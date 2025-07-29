@@ -1,0 +1,1 @@
+export default function DashboardPage() { return <div className="text-2xl font-bold">Bienvenue sur le Dashboard EnerTrack</div>; }
