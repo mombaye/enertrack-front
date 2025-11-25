@@ -1,6 +1,6 @@
 import { useForm } from "react-hook-form";
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, useLocation } from "react-router-dom";
 import camusatLogo from "@/assets/images/camusat-logo.png";
 import { loginUser } from "@/services/authService";
 import { toast } from "react-toastify";
@@ -23,10 +23,15 @@ function EnergySVG() {
 
 export default function LoginPage() {
   const { register, handleSubmit, formState: { errors } } = useForm();
-  
-  const { login } = useAuth();
-  console.log("DEBUG useAuth() :", useAuth());
+  const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+    // si déjà connecté, on évite d’afficher le login
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+
+  // cible à retrouver après login (définie par le RouteGuard)
+  const fromPath = (location.state as any)?.from?.pathname || "/dashboard";
 
   const onSubmit = async (data: any) => {
     try {

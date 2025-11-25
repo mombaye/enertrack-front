@@ -2,11 +2,15 @@ import { useState, useEffect } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import DateRangePicker from "@/components/ui/DateRangePicker";
+import DatePicker from "@/components/ui/DatePicker";
 import { Upload } from "lucide-react";
-import { fetchInvoices, fetchInvoiceStats, importInvoicesExcel } from "@/services/invoices";
+import { fetchImportStatus, fetchInvoices, fetchInvoicesKPI, fetchInvoiceStats, importInvoicesExcel, importInvoicesExcelAsync } from "@/services/invoices";
 import InvoicesTable from "@/components/invoices/InvoicesTable";
 import StatsTable from "@/components/invoices/StatsTable";
 import { toast } from "react-toastify";
+
+import ImportProgressBar from "@/components/utils/ImportProgressBar";
+import KPIPageTab from "@/components/invoices/KPIPageTab";
 
 const now = new Date();
 const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
@@ -27,18 +31,25 @@ export default function InvoicesPage() {
   const avgConsoGlobal = stats.length ? Math.round(stats.reduce((a, s) => a + (Number(s.avg_consommation) || 0), 0) / stats.length) : 0;
   const countGlobal = stats.reduce((a, s) => a + (Number(s.count) || 0), 0);
 
+  const [importProgress, setImportProgress] = useState<number | null>(null);
+  const [startDate, setStartDate] = useState<Date | null>(threeMonthsAgo);
+  const [endDate, setEndDate] = useState<Date | null>(now);
+  const [activeTab, setActiveTab] = useState("factures");
+  const [kpi, setKpi] = useState<any[]>([]);
+  const [loadingKPI, setLoadingKPI] = useState(false);
+  
+
+
   useEffect(() => {
-    if (!dateRange) return;
+    if (!startDate || !endDate) return;
+
     setLoading(true);
+    const start = startDate.toISOString().slice(0, 10);
+    const end = endDate.toISOString().slice(0, 10);
+
     Promise.all([
-      fetchInvoices({
-        startDate: dateRange.from.toISOString().slice(0, 10),
-        endDate: dateRange.to.toISOString().slice(0, 10),
-      }),
-      fetchInvoiceStats({
-        startDate: dateRange.from.toISOString().slice(0, 10),
-        endDate: dateRange.to.toISOString().slice(0, 10),
-      }),
+      fetchInvoices({ startDate: start, endDate: end }),
+      fetchInvoiceStats({ startDate: start, endDate: end }),
     ])
       .then(([invoicesRes, statsRes]) => {
         setInvoices(invoicesRes);
@@ -46,27 +57,92 @@ export default function InvoicesPage() {
       })
       .catch(() => toast.error("Erreur lors du chargement"))
       .finally(() => setLoading(false));
-  }, [dateRange]);
+  }, [startDate, endDate]);
 
-  function handleImportExcel(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImportLoading(true);
-    importInvoicesExcel(file)
-      .then(() => {
-        toast.success("Import réussi !");
-        // Refresh
-        setTimeout(() => {
-          if (dateRange)
+
+  useEffect(() => {
+  if (activeTab === "kpi" && kpi.length === 0) {
+    setLoadingKPI(true);
+    fetchInvoicesKPI()
+      .then(setKpi)
+      .catch(() => toast.error("Erreur lors du chargement des KPI"))
+      .finally(() => setLoadingKPI(false));
+  }
+}, [activeTab, kpi.length]);
+
+  function pollImportStatus(taskId: string) {
+    let attempts = 0;
+    const interval = setInterval(async () => {
+      try {
+        const { status, result } = await fetchImportStatus(taskId);
+
+        if (status === "SUCCESS") {
+          clearInterval(interval);
+          setImportProgress(100);
+          setTimeout(() => setImportProgress(null), 800);
+          setImportLoading(false);
+
+          toast.success(result.message);
+          if (result.skipped) toast.warn(`${result.skipped} ligne(s) ignorée(s)`);
+          if (result.errors?.length)
+            toast.info(`${result.errors.length} erreur(s) — voir console`);
+
+          console.log("Erreurs d'import :", result.errors);
+
+          // Refresh data
+          if (dateRange) {
             fetchInvoices({
               startDate: dateRange.from.toISOString().slice(0, 10),
               endDate: dateRange.to.toISOString().slice(0, 10),
             }).then(setInvoices);
-        }, 700);
-      })
-      .catch(() => toast.error("Échec import Excel"))
-      .finally(() => setImportLoading(false));
+          }
+        }
+
+        if (status === "FAILURE") {
+          clearInterval(interval);
+          setImportLoading(false);
+          setImportProgress(null);
+          toast.error("Erreur serveur pendant l'import");
+        }
+
+        attempts += 1;
+        if (attempts >= 30) {
+          clearInterval(interval);
+          setImportLoading(false);
+          setImportProgress(null);
+          toast.error("Import trop long ou inactif");
+        } else {
+          // Barre de progression fictive
+          setImportProgress((prev) => Math.min((prev || 10) + 5, 95));
+        }
+      } catch {
+        clearInterval(interval);
+        setImportLoading(false);
+        setImportProgress(null);
+        toast.error("Erreur lors du suivi d'import");
+      }
+    }, 2000);
   }
+
+  async function handleImportExcel(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportLoading(true);
+    setImportProgress(10); // démarrage fictif
+
+    try {
+      const { task_id } = await importInvoicesExcelAsync(file);
+      pollImportStatus(task_id);
+    } catch (err) {
+      toast.error("Échec de lancement de l’import");
+      setImportLoading(false);
+      setImportProgress(null);
+    }
+  }
+
+
+
 
   return (
     <div>
@@ -78,14 +154,18 @@ export default function InvoicesPage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-3 items-center">
-          <DateRangePicker
-            value={dateRange}
-            onChange={setDateRange}
-            presets={[
-              { label: "3 derniers mois", getRange: () => ({ from: threeMonthsAgo, to: now }) },
-              { label: "Année en cours", getRange: () => ({ from: startOfYear, to: now }) },
-            ]}
-          />
+         <div className="flex gap-2 items-center">
+          <div>
+            <div className="text-sm font-medium text-blue-900 mb-1">Date de début</div>
+            <DatePicker value={startDate} onChange={setStartDate} />
+          </div>
+          <div>
+            <div className="text-sm font-medium text-blue-900 mb-1">Date de fin</div>
+            <DatePicker value={endDate} onChange={setEndDate} />
+          </div>
+        </div>
+
+
           <label className="inline-flex items-center cursor-pointer relative">
             <input
               type="file"
@@ -116,12 +196,13 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="factures" className="w-full">
+      <Tabs defaultValue="factures" onValueChange={setActiveTab} className="w-full">
         <TabsList>
           <TabsTrigger value="factures">📄 Historique</TabsTrigger>
           <TabsTrigger value="stats">📊 Stats moyennes par site</TabsTrigger>
+           <TabsTrigger value="kpi">📈 KPI par site</TabsTrigger>
         </TabsList>
-
+       
         <TabsContent value="factures" className="mt-8">
           {loading ? (
             <div className="flex items-center justify-center py-16">
@@ -161,7 +242,19 @@ export default function InvoicesPage() {
             <StatsTable stats={stats} />
           )}
         </TabsContent>
+
+        
+        {/* ... */}
+        <TabsContent value="kpi" className="mt-8">
+          <KPIPageTab kpi={kpi} loading={loadingKPI} />
+        </TabsContent>
+      
       </Tabs>
+
+      {importProgress !== null && <ImportProgressBar progress={importProgress} />}
+
+
+
     </div>
   );
 }

@@ -5,8 +5,9 @@ import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { CalendarDays } from "lucide-react";
+import type { DateRange } from "react-day-picker";
 
-type Range = { from: Date; to: Date } | null;
+type Range = DateRange | null;
 type Preset = { label: string; getRange: () => Range };
 
 interface DateRangePickerProps {
@@ -17,18 +18,25 @@ interface DateRangePickerProps {
 
 export function DateRangePicker({ value, onChange, presets }: DateRangePickerProps) {
   const [open, setOpen] = React.useState(false);
+  const [tempRange, setTempRange] = React.useState<Range>(value);
 
-  // Génère le label du range affiché sur le bouton
+  // Met à jour la sélection temporaire si la valeur initiale change
+  React.useEffect(() => {
+    setTempRange(value);
+  }, [value]);
+
   function getLabel() {
     if (!value?.from || !value?.to) return "Choisir une période";
-    if (format(value.from, "yyyy-MM-dd") === format(value.to, "yyyy-MM-dd"))
+    if (format(value.from, "yyyy-MM-dd") === format(value.to, "yyyy-MM-dd")) {
       return format(value.from, "dd/MM/yyyy", { locale: fr });
+    }
     return `${format(value.from, "dd/MM/yyyy", { locale: fr })} → ${format(value.to, "dd/MM/yyyy", { locale: fr })}`;
   }
 
-  // Pour les presets
   function handlePreset(preset: Preset) {
-    onChange(preset.getRange());
+    const presetRange = preset.getRange();
+    setTempRange(presetRange);
+    onChange(presetRange);
     setOpen(false);
   }
 
@@ -45,7 +53,7 @@ export function DateRangePicker({ value, onChange, presets }: DateRangePickerPro
           {/* Presets */}
           {presets?.length && (
             <div className="flex gap-2 mb-2">
-              {presets.map(preset => (
+              {presets.map((preset) => (
                 <Button
                   key={preset.label}
                   type="button"
@@ -59,21 +67,23 @@ export function DateRangePicker({ value, onChange, presets }: DateRangePickerPro
               ))}
             </div>
           )}
-          {/* Calendar Range */}
-          <Calendar
-            mode="range"
-            selected={value ? { from: value.from, to: value.to } : undefined}
-            onSelect={range => {
-              if (range?.from && range?.to) {
-                onChange({ from: range.from, to: range.to });
-                setOpen(false);
-              }
-            }}
-            locale={fr}
-            numberOfMonths={2}
-            initialFocus
-            className="rounded-xl"
-          />
+          {/* Calendar */}
+         <Calendar
+          mode="range"
+          selected={tempRange ?? undefined} // ✅ Fix ici
+          onSelect={(range) => {
+            setTempRange(range ?? null);
+            if (range?.from && range?.to) {
+              onChange({ from: range.from, to: range.to });
+              setOpen(false);
+            }
+          }}
+          locale={fr}
+          numberOfMonths={2}
+          initialFocus
+          className="rounded-xl"
+        />
+
         </div>
       </PopoverContent>
     </Popover>
