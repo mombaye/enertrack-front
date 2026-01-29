@@ -1,15 +1,17 @@
-
 import { Outlet } from "react-router-dom";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
 
 export default function MainLayout() {
   return (
-    <div className="flex">
+    <div className="min-h-screen bg-slate-50">
       <Sidebar />
-      <div className="flex-1 min-h-screen bg-blue-50 md:ml-64">
+
+      {/* zone principale (padding-left géré par Sidebar via data attr) */}
+      <div className="md:pl-[280px]">
         <Header />
-        <main className="p-4 md:p-8">
+
+        <main className="px-4 py-4 md:px-8 md:py-6">
           <Outlet />
         </main>
       </div>

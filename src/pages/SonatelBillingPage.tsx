@@ -1,504 +1,647 @@
-// src/pages/SonatelBillingPage.tsx
-import React from "react";
-import { Upload, FileSpreadsheet, Layers, BarChart3, RefreshCw, Search, Calendar, Filter } from "lucide-react";
+import { useMemo, useState } from "react";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
+import { UploadCloud, RefreshCw } from "lucide-react";
+
+import { DataTable, Col } from "@/components/DataTable";
+import { StatusPill, money, num, cn } from "@/features/sonatelBilling/ui";
+import { useAuth } from "@/auth/AuthContext";
+
+// ✅ API existantes (factures + monthly + contract)
 import {
-  importSonatelFile,
-  listBatches,
   listInvoices,
   listMonthly,
-  ImportBatch,
+  listContractMonths,
   SonatelInvoice,
-  MonthlyRow,
-} from "@/services/sonatelBilling";
-import { format } from "date-fns";
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RTooltip,
-  Legend,
-} from "recharts";
+  MonthlySynthesis,
+  ContractMonth,
+} from "@/features/sonatelBilling/api";
 
-type TabKey = "import" | "records" | "monthly";
+// ✅ Import API (batches/issues/import) — adapte le path si différent
+import { getBatchIssues, importInvoices, listBatches, ImportIssue } from "@/features/sonatelBilling/admin/importApi";
+import { SeverityPill } from "@/features/sonatelBilling/admin/ui";
+import SonatelBillingStatsTab from "@/features/sonatelBilling/SonatelBillingStatsTab";
+
+type Tab = "INVOICES" | "MONTHLY" | "CONTRACT" | "IMPORT"| "STATS";
+
+
+function KpiCard({ title, value, sub }: { title: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_18px_60px_rgba(2,6,23,0.06)]">
+      <div className="text-xs font-semibold tracking-wide text-slate-500">{title}</div>
+      <div className="mt-2 text-2xl font-extrabold text-slate-900">{value}</div>
+      {sub ? <div className="mt-1 text-xs text-slate-500">{sub}</div> : null}
+    </div>
+  );
+}
+
+
+// en haut du fichier (SonatelBillingPage.tsx)
+function fmtDate(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function defaultRangeCurrentYear() {
+  const now = new Date();
+  return {
+    start: fmtDate(new Date(now.getFullYear(), 0, 1)),
+    end: fmtDate(now),
+  };
+}
+
+
+
+function PaginationBar({
+  page,
+  total,
+  pageSize,
+  onPage,
+}: {
+  page: number;
+  total: number;
+  pageSize: number;
+  onPage: (p: number) => void;
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  return (
+    <div className="mt-4 flex items-center justify-between">
+      <div className="text-sm text-slate-500">
+        Page <span className="font-semibold">{page}</span> / {totalPages} • Total{" "}
+        <span className="font-semibold">{total.toLocaleString("fr-FR")}</span>
+      </div>
+      <div className="flex gap-2">
+        <button
+          disabled={page <= 1}
+          onClick={() => onPage(Math.max(1, page - 1))}
+          className="px-3 py-2 rounded-2xl border border-slate-200 bg-white disabled:opacity-40"
+        >
+          Précédent
+        </button>
+        <button
+          disabled={page >= totalPages}
+          onClick={() => onPage(Math.min(totalPages, page + 1))}
+          className="px-3 py-2 rounded-2xl border border-slate-200 bg-white disabled:opacity-40"
+        >
+          Suivant
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_18px_60px_rgba(2,6,23,0.06)]">
+      <div className="text-xs font-semibold tracking-wide text-slate-500">{label}</div>
+      <div className="mt-1 text-xl font-extrabold text-slate-900">{value}</div>
+    </div>
+  );
+}
 
 export default function SonatelBillingPage() {
-  const [tab, setTab] = React.useState<TabKey>("import");
+  const { user } = useAuth();
+  const role = user?.role || "analyst";
+  const isAdmin = role === "admin";
 
-  return (
-    <div className="p-4 md:p-6">
-      <Header />
-      {/*<TabBar current={tab} onChange={setTab} />*/}
-      <div className="mt-6">
-        {tab === "import" && <ImportSection />}
-        {tab === "records" && <RecordsSection />}
-        {tab === "monthly" && <MonthlySection />}
-      </div>
-    </div>
-  );
-}
+  const qc = useQueryClient();
 
-/* ---------- UI: Header & Tabs ---------- */
-function Header() {
-  return (
-    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-      <div>
-        <h1 className="text-2xl font-bold text-blue-900">Billing Sonatel</h1>
-        <p className="text-slate-500">Import Excel • Historique brut • Synthèse mensuelle</p>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-slate-500">EnerTrack · Utilities</span>
-      </div>
-    </div>
-  );
-}
+  const [tab, setTab] = useState<Tab>("INVOICES");
 
-function TabBar({ current, onChange }: { current: TabKey; onChange: (k: TabKey) => void }) {
-  const items: Array<{ k: TabKey; label: string; icon: React.ReactNode }> = [
-    { k: "import", label: "Import", icon: <Upload className="h-4 w-4" /> },
-    { k: "records", label: "Factures (brut)", icon: <FileSpreadsheet className="h-4 w-4" /> },
-    { k: "monthly", label: "Synthèse mensuelle", icon: <BarChart3 className="h-4 w-4" /> },
-  ];
-  return (
-    <div className="flex bg-white rounded-2xl border border-slate-200 p-1 shadow-sm w-full overflow-x-auto">
-      {items.map((it) => (
-        <button
-          key={it.k}
-          onClick={() => onChange(it.k)}
-          className={[
-            "flex items-center gap-2 px-4 py-2 rounded-xl text-sm whitespace-nowrap transition",
-            current === it.k ? "bg-blue-900 text-white shadow-sm" : "text-slate-700 hover:bg-slate-50",
-          ].join(" ")}
-        >
-          {it.icon} {it.label}
-        </button>
-      ))}
-    </div>
-  );
-}
+  // filtres communs
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<string>("");
+  const [site, setSite] = useState<string>(""); // site_id (code) si supporté
+  const [page, setPage] = useState(1);
 
-/* ---------- Import Section ---------- */
-function ImportSection() {
-  const [file, setFile] = React.useState<File | null>(null);
-  const [loading, setLoading] = React.useState(false);
-  const [batches, setBatches] = React.useState<ImportBatch[]>([]);
+  // filtres mensuels
+  const [year, setYear] = useState<string>("");
+  const [month, setMonth] = useState<string>("");
 
-  const refresh = React.useCallback(async () => {
-    const data = await listBatches();
-    setBatches(data);
-  }, []);
+  // ✅ NEW: filtre date commun (par défaut current year)
+  const defRange = useMemo(() => defaultRangeCurrentYear(), []);
+  const [dateStart, setDateStart] = useState(defRange.start);
+  const [dateEnd, setDateEnd] = useState(defRange.end);
 
-  React.useEffect(() => {
-    refresh().catch(() => {});
-  }, [refresh]);
 
-  const onImport = async () => {
-    if (!file) {
-      toast.error("Choisis un fichier Excel d’abord.");
-      return;
-    }
-    try {
-      setLoading(true);
-      const res = await importSonatelFile(file);
-      toast.success(`Import OK: ${res.rows_created} lignes (batch ${res.batch.id})`);
-      setFile(null);
-      await refresh();
-    } catch (e: any) {
-      toast.error(e?.response?.data?.detail || "Échec import");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const pageSize = 20;
 
-  return (
-    <div className="grid gap-6 md:grid-cols-5">
-      {/* uploader */}
-      <div className="md:col-span-2">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="font-semibold text-blue-900 mb-2">Uploader un fichier Sonatel</h3>
-          <p className="text-sm text-slate-500 mb-4">
-            Formats supportés : <span className="font-mono">.xlsx</span>, <span className="font-mono">.xls</span>.
-          </p>
-          <label className="block">
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm file:mr-4 file:rounded-xl file:border-0 file:bg-blue-900 file:px-4 file:py-2 file:text-white hover:file:bg-blue-800"
-            />
-          </label>
-          <div className="flex items-center gap-2 mt-4">
-            <button
-              onClick={onImport}
-              disabled={!file || loading}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-900 px-4 py-2 text-white hover:bg-blue-800 disabled:opacity-50"
-            >
-              <Upload className="h-4 w-4" />
-              Importer
-            </button>
-            <button
-              onClick={refresh}
-              className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-slate-700 hover:bg-slate-50"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Rafraîchir
-            </button>
+
+  const tabs = useMemo(() => {
+    const base: Array<{ key: Tab; label: string }> = [
+      { key: "INVOICES", label: "Factures" },
+      { key: "MONTHLY", label: "Synthèse mensuelle" },
+      { key: "CONTRACT", label: "Contrat × Mois" },
+      { key: "STATS", label: "Stats" }, // ✅ NEW
+    ];
+    if (isAdmin) base.push({ key: "IMPORT", label: "Import" });
+    return base;
+  }, [isAdmin]);
+
+
+  // ======================
+  // ✅ Invoices
+  // ======================
+  const invoicesQ = useQuery({
+  enabled: tab === "INVOICES",
+  queryKey: ["sb-invoices", { page, search, status, site, dateStart, dateEnd }],
+  queryFn: () =>
+    listInvoices({
+      page,
+      page_size: pageSize,
+      search,
+      status,
+      site,
+      start: dateStart,   // ✅ NEW
+      end: dateEnd,       // ✅ NEW
+    }),
+  placeholderData: keepPreviousData,
+});
+
+const monthlyQ = useQuery({
+  enabled: tab === "MONTHLY",
+  queryKey: ["sb-monthly", { page, status, site, search, dateStart, dateEnd }],
+  queryFn: () =>
+    listMonthly({
+      page,
+      page_size: pageSize,
+      status: status || undefined,
+      site: site || undefined,
+      account: search || undefined,
+      start: dateStart,   // ✅ NEW
+      end: dateEnd,       // ✅ NEW
+    }),
+  placeholderData: keepPreviousData,
+});
+
+const contractQ = useQuery({
+  enabled: tab === "CONTRACT",
+  queryKey: ["sb-contract-months", { page, status, site, search, dateStart, dateEnd }],
+  queryFn: () =>
+    listContractMonths({
+      page,
+      page_size: pageSize,
+      status: status || undefined,
+      site: site || undefined,
+      account: search || undefined,
+      start: dateStart,   // ✅ NEW
+      end: dateEnd,       // ✅ NEW
+    }),
+  placeholderData: keepPreviousData,
+});
+
+
+
+  // ======================
+  // ✅ Contract × Month
+  // ======================
+ 
+
+  // ======================
+  // ✅ Columns
+  // ======================
+  const invoiceCols: Col<SonatelInvoice>[] = useMemo(
+    () => [
+      {
+        key: "site",
+        title: "Site",
+        render: (r) => (
+          <div className="min-w-[180px]">
+            <div className="font-semibold">{(r as any)?.site?.site_id || (r as any)?.site_id || "—"}</div>
+            <div className="text-xs text-slate-500 truncate">{(r as any)?.site?.name || (r as any)?.site_name || ""}</div>
           </div>
-          {file && <p className="mt-2 text-xs text-slate-500 truncate">Fichier sélectionné : {file.name}</p>}
-        </div>
-      </div>
+        ),
+      },
+      { key: "contract", title: "Contrat", render: (r) => <span className="font-mono">{r.numero_compte_contrat}</span> },
+      { key: "fact", title: "Facture", render: (r) => <span className="font-mono">{r.numero_facture}</span> },
+      {
+        key: "period",
+        title: "Période",
+        render: (r) => (
+          <div className="text-xs whitespace-nowrap">
+            <div>{r.date_debut_periode || "—"}</div>
+            <div className="text-slate-500">→ {r.date_fin_periode || "—"}</div>
+          </div>
+        ),
+      },
+      {
+        key: "echeance",
+        title: "Échéance",
+        render: (r) => (r as any)?.echeance || "—",
+        className: "whitespace-nowrap",
+      },
 
-      {/* batches */}
-      <div className="md:col-span-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-blue-900">Historique des imports</h3>
-            <button onClick={refresh} className="rounded-xl border px-3 py-1.5 hover:bg-slate-50">
-              <RefreshCw className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="max-h-[380px] overflow-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-slate-50 text-slate-600">
-                <tr>
-                  <th className="text-left p-2">ID</th>
-                  <th className="text-left p-2">Fichier</th>
-                  <th className="text-left p-2">Importé le</th>
-                </tr>
-              </thead>
-              <tbody>
-                {batches.map((b) => (
-                  <tr key={b.id} className="border-t hover:bg-slate-50">
-                    <td className="p-2">{b.id}</td>
-                    <td className="p-2">{b.source_filename}</td>
-                    <td className="p-2">{format(new Date(b.imported_at), "dd/MM/yyyy HH:mm")}</td>
-                  </tr>
-                ))}
-                {batches.length === 0 && (
-                  <tr>
-                    <td className="p-3 text-slate-500" colSpan={3}>
-                      Aucun import pour le moment.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
+      { key: "ht", title: "HT", render: (r) => money((r as any)?.montant_hors_tva), className: "whitespace-nowrap" },
+      { key: "ttc", title: "TTC", render: (r) => money((r as any)?.montant_ttc), className: "whitespace-nowrap" },
+
+      // ✅ Données cibles
+      { key: "montant_cosinus_phi", title: "Montant Cosinus Phi", render: (r) => money((r as any)?.montant_cosinus_phi), className: "whitespace-nowrap" },
+      { key: "abo", title: "Abonnement", render: (r) => money((r as any)?.abonnement_calcule), className: "whitespace-nowrap" },
+      { key: "pen", title: "PenPrime", render: (r) => money((r as any)?.penalite_abonnement_calculee), className: "whitespace-nowrap" },
+      { key: "nrj", title: "NRJ", render: (r) => money((r as any)?.energie_calculee), className: "whitespace-nowrap" },
+
+      { key: "status", title: "Statut", render: (r) => <StatusPill v={(r as any)?.status} /> },
+    ],
+    []
   );
-}
 
-/* ---------- Records Section ---------- */
-function RecordsSection() {
-  const [rows, setRows] = React.useState<SonatelInvoice[]>([]);
-  const [loading, setLoading] = React.useState(false);
-  const [search, setSearch] = React.useState("");
-
-  const fetchRows = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await listInvoices({ search });
-      setRows(data);
-    } finally {
-      setLoading(false);
-    }
-  }, [search]);
-
-  React.useEffect(() => {
-    fetchRows().catch(() => {});
-  }, [fetchRows]);
-
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 p-4">
-        <div className="flex items-center gap-2">
-          <Layers className="h-5 w-5 text-blue-900" />
-          <h3 className="font-semibold text-blue-900">Factures (données brutes)</h3>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher: facture, compte, compteur…"
-              className="pl-9 pr-3 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-            />
+  const monthlyCols: Col<MonthlySynthesis>[] = useMemo(
+    () => [
+      {
+        key: "site",
+        title: "Site",
+        render: (r) => (
+          <div className="min-w-[190px]">
+            <div className="font-semibold">{(r as any).site_id || "—"}</div>
+            <div className="text-xs text-slate-500 truncate">{(r as any).site_name || ""}</div>
           </div>
-          <button onClick={fetchRows} className="rounded-xl border px-3 py-2 hover:bg-slate-50">
-            <RefreshCw className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-
-      <div className="overflow-auto max-h-[70vh] border-t">
-        <table className="w-full text-xs">
-          <thead className="sticky top-0 bg-slate-50">
-            <tr className="text-slate-600">
-              <th className="p-2 text-left">Facture</th>
-              <th className="p-2 text-left">Compte</th>
-              <th className="p-2 text-left">Période</th>
-              <th className="p-2 text-right">Conso</th>
-              <th className="p-2 text-right">Énergie</th>
-              <th className="p-2 text-right">TTC</th>
-              <th className="p-2 text-left">Agence</th>
-              <th className="p-2 text-left">Compteur</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr>
-                <td colSpan={8} className="p-4 text-center text-slate-500">
-                  Chargement…
-                </td>
-              </tr>
-            )}
-            {!loading &&
-              rows.map((r) => (
-                <tr key={r.id} className="border-t hover:bg-slate-50">
-                  <td className="p-2 font-medium">{r.numero_facture}</td>
-                  <td className="p-2">{r.numero_compte_contrat}</td>
-                  <td className="p-2">
-                    {format(new Date(r.date_debut_periode), "dd/MM/yyyy")} →{" "}
-                    {format(new Date(r.date_fin_periode), "dd/MM/yyyy")}
-                  </td>
-                  <td className="p-2 text-right">{fmt(r.conso_facturee)}</td>
-                  <td className="p-2 text-right">{fmt(r.montant_total_energie)}</td>
-                  <td className="p-2 text-right">{fmt(r.montant_ttc)}</td>
-                  <td className="p-2">{r.agence || "-"}</td>
-                  <td className="p-2">{r.numero_compteur || "-"}</td>
-                </tr>
-              ))}
-            {!loading && rows.length === 0 && (
-              <tr>
-                <td className="p-4 text-center text-slate-500" colSpan={8}>
-                  Aucun enregistrement.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+        ),
+      },
+      { key: "contract", title: "Contrat", render: (r) => <span className="font-mono">{r.numero_compte_contrat}</span> },
+      { key: "fact", title: "Facture", render: (r) => <span className="font-mono">{r.numero_facture}</span> },
+      { key: "ym", title: "Mois", render: (r) => `${r.year}-${String(r.month).padStart(2, "0")}` },
+      { key: "conso", title: "Conso", render: (r) => num((r as any).conso), className: "whitespace-nowrap" },
+      { key: "ht", title: "HT", render: (r) => money((r as any).montant_hors_tva), className: "whitespace-nowrap" },
+      { key: "ttc", title: "TTC", render: (r) => money((r as any).montant_ttc), className: "whitespace-nowrap" },
+      { key: "abo", title: "Abonnement", render: (r) => money((r as any).abonnement_calcule), className: "whitespace-nowrap" },
+      { key: "pen", title: "PenPrime", render: (r) => money((r as any).penalite_abonnement_calculee), className: "whitespace-nowrap" },
+      { key: "nrj", title: "NRJ", render: (r) => money((r as any).energie_calculee), className: "whitespace-nowrap" },
+      { key: "status", title: "Statut", render: (r) => <StatusPill v={(r as any).status} /> },
+    ],
+    []
   );
-}
 
-/* ---------- Monthly Section (filtres + graphe + table) ---------- */
-function MonthlySection() {
-  const [year, setYear] = React.useState<string>(String(new Date().getFullYear()));
-  const [month, setMonth] = React.useState<string>("");
-  const [account, setAccount] = React.useState<string>("");
-  const [facture, setFacture] = React.useState<string>("");
+  const contractCols: Col<ContractMonth>[] = useMemo(
+    () => [
+      {
+        key: "site",
+        title: "Site",
+        render: (r) => (
+          <div className="min-w-[190px]">
+            <div className="font-semibold">{(r as any).site_id || "—"}</div>
+            <div className="text-xs text-slate-500 truncate">{(r as any).site_name || ""}</div>
+          </div>
+        ),
+      },
+      { key: "contract", title: "Contrat", render: (r) => <span className="font-mono">{r.numero_compte_contrat}</span> },
+      { key: "ym", title: "Mois", render: (r) => `${r.year}-${String(r.month).padStart(2, "0")}` },
+      { key: "count", title: "#Factures", render: (r) => (r as any).invoices_count, className: "whitespace-nowrap font-semibold" },
+      { key: "conso", title: "Conso", render: (r) => num((r as any).conso), className: "whitespace-nowrap" },
+      { key: "ht", title: "HT", render: (r) => money((r as any).montant_hors_tva), className: "whitespace-nowrap" },
+      { key: "ttc", title: "TTC", render: (r) => money((r as any).montant_ttc), className: "whitespace-nowrap" },
+      { key: "abo", title: "Abonnement", render: (r) => money((r as any).abonnement_calcule), className: "whitespace-nowrap" },
+      { key: "pen", title: "PenPrime", render: (r) => money((r as any).penalite_abonnement_calculee), className: "whitespace-nowrap" },
+      { key: "nrj", title: "NRJ", render: (r) => money((r as any).energie_calculee), className: "whitespace-nowrap" },
+    ],
+    []
+  );
 
-  const [rows, setRows] = React.useState<MonthlyRow[]>([]);
-  const [loading, setLoading] = React.useState(false);
+  // ======================
+  // ✅ Active tab data
+  // ======================
+  const active = tab === "INVOICES" ? invoicesQ : tab === "MONTHLY" ? monthlyQ : tab === "CONTRACT" ? contractQ : null;
+  const rows = ((active?.data as any)?.results ?? []) as any[];
+  const total = (active?.data as any)?.count ?? 0;
 
-  const fetchRows = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await listMonthly({
-        year: year || undefined,
-        month: month || undefined,
-        account: account || undefined,
-        facture: facture || undefined,
-      });
-      setRows(data);
-    } finally {
-      setLoading(false);
-    }
-  }, [year, month, account, facture]);
-
-  React.useEffect(() => {
-    fetchRows().catch(() => {});
-  }, [fetchRows]);
-
-  // Agrégats par mois (pour le graphe)
-  const chartData = React.useMemo(() => {
-    const map = new Map<string, { monthLabel: string; conso: number; energie: number; ttc: number }>();
-    for (const r of rows) {
-      const key = `${r.year}-${String(r.month).padStart(2, "0")}`;
-      const obj = map.get(key) || { monthLabel: key, conso: 0, energie: 0, ttc: 0 };
-      obj.conso += toNum(r.conso);
-      obj.energie += toNum(r.montant_energie);
-      obj.ttc += toNum(r.montant_ttc);
-      map.set(key, obj);
-    }
-    return Array.from(map.values()).sort((a, b) => (a.monthLabel > b.monthLabel ? 1 : -1));
+  const kpi = useMemo(() => {
+    const sum = (key: string) => rows.reduce((acc, r) => acc + (Number(r?.[key] ?? 0) || 0), 0);
+    return {
+      ttc: sum("montant_ttc"),
+      ht: sum("montant_hors_tva"),
+      nrj: sum("energie_calculee"),
+      abo: sum("abonnement_calcule"),
+      pen: sum("penalite_abonnement_calculee"),
+    };
   }, [rows]);
 
+  function resetPage(nextTab: Tab) {
+    setTab(nextTab);
+    setPage(1);
+  }
+
+  // ======================
+  // ✅ IMPORT (Admin) — avec echeance (type date)
+  // ======================
+  const [file, setFile] = useState<File | null>(null);
+  const [echeance, setEcheance] = useState<string>(""); // ✅ YYYY-MM-DD
+  const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
+  const [severity, setSeverity] = useState<string>("");
+
+  const batchesQ = useQuery({
+    enabled: tab === "IMPORT" && isAdmin,
+    queryKey: ["sb-batches", { kind: "SENELEC_INVOICE" }], // ⚠️ garde ton kind actuel
+    queryFn: () => listBatches({ kind: "SENELEC_INVOICE", page: 1, page_size: 20 }),
+    placeholderData: keepPreviousData,
+  });
+
+  const issuesQ = useQuery({
+    enabled: tab === "IMPORT" && !!selectedBatchId && isAdmin,
+    queryKey: ["sb-batch-issues", selectedBatchId, severity],
+    queryFn: () => getBatchIssues(selectedBatchId!, severity ? { severity } : undefined),
+    placeholderData: keepPreviousData,
+  });
+
+  const importMut = useMutation({
+    mutationFn: ({ file, echeance }: { file: File; echeance: string }) => importInvoices(file, echeance),
+    onSuccess: (res) => {
+      toast.success(`Import OK: +${res.rows_created} / maj ${res.rows_updated} • issues ${res.issues_logged}`);
+      setSelectedBatchId(res.batch.id);
+      qc.invalidateQueries({ queryKey: ["sb-batches"] });
+      qc.invalidateQueries({ queryKey: ["sb-invoices"] });
+      qc.invalidateQueries({ queryKey: ["sb-monthly"] });
+      qc.invalidateQueries({ queryKey: ["sb-contract-months"] });
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.detail || "Import échoué"),
+  });
+
+  const issueCols: Col<ImportIssue>[] = useMemo(
+    () => [
+      { key: "sev", title: "Niveau", render: (r) => <SeverityPill v={r.severity} /> },
+      { key: "row", title: "Ligne", render: (r) => r.row_number ?? "—", className: "whitespace-nowrap font-semibold" },
+      { key: "field", title: "Champ", render: (r) => r.field || "—", className: "whitespace-nowrap" },
+      { key: "msg", title: "Message", render: (r) => <div className="min-w-[420px]">{r.message}</div> },
+    ],
+    []
+  );
+
+  const lastBatches = (batchesQ.data as any)?.results ?? [];
+  const issues = (issuesQ.data as any) ?? [];
+
+
+
   return (
-    <div className="space-y-6">
-      {/* Filtres */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex items-center gap-2 mb-3">
-          <Filter className="h-4 w-4 text-blue-900" />
-          <h3 className="font-semibold text-blue-900">Filtres</h3>
-        </div>
-
-        <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-3">
-          <TextField value={year} onChange={setYear} placeholder="Année (ex: 2025)" icon={<Calendar className="h-4 w-4" />} />
-          <TextField value={month} onChange={setMonth} placeholder="Mois (1-12)" icon={<Calendar className="h-4 w-4" />} />
-          <TextField value={account} onChange={setAccount} placeholder="Compte contrat" />
-          <TextField value={facture} onChange={setFacture} placeholder="N° facture" />
-        </div>
-
-        <div className="mt-3 flex items-center gap-2">
-          <button onClick={fetchRows} className="rounded-xl bg-blue-900 px-4 py-2 text-white hover:bg-blue-800 inline-flex items-center gap-2">
-            <Search className="h-4 w-4" /> Rechercher
-          </button>
-          <button
-            onClick={() => {
-              setYear(String(new Date().getFullYear()));
-              setMonth("");
-              setAccount("");
-              setFacture("");
-            }}
-            className="rounded-xl border px-4 py-2 hover:bg-slate-50"
-          >
-            Réinitialiser
-          </button>
-        </div>
-      </div>
-
-      {/* Graphes */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        <Card title="Montant TTC par mois">
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="monthLabel" />
-                <YAxis />
-                <RTooltip />
-                <Legend />
-                <Bar dataKey="ttc" name="TTC" />
-              </BarChart>
-            </ResponsiveContainer>
+    <div className="px-6 py-6">
+      {/* Header */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_18px_60px_rgba(2,6,23,0.06)]">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-extrabold text-slate-900">Billing Sonatel</h1>
+            <p className="text-slate-500 mt-1">
+              Factures • Synthèse mensuelle • Contrat × Mois — Données cibles (Abonnement / PenPrime / NRJ)
+            </p>
           </div>
-        </Card>
-
-        <Card title="Énergie / Conso par mois">
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="monthLabel" />
-                <YAxis />
-                <RTooltip />
-                <Legend />
-                <Bar dataKey="energie" name="Montant énergie" />
-                <Bar dataKey="conso" name="Conso" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-      </div>
-
-      {/* Table */}
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="p-4 font-semibold text-blue-900">Détails synthèse (lignes proratisées)</div>
-        <div className="overflow-auto max-h-[70vh] border-t">
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-slate-50 text-slate-600">
-              <tr>
-                <th className="p-2 text-left">Compte</th>
-                <th className="p-2 text-left">Facture</th>
-                <th className="p-2 text-left">Année</th>
-                <th className="p-2 text-left">Mois</th>
-                <th className="p-2 text-right">Jours couverts</th>
-                <th className="p-2 text-right">Conso</th>
-                <th className="p-2 text-right">Énergie</th>
-                <th className="p-2 text-right">TTC</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <tr>
-                  <td colSpan={8} className="p-4 text-center text-slate-500">
-                    Chargement…
-                  </td>
-                </tr>
-              )}
-              {!loading &&
-                rows.map((r) => (
-                  <tr key={r.id} className="border-t hover:bg-slate-50">
-                    <td className="p-2">{r.numero_compte_contrat}</td>
-                    <td className="p-2">{r.numero_facture}</td>
-                    <td className="p-2">{r.year}</td>
-                    <td className="p-2">{String(r.month).padStart(2, "0")}</td>
-                    <td className="p-2 text-right">
-                      {r.days_covered}/{r.days_in_month}
-                    </td>
-                    <td className="p-2 text-right">{fmt(r.conso)}</td>
-                    <td className="p-2 text-right">{fmt(r.montant_energie)}</td>
-                    <td className="p-2 text-right">{fmt(r.montant_ttc)}</td>
-                  </tr>
-                ))}
-              {!loading && rows.length === 0 && (
-                <tr>
-                  <td className="p-4 text-center text-slate-500" colSpan={8}>
-                    Aucun résultat pour ces filtres.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
         </div>
+
+        {/* Tabs */}
+        <div className="mt-4 flex flex-wrap gap-2">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => resetPage(t.key)}
+              className={cn(
+                "px-4 py-2 rounded-2xl border font-semibold transition",
+                tab === t.key
+                  ? "bg-blue-900 text-white border-blue-900"
+                  : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Filters (pas pour IMPORT) */}
+        {/* Filters */}
+        {tab !== "IMPORT" ? (
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-6 gap-3">
+            {/* Search/site/status uniquement hors STATS */}
+            {tab !== "STATS" ? (
+              <>
+                <input
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setPage(1);
+                  }}
+                  placeholder={tab === "INVOICES" ? "Recherche (facture/contrat/compteur)…" : "Contrat (num) …"}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-900/20"
+                />
+
+                <input
+                  value={site}
+                  onChange={(e) => {
+                    setSite(e.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="Site (code) ex: S001"
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5"
+                />
+
+                <select
+                  value={status}
+                  onChange={(e) => {
+                    setStatus(e.target.value);
+                    setPage(1);
+                  }}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5"
+                >
+                  <option value="">Tous statuts</option>
+                  <option value="CREATED">Créée</option>
+                  <option value="VALIDATED">Validée</option>
+                  <option value="CONTESTED">Contestée</option>
+                </select>
+              </>
+            ) : (
+              // petit spacer pour garder la grille alignée
+              <div className="md:col-span-3" />
+            )}
+
+            {/* Dates : partout sauf IMPORT */}
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5">
+              <div className="text-[11px] font-bold text-slate-500">Date début</div>
+              <input
+                type="date"
+                value={dateStart}
+                onChange={(e) => {
+                  setDateStart(e.target.value);
+                  setPage(1);
+                }}
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 font-semibold"
+              />
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5">
+              <div className="text-[11px] font-bold text-slate-500">Date fin</div>
+              <input
+                type="date"
+                value={dateEnd}
+                onChange={(e) => {
+                  setDateEnd(e.target.value);
+                  setPage(1);
+                }}
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 font-semibold"
+              />
+            </div>
+          </div>
+        ) : null}
+
+
+      </div>
+
+      {/* KPI (pas pour IMPORT) */}
+      {tab !== "IMPORT" && tab !== "STATS" ? (
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-5 gap-3">
+          <KpiCard title="TTC (page)" value={money(String(kpi.ttc))} />
+          <KpiCard title="HT (page)" value={money(String(kpi.ht))} />
+          <KpiCard title="NRJ (page)" value={money(String(kpi.nrj))} />
+          <KpiCard title="Abonnement (page)" value={money(String(kpi.abo))} />
+          <KpiCard title="PenPrime (page)" value={money(String(kpi.pen))} />
+        </div>
+      ) : null}
+
+      {/* Content */}
+      <div className="mt-4">
+        { tab === "STATS" ? (
+            <SonatelBillingStatsTab start={dateStart} end={dateEnd} />
+          ) : tab === "INVOICES" ? (
+          <>
+            <DataTable cols={invoiceCols} rows={rows as SonatelInvoice[]} loading={invoicesQ.isLoading} />
+            <PaginationBar page={page} total={total} pageSize={pageSize} onPage={setPage} />
+          </>
+        ) : tab === "MONTHLY" ? (
+          <>
+            <DataTable cols={monthlyCols} rows={rows as MonthlySynthesis[]} loading={monthlyQ.isLoading} />
+            <PaginationBar page={page} total={total} pageSize={pageSize} onPage={setPage} />
+          </>
+        ) : tab === "CONTRACT" ? (
+          <>
+            <DataTable cols={contractCols} rows={rows as ContractMonth[]} loading={contractQ.isLoading} />
+            <PaginationBar page={page} total={total} pageSize={pageSize} onPage={setPage} />
+          </>
+        ) : (
+          // ======================
+          // ✅ IMPORT TAB (Admin)
+          // ======================
+          <div className="space-y-4">
+            {!isAdmin ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-600">
+                Accès réservé Admin.
+              </div>
+            ) : (
+              <>
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_18px_60px_rgba(2,6,23,0.06)]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h2 className="text-xl font-extrabold text-slate-900">Import Factures (Excel)</h2>
+                      <p className="text-slate-500 mt-1">
+                        Upload Sonatel → upsert factures + synthèse mensuelle + recalcul Contrat×Mois.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => batchesQ.refetch()}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 font-semibold"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Rafraîchir
+                    </button>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <label className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                      <div className="text-xs font-semibold text-slate-500">Fichier</div>
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls"
+                        onChange={(e) => setFile(e.target.files?.[0] || null)}
+                        className="mt-2 block w-full text-sm"
+                      />
+                      {file ? <div className="mt-2 text-xs text-slate-500">{file.name}</div> : null}
+                    </label>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                      <div className="text-xs font-semibold text-slate-500">Échéance (obligatoire)</div>
+                      <input
+                        type="date"
+                        value={echeance}
+                        onChange={(e) => setEcheance(e.target.value)}
+                        className="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2 font-semibold"
+                      />
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                      <div className="text-xs font-semibold text-slate-500">Derniers batches</div>
+                      <select
+                        className="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2"
+                        value={selectedBatchId ?? ""}
+                        onChange={(e) => setSelectedBatchId(e.target.value ? Number(e.target.value) : null)}
+                      >
+                        <option value="">— sélectionner —</option>
+                        {lastBatches.map((b: any) => (
+                          <option key={b.id} value={b.id}>
+                            #{b.id} • {new Date(b.imported_at).toLocaleString("fr-FR")} • {b.source_filename}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 flex items-end">
+                      <button
+                        disabled={!file || !echeance || importMut.isPending}
+                        onClick={() => file && echeance && importMut.mutate({ file, echeance })}
+                        className={cn(
+                          "w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl font-extrabold",
+                          "bg-blue-900 text-white border border-blue-900",
+                          (!file || !echeance || importMut.isPending) ? "opacity-50 cursor-not-allowed" : "hover:opacity-95"
+                        )}
+                      >
+                        <UploadCloud className="h-5 w-5" />
+                        {importMut.isPending ? "Import..." : "Importer"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {importMut.data ? (
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-6 gap-3">
+                      <Stat label="Créées" value={importMut.data.rows_created} />
+                      <Stat label="Mises à jour" value={importMut.data.rows_updated} />
+                      <Stat label="Monthly créées" value={importMut.data.monthly_rows_created} />
+                      <Stat label="Issues" value={importMut.data.issues_logged} />
+                      <Stat label="Missing Site" value={importMut.data.invoices_missing_site_count} />
+                      <Stat label="Contrat×Mois upsert" value={importMut.data.contract_months_upserted} />
+                    </div>
+                  ) : null}
+
+                  {importMut.data?.invoices_missing_site_count ? (
+                    <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
+                      <div className="font-semibold">Attention : contrats sans mapping Site</div>
+                      <div className="text-sm mt-1">
+                        Exemples: {importMut.data.invoices_missing_site_sample?.join(", ") || "—"}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_18px_60px_rgba(2,6,23,0.06)]">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-lg font-extrabold text-slate-900">Issues du batch</h3>
+                    <select
+                      value={severity}
+                      onChange={(e) => setSeverity(e.target.value)}
+                      className="rounded-2xl border border-slate-200 bg-white px-3 py-2 font-semibold"
+                    >
+                      <option value="">Tous</option>
+                      <option value="ERROR">ERROR</option>
+                      <option value="WARN">WARN</option>
+                      <option value="INFO">INFO</option>
+                    </select>
+                  </div>
+
+                  <div className="mt-3">
+                    <DataTable
+                      cols={issueCols}
+                      rows={issues}
+                      loading={issuesQ.isLoading}
+                      emptyText={selectedBatchId ? "Aucune issue" : "Sélectionne un batch pour voir les issues"}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
-}
-
-/* ---------- Small UI helpers ---------- */
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="font-semibold text-blue-900 mb-2">{title}</div>
-      {children}
-    </div>
-  );
-}
-
-function TextField({
-  value,
-  onChange,
-  placeholder,
-  icon,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  icon?: React.ReactNode;
-}) {
-  return (
-    <div className="relative">
-      {icon && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">{icon}</span>}
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className={[
-          "w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200",
-          icon ? "pl-9" : "",
-        ].join(" ")}
-      />
-    </div>
-  );
-}
-
-function toNum(x?: string | null) {
-  if (!x) return 0;
-  // backend renvoie des strings décimales → parse float
-  const n = Number(x);
-  return isNaN(n) ? 0 : n;
-}
-
-function fmt(x?: string | null) {
-  const n = toNum(x);
-  return n ? n.toLocaleString("fr-FR") : "-";
 }

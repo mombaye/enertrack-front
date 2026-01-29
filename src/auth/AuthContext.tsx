@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { api } from "@/services/api";
+// src/auth/AuthContext.tsx
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { jwtDecode } from "jwt-decode";
-import { toast } from "react-toastify";
+import { tokenStorage } from "@/auth/tokenStorage";
+import { setOnAuthFailure, authApi } from "@/services/api";
 
 export interface UserJWT {
   username: string;
@@ -10,126 +11,94 @@ export interface UserJWT {
   exp: number;
   [key: string]: any;
 }
-interface AuthContextType {
+
+type AuthCtx = {
   user: UserJWT | null;
   access: string | null;
-  login: (token: string, refresh: string) => void;
-  logout: () => void;
   isAuthenticated: boolean;
+  login: (access: string, refresh: string) => void;
+  logout: () => void;
+  refreshNow: () => Promise<void>;
+};
+
+const AuthContext = createContext<AuthCtx>({} as AuthCtx);
+
+function isExpired(access: string) {
+  try {
+    const { exp } = jwtDecode<{ exp: number }>(access);
+    return Date.now() >= exp * 1000;
+  } catch {
+    return true;
+  }
 }
-const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
-const ACCESS_KEY = "enertrack_access";
-const REFRESH_KEY = "enertrack_refresh";
-
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [access, setAccess] = useState<string | null>(() => localStorage.getItem(ACCESS_KEY));
-  const [refresh, setRefresh] = useState<string | null>(() => localStorage.getItem(REFRESH_KEY));
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [access, setAccess] = useState<string | null>(() => tokenStorage.getAccess());
   const [user, setUser] = useState<UserJWT | null>(null);
 
+  const logout = () => {
+    tokenStorage.clear();
+    setAccess(null);
+    setUser(null);
+  };
+
+  const login = (accessToken: string, refreshToken: string) => {
+    tokenStorage.setTokens(accessToken, refreshToken);
+    setAccess(accessToken);
+  };
+
+  const refreshNow = async () => {
+    const refresh = tokenStorage.getRefresh();
+    if (!refresh) return logout();
+
+    const res = await authApi.post<{ access: string }>("/auth/refresh/", { refresh });
+    if (!res.data?.access) return logout();
+
+    tokenStorage.setAccess(res.data.access);
+    setAccess(res.data.access);
+  };
+
+  // connect api interceptor => logout si refresh fail
   useEffect(() => {
-    if (access) {
-      try {
-        setUser(jwtDecode<UserJWT>(access));
-      } catch {
-        setUser(null);
-      }
-    } else {
+    setOnAuthFailure(() => logout);
+  }, []);
+
+  // decode user à chaque access
+  useEffect(() => {
+    if (!access) {
+      setUser(null);
+      return;
+    }
+    try {
+      setUser(jwtDecode<UserJWT>(access));
+    } catch {
       setUser(null);
     }
   }, [access]);
 
+  // au boot: si access expiré mais refresh existe => refresh 1x
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    if (access && refresh) {
-      try {
-        const { exp } = jwtDecode<{ exp: number }>(access);
-        const expiresIn = exp * 1000 - Date.now() - 10000; // 10s avant
-        if (expiresIn > 0) {
-          timer = setTimeout(refreshToken, expiresIn);
-        } else {
-          refreshToken();
-        }
-      } catch {
-        toast.error("Session expirée, veuillez vous reconnecter.", { autoClose: 5000 });
-        logout();
-      }
+    const a = tokenStorage.getAccess();
+    const r = tokenStorage.getRefresh();
+    if (!a || !r) return;
+    if (isExpired(a)) {
+      refreshNow().catch(() => logout());
     }
-    return () => {
-      if (timer) clearTimeout(timer);
-    };
-  }, [access, refresh]);
-
-  const login = (accessToken: string, refreshToken: string) => {
-    localStorage.setItem(ACCESS_KEY, accessToken);
-    localStorage.setItem(REFRESH_KEY, refreshToken);
-    setAccess(accessToken);
-    setRefresh(refreshToken);
-  };
-
-  const logout = () => {
-    localStorage.removeItem(ACCESS_KEY);
-    localStorage.removeItem(REFRESH_KEY);
-    setAccess(null);
-    setRefresh(null);
-    setUser(null);
-  };
-
-  const refreshToken = async () => {
-    if (!refresh) return logout();
-    try {
-      const res = await api.post<{ access: string }>("/auth/refresh/", { refresh });
-      if (res.data.access) {
-        login(res.data.access, refresh);
-      } else {
-        logout();
-      }
-    } catch {
-      toast.error("Session expirée, veuillez vous reconnecter.", { autoClose: 5000 });
-      logout();
-    }
-  };
-
-  useEffect(() => {
-    const interceptor = api.interceptors.response.use(
-      res => res,
-      async error => {
-        const origRequest = error.config;
-        if (
-          error.response?.status === 401 &&
-          !origRequest._retry &&
-          refresh
-        ) {
-          origRequest._retry = true;
-          await refreshToken();
-          origRequest.headers["Authorization"] = `Bearer ${localStorage.getItem(ACCESS_KEY)}`;
-          return api(origRequest);
-        }
-        return Promise.reject(error);
-      }
-    );
-    return () => api.interceptors.response.eject(interceptor);
-  }, [access, refresh]);
-
-  useEffect(() => {
-    api.defaults.headers.common["Authorization"] = access ? `Bearer ${access}` : "";
-  }, [access]);
-
-  useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === ACCESS_KEY && !e.newValue) logout();
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-
-
-  return (
-    <AuthContext.Provider value={{ user, access, login, logout, isAuthenticated: !!access }}>
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo<AuthCtx>(
+    () => ({
+      user,
+      access,
+      isAuthenticated: !!access && !!user,
+      login,
+      logout,
+      refreshNow,
+    }),
+    [user, access]
   );
-};
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
 
 export const useAuth = () => useContext(AuthContext);
