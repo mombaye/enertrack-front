@@ -1,4 +1,4 @@
-// App.tsx
+// App.tsx  — ajouter les imports et la route certification
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { RouteGuard } from "@/routes/RouteGuard";
 import MainLayout from "@/layouts/MainLayout";
@@ -12,14 +12,16 @@ import SonatelConfigPage from "@/features/sonatelBilling/admin/SonatelConfigPage
 import TariffRatesAdminPage from "@/features/sonatelBilling/admin/TariffRatesAdminPage";
 import ContractSiteLinksAdminPage from "@/features/sonatelBilling/admin/ContractSiteLinksAdminPage";
 import BillingComputePage from "@/features/sonatelBilling/admin/BillingComputePage";
-import StatusUpdateAdminPage from "@/features/sonatelBilling/admin/StatusUpdateImportPage";
+import InvoicesImportPage from "./features/sonatelBilling/InvoicesImportPage";
+import StatusUpdateImportPage from "@/features/sonatelBilling/admin/StatusUpdateImportPage";
+
+// ✅ NOUVEAU — Module Certification
+import CertificationPage from "@/features/certification/CertificationPage";
 
 import { ToastContainer } from "react-toastify";
 import { AuthProvider } from "@/auth/AuthContext";
-
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import InvoicesImportPage from "./features/sonatelBilling/InvoicesImportPage";
-import StatusUpdateImportPage from "@/features/sonatelBilling/admin/StatusUpdateImportPage";
+import UsersPage from "./features/users/Userspage";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +36,7 @@ export default function App() {
 
             <Route element={<RouteGuard />}>
               <Route element={<MainLayout />}>
+
                 <Route path="/dashboard" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
                   <Route index element={<DashboardPage />} />
                 </Route>
@@ -50,17 +53,26 @@ export default function App() {
                   <Route index element={<SonatelBillingPage />} />
                 </Route>
 
-                  <Route path="/billing/sonatel/config" element={<RouteGuard allowedRoles={["admin"]} />}>
-                    <Route element={<SonatelConfigPage />}>
-                      {/* ✅ /billing/sonatel/config -> /billing/sonatel/config/tariffs */}
-                      <Route index element={<Navigate to="tariffs" replace />} />
-                      <Route path="tariffs" element={<TariffRatesAdminPage />} />
-                      <Route path="contract-sites" element={<ContractSiteLinksAdminPage />} />
-                      <Route path="import-invoices" element={<InvoicesImportPage />} />
-                      <Route path="status-update" element={<StatusUpdateImportPage />} />
-                      <Route path="compute" element={<BillingComputePage />} />
-                    </Route>
+                {/* ✅ NOUVEAU — Certification */}
+                <Route path="/certification" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
+                  <Route index element={<CertificationPage />} />
+                </Route>
+
+                <Route path="/billing/sonatel/config" element={<RouteGuard allowedRoles={["admin"]} />}>
+                  <Route element={<SonatelConfigPage />}>
+                    <Route index element={<Navigate to="tariffs" replace />} />
+                    <Route path="tariffs" element={<TariffRatesAdminPage />} />
+                    <Route path="contract-sites" element={<ContractSiteLinksAdminPage />} />
+                    <Route path="import-invoices" element={<InvoicesImportPage />} />
+                    <Route path="status-update" element={<StatusUpdateImportPage />} />
+                    <Route path="compute" element={<BillingComputePage />} />
                   </Route>
+                </Route>
+
+                <Route path="/users" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
+                  <Route index element={<UsersPage />} />
+                </Route>
+
               </Route>
             </Route>
           </Routes>

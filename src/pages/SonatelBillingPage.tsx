@@ -1,351 +1,299 @@
+// src/features/sonatelBilling/SonatelBillingPage.tsx
 import { useMemo, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
-import { UploadCloud, RefreshCw } from "lucide-react";
+import {
+  UploadCloud, RefreshCw, FileSpreadsheet, AlertTriangle,
+  ChevronLeft, ChevronRight, TrendingUp, Zap, DollarSign,
+  BarChart3, Filter, Search, Calendar,
+} from "lucide-react";
 
 import { DataTable, Col } from "@/components/DataTable";
-import { StatusPill, money, num, cn } from "@/features/sonatelBilling/ui";
+import { StatusPill, money, num } from "@/features/sonatelBilling/ui";
 import { useAuth } from "@/auth/AuthContext";
 
-// ✅ API existantes (factures + monthly + contract)
 import {
-  listInvoices,
-  listMonthly,
-  listContractMonths,
-  SonatelInvoice,
-  MonthlySynthesis,
-  ContractMonth,
+  listInvoices, listMonthly, listContractMonths,
+  SonatelInvoice, MonthlySynthesis, ContractMonth,
 } from "@/features/sonatelBilling/api";
-
-// ✅ Import API (batches/issues/import) — adapte le path si différent
 import { getBatchIssues, importInvoices, listBatches, ImportIssue } from "@/features/sonatelBilling/admin/importApi";
 import { SeverityPill } from "@/features/sonatelBilling/admin/ui";
 import SonatelBillingStatsTab from "@/features/sonatelBilling/SonatelBillingStatsTab";
 
-type Tab = "INVOICES" | "MONTHLY" | "CONTRACT" | "IMPORT"| "STATS";
+type Tab = "INVOICES" | "MONTHLY" | "CONTRACT" | "IMPORT" | "STATS";
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function fmtDate(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function defaultRange() {
+  const now = new Date();
+  return { start: fmtDate(new Date(now.getFullYear(), 0, 1)), end: fmtDate(now) };
+}
 
-function KpiCard({ title, value, sub }: { title: string; value: string; sub?: string }) {
+// ─── KPI card ─────────────────────────────────────────────────────────────────
+function KpiCard({ label, value, icon, accent }: {
+  label: string; value: string; icon: React.ReactNode; accent?: string;
+}) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_18px_60px_rgba(2,6,23,0.06)]">
-      <div className="text-xs font-semibold tracking-wide text-slate-500">{title}</div>
-      <div className="mt-2 text-2xl font-extrabold text-slate-900">{value}</div>
-      {sub ? <div className="mt-1 text-xs text-slate-500">{sub}</div> : null}
+    <div style={{
+      background: "white",
+      borderRadius: 16,
+      padding: "18px 20px",
+      border: "1px solid rgba(30,58,138,.08)",
+      boxShadow: "0 1px 3px rgba(30,58,138,.04), 0 8px 24px rgba(30,58,138,.05)",
+      display: "flex", flexDirection: "column", gap: 10,
+      transition: "box-shadow .2s, transform .2s",
+    }}
+    onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 20px rgba(30,58,138,.1)"; (e.currentTarget as HTMLDivElement).style.transform = "translateY(-1px)"; }}
+    onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 1px 3px rgba(30,58,138,.04), 0 8px 24px rgba(30,58,138,.05)"; (e.currentTarget as HTMLDivElement).style.transform = "translateY(0)"; }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8", letterSpacing: ".04em", textTransform: "uppercase" }}>{label}</span>
+        <div style={{
+          width: 32, height: 32, borderRadius: 9,
+          background: accent ? `${accent}15` : "rgba(30,58,138,.07)",
+          display: "grid", placeItems: "center",
+          color: accent || "#1e3a8a",
+        }}>{icon}</div>
+      </div>
+      <div style={{
+        fontFamily: "'Outfit',sans-serif",
+        fontSize: 20, fontWeight: 800,
+        color: "#0f172a", letterSpacing: "-.02em",
+      }}>{value}</div>
     </div>
   );
 }
 
-
-// en haut du fichier (SonatelBillingPage.tsx)
-function fmtDate(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-function defaultRangeCurrentYear() {
-  const now = new Date();
-  return {
-    start: fmtDate(new Date(now.getFullYear(), 0, 1)),
-    end: fmtDate(now),
-  };
-}
-
-
-
-function PaginationBar({
-  page,
-  total,
-  pageSize,
-  onPage,
-}: {
-  page: number;
-  total: number;
-  pageSize: number;
-  onPage: (p: number) => void;
+// ─── Pagination ───────────────────────────────────────────────────────────────
+function Pagination({ page, total, pageSize, onPage }: {
+  page: number; total: number; pageSize: number; onPage: (p: number) => void;
 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   return (
-    <div className="mt-4 flex items-center justify-between">
-      <div className="text-sm text-slate-500">
-        Page <span className="font-semibold">{page}</span> / {totalPages} • Total{" "}
-        <span className="font-semibold">{total.toLocaleString("fr-FR")}</span>
-      </div>
-      <div className="flex gap-2">
-        <button
-          disabled={page <= 1}
-          onClick={() => onPage(Math.max(1, page - 1))}
-          className="px-3 py-2 rounded-2xl border border-slate-200 bg-white disabled:opacity-40"
-        >
-          Précédent
-        </button>
-        <button
-          disabled={page >= totalPages}
-          onClick={() => onPage(Math.min(totalPages, page + 1))}
-          className="px-3 py-2 rounded-2xl border border-slate-200 bg-white disabled:opacity-40"
-        >
-          Suivant
-        </button>
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      marginTop: 16, padding: "12px 16px",
+      background: "white", borderRadius: 12,
+      border: "1px solid rgba(30,58,138,.07)",
+    }}>
+      <span style={{ fontSize: 12, color: "#64748b", fontWeight: 500 }}>
+        Page <strong>{page}</strong> / {totalPages} &nbsp;·&nbsp; <strong>{total.toLocaleString("fr-FR")}</strong> résultats
+      </span>
+      <div style={{ display: "flex", gap: 6 }}>
+        {[
+          { label: <ChevronLeft size={14}/>, disabled: page <= 1, fn: () => onPage(page - 1) },
+          { label: <ChevronRight size={14}/>, disabled: page >= totalPages, fn: () => onPage(page + 1) },
+        ].map(({ label, disabled, fn }, i) => (
+          <button key={i} disabled={disabled} onClick={fn} style={{
+            width: 32, height: 32, borderRadius: 8,
+            display: "grid", placeItems: "center",
+            border: "1px solid rgba(30,58,138,.12)",
+            background: "white", cursor: disabled ? "not-allowed" : "pointer",
+            opacity: disabled ? .4 : 1,
+            color: "#1e3a8a",
+            transition: "background .15s",
+          }}
+          onMouseEnter={e => { if (!disabled) (e.currentTarget as HTMLButtonElement).style.background = "#f0f4ff"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "white"; }}
+          >
+            {label}
+          </button>
+        ))}
       </div>
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string | number }) {
+// ─── Stat mini ────────────────────────────────────────────────────────────────
+function StatMini({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_18px_60px_rgba(2,6,23,0.06)]">
-      <div className="text-xs font-semibold tracking-wide text-slate-500">{label}</div>
-      <div className="mt-1 text-xl font-extrabold text-slate-900">{value}</div>
+    <div style={{
+      background: "#f8faff", borderRadius: 12, padding: "12px 14px",
+      border: "1px solid rgba(30,58,138,.08)",
+    }}>
+      <div style={{ fontSize: 10.5, fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: ".05em" }}>{label}</div>
+      <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 18, fontWeight: 800, color: "#1e3a8a", marginTop: 4 }}>{value}</div>
     </div>
   );
 }
 
+// ─── Tab button ───────────────────────────────────────────────────────────────
+function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} style={{
+      padding: "8px 16px", borderRadius: 10,
+      border: active ? "1px solid #1e3a8a" : "1px solid rgba(30,58,138,.12)",
+      background: active ? "#1e3a8a" : "white",
+      color: active ? "white" : "#475569",
+      fontFamily: "'DM Sans',sans-serif",
+      fontSize: 13, fontWeight: 600,
+      cursor: "pointer",
+      transition: "all .18s",
+      display: "flex", alignItems: "center", gap: 6,
+      boxShadow: active ? "0 4px 12px rgba(30,58,138,.2)" : "none",
+      whiteSpace: "nowrap",
+    }}
+    onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLButtonElement).style.background = "#f0f4ff"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(30,58,138,.25)"; }}}
+    onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLButtonElement).style.background = "white"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(30,58,138,.12)"; }}}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ─── Field ────────────────────────────────────────────────────────────────────
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{
+      background: "white", borderRadius: 12,
+      border: "1px solid rgba(30,58,138,.1)",
+      padding: "10px 14px",
+    }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 6 }}>
+        {label}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+const inputStyle: React.CSSProperties = {
+  width: "100%", background: "#f8faff",
+  border: "1.5px solid #dde5ff",
+  borderRadius: 8, padding: "8px 12px",
+  fontSize: 13, color: "#1e3a8a",
+  fontFamily: "'DM Sans',sans-serif",
+  outline: "none",
+};
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 export default function SonatelBillingPage() {
   const { user } = useAuth();
   const role = user?.role || "analyst";
   const isAdmin = role === "admin";
-
   const qc = useQueryClient();
 
-  const [tab, setTab] = useState<Tab>("INVOICES");
+  const [tab, setTab]         = useState<Tab>("INVOICES");
+  const [search, setSearch]   = useState("");
+  const [status, setStatus]   = useState("");
+  const [site, setSite]       = useState("");
+  const [page, setPage]       = useState(1);
 
-  // filtres communs
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<string>("");
-  const [site, setSite] = useState<string>(""); // site_id (code) si supporté
-  const [page, setPage] = useState(1);
-
-  // filtres mensuels
-  const [year, setYear] = useState<string>("");
-  const [month, setMonth] = useState<string>("");
-
-  // ✅ NEW: filtre date commun (par défaut current year)
-  const defRange = useMemo(() => defaultRangeCurrentYear(), []);
+  const defRange = useMemo(() => defaultRange(), []);
   const [dateStart, setDateStart] = useState(defRange.start);
-  const [dateEnd, setDateEnd] = useState(defRange.end);
-
+  const [dateEnd,   setDateEnd]   = useState(defRange.end);
 
   const pageSize = 20;
 
-
   const tabs = useMemo(() => {
-    const base: Array<{ key: Tab; label: string }> = [
-      { key: "INVOICES", label: "Factures" },
-      { key: "MONTHLY", label: "Synthèse mensuelle" },
-      { key: "CONTRACT", label: "Contrat × Mois" },
-      { key: "STATS", label: "Stats" }, // ✅ NEW
+    const base: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
+      { key: "INVOICES", label: "Factures",           icon: <FileSpreadsheet size={13}/> },
+      { key: "MONTHLY",  label: "Synthèse mensuelle", icon: <BarChart3 size={13}/> },
+      { key: "CONTRACT", label: "Contrat × Mois",     icon: <TrendingUp size={13}/> },
+      { key: "STATS",    label: "Statistiques",       icon: <Zap size={13}/> },
     ];
-    if (isAdmin) base.push({ key: "IMPORT", label: "Import" });
+    if (isAdmin) base.push({ key: "IMPORT", label: "Import", icon: <UploadCloud size={13}/> });
     return base;
   }, [isAdmin]);
 
-
-  // ======================
-  // ✅ Invoices
-  // ======================
+  // ── Queries
   const invoicesQ = useQuery({
-  enabled: tab === "INVOICES",
-  queryKey: ["sb-invoices", { page, search, status, site, dateStart, dateEnd }],
-  queryFn: () =>
-    listInvoices({
-      page,
-      page_size: pageSize,
-      search,
-      status,
-      site,
-      start: dateStart,   // ✅ NEW
-      end: dateEnd,       // ✅ NEW
-    }),
-  placeholderData: keepPreviousData,
-});
+    enabled: tab === "INVOICES",
+    queryKey: ["sb-invoices", { page, search, status, site, dateStart, dateEnd }],
+    queryFn: () => listInvoices({ page, page_size: pageSize, search, status, site, start: dateStart, end: dateEnd }),
+    placeholderData: keepPreviousData,
+  });
+  const monthlyQ = useQuery({
+    enabled: tab === "MONTHLY",
+    queryKey: ["sb-monthly", { page, status, site, search, dateStart, dateEnd }],
+    queryFn: () => listMonthly({ page, page_size: pageSize, status: status||undefined, site: site||undefined, account: search||undefined, start: dateStart, end: dateEnd }),
+    placeholderData: keepPreviousData,
+  });
+  const contractQ = useQuery({
+    enabled: tab === "CONTRACT",
+    queryKey: ["sb-contract-months", { page, status, site, search, dateStart, dateEnd }],
+    queryFn: () => listContractMonths({ page, page_size: pageSize, status: status||undefined, site: site||undefined, account: search||undefined, start: dateStart, end: dateEnd }),
+    placeholderData: keepPreviousData,
+  });
 
-const monthlyQ = useQuery({
-  enabled: tab === "MONTHLY",
-  queryKey: ["sb-monthly", { page, status, site, search, dateStart, dateEnd }],
-  queryFn: () =>
-    listMonthly({
-      page,
-      page_size: pageSize,
-      status: status || undefined,
-      site: site || undefined,
-      account: search || undefined,
-      start: dateStart,   // ✅ NEW
-      end: dateEnd,       // ✅ NEW
-    }),
-  placeholderData: keepPreviousData,
-});
+  // ── Columns
+  const invoiceCols: Col<SonatelInvoice>[] = useMemo(() => [
+    { key:"site",   title:"Site",     render:(r) => <div style={{minWidth:160}}><div style={{fontWeight:600,fontSize:13}}>{(r as any)?.site?.site_id||(r as any)?.site_id||"—"}</div><div style={{fontSize:11,color:"#94a3b8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:140}}>{(r as any)?.site?.name||(r as any)?.site_name||""}</div></div> },
+    { key:"contract",title:"Contrat", render:(r) => <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:12}}>{r.numero_compte_contrat}</span> },
+    { key:"fact",   title:"Facture",  render:(r) => <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:12}}>{r.numero_facture}</span> },
+    { key:"period", title:"Période",  render:(r) => <div style={{fontSize:12,whiteSpace:"nowrap"}}><div>{r.date_debut_periode||"—"}</div><div style={{color:"#94a3b8"}}>→ {r.date_fin_periode||"—"}</div></div> },
+    { key:"echeance",title:"Échéance",render:(r) => <span style={{fontSize:12,whiteSpace:"nowrap"}}>{(r as any)?.echeance||"—"}</span> },
+    { key:"ht",     title:"HT",       render:(r) => <span style={{whiteSpace:"nowrap",fontSize:13,fontWeight:600}}>{money((r as any)?.montant_hors_tva)}</span> },
+    { key:"ttc",    title:"TTC",      render:(r) => <span style={{whiteSpace:"nowrap",fontSize:13,fontWeight:700,color:"#1e3a8a"}}>{money((r as any)?.montant_ttc)}</span> },
+    { key:"cosinus",title:"Cos φ",    render:(r) => <span style={{whiteSpace:"nowrap",fontSize:12}}>{money((r as any)?.montant_cosinus_phi)}</span> },
+    { key:"abo",    title:"Abo.",      render:(r) => <span style={{whiteSpace:"nowrap",fontSize:12}}>{money((r as any)?.abonnement_calcule)}</span> },
+    { key:"pen",    title:"PenPrime", render:(r) => <span style={{whiteSpace:"nowrap",fontSize:12}}>{money((r as any)?.penalite_abonnement_calculee)}</span> },
+    { key:"nrj",    title:"NRJ",      render:(r) => <span style={{whiteSpace:"nowrap",fontSize:12}}>{money((r as any)?.energie_calculee)}</span> },
+    { key:"status", title:"Statut",   render:(r) => <StatusPill v={(r as any)?.status} /> },
+  ], []);
 
-const contractQ = useQuery({
-  enabled: tab === "CONTRACT",
-  queryKey: ["sb-contract-months", { page, status, site, search, dateStart, dateEnd }],
-  queryFn: () =>
-    listContractMonths({
-      page,
-      page_size: pageSize,
-      status: status || undefined,
-      site: site || undefined,
-      account: search || undefined,
-      start: dateStart,   // ✅ NEW
-      end: dateEnd,       // ✅ NEW
-    }),
-  placeholderData: keepPreviousData,
-});
+  const monthlyCols: Col<MonthlySynthesis>[] = useMemo(() => [
+    { key:"site",   title:"Site",     render:(r) => <div style={{minWidth:160}}><div style={{fontWeight:600,fontSize:13}}>{(r as any).site_id||"—"}</div><div style={{fontSize:11,color:"#94a3b8",maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(r as any).site_name||""}</div></div> },
+    { key:"contract",title:"Contrat", render:(r) => <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:12}}>{r.numero_compte_contrat}</span> },
+    { key:"fact",   title:"Facture",  render:(r) => <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:12}}>{r.numero_facture}</span> },
+    { key:"ym",     title:"Mois",     render:(r) => <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:12,fontWeight:600}}>{`${r.year}-${String(r.month).padStart(2,"0")}`}</span> },
+    { key:"conso",  title:"Conso",    render:(r) => <span style={{whiteSpace:"nowrap",fontSize:12}}>{num((r as any).conso)}</span> },
+    { key:"ht",     title:"HT",       render:(r) => <span style={{whiteSpace:"nowrap",fontSize:13,fontWeight:600}}>{money((r as any).montant_hors_tva)}</span> },
+    { key:"ttc",    title:"TTC",      render:(r) => <span style={{whiteSpace:"nowrap",fontSize:13,fontWeight:700,color:"#1e3a8a"}}>{money((r as any).montant_ttc)}</span> },
+    { key:"abo",    title:"Abo.",      render:(r) => <span style={{whiteSpace:"nowrap",fontSize:12}}>{money((r as any).abonnement_calcule)}</span> },
+    { key:"pen",    title:"PenPrime", render:(r) => <span style={{whiteSpace:"nowrap",fontSize:12}}>{money((r as any).penalite_abonnement_calculee)}</span> },
+    { key:"nrj",    title:"NRJ",      render:(r) => <span style={{whiteSpace:"nowrap",fontSize:12}}>{money((r as any).energie_calculee)}</span> },
+    { key:"status", title:"Statut",   render:(r) => <StatusPill v={(r as any).status} /> },
+  ], []);
 
+  const contractCols: Col<ContractMonth>[] = useMemo(() => [
+    { key:"site",   title:"Site",      render:(r) => <div style={{minWidth:160}}><div style={{fontWeight:600,fontSize:13}}>{(r as any).site_id||"—"}</div><div style={{fontSize:11,color:"#94a3b8",maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(r as any).site_name||""}</div></div> },
+    { key:"contract",title:"Contrat",  render:(r) => <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:12}}>{r.numero_compte_contrat}</span> },
+    { key:"ym",     title:"Mois",      render:(r) => <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:12,fontWeight:600}}>{`${r.year}-${String(r.month).padStart(2,"0")}`}</span> },
+    { key:"count",  title:"# Factures",render:(r) => <span style={{fontWeight:700,color:"#1e3a8a"}}>{(r as any).invoices_count}</span> },
+    { key:"conso",  title:"Conso",     render:(r) => <span style={{whiteSpace:"nowrap",fontSize:12}}>{num((r as any).conso)}</span> },
+    { key:"ht",     title:"HT",        render:(r) => <span style={{whiteSpace:"nowrap",fontSize:13,fontWeight:600}}>{money((r as any).montant_hors_tva)}</span> },
+    { key:"ttc",    title:"TTC",       render:(r) => <span style={{whiteSpace:"nowrap",fontSize:13,fontWeight:700,color:"#1e3a8a"}}>{money((r as any).montant_ttc)}</span> },
+    { key:"abo",    title:"Abo.",       render:(r) => <span style={{whiteSpace:"nowrap",fontSize:12}}>{money((r as any).abonnement_calcule)}</span> },
+    { key:"pen",    title:"PenPrime",  render:(r) => <span style={{whiteSpace:"nowrap",fontSize:12}}>{money((r as any).penalite_abonnement_calculee)}</span> },
+    { key:"nrj",    title:"NRJ",       render:(r) => <span style={{whiteSpace:"nowrap",fontSize:12}}>{money((r as any).energie_calculee)}</span> },
+  ], []);
 
-
-  // ======================
-  // ✅ Contract × Month
-  // ======================
- 
-
-  // ======================
-  // ✅ Columns
-  // ======================
-  const invoiceCols: Col<SonatelInvoice>[] = useMemo(
-    () => [
-      {
-        key: "site",
-        title: "Site",
-        render: (r) => (
-          <div className="min-w-[180px]">
-            <div className="font-semibold">{(r as any)?.site?.site_id || (r as any)?.site_id || "—"}</div>
-            <div className="text-xs text-slate-500 truncate">{(r as any)?.site?.name || (r as any)?.site_name || ""}</div>
-          </div>
-        ),
-      },
-      { key: "contract", title: "Contrat", render: (r) => <span className="font-mono">{r.numero_compte_contrat}</span> },
-      { key: "fact", title: "Facture", render: (r) => <span className="font-mono">{r.numero_facture}</span> },
-      {
-        key: "period",
-        title: "Période",
-        render: (r) => (
-          <div className="text-xs whitespace-nowrap">
-            <div>{r.date_debut_periode || "—"}</div>
-            <div className="text-slate-500">→ {r.date_fin_periode || "—"}</div>
-          </div>
-        ),
-      },
-      {
-        key: "echeance",
-        title: "Échéance",
-        render: (r) => (r as any)?.echeance || "—",
-        className: "whitespace-nowrap",
-      },
-
-      { key: "ht", title: "HT", render: (r) => money((r as any)?.montant_hors_tva), className: "whitespace-nowrap" },
-      { key: "ttc", title: "TTC", render: (r) => money((r as any)?.montant_ttc), className: "whitespace-nowrap" },
-
-      // ✅ Données cibles
-      { key: "montant_cosinus_phi", title: "Montant Cosinus Phi", render: (r) => money((r as any)?.montant_cosinus_phi), className: "whitespace-nowrap" },
-      { key: "abo", title: "Abonnement", render: (r) => money((r as any)?.abonnement_calcule), className: "whitespace-nowrap" },
-      { key: "pen", title: "PenPrime", render: (r) => money((r as any)?.penalite_abonnement_calculee), className: "whitespace-nowrap" },
-      { key: "nrj", title: "NRJ", render: (r) => money((r as any)?.energie_calculee), className: "whitespace-nowrap" },
-
-      { key: "status", title: "Statut", render: (r) => <StatusPill v={(r as any)?.status} /> },
-    ],
-    []
-  );
-
-  const monthlyCols: Col<MonthlySynthesis>[] = useMemo(
-    () => [
-      {
-        key: "site",
-        title: "Site",
-        render: (r) => (
-          <div className="min-w-[190px]">
-            <div className="font-semibold">{(r as any).site_id || "—"}</div>
-            <div className="text-xs text-slate-500 truncate">{(r as any).site_name || ""}</div>
-          </div>
-        ),
-      },
-      { key: "contract", title: "Contrat", render: (r) => <span className="font-mono">{r.numero_compte_contrat}</span> },
-      { key: "fact", title: "Facture", render: (r) => <span className="font-mono">{r.numero_facture}</span> },
-      { key: "ym", title: "Mois", render: (r) => `${r.year}-${String(r.month).padStart(2, "0")}` },
-      { key: "conso", title: "Conso", render: (r) => num((r as any).conso), className: "whitespace-nowrap" },
-      { key: "ht", title: "HT", render: (r) => money((r as any).montant_hors_tva), className: "whitespace-nowrap" },
-      { key: "ttc", title: "TTC", render: (r) => money((r as any).montant_ttc), className: "whitespace-nowrap" },
-      { key: "abo", title: "Abonnement", render: (r) => money((r as any).abonnement_calcule), className: "whitespace-nowrap" },
-      { key: "pen", title: "PenPrime", render: (r) => money((r as any).penalite_abonnement_calculee), className: "whitespace-nowrap" },
-      { key: "nrj", title: "NRJ", render: (r) => money((r as any).energie_calculee), className: "whitespace-nowrap" },
-      { key: "status", title: "Statut", render: (r) => <StatusPill v={(r as any).status} /> },
-    ],
-    []
-  );
-
-  const contractCols: Col<ContractMonth>[] = useMemo(
-    () => [
-      {
-        key: "site",
-        title: "Site",
-        render: (r) => (
-          <div className="min-w-[190px]">
-            <div className="font-semibold">{(r as any).site_id || "—"}</div>
-            <div className="text-xs text-slate-500 truncate">{(r as any).site_name || ""}</div>
-          </div>
-        ),
-      },
-      { key: "contract", title: "Contrat", render: (r) => <span className="font-mono">{r.numero_compte_contrat}</span> },
-      { key: "ym", title: "Mois", render: (r) => `${r.year}-${String(r.month).padStart(2, "0")}` },
-      { key: "count", title: "#Factures", render: (r) => (r as any).invoices_count, className: "whitespace-nowrap font-semibold" },
-      { key: "conso", title: "Conso", render: (r) => num((r as any).conso), className: "whitespace-nowrap" },
-      { key: "ht", title: "HT", render: (r) => money((r as any).montant_hors_tva), className: "whitespace-nowrap" },
-      { key: "ttc", title: "TTC", render: (r) => money((r as any).montant_ttc), className: "whitespace-nowrap" },
-      { key: "abo", title: "Abonnement", render: (r) => money((r as any).abonnement_calcule), className: "whitespace-nowrap" },
-      { key: "pen", title: "PenPrime", render: (r) => money((r as any).penalite_abonnement_calculee), className: "whitespace-nowrap" },
-      { key: "nrj", title: "NRJ", render: (r) => money((r as any).energie_calculee), className: "whitespace-nowrap" },
-    ],
-    []
-  );
-
-  // ======================
-  // ✅ Active tab data
-  // ======================
   const active = tab === "INVOICES" ? invoicesQ : tab === "MONTHLY" ? monthlyQ : tab === "CONTRACT" ? contractQ : null;
   const rows = ((active?.data as any)?.results ?? []) as any[];
   const total = (active?.data as any)?.count ?? 0;
 
   const kpi = useMemo(() => {
-    const sum = (key: string) => rows.reduce((acc, r) => acc + (Number(r?.[key] ?? 0) || 0), 0);
-    return {
-      ttc: sum("montant_ttc"),
-      ht: sum("montant_hors_tva"),
-      nrj: sum("energie_calculee"),
-      abo: sum("abonnement_calcule"),
-      pen: sum("penalite_abonnement_calculee"),
-    };
+    const s = (k: string) => rows.reduce((a, r) => a + (Number(r?.[k] ?? 0) || 0), 0);
+    return { ttc: s("montant_ttc"), ht: s("montant_hors_tva"), nrj: s("energie_calculee"), abo: s("abonnement_calcule"), pen: s("penalite_abonnement_calculee") };
   }, [rows]);
 
-  function resetPage(nextTab: Tab) {
-    setTab(nextTab);
-    setPage(1);
-  }
+  function go(t: Tab) { setTab(t); setPage(1); }
 
-  // ======================
-  // ✅ IMPORT (Admin) — avec echeance (type date)
-  // ======================
-  const [file, setFile] = useState<File | null>(null);
-  const [echeance, setEcheance] = useState<string>(""); // ✅ YYYY-MM-DD
+  // ── Import
+  const [file, setFile]               = useState<File | null>(null);
+  const [echeance, setEcheance]       = useState("");
   const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
-  const [severity, setSeverity] = useState<string>("");
+  const [severity, setSeverity]       = useState("");
 
   const batchesQ = useQuery({
     enabled: tab === "IMPORT" && isAdmin,
-    queryKey: ["sb-batches", { kind: "SENELEC_INVOICE" }], // ⚠️ garde ton kind actuel
-    queryFn: () => listBatches({ kind: "SENELEC_INVOICE", page: 1, page_size: 20 }),
+    queryKey: ["sb-batches", { kind: "SENELEC_INVOICE" }],
+    queryFn:  () => listBatches({ kind: "SENELEC_INVOICE", page: 1, page_size: 20 }),
     placeholderData: keepPreviousData,
   });
-
   const issuesQ = useQuery({
     enabled: tab === "IMPORT" && !!selectedBatchId && isAdmin,
     queryKey: ["sb-batch-issues", selectedBatchId, severity],
-    queryFn: () => getBatchIssues(selectedBatchId!, severity ? { severity } : undefined),
+    queryFn:  () => getBatchIssues(selectedBatchId!, severity ? { severity } : undefined),
     placeholderData: keepPreviousData,
   });
-
   const importMut = useMutation({
     mutationFn: ({ file, echeance }: { file: File; echeance: string }) => importInvoices(file, echeance),
     onSuccess: (res) => {
-      toast.success(`Import OK: +${res.rows_created} / maj ${res.rows_updated} • issues ${res.issues_logged}`);
+      toast.success(`Import OK — +${res.rows_created} créées / ${res.rows_updated} mises à jour`);
       setSelectedBatchId(res.batch.id);
       qc.invalidateQueries({ queryKey: ["sb-batches"] });
       qc.invalidateQueries({ queryKey: ["sb-invoices"] });
@@ -355,293 +303,430 @@ const contractQ = useQuery({
     onError: (e: any) => toast.error(e?.response?.data?.detail || "Import échoué"),
   });
 
-  const issueCols: Col<ImportIssue>[] = useMemo(
-    () => [
-      { key: "sev", title: "Niveau", render: (r) => <SeverityPill v={r.severity} /> },
-      { key: "row", title: "Ligne", render: (r) => r.row_number ?? "—", className: "whitespace-nowrap font-semibold" },
-      { key: "field", title: "Champ", render: (r) => r.field || "—", className: "whitespace-nowrap" },
-      { key: "msg", title: "Message", render: (r) => <div className="min-w-[420px]">{r.message}</div> },
-    ],
-    []
-  );
+  const issueCols: Col<ImportIssue>[] = useMemo(() => [
+    { key:"sev",  title:"Niveau",  render:(r) => <SeverityPill v={r.severity} /> },
+    { key:"row",  title:"Ligne",   render:(r) => <span style={{fontFamily:"'JetBrains Mono',monospace",fontWeight:700}}>{r.row_number ?? "—"}</span> },
+    { key:"field",title:"Champ",   render:(r) => <span style={{fontSize:12,whiteSpace:"nowrap"}}>{r.field||"—"}</span> },
+    { key:"msg",  title:"Message", render:(r) => <div style={{minWidth:380,fontSize:12}}>{r.message}</div> },
+  ], []);
 
   const lastBatches = (batchesQ.data as any)?.results ?? [];
   const issues = (issuesQ.data as any) ?? [];
-
-
+  const showFilters = tab !== "IMPORT" && tab !== "STATS";
+  const showKpi     = tab !== "IMPORT" && tab !== "STATS";
 
   return (
-    <div className="px-6 py-6">
-      {/* Header */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_18px_60px_rgba(2,6,23,0.06)]">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-extrabold text-slate-900">Billing Sonatel</h1>
-            <p className="text-slate-500 mt-1">
-              Factures • Synthèse mensuelle • Contrat × Mois — Données cibles (Abonnement / PenPrime / NRJ)
-            </p>
-          </div>
-        </div>
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800&family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
-        {/* Tabs */}
-        <div className="mt-4 flex flex-wrap gap-2">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => resetPage(t.key)}
-              className={cn(
-                "px-4 py-2 rounded-2xl border font-semibold transition",
-                tab === t.key
-                  ? "bg-blue-900 text-white border-blue-900"
-                  : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        .sbp * { font-family:'DM Sans',sans-serif; box-sizing:border-box; }
+        .sbp .display { font-family:'Outfit',sans-serif; }
+        .sbp .mono    { font-family:'JetBrains Mono',monospace; }
 
-        {/* Filters (pas pour IMPORT) */}
-        {/* Filters */}
-        {tab !== "IMPORT" ? (
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-6 gap-3">
-            {/* Search/site/status uniquement hors STATS */}
-            {tab !== "STATS" ? (
-              <>
-                <input
-                  value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value);
-                    setPage(1);
-                  }}
-                  placeholder={tab === "INVOICES" ? "Recherche (facture/contrat/compteur)…" : "Contrat (num) …"}
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-900/20"
-                />
+        /* Table overrides — clean blue-white style */
+        .sbp table { width:100%; border-collapse:collapse; }
+        .sbp thead tr {
+          background: #f0f4ff;
+          border-bottom: 2px solid rgba(30,58,138,.08);
+        }
+        .sbp thead th {
+          padding: 10px 14px;
+          font-size: 10.5px; font-weight:700;
+          color: #64748b;
+          text-transform: uppercase; letter-spacing:.08em;
+          text-align: left; white-space:nowrap;
+        }
+        .sbp tbody tr {
+          border-bottom: 1px solid rgba(30,58,138,.05);
+          transition: background .12s;
+        }
+        .sbp tbody tr:hover { background: #f8faff; }
+        .sbp tbody tr:last-child { border-bottom: none; }
+        .sbp tbody td { padding: 10px 14px; font-size:13px; }
 
-                <input
-                  value={site}
-                  onChange={(e) => {
-                    setSite(e.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="Site (code) ex: S001"
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5"
-                />
+        @keyframes sbp-in {
+          from { opacity:0; transform:translateY(8px); }
+          to   { opacity:1; transform:translateY(0); }
+        }
+        .sbp-card { animation: sbp-in .4s cubic-bezier(.22,1,.36,1) both; }
+        .sbp-card:nth-child(1) { animation-delay:.04s; }
+        .sbp-card:nth-child(2) { animation-delay:.08s; }
+        .sbp-card:nth-child(3) { animation-delay:.12s; }
+        .sbp-card:nth-child(4) { animation-delay:.16s; }
+        .sbp-card:nth-child(5) { animation-delay:.20s; }
 
-                <select
-                  value={status}
-                  onChange={(e) => {
-                    setStatus(e.target.value);
-                    setPage(1);
-                  }}
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5"
-                >
-                  <option value="">Tous statuts</option>
-                  <option value="CREATED">Créée</option>
-                  <option value="VALIDATED">Validée</option>
-                  <option value="CONTESTED">Contestée</option>
-                </select>
-              </>
-            ) : (
-              // petit spacer pour garder la grille alignée
-              <div className="md:col-span-3" />
-            )}
+        .sbp input:focus, .sbp select:focus {
+          outline:none;
+          border-color: #1e3a8a !important;
+          box-shadow: 0 0 0 3px rgba(30,58,138,.09) !important;
+        }
 
-            {/* Dates : partout sauf IMPORT */}
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5">
-              <div className="text-[11px] font-bold text-slate-500">Date début</div>
-              <input
-                type="date"
-                value={dateStart}
-                onChange={(e) => {
-                  setDateStart(e.target.value);
-                  setPage(1);
-                }}
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 font-semibold"
-              />
-            </div>
+        .import-dropzone {
+          border: 2px dashed rgba(30,58,138,.2);
+          border-radius: 12px;
+          padding: 20px;
+          text-align: center;
+          transition: border-color .2s, background .2s;
+          cursor: pointer;
+        }
+        .import-dropzone:hover {
+          border-color: rgba(30,58,138,.45);
+          background: #f0f4ff;
+        }
+      `}</style>
 
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5">
-              <div className="text-[11px] font-bold text-slate-500">Date fin</div>
-              <input
-                type="date"
-                value={dateEnd}
-                onChange={(e) => {
-                  setDateEnd(e.target.value);
-                  setPage(1);
-                }}
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 font-semibold"
-              />
-            </div>
-          </div>
-        ) : null}
+      <div className="sbp" style={{ display:"flex", flexDirection:"column", gap:16 }}>
 
+        {/* ══ Page header card */}
+        <div className="sbp-card" style={{
+          background:"white", borderRadius:20,
+          border:"1px solid rgba(30,58,138,.08)",
+          boxShadow:"0 1px 3px rgba(30,58,138,.04), 0 8px 32px rgba(30,58,138,.06)",
+          overflow:"hidden",
+          position:"relative",
+        }}>
+          {/* Orange top bar */}
+          <div style={{
+            height:3, background:"linear-gradient(90deg,#E8401C,#ff7350,transparent)",
+            position:"absolute", top:0, left:0, right:0,
+          }}/>
 
-      </div>
-
-      {/* KPI (pas pour IMPORT) */}
-      {tab !== "IMPORT" && tab !== "STATS" ? (
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-5 gap-3">
-          <KpiCard title="TTC (page)" value={money(String(kpi.ttc))} />
-          <KpiCard title="HT (page)" value={money(String(kpi.ht))} />
-          <KpiCard title="NRJ (page)" value={money(String(kpi.nrj))} />
-          <KpiCard title="Abonnement (page)" value={money(String(kpi.abo))} />
-          <KpiCard title="PenPrime (page)" value={money(String(kpi.pen))} />
-        </div>
-      ) : null}
-
-      {/* Content */}
-      <div className="mt-4">
-        { tab === "STATS" ? (
-            <SonatelBillingStatsTab start={dateStart} end={dateEnd} />
-          ) : tab === "INVOICES" ? (
-          <>
-            <DataTable cols={invoiceCols} rows={rows as SonatelInvoice[]} loading={invoicesQ.isLoading} />
-            <PaginationBar page={page} total={total} pageSize={pageSize} onPage={setPage} />
-          </>
-        ) : tab === "MONTHLY" ? (
-          <>
-            <DataTable cols={monthlyCols} rows={rows as MonthlySynthesis[]} loading={monthlyQ.isLoading} />
-            <PaginationBar page={page} total={total} pageSize={pageSize} onPage={setPage} />
-          </>
-        ) : tab === "CONTRACT" ? (
-          <>
-            <DataTable cols={contractCols} rows={rows as ContractMonth[]} loading={contractQ.isLoading} />
-            <PaginationBar page={page} total={total} pageSize={pageSize} onPage={setPage} />
-          </>
-        ) : (
-          // ======================
-          // ✅ IMPORT TAB (Admin)
-          // ======================
-          <div className="space-y-4">
-            {!isAdmin ? (
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-600">
-                Accès réservé Admin.
+          <div style={{ padding:"22px 24px 0" }}>
+            <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:16, flexWrap:"wrap" }}>
+              <div>
+                <div style={{
+                  display:"inline-flex", alignItems:"center", gap:6,
+                  background:"rgba(232,64,28,.08)", border:"1px solid rgba(232,64,28,.18)",
+                  borderRadius:100, padding:"3px 10px",
+                  marginBottom:8,
+                }}>
+                  <div style={{width:5,height:5,borderRadius:"50%",background:"#E8401C"}}/>
+                  <span style={{fontSize:10,fontWeight:700,letterSpacing:".12em",color:"#E8401C",textTransform:"uppercase"}}>
+                    Facturation Sénélec
+                  </span>
+                </div>
+                <h1 className="display" style={{
+                  fontSize:22, fontWeight:800,
+                  color:"#0f172a", letterSpacing:"-.025em",
+                  margin:0, lineHeight:1.2,
+                }}>
+                  Billing Sonatel
+                </h1>
+                <p style={{ fontSize:13, color:"#64748b", marginTop:4 }}>
+                  Factures · Synthèse mensuelle · Contrat × Mois · Données cibles
+                </p>
               </div>
-            ) : (
-              <>
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_18px_60px_rgba(2,6,23,0.06)]">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h2 className="text-xl font-extrabold text-slate-900">Import Factures (Excel)</h2>
-                      <p className="text-slate-500 mt-1">
-                        Upload Sonatel → upsert factures + synthèse mensuelle + recalcul Contrat×Mois.
-                      </p>
-                    </div>
+            </div>
 
-                    <button
-                      onClick={() => batchesQ.refetch()}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 font-semibold"
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                      Rafraîchir
-                    </button>
+            {/* Tabs */}
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:18, paddingBottom:18 }}>
+              {tabs.map(t => (
+                <TabBtn key={t.key} active={tab === t.key} onClick={() => go(t.key)}>
+                  {t.icon} {t.label}
+                </TabBtn>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ══ Filters */}
+        {showFilters && (
+          <div className="sbp-card" style={{
+            background:"white", borderRadius:16,
+            border:"1px solid rgba(30,58,138,.08)",
+            boxShadow:"0 1px 3px rgba(30,58,138,.04)",
+            padding:"16px 20px",
+          }}>
+            <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:12 }}>
+              <Filter size={13} style={{color:"#94a3b8"}}/>
+              <span style={{fontSize:11,fontWeight:700,color:"#94a3b8",letterSpacing:".08em",textTransform:"uppercase"}}>Filtres</span>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))", gap:10 }}>
+
+              {tab !== "STATS" && (
+                <>
+                  {/* Search */}
+                  <div style={{ position:"relative" }}>
+                    <Search size={13} style={{ position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#94a3b8",pointerEvents:"none" }}/>
+                    <input
+                      value={search}
+                      onChange={e => { setSearch(e.target.value); setPage(1); }}
+                      placeholder={tab==="INVOICES" ? "Facture / contrat…" : "Contrat…"}
+                      style={{ ...inputStyle, paddingLeft:30 }}
+                    />
                   </div>
 
-                  <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
-                    <label className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                      <div className="text-xs font-semibold text-slate-500">Fichier</div>
-                      <input
-                        type="file"
-                        accept=".xlsx,.xls"
-                        onChange={(e) => setFile(e.target.files?.[0] || null)}
-                        className="mt-2 block w-full text-sm"
-                      />
-                      {file ? <div className="mt-2 text-xs text-slate-500">{file.name}</div> : null}
-                    </label>
+                  {/* Site */}
+                  <input
+                    value={site}
+                    onChange={e => { setSite(e.target.value); setPage(1); }}
+                    placeholder="Site (ex: S001)"
+                    style={inputStyle}
+                  />
 
-                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                      <div className="text-xs font-semibold text-slate-500">Échéance (obligatoire)</div>
-                      <input
-                        type="date"
-                        value={echeance}
-                        onChange={(e) => setEcheance(e.target.value)}
-                        className="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2 font-semibold"
-                      />
-                    </div>
+                  {/* Status */}
+                  <select
+                    value={status}
+                    onChange={e => { setStatus(e.target.value); setPage(1); }}
+                    style={inputStyle}
+                  >
+                    <option value="">Tous statuts</option>
+                    <option value="CREATED">Créée</option>
+                    <option value="VALIDATED">Validée</option>
+                    <option value="CONTESTED">Contestée</option>
+                  </select>
+                </>
+              )}
 
-                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                      <div className="text-xs font-semibold text-slate-500">Derniers batches</div>
-                      <select
-                        className="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2"
-                        value={selectedBatchId ?? ""}
-                        onChange={(e) => setSelectedBatchId(e.target.value ? Number(e.target.value) : null)}
+              {/* Date range */}
+              <div style={{ position:"relative" }}>
+                <Calendar size={13} style={{ position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#94a3b8",pointerEvents:"none" }}/>
+                <input
+                  type="date" value={dateStart}
+                  onChange={e => { setDateStart(e.target.value); setPage(1); }}
+                  style={{ ...inputStyle, paddingLeft:30 }}
+                />
+              </div>
+              <div style={{ position:"relative" }}>
+                <Calendar size={13} style={{ position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#94a3b8",pointerEvents:"none" }}/>
+                <input
+                  type="date" value={dateEnd}
+                  onChange={e => { setDateEnd(e.target.value); setPage(1); }}
+                  style={{ ...inputStyle, paddingLeft:30 }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ KPI cards */}
+        {showKpi && (
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(170px,1fr))", gap:10 }}>
+            {[
+              { label:"TTC (page)",    value:money(String(kpi.ttc)), icon:<DollarSign size={14}/>,   accent:"#1e3a8a" },
+              { label:"HT (page)",     value:money(String(kpi.ht)),  icon:<DollarSign size={14}/>,   accent:"#475569" },
+              { label:"NRJ (page)",    value:money(String(kpi.nrj)), icon:<Zap size={14}/>,          accent:"#E8401C" },
+              { label:"Abonnement",    value:money(String(kpi.abo)), icon:<TrendingUp size={14}/>,   accent:"#10b981" },
+              { label:"PenPrime",      value:money(String(kpi.pen)), icon:<AlertTriangle size={14}/>,accent:"#f59e0b" },
+            ].map((k, i) => (
+              <div key={i} className="sbp-card">
+                <KpiCard {...k} />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ══ Content */}
+        <div className="sbp-card" style={{
+          background:"white", borderRadius:16,
+          border:"1px solid rgba(30,58,138,.08)",
+          boxShadow:"0 1px 3px rgba(30,58,138,.04), 0 8px 24px rgba(30,58,138,.04)",
+          overflow:"hidden",
+        }}>
+
+          {/* STATS */}
+          {tab === "STATS" && (
+            <div style={{ padding:"20px" }}>
+              <SonatelBillingStatsTab start={dateStart} end={dateEnd} />
+            </div>
+          )}
+
+          {/* DATA TABLES */}
+          {(tab === "INVOICES" || tab === "MONTHLY" || tab === "CONTRACT") && (
+            <>
+              <div style={{ overflowX:"auto" }}>
+                <DataTable
+                  cols={tab === "INVOICES" ? invoiceCols : tab === "MONTHLY" ? monthlyCols : contractCols}
+                  rows={rows}
+                  loading={active?.isLoading}
+                />
+              </div>
+              <div style={{ padding:"0 16px 16px" }}>
+                <Pagination page={page} total={total} pageSize={pageSize} onPage={setPage} />
+              </div>
+            </>
+          )}
+
+          {/* IMPORT */}
+          {tab === "IMPORT" && (
+            <div style={{ padding:"20px" }}>
+              {!isAdmin ? (
+                <div style={{
+                  padding:"40px 24px", textAlign:"center",
+                  color:"#64748b", fontSize:14,
+                }}>
+                  <AlertTriangle size={32} style={{color:"#E8401C",margin:"0 auto 12px",display:"block"}}/>
+                  Accès réservé aux administrateurs.
+                </div>
+              ) : (
+                <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+
+                  {/* Upload section */}
+                  <div style={{
+                    background:"#f8faff", borderRadius:14,
+                    border:"1px solid rgba(30,58,138,.1)",
+                    padding:"20px",
+                  }}>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
+                      <div>
+                        <h2 className="display" style={{ fontSize:16, fontWeight:800, color:"#0f172a", margin:0 }}>
+                          Import Factures
+                        </h2>
+                        <p style={{ fontSize:12, color:"#64748b", marginTop:2 }}>
+                          Upload Excel Sénélec → upsert factures + synthèse + Contrat×Mois
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => batchesQ.refetch()}
+                        style={{
+                          display:"flex", alignItems:"center", gap:6,
+                          padding:"7px 12px", borderRadius:9,
+                          border:"1px solid rgba(30,58,138,.12)",
+                          background:"white", cursor:"pointer",
+                          fontSize:12, fontWeight:600, color:"#475569",
+                        }}
                       >
-                        <option value="">— sélectionner —</option>
-                        {lastBatches.map((b: any) => (
-                          <option key={b.id} value={b.id}>
-                            #{b.id} • {new Date(b.imported_at).toLocaleString("fr-FR")} • {b.source_filename}
-                          </option>
-                        ))}
-                      </select>
+                        <RefreshCw size={13}/> Rafraîchir
+                      </button>
                     </div>
 
-                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 flex items-end">
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr auto", gap:12, alignItems:"end" }}>
+
+                      {/* File */}
+                      <Field label="Fichier Excel">
+                        <label className="import-dropzone" style={{ display:"block", cursor:"pointer" }}>
+                          <FileSpreadsheet size={22} style={{color:"#1e3a8a",margin:"0 auto 6px",display:"block"}}/>
+                          <div style={{fontSize:12,color:"#64748b",fontWeight:500}}>
+                            {file ? file.name : "Cliquer ou déposer .xlsx / .xls"}
+                          </div>
+                          <input type="file" accept=".xlsx,.xls"
+                            onChange={e => setFile(e.target.files?.[0]||null)}
+                            style={{display:"none"}}
+                          />
+                        </label>
+                      </Field>
+
+                      {/* Echeance */}
+                      <Field label="Échéance *">
+                        <div style={{ position:"relative" }}>
+                          <Calendar size={13} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#94a3b8",pointerEvents:"none"}}/>
+                          <input
+                            type="date" value={echeance}
+                            onChange={e => setEcheance(e.target.value)}
+                            style={{ ...inputStyle, paddingLeft:30 }}
+                          />
+                        </div>
+                      </Field>
+
+                      {/* Batch picker */}
+                      <Field label="Batch précédent">
+                        <select
+                          value={selectedBatchId ?? ""}
+                          onChange={e => setSelectedBatchId(e.target.value ? Number(e.target.value) : null)}
+                          style={inputStyle}
+                        >
+                          <option value="">— sélectionner —</option>
+                          {lastBatches.map((b: any) => (
+                            <option key={b.id} value={b.id}>
+                              #{b.id} · {new Date(b.imported_at).toLocaleString("fr-FR")} · {b.source_filename}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+
+                      {/* Submit */}
                       <button
                         disabled={!file || !echeance || importMut.isPending}
                         onClick={() => file && echeance && importMut.mutate({ file, echeance })}
-                        className={cn(
-                          "w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl font-extrabold",
-                          "bg-blue-900 text-white border border-blue-900",
-                          (!file || !echeance || importMut.isPending) ? "opacity-50 cursor-not-allowed" : "hover:opacity-95"
-                        )}
+                        style={{
+                          display:"flex", alignItems:"center", justifyContent:"center", gap:7,
+                          padding:"11px 20px", borderRadius:10,
+                          background: (!file || !echeance || importMut.isPending) ? "#94a3b8" : "#1e3a8a",
+                          color:"white", border:"none",
+                          fontSize:13, fontWeight:700,
+                          cursor: (!file || !echeance || importMut.isPending) ? "not-allowed" : "pointer",
+                          transition:"background .18s",
+                          boxShadow: (!file||!echeance||importMut.isPending) ? "none" : "0 4px 14px rgba(30,58,138,.25)",
+                          height:42, whiteSpace:"nowrap",
+                        }}
                       >
-                        <UploadCloud className="h-5 w-5" />
+                        <UploadCloud size={15}/>
                         {importMut.isPending ? "Import..." : "Importer"}
                       </button>
                     </div>
                   </div>
 
-                  {importMut.data ? (
-                    <div className="mt-4 grid grid-cols-1 md:grid-cols-6 gap-3">
-                      <Stat label="Créées" value={importMut.data.rows_created} />
-                      <Stat label="Mises à jour" value={importMut.data.rows_updated} />
-                      <Stat label="Monthly créées" value={importMut.data.monthly_rows_created} />
-                      <Stat label="Issues" value={importMut.data.issues_logged} />
-                      <Stat label="Missing Site" value={importMut.data.invoices_missing_site_count} />
-                      <Stat label="Contrat×Mois upsert" value={importMut.data.contract_months_upserted} />
+                  {/* Import results */}
+                  {importMut.data && (
+                    <div style={{
+                      display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10,
+                    }}>
+                      {[
+                        ["Créées",           importMut.data.rows_created],
+                        ["Mises à jour",     importMut.data.rows_updated],
+                        ["Monthly créées",   importMut.data.monthly_rows_created],
+                        ["Issues",           importMut.data.issues_logged],
+                        ["Sans site",        importMut.data.invoices_missing_site_count],
+                        ["Contrat×Mois",     importMut.data.contract_months_upserted],
+                      ].map(([l, v]) => <StatMini key={l} label={String(l)} value={v as number} />)}
                     </div>
-                  ) : null}
+                  )}
 
                   {importMut.data?.invoices_missing_site_count ? (
-                    <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
-                      <div className="font-semibold">Attention : contrats sans mapping Site</div>
-                      <div className="text-sm mt-1">
-                        Exemples: {importMut.data.invoices_missing_site_sample?.join(", ") || "—"}
+                    <div style={{
+                      background:"#fffbeb", border:"1px solid #fde68a",
+                      borderRadius:12, padding:"14px 16px",
+                      display:"flex", gap:10, alignItems:"flex-start",
+                    }}>
+                      <AlertTriangle size={16} style={{color:"#f59e0b",flexShrink:0,marginTop:1}}/>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:700,color:"#92400e"}}>
+                          {importMut.data.invoices_missing_site_count} contrat(s) sans mapping Site
+                        </div>
+                        <div style={{fontSize:11,color:"#b45309",marginTop:3}}>
+                          Exemples : {importMut.data.invoices_missing_site_sample?.join(", ")||"—"}
+                        </div>
                       </div>
                     </div>
                   ) : null}
-                </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_18px_60px_rgba(2,6,23,0.06)]">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-lg font-extrabold text-slate-900">Issues du batch</h3>
-                    <select
-                      value={severity}
-                      onChange={(e) => setSeverity(e.target.value)}
-                      className="rounded-2xl border border-slate-200 bg-white px-3 py-2 font-semibold"
-                    >
-                      <option value="">Tous</option>
-                      <option value="ERROR">ERROR</option>
-                      <option value="WARN">WARN</option>
-                      <option value="INFO">INFO</option>
-                    </select>
-                  </div>
-
-                  <div className="mt-3">
-                    <DataTable
-                      cols={issueCols}
-                      rows={issues}
-                      loading={issuesQ.isLoading}
-                      emptyText={selectedBatchId ? "Aucune issue" : "Sélectionne un batch pour voir les issues"}
-                    />
+                  {/* Issues table */}
+                  <div style={{ background:"white", borderRadius:12, border:"1px solid rgba(30,58,138,.08)", overflow:"hidden" }}>
+                    <div style={{
+                      padding:"14px 18px",
+                      borderBottom:"1px solid rgba(30,58,138,.07)",
+                      display:"flex", alignItems:"center", justifyContent:"space-between",
+                    }}>
+                      <h3 className="display" style={{ fontSize:14, fontWeight:800, color:"#0f172a", margin:0 }}>
+                        Issues du batch
+                      </h3>
+                      <select
+                        value={severity}
+                        onChange={e => setSeverity(e.target.value)}
+                        style={{ ...inputStyle, width:"auto", padding:"6px 12px" }}
+                      >
+                        <option value="">Tous</option>
+                        <option value="ERROR">ERROR</option>
+                        <option value="WARN">WARN</option>
+                        <option value="INFO">INFO</option>
+                      </select>
+                    </div>
+                    <div style={{ overflowX:"auto" }}>
+                      <DataTable
+                        cols={issueCols}
+                        rows={issues}
+                        loading={issuesQ.isLoading}
+                        emptyText={selectedBatchId ? "Aucune issue" : "Sélectionne un batch pour voir les issues"}
+                      />
+                    </div>
                   </div>
                 </div>
-              </>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
