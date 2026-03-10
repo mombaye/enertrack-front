@@ -22,6 +22,8 @@ import { ToastContainer } from "react-toastify";
 import { AuthProvider } from "@/auth/AuthContext";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import UsersPage from "./features/users/Userspage";
+import ComingSoonPage from "./components/Comingsoonpage";
+import { AlertTriangle, BarChart2, Calculator, Server, Zap } from "lucide-react";
 
 const queryClient = new QueryClient();
 
@@ -68,6 +70,63 @@ export default function App() {
                     <Route path="compute" element={<BillingComputePage />} />
                   </Route>
                 </Route>
+
+
+
+                <Route
+                  path="/modules/estimation"
+                  element={
+                    <ComingSoonPage
+                      moduleName="Estimation"
+                      description="Estimez la consommation prévisionnelle de vos sites à partir des données FMS et de l'historique Sénélec."
+                      icon={<Calculator size={38} color="rgba(255,255,255,0.85)" />}
+                    />
+                  }
+                />
+
+                <Route
+                  path="/modules/optimisation"
+                  element={
+                    <ComingSoonPage
+                      moduleName="Optimisation de Puissance & Tarif"
+                      description="Identifiez les leviers tarifaires et optimisez la puissance souscrite pour réduire vos coûts énergétiques."
+                      icon={<Zap size={38} color="rgba(255,255,255,0.85)" />}
+                    />
+                  }
+                />
+
+                <Route
+                  path="/modules/suivi-conso"
+                  element={
+                    <ComingSoonPage
+                      moduleName="Suivi Conso"
+                      description="Suivez en temps réel la consommation de chaque site et détectez les anomalies de facturation."
+                      icon={<BarChart2 size={38} color="rgba(255,255,255,0.85)" />}
+                    />
+                  }
+                />
+
+                <Route
+                  path="/modules/suivi-penalites"
+                  element={
+                    <ComingSoonPage
+                      moduleName="Suivi Pénalités"
+                      description="Centralisez et analysez toutes les pénalités facturées par Sénélec sur l'ensemble de votre parc."
+                      icon={<AlertTriangle size={38} color="rgba(255,255,255,0.85)" />}
+                    />
+                  }
+                />
+
+                <Route
+                  path="/modules/suivi-fms"
+                  element={
+                    <ComingSoonPage
+                      moduleName="Suivi FMS"
+                      description="Monitoring de la disponibilité et de la qualité des données remontées par les compteurs FMS."
+                      icon={<Server size={38} color="rgba(255,255,255,0.85)" />}
+                    />
+                  }
+                />
 
                 <Route path="/users" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
                   <Route index element={<UsersPage />} />

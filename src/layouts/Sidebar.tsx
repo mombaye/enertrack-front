@@ -4,28 +4,42 @@ import { NavLink, useLocation } from "react-router-dom";
 import {
   Home, User, Menu, X, Receipt,
   ChevronLeft, ChevronRight, Settings2, ShieldCheck,
+  Calculator, Zap, BarChart2, AlertTriangle, Server,
 } from "lucide-react";
 import camusatLogo from "@/assets/images/camusat-logo.png";
 import { useAuth } from "@/auth/AuthContext";
 
-type Section = "ANALYSE" | "FACTURATION" | "ADMINISTRATION" | "RÉSEAU";
+type Section = "ANALYSE" | "FACTURATION" | "MODULES" | "ADMINISTRATION" | "RÉSEAU";
 type LinkItem = {
   to: string; label: string; icon: React.ReactNode;
   adminOnly?: boolean; section?: Section; end?: boolean;
+  comingSoon?: boolean;
 };
 
 const LINKS: LinkItem[] = [
-  { to: "/dashboard",              icon: <Home />,        label: "Dashboard",      section: "ANALYSE",        end: true },
-  { to: "/billing/sonatel",        icon: <Receipt />,     label: "Billing Sonatel",section: "FACTURATION",    end: true },
-  { to: "/certification",          icon: <ShieldCheck />, label: "Certification",  section: "FACTURATION",    end: true },
-  { to: "/users",                  icon: <User />,        label: "Utilisateurs",   section: "ADMINISTRATION", adminOnly: true },
-  { to: "/billing/sonatel/config", icon: <Settings2 />,   label: "Config Sonatel", section: "ADMINISTRATION", adminOnly: true },
+  // ── ANALYSE ─────────────────────────────────────────────────────────────────
+  { to: "/dashboard",              icon: <Home />,         label: "Dashboard",                  section: "ANALYSE",        end: true },
+
+  // ── FACTURATION ──────────────────────────────────────────────────────────────
+  { to: "/billing/sonatel",        icon: <Receipt />,      label: "Billing Sonatel",            section: "FACTURATION",    end: true },
+  { to: "/certification",          icon: <ShieldCheck />,  label: "Certification",              section: "FACTURATION",    end: true },
+
+  // ── MODULES ──────────────────────────────────────────────────────────────────
+  { to: "/modules/estimation",              icon: <Calculator />,   label: "Estimation",                 section: "MODULES",        comingSoon: true },
+  { to: "/modules/optimisation",           icon: <Zap />,          label: "Optim. Puissance & Tarif",   section: "MODULES",        comingSoon: true },
+  { to: "/modules/suivi-conso",            icon: <BarChart2 />,    label: "Suivi Conso",                section: "MODULES",        comingSoon: true },
+  { to: "/modules/suivi-penalites",        icon: <AlertTriangle />,label: "Suivi Pénalités",            section: "MODULES",        comingSoon: true },
+  { to: "/modules/suivi-fms",             icon: <Server />,       label: "Suivi FMS",                  section: "MODULES",        comingSoon: true },
+
+  // ── ADMINISTRATION ───────────────────────────────────────────────────────────
+  { to: "/users",                  icon: <User />,         label: "Utilisateurs",               section: "ADMINISTRATION", adminOnly: true },
+  { to: "/billing/sonatel/config", icon: <Settings2 />,    label: "Config Sonatel",             section: "ADMINISTRATION", adminOnly: true },
 ];
 
 const W  = 272;
 const WC = 72;
 
-// ─── Tooltip for collapsed items ─────────────────────────────────────────────
+// ─── Tooltip for collapsed items ──────────────────────────────────────────────
 function Tip({ label, show }: { label: string; show: boolean }) {
   return (
     <span style={{
@@ -56,7 +70,7 @@ function Tip({ label, show }: { label: string; show: boolean }) {
   );
 }
 
-// ─── Section divider ──────────────────────────────────────────────────────────
+// ─── Section divider ───────────────────────────────────────────────────────────
 function SectionLabel({ title, collapsed }: { title: string; collapsed: boolean }) {
   if (collapsed) return <div style={{ height: 8 }} />;
   return (
@@ -73,12 +87,13 @@ function SectionLabel({ title, collapsed }: { title: string; collapsed: boolean 
   );
 }
 
-// ─── Single nav link ──────────────────────────────────────────────────────────
-function NavItem({ to, icon, label, collapsed, adminOnly, end }: {
+// ─── Single nav link ───────────────────────────────────────────────────────────
+function NavItem({ to, icon, label, collapsed, adminOnly, end, comingSoon }: {
   to: string; icon: React.ReactNode; label: string;
-  collapsed: boolean; adminOnly?: boolean; end?: boolean;
+  collapsed: boolean; adminOnly?: boolean; end?: boolean; comingSoon?: boolean;
 }) {
   const [hov, setHov] = useState(false);
+
   return (
     <li style={{ listStyle: "none", position: "relative" }}>
       <NavLink
@@ -99,6 +114,7 @@ function NavItem({ to, icon, label, collapsed, adminOnly, end }: {
             ? "rgba(255,255,255,.95)"
             : hov ? "rgba(255,255,255,.07)" : "transparent",
           boxShadow: isActive ? "0 4px 20px rgba(0,0,0,.2)" : "none",
+          opacity: comingSoon ? 0.7 : 1,
         })}
       >
         {({ isActive }) => (
@@ -149,6 +165,19 @@ function NavItem({ to, icon, label, collapsed, adminOnly, end }: {
               }}>Admin</span>
             )}
 
+            {/* Coming Soon pill */}
+            {!collapsed && comingSoon && !isActive && (
+              <span style={{
+                fontSize: 8.5, fontWeight: 700,
+                padding: "2px 6px", borderRadius: 100,
+                background: "rgba(232,64,28,0.15)",
+                border: "1px solid rgba(232,64,28,0.25)",
+                color: "#ff7a5c",
+                letterSpacing: ".06em", textTransform: "uppercase",
+                whiteSpace: "nowrap",
+              }}>Soon</span>
+            )}
+
             {collapsed && <Tip label={label} show={hov} />}
           </>
         )}
@@ -157,7 +186,7 @@ function NavItem({ to, icon, label, collapsed, adminOnly, end }: {
   );
 }
 
-// ─── Inner content ────────────────────────────────────────────────────────────
+// ─── Inner content ─────────────────────────────────────────────────────────────
 function Inner({
   collapsed, setCollapsed, onClose, mode,
 }: {
@@ -174,15 +203,16 @@ function Inner({
     () => LINKS.filter(l => !l.adminOnly || role === "admin"),
     [role]
   );
+
   const groups = useMemo(() => {
     const m: Record<Section, LinkItem[]> = {
-      ANALYSE: [], FACTURATION: [], ADMINISTRATION: [], RÉSEAU: [],
+      ANALYSE: [], FACTURATION: [], MODULES: [], ADMINISTRATION: [], RÉSEAU: [],
     };
     for (const l of visible) m[(l.section || "ANALYSE") as Section].push(l);
     return m;
   }, [visible]);
 
-  const sections: Section[] = ["ANALYSE", "FACTURATION", "ADMINISTRATION", "RÉSEAU"];
+  const sections: Section[] = ["ANALYSE", "FACTURATION", "MODULES", "ADMINISTRATION", "RÉSEAU"];
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
@@ -275,8 +305,11 @@ function Inner({
               <SectionLabel title={sec} collapsed={isCol} />
               <ul style={{ margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 1 }}>
                 {items.map(l => (
-                  <NavItem key={l.to} to={l.to} icon={l.icon} label={l.label}
-                    collapsed={isCol} adminOnly={l.adminOnly} end={l.end} />
+                  <NavItem
+                    key={l.to} to={l.to} icon={l.icon} label={l.label}
+                    collapsed={isCol} adminOnly={l.adminOnly} end={l.end}
+                    comingSoon={l.comingSoon}
+                  />
                 ))}
               </ul>
               <div style={{ height: 1, background: "rgba(255,255,255,.05)", margin: "8px 2px 0" }}/>
@@ -328,7 +361,7 @@ function Inner({
   );
 }
 
-// ─── Export ───────────────────────────────────────────────────────────────────
+// ─── Export ────────────────────────────────────────────────────────────────────
 export default function Sidebar() {
   const [collapsed,   setCollapsed]   = useState(false);
   const [mobileOpen,  setMobileOpen]  = useState(false);
