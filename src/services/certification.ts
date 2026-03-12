@@ -170,11 +170,12 @@ export async function listCertResults(params?: {
   site?: string;
   invoice?: string;
   fms_available?: boolean;
-  page_size?: number;          // ✅ NOUVEAU — pour l'export complet
+  page?: number;       // ← ajouter
+  page_size?: number;
 }) {
-  const { data } = await api.get<CertificationResult[]>(`${BASE}/results/`, { params });
-  return data;
-}
+  const { data } = await api.get(`${BASE}/results/`, { params });
+  return data;          // ← retirer le typage <CertificationResult[]> ici
+}                       //   car la réponse paginée n'est PAS un tableau direct
 
 export async function checkEfmsHealth() {
   const { data } = await api.get<EfmsHealth>(`${BASE}/efms-health/`);

@@ -532,18 +532,43 @@ export default function CertificationPage() {
   const results: CertificationResult[] = Array.isArray(resultsRaw) ? resultsRaw : (resultsRaw as any)?.results ?? [];
   const selectedBatch = certBatches.find(b => b.id === selectedBatchId);
 
-  const handleExport = async () => {
-    if (!selectedBatchId || !selectedBatch) return;
-    setIsExporting(true);
-    try {
-      const raw = await listCertResults({ cert_batch: selectedBatchId, page_size: 9999 });
-      const all: CertificationResult[] = Array.isArray(raw) ? raw : (raw as any)?.results ?? [];
-      const label = selectedBatch.echeance !== "N/A" ? selectedBatch.echeance : `batch-${selectedBatch.id}`;
-      exportResultsToExcel(all, label);
-      toast.success(`Export — ${all.length} factures`);
-    } catch { toast.error("Erreur export"); }
-    finally { setIsExporting(false); }
-  };
+ const handleExport = async () => {
+  if (!selectedBatchId || !selectedBatch) return;
+  setIsExporting(true);
+  try {
+    const all: CertificationResult[] = [];
+    let page = 1;
+    let hasMore = true;
+
+    while (hasMore) {
+      const raw = await listCertResults({
+        cert_batch: selectedBatchId,
+        page,
+        page_size: 200,
+      });
+
+      const isArray = Array.isArray(raw);
+      const rows: CertificationResult[] = isArray
+        ? raw
+        : (raw as any)?.results ?? [];
+
+      all.push(...rows);
+      hasMore = !isArray && !!(raw as any)?.next;
+      page++;
+      if (page > 500) break; // sécurité
+    }
+
+    const label = selectedBatch.echeance !== "N/A"
+      ? selectedBatch.echeance
+      : `batch-${selectedBatch.id}`;
+    exportResultsToExcel(all, label);
+    toast.success(`Export — ${all.length} factures`);
+  } catch {
+    toast.error("Erreur export");
+  } finally {
+    setIsExporting(false);
+  }
+};
 
   const uploadMut = useMutation({
     mutationFn: async (file: File) => {
