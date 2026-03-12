@@ -37,45 +37,69 @@ const STATUS_LABELS: Record<string, string> = {
   NEEDS_REVIEW: "À analyser", UNKNOWN_CONTRACT: "Contrat inconnu",
   FMS_UNAVAILABLE: "FMS indispo", PENDING_CERTIFICATION: "En attente",
 };
+
+// ✅ Labels complets ACM + Grid
 const RULE_LABELS: Record<string, string> = {
-  FMS_PERIODE: "FMS / Période", FMS_30J: "FMS / 30j",
-  ACM_PERIODE: "ACM / Période", ACM_30J: "ACM / 30j", HISTO_3MOIS: "Histo 3 mois",
+  FMS_PERIODE: "Grid · Période",
+  FMS_30J:     "Grid · 30j",
+  ACM_PERIODE: "ACM · Période",
+  ACM_30J:     "ACM · 30j",
+  HISTO_3MOIS: "Histo 3 mois",
 };
 
+// ✅ Couleur du badge selon la règle
+const RULE_BADGE_CLASS: Record<string, string> = {
+  ACM_PERIODE: "bg-emerald-50 border-emerald-200 text-emerald-800",
+  ACM_30J:     "bg-emerald-50 border-emerald-200 text-emerald-800",
+  FMS_PERIODE: "bg-blue-50   border-blue-200   text-blue-800",
+  FMS_30J:     "bg-blue-50   border-blue-200   text-blue-800",
+  HISTO_3MOIS: "bg-purple-50 border-purple-200 text-purple-800",
+};
 
+// ✅ Source FMS courte pour la colonne du tableau
+function getSourceLabel(r: CertificationResult): { label: string; cls: string } {
+  if (r.acm_available)  return { label: "ACM",  cls: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+  if (r.fms_available)  return { label: "Grid", cls: "bg-blue-50   text-blue-700   border-blue-200" };
+  return { label: "—", cls: "bg-slate-50 text-slate-400 border-slate-200" };
+}
 
-
+// ✅ Export Excel — colonne "Source eFMS" ajoutée
 function exportResultsToExcel(results: CertificationResult[], batchLabel: string) {
-  const rows = results.map(r => ({
-    "N° Facture": r.numero_facture ?? "",
-    "N° Contrat": r.numero_compte_contrat ?? "",
-    "Site ID": r.site_id ?? "", "Site": r.site_name ?? "",
-    "Début période": r.date_debut_periode ?? "", "Fin période": r.date_fin_periode ?? "",
-    "Nb jours": r.nb_jours_facturation ?? "",
-    "Montant TTC (F)": r.montant_ttc ? parseFloat(String(r.montant_ttc)) : "",
-    "Montant HTVA facturé": r.montant_hors_tva ? parseFloat(String(r.montant_hors_tva)) : "",
-    "Conso facturée (kWh)": r.conso_facturee_periode ? parseFloat(String(r.conso_facturee_periode)) : "",
-    "Conso norm. 30j (kWh)": r.conso_facturee_30j ? parseFloat(String(r.conso_facturee_30j)) : "",
-    "FMS dispo": r.fms_available ? "Oui" : "Non",
-    "Conso FMS période": r.conso_fms_periode ? parseFloat(String(r.conso_fms_periode)) : "",
-    "Conso FMS 30j": r.conso_fms_30j ? parseFloat(String(r.conso_fms_30j)) : "",
-    "Ratio FMS/période": r.ratio_fms_periode ? parseFloat(String(r.ratio_fms_periode)) : "",
-    "Ratio FMS/30j": r.ratio_fms_30j ? parseFloat(String(r.ratio_fms_30j)) : "",
-    "ACM dispo": r.acm_available ? "Oui" : "Non",
-    "Estim ACM période": r.estim_conso_acm_periode ? parseFloat(String(r.estim_conso_acm_periode)) : "",
-    "Estim ACM 30j": r.estim_conso_acm_30j ? parseFloat(String(r.estim_conso_acm_30j)) : "",
-    "Ratio ACM/période": r.ratio_acm_periode ? parseFloat(String(r.ratio_acm_periode)) : "",
-    "Ratio ACM/30j": r.ratio_acm_30j ? parseFloat(String(r.ratio_acm_30j)) : "",
-    "HTVA recalculé (F)": r.montant_htva_calcule ? parseFloat(String(r.montant_htva_calcule)) : "",
-    "Variation montant (%)": r.variation_montant_pct ? parseFloat(String(r.variation_montant_pct)) : "",
-    "Montant cohérent": r.montant_coherent === null ? "" : r.montant_coherent ? "Oui" : "Non",
-    "Histo 3M avg": r.histo_3mois_avg ? parseFloat(String(r.histo_3mois_avg)) : "",
-    "Ratio Histo 3M": r.ratio_histo_3mois ? parseFloat(String(r.ratio_histo_3mois)) : "",
-    "Statut": STATUS_LABELS[r.status] ?? r.status,
-    "Règle": r.certified_by_rule ? (RULE_LABELS[r.certified_by_rule] ?? r.certified_by_rule) : "",
-    "Erreur FMS": r.fms_error ?? "", "Erreur ACM": r.acm_error ?? "",
-    "Erreur montant": r.montant_check_error ?? "",
-  }));
+  const rows = results.map(r => {
+    const src = r.acm_available ? "ACM" : r.fms_available ? "Grid" : "Indisponible";
+    return {
+      "N° Facture": r.numero_facture ?? "",
+      "N° Contrat": r.numero_compte_contrat ?? "",
+      "Site ID": r.site_id ?? "", "Site": r.site_name ?? "",
+      "Début période": r.date_debut_periode ?? "", "Fin période": r.date_fin_periode ?? "",
+      "Nb jours": r.nb_jours_facturation ?? "",
+      "Montant TTC (F)": r.montant_ttc ? parseFloat(String(r.montant_ttc)) : "",
+      "Montant HTVA facturé": r.montant_hors_tva ? parseFloat(String(r.montant_hors_tva)) : "",
+      "Conso facturée (kWh)": r.conso_facturee_periode ? parseFloat(String(r.conso_facturee_periode)) : "",
+      "Conso norm. 30j (kWh)": r.conso_facturee_30j ? parseFloat(String(r.conso_facturee_30j)) : "",
+      // ✅ Source eFMS en premier pour la lisibilité audit
+      "Source eFMS": src,
+      "ACM dispo": r.acm_available ? "Oui" : "Non",
+      "Estim ACM période": r.estim_conso_acm_periode ? parseFloat(String(r.estim_conso_acm_periode)) : "",
+      "Estim ACM 30j": r.estim_conso_acm_30j ? parseFloat(String(r.estim_conso_acm_30j)) : "",
+      "Ratio ACM/période": r.ratio_acm_periode ? parseFloat(String(r.ratio_acm_periode)) : "",
+      "Ratio ACM/30j": r.ratio_acm_30j ? parseFloat(String(r.ratio_acm_30j)) : "",
+      "FMS Grid dispo": r.fms_available ? "Oui" : "Non",
+      "Conso FMS période": r.conso_fms_periode ? parseFloat(String(r.conso_fms_periode)) : "",
+      "Conso FMS 30j": r.conso_fms_30j ? parseFloat(String(r.conso_fms_30j)) : "",
+      "Ratio FMS/période": r.ratio_fms_periode ? parseFloat(String(r.ratio_fms_periode)) : "",
+      "Ratio FMS/30j": r.ratio_fms_30j ? parseFloat(String(r.ratio_fms_30j)) : "",
+      "HTVA recalculé (F)": r.montant_htva_calcule ? parseFloat(String(r.montant_htva_calcule)) : "",
+      "Variation montant (%)": r.variation_montant_pct ? parseFloat(String(r.variation_montant_pct)) : "",
+      "Montant cohérent": r.montant_coherent === null ? "" : r.montant_coherent ? "Oui" : "Non",
+      "Histo 3M avg": r.histo_3mois_avg ? parseFloat(String(r.histo_3mois_avg)) : "",
+      "Ratio Histo 3M": r.ratio_histo_3mois ? parseFloat(String(r.ratio_histo_3mois)) : "",
+      "Statut": STATUS_LABELS[r.status] ?? r.status,
+      "Règle": r.certified_by_rule ? (RULE_LABELS[r.certified_by_rule] ?? r.certified_by_rule) : "",
+      "Erreur FMS": r.fms_error ?? "", "Erreur ACM": r.acm_error ?? "",
+      "Erreur montant": r.montant_check_error ?? "",
+    };
+  });
   const ws = XLSX.utils.json_to_sheet(rows);
   ws["!cols"] = Array(Object.keys(rows[0] ?? {}).length).fill({ wch: 20 });
   const wb = XLSX.utils.book_new();
@@ -83,6 +107,11 @@ function exportResultsToExcel(results: CertificationResult[], batchLabel: string
   const recapData = Object.entries(
     rows.reduce((acc, r) => { acc[r["Statut"]] = (acc[r["Statut"]] || 0) + 1; return acc; }, {} as Record<string, number>)
   ).map(([statut, count]) => ({ "Statut": statut, "Nb factures": count }));
+  // ✅ Ventilation ACM vs Grid dans le récap
+  const nbAcm  = rows.filter(r => r["Source eFMS"] === "ACM").length;
+  const nbGrid = rows.filter(r => r["Source eFMS"] === "Grid").length;
+  recapData.push({ "Statut": "  dont ACM",  "Nb factures": nbAcm });
+  recapData.push({ "Statut": "  dont Grid", "Nb factures": nbGrid });
   recapData.push({ "Statut": "TOTAL", "Nb factures": rows.length });
   const wsRecap = XLSX.utils.json_to_sheet(recapData);
   wsRecap["!cols"] = [{ wch: 24 }, { wch: 14 }];
@@ -132,351 +161,6 @@ function StepBar({ current }: { current: Step }) {
   );
 }
 
-function CertProgress({ counters, status }: { counters: Counters; status: string }) {
-  const t = counters.total || 1;
-  const processed =
-    counters.certified_fms +
-    counters.certified_senelec +
-    counters.needs_review +
-    counters.unknown_contract +
-    counters.fms_unavailable;
-
-  const targetPct = counters.total > 0 ? pct(processed, t) : 0;
-  const [displayPct, setDisplayPct] = useState(targetPct);
-  const animRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Phase prefetch : RUNNING mais aucun résultat encore → chargement EFMS
-  const isPrefetching = status === "RUNNING" && processed === 0 && counters.total > 0;
-
-  useEffect(() => {
-    if (animRef.current) clearInterval(animRef.current);
-    if (status !== "RUNNING" || targetPct === displayPct) {
-      setDisplayPct(targetPct);
-      return;
-    }
-    const step = Math.max((targetPct - displayPct) / 30, 0.3);
-    animRef.current = setInterval(() => {
-      setDisplayPct(prev => {
-        const next = Math.min(prev + step, targetPct);
-        if (next >= targetPct && animRef.current) {
-          clearInterval(animRef.current);
-          animRef.current = null;
-        }
-        return next;
-      });
-    }, 80);
-    return () => { if (animRef.current) clearInterval(animRef.current); };
-  }, [targetPct, status]);
-
-  const circumference = 2 * Math.PI * 34;
-
-  const bars = [
-    { label: "Certifié FMS",     val: counters.certified_fms,     color: "bg-emerald-500", light: "bg-emerald-50",  text: "text-emerald-700" },
-    { label: "Certifié Sénélec", val: counters.certified_senelec, color: "bg-blue-500",    light: "bg-blue-50",     text: "text-blue-700"    },
-    { label: "À analyser",       val: counters.needs_review,       color: "bg-amber-400",  light: "bg-amber-50",    text: "text-amber-700"   },
-    { label: "Inconnu",          val: counters.unknown_contract,   color: "bg-red-400",    light: "bg-red-50",      text: "text-red-700"     },
-    { label: "FMS indispo",      val: counters.fms_unavailable,    color: "bg-slate-300",  light: "bg-slate-50",    text: "text-slate-500"   },
-  ];
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center gap-6">
-        {/* Cercle de progression */}
-        <div className="relative w-20 h-20 shrink-0">
-          <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
-            <circle cx="40" cy="40" r="34" fill="none" stroke="#e2e8f0" strokeWidth="8" />
-            <circle
-              cx="40" cy="40" r="34" fill="none"
-              stroke={status === "DONE" ? "#10b981" : "#1e3a8a"}
-              strokeWidth="8"
-              strokeDasharray={`${circumference}`}
-              strokeDashoffset={`${circumference * (1 - displayPct / 100)}`}
-              strokeLinecap="round"
-              style={{ transition: "stroke-dashoffset 0.15s linear" }}
-            />
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            {isPrefetching ? (
-              <Loader2 className="w-5 h-5 animate-spin text-blue-900" />
-            ) : (
-              <span className="text-lg font-bold text-slate-800 leading-none">
-                {Math.round(displayPct)}%
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            {status === "RUNNING" && <Loader2 className="w-4 h-4 animate-spin text-blue-900" />}
-            {status === "DONE"    && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
-            {status === "FAILED"  && <AlertTriangle className="w-4 h-4 text-red-500" />}
-            <span className="font-semibold text-slate-800 text-sm">
-              {status === "RUNNING"
-                ? isPrefetching
-                  ? "Initialisation — chargement données EFMS..."
-                  : "Certification en cours..."
-                : status === "DONE"   ? "Certification terminée"
-                : status === "FAILED" ? "Échec"
-                : status}
-            </span>
-          </div>
-
-          {/* Phase prefetch : indicateur spécifique */}
-          {isPrefetching ? (
-            <div className="mt-2 flex items-center gap-2">
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-50 border border-blue-100 text-xs text-blue-700 font-medium">
-                <Database className="w-3.5 h-3.5 animate-pulse" />
-                Prefetch EFMS en cours — 1 requête pour tous les sites…
-              </div>
-            </div>
-          ) : (
-            <>
-              <p className="text-sm text-slate-400">{processed} / {counters.total} factures traitées</p>
-              <div className="mt-3 h-2.5 rounded-full overflow-hidden bg-slate-100 flex">
-                {bars.map((b, i) =>
-                  b.val > 0 && (
-                    <div
-                      key={i}
-                      className={`${b.color} transition-all duration-500 ease-out`}
-                      style={{ width: `${pct(b.val, t)}%` }}
-                    />
-                  )
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {!isPrefetching && (
-        <div className="grid grid-cols-5 gap-2">
-          {bars.map((b, i) => (
-            <div key={i} className={`rounded-xl px-3 py-2.5 text-center ${b.light}`}>
-              <div className={`text-xl font-bold ${b.text}`}>{b.val}</div>
-              <div className="text-xs text-slate-400 mt-0.5 leading-tight">{b.label}</div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-// ─── ResultRow (version CDC correcte — ACM = double-check uniquement) ─────────
-function ResultRow({ result }: { result: CertificationResult }) {
-  const [open, setOpen] = useState(false);
-
-  // fms_error ne contient plus "__ACM_FALLBACK__" (étape 5B supprimée)
-  const fmsErrorDisplay = result.fms_error;
-
-  return (
-    <>
-      <tr
-        className="border-b border-slate-100 hover:bg-blue-50/20 cursor-pointer transition-colors"
-        onClick={() => setOpen(!open)}
-      >
-        <td className="px-4 py-3 w-6 text-slate-300">
-          {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-        </td>
-        <td className="px-4 py-3">
-          <div className="font-mono text-sm text-slate-800 font-medium">{result.numero_facture}</div>
-          <div className="text-xs text-slate-400">{result.numero_compte_contrat}</div>
-        </td>
-        <td className="px-4 py-3">
-          <div className="text-sm font-medium text-slate-700">{result.site_id ?? "—"}</div>
-          <div className="text-xs text-slate-400 max-w-[140px] truncate">{result.site_name ?? ""}</div>
-        </td>
-        <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
-          {fmtDate(result.date_debut_periode)} — {fmtDate(result.date_fin_periode)}
-        </td>
-        <td className="px-4 py-3 text-right font-mono text-sm text-slate-700">
-          {result.montant_ttc ? `${fmt(result.montant_ttc)} F` : "—"}
-        </td>
-        <td className="px-4 py-3"><StatusBadge status={result.status} /></td>
-        <td className="px-4 py-3 text-center">
-          <MontantBadge coherent={result.montant_coherent} variation={result.variation_montant_pct} />
-        </td>
-        <td className="px-4 py-3 text-center">
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
-            result.fms_available
-              ? "bg-emerald-50 text-emerald-600 border-emerald-200"
-              : "bg-slate-50 text-slate-400 border-slate-200"
-          }`}>
-            {result.fms_available ? "Oui" : "Non"}
-          </span>
-        </td>
-      </tr>
-
-      {open && (
-        <tr className="bg-slate-50/60 border-b border-blue-100">
-          <td colSpan={8} className="px-6 py-5">
-            <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-
-              {/* ── Section 1 : Consommations ─────────────────────────────── */}
-              <Sect title="Consommations" icon={<Activity className="w-3.5 h-3.5" />}>
-                <DR label="Conso période">
-                  {result.conso_facturee_periode ? `${fmt(result.conso_facturee_periode, 1)} kWh` : "N/A"}
-                </DR>
-                <DR label="Normalisé 30j">
-                  {result.conso_facturee_30j ? `${fmt(result.conso_facturee_30j, 1)} kWh` : "N/A"}
-                </DR>
-                <DR label="Nb jours">{result.nb_jours_facturation ?? "N/A"}</DR>
-                <div className="border-t border-slate-100 pt-2 mt-1">
-                  <DR label="Histo dernier">
-                    {result.histo_last_conso ? `${fmt(result.histo_last_conso, 1)} kWh` : "N/A"}
-                  </DR>
-                  <DR label="Histo 3M avg">
-                    {result.histo_3mois_avg ? `${fmt(result.histo_3mois_avg, 1)} kWh` : "N/A"}
-                  </DR>
-                </div>
-              </Sect>
-
-              {/* ── Section 2 : FMS Grid + Ratios ─────────────────────────── */}
-              <Sect title="FMS Grid + Ratios" icon={<Database className="w-3.5 h-3.5" />}>
-                <DR label="FMS période">
-                  {result.conso_fms_periode ? `${fmt(result.conso_fms_periode, 1)} kWh` : "N/A"}
-                </DR>
-                <DR label="FMS 30j">
-                  {result.conso_fms_30j ? `${fmt(result.conso_fms_30j, 1)} kWh` : "N/A"}
-                </DR>
-                <DR label="Dernier mois">{fmtDate(result.fms_last_complete_month)}</DR>
-                <div className="border-t border-slate-100 pt-2 mt-1">
-                  <DR label="Ratio FMS/période">
-                    <RatioCell value={result.ratio_fms_periode} threshold={0.9} />
-                  </DR>
-                  <DR label="Ratio FMS/30j">
-                    <RatioCell value={result.ratio_fms_30j} threshold={0.9} />
-                  </DR>
-                  <DR label="Ratio Histo 3M">
-                    <RatioCell value={result.ratio_histo_3mois} threshold={0.9} />
-                  </DR>
-                </div>
-                {fmsErrorDisplay && (
-                  <div className="text-orange-600 bg-orange-50 border border-orange-200 rounded px-2 py-1 mt-1 text-xs">
-                    {fmsErrorDisplay}
-                  </div>
-                )}
-              </Sect>
-
-              {/* ── Section 3 : ACM double-check (CDC étape 7) ─────────────── */}
-              <Sect title="AC Power Meter" icon={<Cpu className="w-3.5 h-3.5" />}>
-                {!result.fms_available ? (
-                  // Grid indispo → ACM non déclenché (pas de fallback)
-                  <p className="text-slate-400 italic text-xs">
-                    Non déclenché (FMS Grid indisponible)
-                  </p>
-                ) : !result.acm_available && !result.acm_error ? (
-                  // Grid dispo mais ratio < seuil → ACM non déclenché
-                  <p className="text-slate-400 italic text-xs">
-                    Non déclenché (ratio FMS &lt; 90%)
-                  </p>
-                ) : (
-                  // ACM déclenché = double-check ratio FMS
-                  <>
-                    <div className="flex items-center gap-1.5 text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1 mb-2 text-xs font-semibold">
-                      <ShieldCheck className="w-3 h-3 shrink-0" />
-                      Double-check CDC (U×I / 1000)
-                    </div>
-                    <DR label="ACM dispo">
-                      <span className={result.acm_available ? "text-emerald-600 font-semibold" : "text-slate-400"}>
-                        {result.acm_available ? "Oui" : "Non"}
-                      </span>
-                    </DR>
-                    {result.acm_available && (
-                      <>
-                        <DR label="Estim ACM période">
-                          {result.estim_conso_acm_periode
-                            ? `${fmt(result.estim_conso_acm_periode, 1)} kWh`
-                            : "N/A"}
-                        </DR>
-                        <DR label="Estim ACM 30j">
-                          {result.estim_conso_acm_30j
-                            ? `${fmt(result.estim_conso_acm_30j, 1)} kWh`
-                            : "N/A"}
-                        </DR>
-                        <div className="border-t border-slate-100 pt-2 mt-1">
-                          <DR label="Ratio ACM/période">
-                            <RatioCell value={result.ratio_acm_periode} threshold={0.9} />
-                          </DR>
-                          <DR label="Ratio ACM/30j">
-                            <RatioCell value={result.ratio_acm_30j} threshold={0.9} />
-                          </DR>
-                        </div>
-                      </>
-                    )}
-                    {result.acm_error && (
-                      <div className="text-orange-600 bg-orange-50 border border-orange-200 rounded px-2 py-1 mt-1 text-xs">
-                        {result.acm_error}
-                      </div>
-                    )}
-                  </>
-                )}
-              </Sect>
-
-              {/* ── Section 4 : Cohérence montant ──────────────────────────── */}
-              <Sect title="Cohérence Montant" icon={<Receipt className="w-3.5 h-3.5" />}>
-                <DR label="HTVA facturé">
-                  {result.montant_hors_tva ? `${fmt(result.montant_hors_tva)} F` : "N/A"}
-                </DR>
-                <DR label="HTVA recalculé">
-                  {result.montant_htva_calcule ? `${fmt(result.montant_htva_calcule)} F` : "N/A"}
-                </DR>
-                {result.variation_montant_pct != null && (
-                  <DR label="Variation">
-                    <span className={`font-mono font-bold ${
-                      result.montant_coherent
-                        ? "text-emerald-600"
-                        : result.montant_coherent === false
-                        ? "text-red-600"
-                        : "text-slate-500"
-                    }`}>
-                      {parseFloat(result.variation_montant_pct) >= 0 ? "+" : ""}
-                      {parseFloat(result.variation_montant_pct).toFixed(2)}%
-                    </span>
-                  </DR>
-                )}
-                <div className="pt-1">
-                  <DR label="Résultat">
-                    {result.montant_coherent === null ? (
-                      <span className="text-slate-400">Non calculé</span>
-                    ) : result.montant_coherent ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Cohérent ≤7%
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-red-600 font-semibold">
-                        <AlertTriangle className="w-3.5 h-3.5" /> Incohérent &gt;7%
-                      </span>
-                    )}
-                  </DR>
-                </div>
-                {result.montant_check_error && (
-                  <div className="text-orange-600 bg-orange-50 border border-orange-200 rounded px-2 py-1 mt-1 text-xs">
-                    {result.montant_check_error}
-                  </div>
-                )}
-              </Sect>
-            </div>
-
-            {/* Règle de certification */}
-            {result.certified_by_rule && (
-              <div className="mt-3 flex items-center gap-2">
-                <ShieldCheck className="w-3.5 h-3.5 text-blue-900" />
-                <span className="text-xs font-bold text-blue-900">Certifié par :</span>
-                <span className="text-xs bg-blue-50 border border-blue-200 text-blue-800 font-semibold px-2.5 py-1 rounded-full">
-                  {RULE_LABELS[result.certified_by_rule] ?? result.certified_by_rule}
-                </span>
-              </div>
-            )}
-          </td>
-        </tr>
-      )}
-    </>
-  );
-}
-
 function EfmsBadge({ reachable, loading }: { reachable: boolean | undefined; loading: boolean }) {
   if (loading) return (
     <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-400">
@@ -519,7 +203,67 @@ function UploadZone({ onFile }: { onFile: (f: File) => void }) {
 
 type Counters = { total: number; certified_fms: number; certified_senelec: number; needs_review: number; unknown_contract: number; fms_unavailable: number; };
 
-
+function CertProgress({ counters, status }: { counters: Counters; status: string }) {
+  const t = counters.total || 1;
+  const processed = counters.certified_fms + counters.certified_senelec + counters.needs_review + counters.unknown_contract + counters.fms_unavailable;
+  const targetPct = counters.total > 0 ? pct(processed, t) : 0;
+  const [displayPct, setDisplayPct] = useState(targetPct);
+  const animRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (animRef.current) clearInterval(animRef.current);
+    if (status !== "RUNNING" || targetPct === displayPct) { setDisplayPct(targetPct); return; }
+    const step = Math.max((targetPct - displayPct) / 30, 0.3);
+    animRef.current = setInterval(() => {
+      setDisplayPct(prev => { const next = Math.min(prev + step, targetPct); if (next >= targetPct && animRef.current) { clearInterval(animRef.current); animRef.current = null; } return next; });
+    }, 80);
+    return () => { if (animRef.current) clearInterval(animRef.current); };
+  }, [targetPct, status]);
+  const circumference = 2 * Math.PI * 34;
+  const bars = [
+    { label: "Certifié FMS", val: counters.certified_fms, color: "bg-emerald-500", light: "bg-emerald-50", text: "text-emerald-700" },
+    { label: "Certifié Sénélec", val: counters.certified_senelec, color: "bg-blue-500", light: "bg-blue-50", text: "text-blue-700" },
+    { label: "À analyser", val: counters.needs_review, color: "bg-amber-400", light: "bg-amber-50", text: "text-amber-700" },
+    { label: "Inconnu", val: counters.unknown_contract, color: "bg-red-400", light: "bg-red-50", text: "text-red-700" },
+    { label: "FMS indispo", val: counters.fms_unavailable, color: "bg-slate-300", light: "bg-slate-50", text: "text-slate-500" },
+  ];
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-6">
+        <div className="relative w-20 h-20 shrink-0">
+          <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="34" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+            <circle cx="40" cy="40" r="34" fill="none" stroke={status === "DONE" ? "#10b981" : "#1e3a8a"} strokeWidth="8" strokeDasharray={`${circumference}`} strokeDashoffset={`${circumference * (1 - displayPct / 100)}`} strokeLinecap="round" style={{ transition: "stroke-dashoffset 0.15s linear" }} />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-lg font-bold text-slate-800 leading-none">{Math.round(displayPct)}%</span>
+          </div>
+        </div>
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-1">
+            {status === "RUNNING" && <Loader2 className="w-4 h-4 animate-spin text-blue-900" />}
+            {status === "DONE" && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+            {status === "FAILED" && <AlertTriangle className="w-4 h-4 text-red-500" />}
+            <span className="font-semibold text-slate-800 text-sm">
+              {status === "RUNNING" ? "Certification en cours..." : status === "DONE" ? "Certification terminée" : status === "FAILED" ? "Échec" : status}
+            </span>
+          </div>
+          <p className="text-sm text-slate-400">{processed} / {counters.total} factures traitées</p>
+          <div className="mt-3 h-2.5 rounded-full overflow-hidden bg-slate-100 flex">
+            {bars.map((b, i) => b.val > 0 && <div key={i} className={`${b.color} transition-all duration-500 ease-out`} style={{ width: `${pct(b.val, t)}%` }} />)}
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-5 gap-2">
+        {bars.map((b, i) => (
+          <div key={i} className={`rounded-xl px-3 py-2.5 text-center ${b.light}`}>
+            <div className={`text-xl font-bold ${b.text}`}>{b.val}</div>
+            <div className="text-xs text-slate-400 mt-0.5 leading-tight">{b.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const STATUS_CFG: Record<string, { label: string; color: string; bg: string; border: string }> = {
   PENDING_CERTIFICATION: { label: "En attente", color: "text-slate-500", bg: "bg-slate-50", border: "border-slate-200" },
@@ -562,12 +306,19 @@ function MontantBadge({ coherent, variation }: { coherent: boolean | null; varia
   );
 }
 
-function Sect({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
+function Sect({ title, icon, children, highlight }: { title: string; icon: React.ReactNode; children: React.ReactNode; highlight?: "acm" | "grid" | "none" }) {
+  const ring = highlight === "acm"
+    ? "ring-1 ring-emerald-200 bg-emerald-50/30"
+    : highlight === "grid"
+    ? "ring-1 ring-blue-200 bg-blue-50/30"
+    : "bg-white";
   return (
-    <div className="bg-white rounded-xl border border-slate-100 p-4">
+    <div className={`rounded-xl border border-slate-100 p-4 ${ring}`}>
       <div className="flex items-center gap-2 mb-3">
         <span className="text-slate-400">{icon}</span>
         <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{title}</span>
+        {highlight === "acm"  && <span className="ml-auto text-xs font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full">Source principale</span>}
+        {highlight === "grid" && <span className="ml-auto text-xs font-bold text-blue-700 bg-blue-100 border border-blue-200 px-2 py-0.5 rounded-full">Fallback</span>}
       </div>
       <div className="space-y-2 text-xs">{children}</div>
     </div>
@@ -583,6 +334,161 @@ function DR({ label, children }: { label: string; children: React.ReactNode }) {
   );
 }
 
+function ResultRow({ result }: { result: CertificationResult }) {
+  const [open, setOpen] = useState(false);
+
+  // ✅ Dériver quelle source a été utilisée
+  const acmUsed  = result.acm_available;
+  const gridUsed = !result.acm_available && result.fms_available;
+  const src = getSourceLabel(result);
+
+  return (
+    <>
+      <tr className="border-b border-slate-100 hover:bg-blue-50/20 cursor-pointer transition-colors" onClick={() => setOpen(!open)}>
+        <td className="px-4 py-3 w-6 text-slate-300">{open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</td>
+        <td className="px-4 py-3">
+          <div className="font-mono text-sm text-slate-800 font-medium">{result.numero_facture}</div>
+          <div className="text-xs text-slate-400">{result.numero_compte_contrat}</div>
+        </td>
+        <td className="px-4 py-3">
+          <div className="text-sm font-medium text-slate-700">{result.site_id ?? "—"}</div>
+          <div className="text-xs text-slate-400 max-w-[140px] truncate">{result.site_name ?? ""}</div>
+        </td>
+        <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+          {fmtDate(result.date_debut_periode)} — {fmtDate(result.date_fin_periode)}
+        </td>
+        <td className="px-4 py-3 text-right font-mono text-sm text-slate-700">
+          {result.montant_ttc ? `${fmt(result.montant_ttc)} F` : "—"}
+        </td>
+        <td className="px-4 py-3"><StatusBadge status={result.status} /></td>
+        <td className="px-4 py-3 text-center">
+          <MontantBadge coherent={result.montant_coherent} variation={result.variation_montant_pct} />
+        </td>
+        {/* ✅ Colonne "Source" remplace "FMS" — distingue ACM / Grid / — */}
+        <td className="px-4 py-3 text-center">
+          <span className={`text-xs px-2 py-0.5 rounded-full font-semibold border ${src.cls}`}>
+            {src.label}
+          </span>
+        </td>
+      </tr>
+
+      {open && (
+        <tr className="bg-slate-50/60 border-b border-blue-100">
+          <td colSpan={8} className="px-6 py-5">
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+
+              {/* Section 1 : Consommations — inchangée */}
+              <Sect title="Consommations" icon={<Activity className="w-3.5 h-3.5" />}>
+                <DR label="Conso période">{result.conso_facturee_periode ? `${fmt(result.conso_facturee_periode, 1)} kWh` : "N/A"}</DR>
+                <DR label="Normalisé 30j">{result.conso_facturee_30j ? `${fmt(result.conso_facturee_30j, 1)} kWh` : "N/A"}</DR>
+                <DR label="Nb jours">{result.nb_jours_facturation ?? "N/A"}</DR>
+                <div className="border-t border-slate-100 pt-2 mt-1">
+                  <DR label="Histo dernier">{result.histo_last_conso ? `${fmt(result.histo_last_conso, 1)} kWh` : "N/A"}</DR>
+                  <DR label="Histo 3M avg">{result.histo_3mois_avg ? `${fmt(result.histo_3mois_avg, 1)} kWh` : "N/A"}</DR>
+                </div>
+              </Sect>
+
+              {/* ✅ Section 2 : ACM (source PRIMAIRE) */}
+              <Sect
+                title="AC Power Meter"
+                icon={<Cpu className="w-3.5 h-3.5" />}
+                highlight={acmUsed ? "acm" : "none"}
+              >
+                {!result.fms_available && !result.acm_available ? (
+                  // Ni ACM ni Grid disponibles
+                  <p className="text-slate-400 italic">Aucune donnée eFMS disponible pour ce site</p>
+                ) : acmUsed ? (
+                  // ACM disponible et utilisé comme source principale
+                  <>
+                    <DR label="Conso période">{result.estim_conso_acm_periode ? `${fmt(result.estim_conso_acm_periode, 1)} kWh` : "N/A"}</DR>
+                    <DR label="Conso 30j">{result.estim_conso_acm_30j ? `${fmt(result.estim_conso_acm_30j, 1)} kWh` : "N/A"}</DR>
+                    <div className="border-t border-slate-100 pt-2 mt-1">
+                      <DR label="Ratio période"><RatioCell value={result.ratio_acm_periode} threshold={0.9} /></DR>
+                      <DR label="Ratio 30j"><RatioCell value={result.ratio_acm_30j} threshold={0.9} /></DR>
+                    </div>
+                    {result.acm_error && (
+                      <div className="text-orange-600 bg-orange-50 border border-orange-200 rounded px-2 py-1 mt-1">{result.acm_error}</div>
+                    )}
+                  </>
+                ) : (
+                  // ACM absent → Grid utilisé à la place
+                  <p className="text-slate-400 italic">Indisponible — Grid utilisé en fallback</p>
+                )}
+              </Sect>
+
+              {/* ✅ Section 3 : Grid (source SECONDAIRE / fallback) */}
+              <Sect
+                title="FMS Grid"
+                icon={<Database className="w-3.5 h-3.5" />}
+                highlight={gridUsed ? "grid" : "none"}
+              >
+                {!result.fms_available && !result.acm_available ? (
+                  <p className="text-slate-400 italic">Indisponible</p>
+                ) : acmUsed ? (
+                  // Grid non requis car ACM pris en priorité
+                  <p className="text-slate-400 italic">Non requis — ACM disponible en source principale</p>
+                ) : (
+                  // Grid utilisé comme fallback
+                  <>
+                    <DR label="Conso période">{result.conso_fms_periode ? `${fmt(result.conso_fms_periode, 1)} kWh` : "N/A"}</DR>
+                    <DR label="Conso 30j">{result.conso_fms_30j ? `${fmt(result.conso_fms_30j, 1)} kWh` : "N/A"}</DR>
+                    <DR label="Dernier mois">{fmtDate(result.fms_last_complete_month)}</DR>
+                    <div className="border-t border-slate-100 pt-2 mt-1">
+                      <DR label="Ratio période"><RatioCell value={result.ratio_fms_periode} threshold={0.9} /></DR>
+                      <DR label="Ratio 30j"><RatioCell value={result.ratio_fms_30j} threshold={0.9} /></DR>
+                      <DR label="Ratio Histo 3M"><RatioCell value={result.ratio_histo_3mois} threshold={0.85} /></DR>
+                    </div>
+                    {result.fms_error && (
+                      <div className="text-orange-600 bg-orange-50 border border-orange-200 rounded px-2 py-1 mt-1">{result.fms_error}</div>
+                    )}
+                  </>
+                )}
+              </Sect>
+
+              {/* Section 4 : Cohérence montant — inchangée */}
+              <Sect title="Cohérence Montant" icon={<Receipt className="w-3.5 h-3.5" />}>
+                <DR label="HTVA facturé">{result.montant_hors_tva ? `${fmt(result.montant_hors_tva)} F` : "N/A"}</DR>
+                <DR label="HTVA recalculé">{result.montant_htva_calcule ? `${fmt(result.montant_htva_calcule)} F` : "N/A"}</DR>
+                {result.variation_montant_pct != null && (
+                  <DR label="Variation">
+                    <span className={`font-mono font-bold ${result.montant_coherent ? "text-emerald-600" : result.montant_coherent === false ? "text-red-600" : "text-slate-500"}`}>
+                      {parseFloat(result.variation_montant_pct) >= 0 ? "+" : ""}{parseFloat(result.variation_montant_pct).toFixed(2)}%
+                    </span>
+                  </DR>
+                )}
+                <div className="pt-1">
+                  <DR label="Résultat">
+                    {result.montant_coherent === null ? (
+                      <span className="text-slate-400">Non calculé</span>
+                    ) : result.montant_coherent ? (
+                      <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold"><CheckCircle2 className="w-3.5 h-3.5" /> Cohérent ≤7%</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-red-600 font-semibold"><AlertTriangle className="w-3.5 h-3.5" /> Incohérent &gt;7%</span>
+                    )}
+                  </DR>
+                </div>
+                {result.montant_check_error && (
+                  <div className="text-orange-600 bg-orange-50 border border-orange-200 rounded px-2 py-1 mt-1">{result.montant_check_error}</div>
+                )}
+              </Sect>
+            </div>
+
+            {/* ✅ Badge "Certifié par" avec couleur selon source */}
+            {result.certified_by_rule && (
+              <div className="mt-3 flex items-center gap-2">
+                <ShieldCheck className="w-3.5 h-3.5 text-blue-900" />
+                <span className="text-xs font-bold text-blue-900">Certifié par :</span>
+                <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${RULE_BADGE_CLASS[result.certified_by_rule] ?? "bg-blue-50 border-blue-200 text-blue-800"}`}>
+                  {RULE_LABELS[result.certified_by_rule] ?? result.certified_by_rule}
+                </span>
+              </div>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
 
 export default function CertificationPage() {
   const qc = useQueryClient();
@@ -679,7 +585,7 @@ export default function CertificationPage() {
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-blue-900 flex items-center justify-center shrink-0"><ShieldCheck className="w-5 h-5 text-white" /></div>
-            <div><h1 className="text-base font-bold text-slate-900 leading-tight">Certification Factures</h1><p className="text-xs text-slate-400">Validation automatique Sénélec × FMS</p></div>
+            <div><h1 className="text-base font-bold text-slate-900 leading-tight">Certification Factures</h1><p className="text-xs text-slate-400">Validation automatique Sénélec × eFMS</p></div>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
             <EfmsBadge reachable={efmsHealth?.efms_reachable} loading={efmsLoading} />
@@ -691,7 +597,7 @@ export default function CertificationPage() {
 
       <div className="max-w-6xl mx-auto px-8 py-8 space-y-6">
 
-        {/* STEP 1 */}
+        {/* STEP 1 — inchangé */}
         {step === "upload" && (
           <div className="space-y-5">
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8">
@@ -749,7 +655,7 @@ export default function CertificationPage() {
           </div>
         )}
 
-        {/* STEP 2 */}
+        {/* STEP 2 — ✅ ordre sources modifié : ACM en premier */}
         {step === "certify" && importResult && (
           <div className="space-y-5">
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
@@ -771,11 +677,12 @@ export default function CertificationPage() {
                   <div className="w-16 h-16 rounded-2xl bg-blue-900 mx-auto flex items-center justify-center"><ShieldCheck className="w-8 h-8 text-white" /></div>
                   <div>
                     <h3 className="text-lg font-bold text-slate-900 mb-1.5">Lancer la certification</h3>
-                    <p className="text-sm text-slate-500 max-w-md mx-auto">Chaque facture sera comparée aux données FMS (Grid + ACM) et à l'historique Sénélec, avec recalcul du montant HTVA.</p>
+                    <p className="text-sm text-slate-500 max-w-md mx-auto">Chaque facture est certifiée via le compteur ACM (source principale) ou le FMS Grid (fallback), puis validée par l'historique Sénélec et le recalcul du montant HTVA.</p>
                   </div>
+                  {/* ✅ ACM en premier dans la liste des sources */}
                   <div className="flex items-center justify-center gap-6 text-xs text-slate-500 flex-wrap">
-                    <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> FMS Grid</div>
-                    <div className="flex items-center gap-1.5"><Cpu className="w-3 h-3 text-blue-500" /> AC Power Meter</div>
+                    <div className="flex items-center gap-1.5"><Cpu className="w-3 h-3 text-emerald-600" /><span className="font-semibold text-emerald-700">ACM (principal)</span></div>
+                    <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-blue-400" /><span>Grid (fallback)</span></div>
                     <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-blue-500" /> Historique Sénélec</div>
                     <div className="flex items-center gap-1.5"><Receipt className="w-3 h-3 text-violet-500" /> Recalcul montant</div>
                   </div>
@@ -790,7 +697,7 @@ export default function CertificationPage() {
           </div>
         )}
 
-        {/* STEP 3 */}
+        {/* STEP 3 — inchangé sauf en-tête colonne "Source" */}
         {step === "results" && (
           <div className="space-y-4">
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
@@ -867,7 +774,10 @@ export default function CertificationPage() {
                           <th className="px-4 py-3 text-center" title="Cohérence montant HTVA (±7%)">
                             <span className="flex items-center justify-center gap-1"><Receipt className="w-3 h-3" /> Montant</span>
                           </th>
-                          <th className="px-4 py-3 text-center">FMS</th>
+                          {/* ✅ "Source" remplace "FMS" */}
+                          <th className="px-4 py-3 text-center" title="Source eFMS utilisée pour la certification">
+                            <span className="flex items-center justify-center gap-1"><Cpu className="w-3 h-3" /> Source</span>
+                          </th>
                         </tr>
                       </thead>
                       <tbody>{results.map(r => <ResultRow key={r.id} result={r} />)}</tbody>
