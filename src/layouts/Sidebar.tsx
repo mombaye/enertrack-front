@@ -5,6 +5,7 @@ import {
   Home, User, Menu, X, Receipt,
   ChevronLeft, ChevronRight, Settings2, ShieldCheck,
   Calculator, Zap, BarChart2, AlertTriangle, Server,
+  Building2,TrendingUp
 } from "lucide-react";
 import camusatLogo from "@/assets/images/camusat-logo.png";
 import { useAuth } from "@/auth/AuthContext";
@@ -22,6 +23,7 @@ const LINKS: LinkItem[] = [
 
   // ── FACTURATION ──────────────────────────────────────────────────────────────
   { to: "/billing/sonatel",        icon: <Receipt />,      label: "Billing Sonatel",            section: "FACTURATION",    end: true },
+  { to: "/billing/suivi", icon: <TrendingUp />, label: "Suivi Facturation", section: "FACTURATION", end: true },
   { to: "/certification",          icon: <ShieldCheck />,  label: "Certification",              section: "FACTURATION",    end: true },
 
   // ── MODULES ──────────────────────────────────────────────────────────────────
@@ -34,6 +36,7 @@ const LINKS: LinkItem[] = [
   // ── ADMINISTRATION ───────────────────────────────────────────────────────────
   { to: "/users",                  icon: <User />,         label: "Utilisateurs",               section: "ADMINISTRATION", adminOnly: true },
   { to: "/billing/sonatel/config", icon: <Settings2 />,    label: "Config Sonatel",             section: "ADMINISTRATION", adminOnly: true },
+  { to: "/admin/sites", icon: <Building2 />, label: "Gestion des sites", section: "ADMINISTRATION", adminOnly: true },
 ];
 
 const W  = 272;

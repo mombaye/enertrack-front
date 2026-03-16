@@ -1,4 +1,4 @@
-// App.tsx  — ajouter les imports et la route certification
+// App.tsx
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { RouteGuard } from "@/routes/RouteGuard";
 import MainLayout from "@/layouts/MainLayout";
@@ -15,15 +15,22 @@ import BillingComputePage from "@/features/sonatelBilling/admin/BillingComputePa
 import InvoicesImportPage from "./features/sonatelBilling/InvoicesImportPage";
 import StatusUpdateImportPage from "@/features/sonatelBilling/admin/StatusUpdateImportPage";
 
-// ✅ NOUVEAU — Module Certification
+// ✅ Module Certification
 import CertificationPage from "@/features/certification/CertificationPage";
+
+// ✅ Suivi Facturation
+import BillingTrackingPage from "@/pages/BillingTrackingPage";
+
+// ✅ NOUVEAU — Module Estimation
+import EstimationPage from "@/features/estimation/EstimationPage";
 
 import { ToastContainer } from "react-toastify";
 import { AuthProvider } from "@/auth/AuthContext";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import UsersPage from "./features/users/Userspage";
 import ComingSoonPage from "./components/Comingsoonpage";
-import { AlertTriangle, BarChart2, Calculator, Server, Zap } from "lucide-react";
+import { AlertTriangle, BarChart2, Server, Zap } from "lucide-react";
+import AdminSitesPage from "./features/sites/admin/AdminSitesPage";
 
 const queryClient = new QueryClient();
 
@@ -55,9 +62,19 @@ export default function App() {
                   <Route index element={<SonatelBillingPage />} />
                 </Route>
 
-                {/* ✅ NOUVEAU — Certification */}
+                {/* ✅ Suivi Facturation */}
+                <Route path="/billing/suivi" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
+                  <Route index element={<BillingTrackingPage />} />
+                </Route>
+
+                {/* ✅ Certification */}
                 <Route path="/certification" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
                   <Route index element={<CertificationPage />} />
+                </Route>
+
+                {/* ✅ NOUVEAU — Estimation (remplace ComingSoonPage) */}
+                <Route path="/modules/estimation" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
+                  <Route index element={<EstimationPage />} />
                 </Route>
 
                 <Route path="/billing/sonatel/config" element={<RouteGuard allowedRoles={["admin"]} />}>
@@ -70,19 +87,6 @@ export default function App() {
                     <Route path="compute" element={<BillingComputePage />} />
                   </Route>
                 </Route>
-
-
-
-                <Route
-                  path="/modules/estimation"
-                  element={
-                    <ComingSoonPage
-                      moduleName="Estimation"
-                      description="Estimez la consommation prévisionnelle de vos sites à partir des données FMS et de l'historique Sénélec."
-                      icon={<Calculator size={38} color="rgba(255,255,255,0.85)" />}
-                    />
-                  }
-                />
 
                 <Route
                   path="/modules/optimisation"
@@ -127,6 +131,10 @@ export default function App() {
                     />
                   }
                 />
+
+                <Route path="/admin/sites" element={<RouteGuard allowedRoles={["admin"]} />}>
+                  <Route index element={<AdminSitesPage />} />
+                </Route>
 
                 <Route path="/users" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
                   <Route index element={<UsersPage />} />

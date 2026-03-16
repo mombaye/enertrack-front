@@ -87,3 +87,62 @@ export async function listMonthly(params?: {
   });
   return data;
 }
+
+
+
+export type ImpactedSiteSummary = {
+  total_cosphi: string;
+  total_penalty: string;
+  sites_cosphi_count: number;
+  sites_penalty_count: number;
+};
+
+export type ImpactedSiteRow = {
+  site_id: string;
+  site_name: string;
+  numero_compte_contrat: string;
+  valeur_cosinus_phi: number | null;
+  montant_cosphi: string;
+  penalite_prime: string;
+  montant_hors_tva: string;
+  pct_cosphi_sur_ht: number;
+  pct_penalty_sur_ht: number;
+};
+
+export type ImpactedMonthTotaux = {
+  montant_cosphi: string;
+  penalite_prime: string;
+  sites_count: number;
+};
+
+export type ImpactedMonth = {
+  period: string;           // "2025-01"
+  sites: ImpactedSiteRow[];
+  totaux: ImpactedMonthTotaux;
+};
+
+export type ImpactedSitesResponse = {
+  range: { start: string; end: string };
+  filter: "both" | "cosphi" | "penalty";
+  summary: ImpactedSiteSummary;
+  by_month: ImpactedMonth[];
+};
+
+export type ImpactedSitesParams = {
+  start: string;            // YYYY-MM-DD
+  end: string;              // YYYY-MM-DD
+  filter?: "both" | "cosphi" | "penalty";
+  min_amount?: number;
+};
+
+// ─── Service ──────────────────────────────────────────────────────────────────
+
+export async function fetchImpactedSites(
+  params: ImpactedSitesParams
+): Promise<ImpactedSitesResponse> {
+  const { data } = await api.get<ImpactedSitesResponse>(
+    "/billing/impacted-sites/",
+    { params }
+  );
+  return data;
+}
