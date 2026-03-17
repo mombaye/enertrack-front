@@ -16,7 +16,7 @@ import {
   listInvoices, listMonthly, listContractMonths,
   SonatelInvoice, MonthlySynthesis, ContractMonth,
 } from "@/features/sonatelBilling/api";
-import { getBatchIssues, importInvoices, listBatches, ImportIssue } from "@/features/sonatelBilling/admin/importApi";
+import { getBatchIssues, listBatches, ImportIssue } from "@/features/sonatelBilling/admin/importApi";
 import { SeverityPill } from "@/features/sonatelBilling/admin/ui";
 import SonatelBillingStatsTab from "@/features/sonatelBilling/SonatelBillingStatsTab";
 import { exportImpactedSitesToExcel } from "@/utils/exportImpactedSites";
@@ -39,7 +39,7 @@ interface ImpactedSiteSummary {
 
 
 
-type Tab = "INVOICES" | "MONTHLY" | "CONTRACT" | "IMPORT" | "STATS" | "PENALITES";
+type Tab = "INVOICES" | "MONTHLY" | "CONTRACT" | "STATS" | "PENALITES";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDate(d: Date) {
@@ -584,7 +584,7 @@ export default function SonatelBillingPage() {
       { key: "STATS",     label: "Statistiques",       icon: <Zap size={13}/> },
       { key: "PENALITES", label: "Pénalités & Cos φ",  icon: <ShieldAlert size={13}/> },
     ];
-    if (isAdmin) base.push({ key: "IMPORT", label: "Import", icon: <UploadCloud size={13}/> });
+    
     return base;
   }, [isAdmin]);
 
@@ -680,18 +680,8 @@ export default function SonatelBillingPage() {
     queryFn:  () => getBatchIssues(selectedBatchId!, severity ? { severity } : undefined),
     placeholderData: keepPreviousData,
   });
-  const importMut = useMutation({
-    mutationFn: ({ file, echeance }: { file: File; echeance: string }) => importInvoices(file, echeance),
-    onSuccess: (res) => {
-      toast.success(`Import OK — +${res.rows_created} créées / ${res.rows_updated} mises à jour`);
-      setSelectedBatchId(res.batch.id);
-      qc.invalidateQueries({ queryKey: ["sb-batches"] });
-      qc.invalidateQueries({ queryKey: ["sb-invoices"] });
-      qc.invalidateQueries({ queryKey: ["sb-monthly"] });
-      qc.invalidateQueries({ queryKey: ["sb-contract-months"] });
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.detail || "Import échoué"),
-  });
+  
+  
 
   const issueCols: Col<ImportIssue>[] = useMemo(() => [
     { key:"sev",  title:"Niveau",  render:(r) => <SeverityPill v={r.severity} /> },
@@ -954,92 +944,8 @@ export default function SonatelBillingPage() {
             </>
           )}
 
-          {/* IMPORT */}
-          {tab === "IMPORT" && (
-            <div style={{ padding:"20px" }}>
-              {!isAdmin ? (
-                <div style={{ padding:"40px 24px", textAlign:"center", color:"#64748b", fontSize:14 }}>
-                  <AlertTriangle size={32} style={{color:"#E8401C",margin:"0 auto 12px",display:"block"}}/>
-                  Accès réservé aux administrateurs.
-                </div>
-              ) : (
-                <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-                  <div style={{ background:"#f8faff", borderRadius:14, border:"1px solid rgba(30,58,138,.1)", padding:"20px" }}>
-                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
-                      <div>
-                        <h2 className="display" style={{ fontSize:16, fontWeight:800, color:"#0f172a", margin:0 }}>Import Factures</h2>
-                        <p style={{ fontSize:12, color:"#64748b", marginTop:2 }}>Upload Excel Sénélec → upsert factures + synthèse + Contrat×Mois</p>
-                      </div>
-                      <button onClick={() => batchesQ.refetch()} style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 12px", borderRadius:9, border:"1px solid rgba(30,58,138,.12)", background:"white", cursor:"pointer", fontSize:12, fontWeight:600, color:"#475569" }}>
-                        <RefreshCw size={13}/> Rafraîchir
-                      </button>
-                    </div>
-                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr auto", gap:12, alignItems:"end" }}>
-                      <Field label="Fichier Excel">
-                        <label className="import-dropzone" style={{ display:"block", cursor:"pointer" }}>
-                          <FileSpreadsheet size={22} style={{color:"#1e3a8a",margin:"0 auto 6px",display:"block"}}/>
-                          <div style={{fontSize:12,color:"#64748b",fontWeight:500}}>{file ? file.name : "Cliquer ou déposer .xlsx / .xls"}</div>
-                          <input type="file" accept=".xlsx,.xls" onChange={e => setFile(e.target.files?.[0]||null)} style={{display:"none"}}/>
-                        </label>
-                      </Field>
-                      <Field label="Échéance *">
-                        <div style={{ position:"relative" }}>
-                          <Calendar size={13} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#94a3b8",pointerEvents:"none"}}/>
-                          <input type="date" value={echeance} onChange={e => setEcheance(e.target.value)} style={{ ...inputStyle, paddingLeft:30 }}/>
-                        </div>
-                      </Field>
-                      <Field label="Batch précédent">
-                        <select value={selectedBatchId ?? ""} onChange={e => setSelectedBatchId(e.target.value ? Number(e.target.value) : null)} style={inputStyle}>
-                          <option value="">— sélectionner —</option>
-                          {lastBatches.map((b: any) => (
-                            <option key={b.id} value={b.id}>#{b.id} · {new Date(b.imported_at).toLocaleString("fr-FR")} · {b.source_filename}</option>
-                          ))}
-                        </select>
-                      </Field>
-                      <button
-                        disabled={!file || !echeance || importMut.isPending}
-                        onClick={() => file && echeance && importMut.mutate({ file, echeance })}
-                        style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:7, padding:"11px 20px", borderRadius:10, background: (!file || !echeance || importMut.isPending) ? "#94a3b8" : "#1e3a8a", color:"white", border:"none", fontSize:13, fontWeight:700, cursor: (!file || !echeance || importMut.isPending) ? "not-allowed" : "pointer", transition:"background .18s", boxShadow: (!file||!echeance||importMut.isPending) ? "none" : "0 4px 14px rgba(30,58,138,.25)", height:42, whiteSpace:"nowrap" }}
-                      >
-                        <UploadCloud size={15}/> {importMut.isPending ? "Import..." : "Importer"}
-                      </button>
-                    </div>
-                  </div>
-
-                  {importMut.data && (
-                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10 }}>
-                      {[["Créées",importMut.data.rows_created],["Mises à jour",importMut.data.rows_updated],["Monthly créées",importMut.data.monthly_rows_created],["Issues",importMut.data.issues_logged],["Sans site",importMut.data.invoices_missing_site_count],["Contrat×Mois",importMut.data.contract_months_upserted]].map(([l,v]) => <StatMini key={l} label={String(l)} value={v as number}/>)}
-                    </div>
-                  )}
-
-                  {importMut.data?.invoices_missing_site_count ? (
-                    <div style={{ background:"#fffbeb", border:"1px solid #fde68a", borderRadius:12, padding:"14px 16px", display:"flex", gap:10, alignItems:"flex-start" }}>
-                      <AlertTriangle size={16} style={{color:"#f59e0b",flexShrink:0,marginTop:1}}/>
-                      <div>
-                        <div style={{fontSize:13,fontWeight:700,color:"#92400e"}}>{importMut.data.invoices_missing_site_count} contrat(s) sans mapping Site</div>
-                        <div style={{fontSize:11,color:"#b45309",marginTop:3}}>Exemples : {importMut.data.invoices_missing_site_sample?.join(", ")||"—"}</div>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <div style={{ background:"white", borderRadius:12, border:"1px solid rgba(30,58,138,.08)", overflow:"hidden" }}>
-                    <div style={{ padding:"14px 18px", borderBottom:"1px solid rgba(30,58,138,.07)", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                      <h3 className="display" style={{ fontSize:14, fontWeight:800, color:"#0f172a", margin:0 }}>Issues du batch</h3>
-                      <select value={severity} onChange={e => setSeverity(e.target.value)} style={{ ...inputStyle, width:"auto", padding:"6px 12px" }}>
-                        <option value="">Tous</option>
-                        <option value="ERROR">ERROR</option>
-                        <option value="WARN">WARN</option>
-                        <option value="INFO">INFO</option>
-                      </select>
-                    </div>
-                    <div style={{ overflowX:"auto" }}>
-                      <DataTable cols={issueCols} rows={issues} loading={issuesQ.isLoading} emptyText={selectedBatchId ? "Aucune issue" : "Sélectionne un batch pour voir les issues"}/>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+          
+          
         </div>
       </div>
     </>

@@ -22,8 +22,8 @@ const LINKS: LinkItem[] = [
   { to: "/dashboard",              icon: <Home />,         label: "Dashboard",                  section: "ANALYSE",        end: true },
 
   // ── FACTURATION ──────────────────────────────────────────────────────────────
-  { to: "/billing/sonatel",        icon: <Receipt />,      label: "Billing Sonatel",            section: "FACTURATION",    end: true },
   { to: "/billing/suivi", icon: <TrendingUp />, label: "Suivi Facturation", section: "FACTURATION", end: true },
+  { to: "/billing/sonatel",        icon: <Receipt />,      label: "Factures Sonatel",            section: "FACTURATION",    end: true },
   { to: "/certification",          icon: <ShieldCheck />,  label: "Certification",              section: "FACTURATION",    end: true },
 
   // ── MODULES ──────────────────────────────────────────────────────────────────
