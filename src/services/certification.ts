@@ -181,3 +181,34 @@ export async function checkEfmsHealth() {
   const { data } = await api.get<EfmsHealth>(`${BASE}/efms-health/`);
   return data;
 }
+
+export type BillingImportTaskStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILURE";
+
+export type BillingBatchTaskStatus = {
+  id: number;
+  task_id: string | null;
+  task_status: BillingImportTaskStatus | null;
+  task_progress: number;
+  task_message: string | null;
+  task_meta?: {
+    rows_created?: number;
+    rows_updated?: number;
+    monthly_rows_created?: number;
+    skipped_missing_required?: number;
+    skipped_invalid_period?: number;
+    skipped_duplicate_in_file?: number;
+    issues_logged?: number;
+    invoices_missing_site_count?: number;
+    invoices_missing_site_sample?: string[];
+  } | null;
+  task_updated_at: string | null;
+  source_filename: string;
+  imported_at: string | null;
+};
+
+export async function pollBillingImportStatus(batchId: number) {
+  const { data } = await api.get<BillingBatchTaskStatus>(
+    `/sonatel-billing/batches/${batchId}/task-status/`
+  );
+  return data;
+}

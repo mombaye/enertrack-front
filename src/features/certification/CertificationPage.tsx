@@ -13,22 +13,32 @@ import {
   listCertBatches, launchCertification, pollBatchStatus,
   listCertResults, checkEfmsHealth,
 } from "@/services/certification";
-import type {
-  CertificationBatch, CertResultStatus, CertificationResult,
+import {
+  CertificationBatch, CertResultStatus, CertificationResult,pollBillingImportStatus
 } from "@/services/certification";
 import { api } from "@/services/api";
 import { toast } from "react-toastify";
+
 
 async function importBillingFile(file: File, echeance: string) {
   const form = new FormData();
   form.append("file", file);
   form.append("echeance", echeance);
+
   const { data } = await api.post("/sonatel-billing/batches/import/", form, {
     headers: { "Content-Type": "multipart/form-data" },
   });
+
   return data as {
-    batch: { id: number; source_filename: string };
-    rows_created: number; rows_updated: number; invoices_missing_site_count: number;
+    batch: {
+      id: number;
+      source_filename: string;
+      task_status?: string;
+      task_progress?: number;
+      task_message?: string;
+    };
+    task_id: string;
+    detail: string;
   };
 }
 
@@ -209,6 +219,7 @@ function CertProgress({ counters, status }: { counters: Counters; status: string
   const targetPct = counters.total > 0 ? pct(processed, t) : 0;
   const [displayPct, setDisplayPct] = useState(targetPct);
   const animRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  
   useEffect(() => {
     if (animRef.current) clearInterval(animRef.current);
     if (status !== "RUNNING" || targetPct === displayPct) { setDisplayPct(targetPct); return; }
@@ -494,7 +505,18 @@ export default function CertificationPage() {
   const qc = useQueryClient();
   const [step, setStep] = useState<Step>("upload");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [importResult, setImportResult] = useState<{ batchId: number; filename: string; rows_created: number; rows_updated: number; missing_sites: number; } | null>(null);
+  const [importResult, setImportResult] = useState<{
+
+    batchId: number;
+    filename: string;
+    taskId: string | null;
+    taskStatus: "PENDING" | "RUNNING" | "SUCCESS" | "FAILURE" | null;
+    taskProgress: number;
+    taskMessage: string | null;
+    rowsCreated: number;
+    rowsUpdated: number;
+    missingSites: number;
+  } | null>(null);
   const [echeance, setEcheance] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
   const [pollingBatchId, setPollingBatchId] = useState<number | null>(null);
@@ -513,6 +535,18 @@ export default function CertificationPage() {
     refetchInterval: (data: any) => (!data || data.status === "RUNNING" || data.status === "PENDING") ? 2500 : false,
   });
 
+  const billingBatchId = importResult?.batchId ?? null;
+
+const { data: billingPoll } = useQuery({
+  queryKey: ["billing-batch-task-status", billingBatchId],
+  queryFn: () => pollBillingImportStatus(billingBatchId!),
+  enabled: billingBatchId !== null && step === "upload",
+  refetchInterval: (data: any) =>
+    !data || data.task_status === "PENDING" || data.task_status === "RUNNING"
+      ? 2000
+      : false,
+});
+
   useEffect(() => {
     if (pollData?.status === "DONE" || pollData?.status === "FAILED") {
       setPollingBatchId(null);
@@ -524,6 +558,9 @@ export default function CertificationPage() {
     }
   }, [pollData]);
 
+
+  
+
   const { data: resultsRaw, isLoading: loadingResults } = useQuery({
     queryKey: ["cert-results", selectedBatchId, statusFilter],
     queryFn: () => listCertResults({ cert_batch: selectedBatchId!, status: (statusFilter || undefined) as CertResultStatus }),
@@ -531,6 +568,35 @@ export default function CertificationPage() {
   });
   const results: CertificationResult[] = Array.isArray(resultsRaw) ? resultsRaw : (resultsRaw as any)?.results ?? [];
   const selectedBatch = certBatches.find(b => b.id === selectedBatchId);
+
+  useEffect(() => {
+  if (!billingPoll || !importResult) return;
+
+  setImportResult(prev => {
+    if (!prev) return prev;
+    return {
+      ...prev,
+      taskStatus: billingPoll.task_status ?? null,
+      taskProgress: billingPoll.task_progress ?? 0,
+      taskMessage: billingPoll.task_message ?? null,
+      rowsCreated: billingPoll.task_meta?.rows_created ?? 0,
+      rowsUpdated: billingPoll.task_meta?.rows_updated ?? 0,
+      missingSites:
+        billingPoll.task_meta?.invoices_missing_site_count ?? 0,
+    };
+  });
+
+  if (billingPoll.task_status === "SUCCESS") {
+    toast.success(
+      `Import terminé — ${(billingPoll.task_meta?.rows_created ?? 0) + (billingPoll.task_meta?.rows_updated ?? 0)} factures`
+    );
+    setStep("certify");
+  }
+
+  if (billingPoll.task_status === "FAILURE") {
+    toast.error(billingPoll.task_message ?? "Échec de l'import");
+  }
+}, [billingPoll]);
 
  const handleExport = async () => {
   if (!selectedBatchId || !selectedBatch) return;
@@ -578,9 +644,20 @@ export default function CertificationPage() {
       catch (e) { clearInterval(iv); setUploadProgress(0); throw e; }
     },
     onSuccess: (data) => {
-      setImportResult({ batchId: data.batch.id, filename: data.batch.source_filename, rows_created: data.rows_created, rows_updated: data.rows_updated, missing_sites: data.invoices_missing_site_count });
-      setTimeout(() => setStep("certify"), 600);
-      toast.success(`Import réussi — ${data.rows_created + data.rows_updated} factures`);
+      setImportResult({
+        batchId: data.batch.id,
+        filename: data.batch.source_filename,
+        taskId: data.task_id ?? null,
+        taskStatus: "PENDING",
+        taskProgress: 0,
+        taskMessage: "Import en file d'attente…",
+        rowsCreated: 0,
+        rowsUpdated: 0,
+        missingSites: 0,
+      });
+
+      setUploadProgress(100);
+      toast.info("Fichier reçu — import en cours...");
     },
     onError: (err: any) => toast.error(err?.response?.data?.detail ?? "Erreur import"),
   });
@@ -592,7 +669,14 @@ export default function CertificationPage() {
       setPollingBatchId(data.cert_batch_id); setSelectedBatchId(data.cert_batch_id);
       qc.invalidateQueries({ queryKey: ["cert-batches"] });
     },
-    onError: (err: any) => toast.error(err?.response?.data?.detail ?? "Erreur lancement"),
+    onError: (err: any) => {
+      const data = err?.response?.data;
+      toast.error(data?.detail ?? "Erreur lancement");
+
+      if (err?.response?.status === 409 && importResult?.batchId) {
+        setStep("upload");
+      }
+    },
   });
 
   const isRunning = pollingBatchId !== null;
@@ -651,10 +735,40 @@ export default function CertificationPage() {
                   <p className="text-xs text-slate-400 mt-2">Import en cours... {uploadProgress}%</p>
                 </div>
               )}
-              {uploadMut.isSuccess && importResult && (
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-5 flex items-center gap-4">
-                  <div className="w-11 h-11 rounded-xl bg-emerald-500 flex items-center justify-center shrink-0"><Check className="w-6 h-6 text-white" /></div>
-                  <div><div className="font-bold text-emerald-800 text-sm">{importResult.filename}</div><div className="text-xs text-emerald-600">{importResult.rows_created + importResult.rows_updated} factures · redirection...</div></div>
+              {importResult && (
+                <div className={`rounded-2xl border p-5 flex items-center gap-4 ${
+                  importResult.taskStatus === "SUCCESS"
+                    ? "border-emerald-200 bg-emerald-50/40"
+                    : importResult.taskStatus === "FAILURE"
+                    ? "border-red-200 bg-red-50/40"
+                    : "border-blue-200 bg-blue-50/30"
+                }`}>
+                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+                    importResult.taskStatus === "SUCCESS"
+                      ? "bg-emerald-500"
+                      : importResult.taskStatus === "FAILURE"
+                      ? "bg-red-500"
+                      : "bg-blue-900"
+                  }`}>
+                    {importResult.taskStatus === "SUCCESS" ? (
+                      <Check className="w-6 h-6 text-white" />
+                    ) : importResult.taskStatus === "FAILURE" ? (
+                      <AlertTriangle className="w-6 h-6 text-white" />
+                    ) : (
+                      <Loader2 className="w-6 h-6 text-white animate-spin" />
+                    )}
+                  </div>
+
+                  <div className="flex-1">
+                    <div className="font-bold text-sm">{importResult.filename}</div>
+                    <div className="text-xs mt-1">
+                      {importResult.taskStatus === "SUCCESS"
+                        ? `${importResult.rowsCreated + importResult.rowsUpdated} factures importées`
+                        : importResult.taskStatus === "FAILURE"
+                        ? "Import échoué"
+                        : `${importResult.taskMessage ?? "Import en cours..."} (${importResult.taskProgress}%)`}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -686,7 +800,7 @@ export default function CertificationPage() {
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0"><FileSpreadsheet className="w-6 h-6 text-emerald-600" /></div>
-                <div className="flex-1"><h2 className="text-sm font-bold text-slate-900">{importResult.filename}</h2><p className="text-xs text-slate-500 mt-0.5">{importResult.rows_created + importResult.rows_updated} factures · Batch #{importResult.batchId}{echeance && <> · <span className="font-semibold text-blue-900">{echeance}</span></>}</p></div>
+                <div className="flex-1"><h2 className="text-sm font-bold text-slate-900">{importResult.filename}</h2><p className="text-xs text-slate-500 mt-0.5">{importResult.rowsCreated + importResult.rowsUpdated} factures · Batch #{importResult.batchId}{echeance && <> · <span className="font-semibold text-blue-900">{echeance}</span></>}</p></div>
                 {!isRunning && <button onClick={() => { setStep("upload"); setImportResult(null); setUploadedFile(null); setUploadProgress(0); uploadMut.reset(); setEcheance(""); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 transition shrink-0"><X className="w-4 h-4" /></button>}
               </div>
             </div>
@@ -716,7 +830,7 @@ export default function CertificationPage() {
                   </button>
                 </div>
               ) : (
-                <CertProgress status={activePoll?.status ?? "RUNNING"} counters={{ total: activePoll?.counters?.total ?? (importResult.rows_created + importResult.rows_updated), certified_fms: activePoll?.counters?.certified_fms ?? 0, certified_senelec: activePoll?.counters?.certified_senelec ?? 0, needs_review: activePoll?.counters?.needs_review ?? 0, unknown_contract: activePoll?.counters?.unknown_contract ?? 0, fms_unavailable: activePoll?.counters?.fms_unavailable ?? 0 }} />
+                <CertProgress status={activePoll?.status ?? "RUNNING"} counters={{ total: activePoll?.counters?.total ?? (importResult.rowsCreated + importResult.rowsUpdated), certified_fms: activePoll?.counters?.certified_fms ?? 0, certified_senelec: activePoll?.counters?.certified_senelec ?? 0, needs_review: activePoll?.counters?.needs_review ?? 0, unknown_contract: activePoll?.counters?.unknown_contract ?? 0, fms_unavailable: activePoll?.counters?.fms_unavailable ?? 0 }} />
               )}
             </div>
           </div>
