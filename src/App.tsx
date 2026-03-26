@@ -31,6 +31,7 @@ import UsersPage from "./features/users/Userspage";
 import ComingSoonPage from "./components/Comingsoonpage";
 import { AlertTriangle, BarChart2, Server, Zap } from "lucide-react";
 import AdminSitesPage from "./features/sites/admin/AdminSitesPage";
+import FinancialPage from "./features/financial/FinancialPage";
 
 const queryClient = new QueryClient();
 
@@ -86,6 +87,11 @@ export default function App() {
                     <Route path="status-update" element={<StatusUpdateImportPage />} />
                     <Route path="compute" element={<BillingComputePage />} />
                   </Route>
+                </Route>
+
+
+                <Route path="/modules/evaluation-financiere" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
+                  <Route index element={<FinancialPage />} />
                 </Route>
 
                 <Route

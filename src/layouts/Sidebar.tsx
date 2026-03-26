@@ -5,7 +5,7 @@ import {
   Home, User, Menu, X, Receipt,
   ChevronLeft, ChevronRight, Settings2, ShieldCheck,
   Calculator, Zap, BarChart2, AlertTriangle, Server,
-  Building2,TrendingUp
+  Building2,TrendingUp, DollarSign
 } from "lucide-react";
 import camusatLogo from "@/assets/images/camusat-logo.png";
 import { useAuth } from "@/auth/AuthContext";
@@ -25,6 +25,8 @@ const LINKS: LinkItem[] = [
   { to: "/billing/suivi", icon: <TrendingUp />, label: "Suivi Facturation", section: "FACTURATION", end: true },
   { to: "/billing/sonatel",        icon: <Receipt />,      label: "Factures Sonatel",            section: "FACTURATION",    end: true },
   { to: "/certification",          icon: <ShieldCheck />,  label: "Certification",              section: "FACTURATION",    end: true },
+  // Sidebar.tsx — dans LINKS
+  { to: "/modules/evaluation-financiere", icon: <DollarSign />, label: "Évaluation Financière", section: "FACTURATION" },
 
   // ── MODULES ──────────────────────────────────────────────────────────────────
   { to: "/modules/estimation",              icon: <Calculator />,   label: "Estimation",                 section: "MODULES",        comingSoon: true },

@@ -17,12 +17,17 @@ import {
   Loader2,
   Save,
   X,
+  ShieldCheck,
+  Database,
+  Settings2,
 } from "lucide-react";
 import { toast } from "react-toastify";
-import type { Site } from "./api";
+import type { GridTargetRule, Site } from "./api";
 import {
   useCreateSite,
   useDeleteSite,
+  useGridTargetRules,
+  useImportGridTargetRules,
   useImportSites,
   useSites,
   useUpdateSite,
@@ -34,18 +39,37 @@ type SiteFormState = {
   modernized: "" | "true" | "false";
   ordered_typology: string;
   installed_typology: string;
+  billing_typology: string;
+
   contract_number: string;
   meter_number: string;
-  billing_typology: string;
-  load_analyses: string;
+
+  analysis_load: string;
+  load_band: string;
+
   site_type: string;
+  ordered_site_type: string;
+  installed_site_type: string;
+
+  configuration: string;
+  target_mapping_key: string;
+
   transformer_capacity: string;
+
   indoor_billed_outdoor: "" | "true" | "false";
   not_yet_solarized: "" | "true" | "false";
+  solarization_date: string;
+
   energy_desk_comment: string;
+  load_comment_category: string;
+
   invoice_payment: string;
   grid_fee: "" | "true" | "false";
   batch_operational: string;
+
+  scope_status: "" | "IN_SCOPE" | "OUT_OF_SCOPE" | "UNKNOWN";
+  meter_status: string;
+
   zone: string;
 };
 
@@ -55,18 +79,27 @@ const EMPTY_FORM: SiteFormState = {
   modernized: "",
   ordered_typology: "",
   installed_typology: "",
+  billing_typology: "",
   contract_number: "",
   meter_number: "",
-  billing_typology: "",
-  load_analyses: "",
+  analysis_load: "",
+  load_band: "",
   site_type: "",
+  ordered_site_type: "",
+  installed_site_type: "",
+  configuration: "",
+  target_mapping_key: "",
   transformer_capacity: "",
   indoor_billed_outdoor: "",
   not_yet_solarized: "",
+  solarization_date: "",
   energy_desk_comment: "",
+  load_comment_category: "",
   invoice_payment: "",
   grid_fee: "",
   batch_operational: "",
+  scope_status: "",
+  meter_status: "",
   zone: "",
 };
 
@@ -96,11 +129,16 @@ function siteToForm(site: Site): SiteFormState {
       site.modernized === true ? "true" : site.modernized === false ? "false" : "",
     ordered_typology: site.ordered_typology || "",
     installed_typology: site.installed_typology || "",
+    billing_typology: site.billing_typology || "",
     contract_number: site.contract_number || "",
     meter_number: site.meter_number || "",
-    billing_typology: site.billing_typology || "",
-    load_analyses: site.load_analyses != null ? String(site.load_analyses) : "",
+    analysis_load: site.analysis_load != null ? String(site.analysis_load) : "",
+    load_band: site.load_band || "",
     site_type: site.site_type || "",
+    ordered_site_type: site.ordered_site_type || "",
+    installed_site_type: site.installed_site_type || "",
+    configuration: site.configuration || "",
+    target_mapping_key: site.target_mapping_key || "",
     transformer_capacity:
       site.transformer_capacity != null ? String(site.transformer_capacity) : "",
     indoor_billed_outdoor:
@@ -115,11 +153,15 @@ function siteToForm(site: Site): SiteFormState {
         : site.not_yet_solarized === false
         ? "false"
         : "",
+    solarization_date: site.solarization_date || "",
     energy_desk_comment: site.energy_desk_comment || "",
+    load_comment_category: site.load_comment_category || "",
     invoice_payment: site.invoice_payment || "",
     grid_fee:
       site.grid_fee === true ? "true" : site.grid_fee === false ? "false" : "",
     batch_operational: site.batch_operational || "",
+    scope_status: site.scope_status || "",
+    meter_status: site.meter_status || "",
     zone: site.zone || "",
   };
 }
@@ -131,18 +173,27 @@ function formToPayload(form: SiteFormState): Partial<Site> {
     modernized: toBool(form.modernized),
     ordered_typology: toNullableString(form.ordered_typology),
     installed_typology: toNullableString(form.installed_typology),
+    billing_typology: toNullableString(form.billing_typology),
     contract_number: toNullableString(form.contract_number),
     meter_number: toNullableString(form.meter_number),
-    billing_typology: toNullableString(form.billing_typology),
-    load_analyses: toNullableNumber(form.load_analyses),
+    analysis_load: toNullableNumber(form.analysis_load),
+    load_band: toNullableString(form.load_band),
     site_type: toNullableString(form.site_type),
+    ordered_site_type: toNullableString(form.ordered_site_type),
+    installed_site_type: toNullableString(form.installed_site_type),
+    configuration: toNullableString(form.configuration),
+    target_mapping_key: toNullableString(form.target_mapping_key),
     transformer_capacity: toNullableNumber(form.transformer_capacity),
     indoor_billed_outdoor: toBool(form.indoor_billed_outdoor),
     not_yet_solarized: toBool(form.not_yet_solarized),
+    solarization_date: toNullableString(form.solarization_date),
     energy_desk_comment: toNullableString(form.energy_desk_comment),
+    load_comment_category: toNullableString(form.load_comment_category),
     invoice_payment: toNullableString(form.invoice_payment),
     grid_fee: toBool(form.grid_fee),
     batch_operational: toNullableString(form.batch_operational),
+    scope_status: (toNullableString(form.scope_status) as Site["scope_status"]) || null,
+    meter_status: toNullableString(form.meter_status),
     zone: toNullableString(form.zone),
   };
 }
@@ -173,12 +224,33 @@ function BoolBadge({ value }: { value: boolean | null }) {
   );
 }
 
-function SoftBadge({ label }: { label?: string | null }) {
+function SoftBadge({
+  label,
+  tone = "slate",
+}: {
+  label?: string | null;
+  tone?: "slate" | "blue" | "amber" | "emerald" | "rose";
+}) {
+  const tones = {
+    slate: "border-slate-200 bg-slate-50 text-slate-700",
+    blue: "border-blue-200 bg-blue-50 text-blue-700",
+    amber: "border-amber-200 bg-amber-50 text-amber-700",
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    rose: "border-rose-200 bg-rose-50 text-rose-700",
+  };
+
   return (
-    <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">
+    <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${tones[tone]}`}>
       {label || "—"}
     </span>
   );
+}
+
+function ScopeBadge({ value }: { value: Site["scope_status"] }) {
+  if (value === "IN_SCOPE") return <SoftBadge label="In scope" tone="emerald" />;
+  if (value === "OUT_OF_SCOPE") return <SoftBadge label="Out of scope" tone="rose" />;
+  if (value === "UNKNOWN") return <SoftBadge label="Unknown" tone="amber" />;
+  return <SoftBadge label="—" />;
 }
 
 function StatCard({
@@ -204,9 +276,7 @@ function StatCard({
           </p>
           <p className="mt-2 text-sm text-slate-500">{hint}</p>
         </div>
-        <div className="rounded-2xl bg-blue-900 p-3 text-white shadow-lg">
-          {icon}
-        </div>
+        <div className="rounded-2xl bg-blue-900 p-3 text-white shadow-lg">{icon}</div>
       </div>
     </div>
   );
@@ -291,7 +361,7 @@ function SiteModal({
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-5xl overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl">
+      <div className="w-full max-w-6xl overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
           <div>
             <h3 className="text-xl font-bold tracking-tight text-slate-900">{title}</h3>
@@ -332,6 +402,18 @@ function SiteModal({
             />
 
             <TextField
+              label="Typologie facturation"
+              value={form.billing_typology}
+              field="billing_typology"
+            />
+            <TextField label="Configuration" value={form.configuration} field="configuration" />
+            <TextField
+              label="Clé de mapping"
+              value={form.target_mapping_key}
+              field="target_mapping_key"
+            />
+
+            <TextField
               label="Numéro contrat"
               value={form.contract_number}
               field="contract_number"
@@ -341,25 +423,58 @@ function SiteModal({
               value={form.meter_number}
               field="meter_number"
             />
-            <TextField
-              label="Typologie facturation"
-              value={form.billing_typology}
-              field="billing_typology"
-            />
+            <TextField label="Statut compteur" value={form.meter_status} field="meter_status" />
 
             <TextField
-              label="Load Analyses"
-              value={form.load_analyses}
-              field="load_analyses"
+              label="Load analyse"
+              value={form.analysis_load}
+              field="analysis_load"
               type="number"
             />
+            <TextField label="Load band" value={form.load_band} field="load_band" />
             <TextField label="Type" value={form.site_type} field="site_type" />
+
+            <TextField
+              label="Type commandé"
+              value={form.ordered_site_type}
+              field="ordered_site_type"
+            />
+            <TextField
+              label="Type installé"
+              value={form.installed_site_type}
+              field="installed_site_type"
+            />
             <TextField
               label="Capacité transformateur"
               value={form.transformer_capacity}
               field="transformer_capacity"
               type="number"
             />
+
+            <TextField
+              label="Date solarisation"
+              value={form.solarization_date}
+              field="solarization_date"
+              type="date"
+            />
+            <TextField
+              label="Catégorie commentaire"
+              value={form.load_comment_category}
+              field="load_comment_category"
+            />
+            <label className="space-y-2">
+              <span className="text-sm font-medium text-slate-700">Scope</span>
+              <select
+                value={form.scope_status}
+                onChange={(e) => setField("scope_status", e.target.value)}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+              >
+                <option value="">—</option>
+                <option value="IN_SCOPE">IN_SCOPE</option>
+                <option value="OUT_OF_SCOPE">OUT_OF_SCOPE</option>
+                <option value="UNKNOWN">UNKNOWN</option>
+              </select>
+            </label>
 
             <BoolSelect
               label="Indoor facturé outdoor"
@@ -421,23 +536,106 @@ function SiteModal({
   );
 }
 
+function GridTargetRulesPanel({
+  rows,
+  importing,
+  onImport,
+}: {
+  rows: GridTargetRule[];
+  importing: boolean;
+  onImport: () => void;
+}) {
+  return (
+    <div className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-base font-bold tracking-tight text-slate-900">
+            Règles GridTargetRule
+          </h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Référentiel cible/redevance importé depuis le fichier client.
+          </p>
+        </div>
+        <button
+          onClick={onImport}
+          disabled={importing}
+          className="inline-flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 disabled:opacity-70"
+        >
+          {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          Import GridTargetRule
+        </button>
+      </div>
+
+      <div className="mt-4 overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="bg-slate-100">
+            <tr className="border-b border-slate-300">
+              {["Configuration", "Type", "Load band", "Target kWh", "Target/jour", "Redevance"].map(
+                (h) => (
+                  <th
+                    key={h}
+                    className="whitespace-nowrap px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em] text-slate-600"
+                  >
+                    {h}
+                  </th>
+                )
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length ? (
+              rows.slice(0, 8).map((rule) => (
+                <tr key={rule.id} className="border-b border-slate-300">
+                  <td className="px-4 py-3 font-medium text-slate-800">{rule.configuration}</td>
+                  <td className="px-4 py-3"><SoftBadge label={rule.site_type} /></td>
+                  <td className="px-4 py-3"><SoftBadge label={rule.load_band} /></td>
+                  <td className="px-4 py-3 text-slate-700">{rule.target_kwh ?? "—"}</td>
+                  <td className="px-4 py-3 text-slate-700">{rule.target_kwh_per_day ?? "—"}</td>
+                  <td className="px-4 py-3 text-slate-700">{rule.grid_fee_amount ?? "—"}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                  Aucune règle importée.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {!!rows.length && (
+        <p className="mt-3 text-xs text-slate-500">
+          {rows.length} règle(s) disponible(s).
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function AdminSitesPage() {
   const [query, setQuery] = useState("");
   const [zone, setZone] = useState("all");
   const [type, setType] = useState("all");
   const [payment, setPayment] = useState("all");
+  const [scope, setScope] = useState("all");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSite, setEditingSite] = useState<Site | null>(null);
   const [form, setForm] = useState<SiteFormState>(EMPTY_FORM);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const gridFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const { data: rows = [], isLoading, isFetching, refetch } = useSites();
+  const { data: gridRules = [] } = useGridTargetRules();
+
   const createMutation = useCreateSite();
   const updateMutation = useUpdateSite();
   const deleteMutation = useDeleteSite();
   const importMutation = useImportSites();
+  const importGridMutation = useImportGridTargetRules();
 
   const filtered = useMemo(() => {
     return rows.filter((site) => {
@@ -449,26 +647,27 @@ export default function AdminSitesPage() {
         site.name.toLowerCase().includes(q) ||
         (site.contract_number || "").toLowerCase().includes(q) ||
         (site.meter_number || "").toLowerCase().includes(q) ||
-        (site.installed_typology || "").toLowerCase().includes(q);
+        (site.installed_typology || "").toLowerCase().includes(q) ||
+        (site.configuration || "").toLowerCase().includes(q);
 
       const matchZone = zone === "all" || (site.zone || "").toUpperCase() === zone;
-      const matchType =
-        type === "all" || (site.site_type || "").toLowerCase() === type.toLowerCase();
+      const matchType = type === "all" || (site.site_type || "").toLowerCase() === type.toLowerCase();
       const matchPayment =
-        payment === "all" ||
-        (site.invoice_payment || "").toLowerCase() === payment.toLowerCase();
+        payment === "all" || (site.invoice_payment || "").toLowerCase() === payment.toLowerCase();
+      const matchScope = scope === "all" || (site.scope_status || "") === scope;
 
-      return matchQuery && matchZone && matchType && matchPayment;
+      return matchQuery && matchZone && matchType && matchPayment && matchScope;
     });
-  }, [rows, query, zone, type, payment]);
+  }, [rows, query, zone, type, payment, scope]);
 
   const stats = useMemo(() => {
     const total = rows.length;
     const modernized = rows.filter((s) => s.modernized === true).length;
     const solarPending = rows.filter((s) => s.not_yet_solarized === true).length;
     const indoor = rows.filter((s) => (s.site_type || "").toLowerCase() === "indoor").length;
+    const inScope = rows.filter((s) => s.scope_status === "IN_SCOPE").length;
 
-    return { total, modernized, solarPending, indoor };
+    return { total, modernized, solarPending, indoor, inScope };
   }, [rows]);
 
   const zoneStats = useMemo(() => {
@@ -495,6 +694,8 @@ export default function AdminSitesPage() {
         site.meter_number,
         site.site_type,
         site.invoice_payment,
+        site.configuration,
+        site.scope_status,
       ];
       fields.forEach((v) => {
         if (v !== null && v !== undefined && String(v).trim() !== "") filled += 1;
@@ -556,9 +757,7 @@ export default function AdminSitesPage() {
   };
 
   const handleDelete = async (site: Site) => {
-    const ok = window.confirm(
-      `Supprimer le site ${site.site_id} - ${site.name} ?`
-    );
+    const ok = window.confirm(`Supprimer le site ${site.site_id} - ${site.name} ?`);
     if (!ok) return;
 
     try {
@@ -577,18 +776,17 @@ export default function AdminSitesPage() {
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = async (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleGridImportClick = () => {
+    gridFileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     try {
       const res = await importMutation.mutateAsync(file);
-      const msg =
-        res?.message ||
-        "Import terminé avec succès.";
-      toast.success(msg);
+      toast.success(res?.message || "Import terminé avec succès.");
       if (res?.errors_count) {
         toast.info(`${res.errors_count} ligne(s) en erreur détectée(s).`);
       }
@@ -603,12 +801,34 @@ export default function AdminSitesPage() {
     }
   };
 
+  const handleGridFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const res = await importGridMutation.mutateAsync(file);
+      toast.success(res?.message || "Import GridTargetRule terminé.");
+      if (res?.errors_count) {
+        toast.info(`${res.errors_count} ligne(s) en erreur détectée(s).`);
+      }
+    } catch (error: any) {
+      const detail =
+        error?.response?.data?.detail ||
+        error?.response?.data?.error ||
+        "Erreur lors de l'import GridTargetRule.";
+      toast.error(detail);
+    } finally {
+      e.target.value = "";
+    }
+  };
+
   const loading =
     isLoading ||
     createMutation.isPending ||
     updateMutation.isPending ||
     deleteMutation.isPending ||
-    importMutation.isPending;
+    importMutation.isPending ||
+    importGridMutation.isPending;
 
   return (
     <div className="min-h-full bg-slate-50">
@@ -618,6 +838,14 @@ export default function AdminSitesPage() {
         accept=".xlsx,.xls"
         className="hidden"
         onChange={handleFileChange}
+      />
+
+      <input
+        ref={gridFileInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        className="hidden"
+        onChange={handleGridFileChange}
       />
 
       <div className="mx-auto max-w-[1600px] space-y-6 px-4 py-6 md:px-6 xl:px-8">
@@ -632,8 +860,8 @@ export default function AdminSitesPage() {
                 Gestion des sites
               </h1>
               <p className="mt-2 max-w-3xl text-sm text-blue-100/85 md:text-base">
-                Gérez le référentiel des sites, l’import Excel, les informations
-                de facturation, les typologies et les statuts de modernisation.
+                Gérez le référentiel des sites, l’import Excel, les informations de
+                facturation, le scope et les règles de cible Grid.
               </p>
             </div>
 
@@ -648,7 +876,20 @@ export default function AdminSitesPage() {
                 ) : (
                   <Upload className="h-4 w-4" />
                 )}
-                Import Excel
+                Import Sites
+              </button>
+
+              <button
+                onClick={handleGridImportClick}
+                disabled={importGridMutation.isPending}
+                className="inline-flex items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/15 disabled:opacity-70"
+              >
+                {importGridMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Database className="h-4 w-4" />
+                )}
+                Import GridTargetRule
               </button>
 
               <button
@@ -662,7 +903,7 @@ export default function AdminSitesPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
           <StatCard
             title="Total sites"
             value={stats.total}
@@ -687,6 +928,12 @@ export default function AdminSitesPage() {
             hint="Sites non encore solarisés"
             icon={<SunMedium className="h-5 w-5" />}
           />
+          <StatCard
+            title="In scope"
+            value={stats.inScope}
+            hint="Périmètre ESCO"
+            icon={<ShieldCheck className="h-5 w-5" />}
+          />
         </div>
 
         <div className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm">
@@ -696,12 +943,12 @@ export default function AdminSitesPage() {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Rechercher par code site, nom, contrat, compteur..."
+                placeholder="Rechercher par code site, nom, contrat, compteur, configuration..."
                 className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
               />
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:w-[520px]">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 xl:w-[760px]">
               <select
                 value={zone}
                 onChange={(e) => setZone(e.target.value)}
@@ -725,6 +972,8 @@ export default function AdminSitesPage() {
                 <option value="all">Tous les types</option>
                 <option value="Indoor">Indoor</option>
                 <option value="Outdoor">Outdoor</option>
+                <option value="INDOOR">INDOOR</option>
+                <option value="OUTDOOR">OUTDOOR</option>
               </select>
 
               <select
@@ -736,11 +985,22 @@ export default function AdminSitesPage() {
                 <option value="Aktivco">Aktivco</option>
                 <option value="Sonatel">Sonatel</option>
               </select>
+
+              <select
+                value={scope}
+                onChange={(e) => setScope(e.target.value)}
+                className="h-12 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+              >
+                <option value="all">Tous scopes</option>
+                <option value="IN_SCOPE">IN_SCOPE</option>
+                <option value="OUT_OF_SCOPE">OUT_OF_SCOPE</option>
+                <option value="UNKNOWN">UNKNOWN</option>
+              </select>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[minmax(0,1fr)_380px]">
           <div className="overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 md:flex-row md:items-center md:justify-between">
               <div>
@@ -761,6 +1021,7 @@ export default function AdminSitesPage() {
                     setZone("all");
                     setType("all");
                     setPayment("all");
+                    setScope("all");
                   }}
                 >
                   <Filter className="h-4 w-4" />
@@ -780,24 +1041,27 @@ export default function AdminSitesPage() {
                   className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
                 >
                   <FileSpreadsheet className="h-4 w-4" />
-                  Import Excel
+                  Import Sites
                 </button>
               </div>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="min-w-[1450px] w-full text-sm">
+              <table className="min-w-[1850px] w-full text-sm">
                 <thead className="sticky top-0 z-10 bg-slate-100">
                   <tr className="border-b border-slate-300">
                     {[
                       "Code site",
                       "Nom",
                       "Zone",
+                      "Scope",
+                      "Configuration",
                       "Modernisé",
                       "Typologie installée",
                       "Numéro contrat",
                       "Compteur",
                       "Load",
+                      "Load band",
                       "Type",
                       "Paiement",
                       "Grid",
@@ -817,7 +1081,7 @@ export default function AdminSitesPage() {
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={13} className="px-6 py-16 text-center">
+                      <td colSpan={16} className="px-6 py-16 text-center">
                         <div className="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-600">
                           <Loader2 className="h-4 w-4 animate-spin" />
                           Chargement des sites...
@@ -830,13 +1094,15 @@ export default function AdminSitesPage() {
                         key={site.id}
                         className="border-b border-slate-300 transition hover:bg-slate-50/80"
                       >
-                        <td className="px-4 py-3 font-semibold text-slate-900">
-                          {site.site_id}
-                        </td>
+                        <td className="px-4 py-3 font-semibold text-slate-900">{site.site_id}</td>
                         <td className="px-4 py-3 text-slate-700">{site.name}</td>
                         <td className="px-4 py-3">
                           <SoftBadge label={site.zone} />
                         </td>
+                        <td className="px-4 py-3">
+                          <ScopeBadge value={site.scope_status} />
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">{site.configuration || "—"}</td>
                         <td className="px-4 py-3">
                           <BoolBadge value={site.modernized} />
                         </td>
@@ -846,11 +1112,12 @@ export default function AdminSitesPage() {
                         <td className="px-4 py-3 text-slate-700">
                           {site.contract_number || "—"}
                         </td>
-                        <td className="px-4 py-3 text-slate-700">
-                          {site.meter_number || "—"}
-                        </td>
+                        <td className="px-4 py-3 text-slate-700">{site.meter_number || "—"}</td>
                         <td className="px-4 py-3 font-medium text-slate-800">
-                          {site.load_analyses ?? "—"}
+                          {site.analysis_load ?? "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <SoftBadge label={site.load_band} />
                         </td>
                         <td className="px-4 py-3">
                           <SoftBadge label={site.site_type} />
@@ -864,9 +1131,7 @@ export default function AdminSitesPage() {
                         <td className="px-4 py-3">
                           <BoolBadge
                             value={
-                              site.not_yet_solarized === null
-                                ? null
-                                : !site.not_yet_solarized
+                              site.not_yet_solarized === null ? null : !site.not_yet_solarized
                             }
                           />
                         </td>
@@ -891,7 +1156,7 @@ export default function AdminSitesPage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={13} className="px-6 py-12 text-center text-sm text-slate-500">
+                      <td colSpan={16} className="px-6 py-12 text-center text-sm text-slate-500">
                         Aucun site trouvé avec les filtres actuels.
                       </td>
                     </tr>
@@ -913,9 +1178,7 @@ export default function AdminSitesPage() {
                 >
                   <Plus className="h-4 w-4 text-blue-700" />
                   <div>
-                    <div className="text-sm font-semibold text-slate-900">
-                      Créer un site
-                    </div>
+                    <div className="text-sm font-semibold text-slate-900">Créer un site</div>
                     <div className="text-xs text-slate-500">
                       Ajouter une nouvelle entrée au référentiel
                     </div>
@@ -928,11 +1191,24 @@ export default function AdminSitesPage() {
                 >
                   <Upload className="h-4 w-4 text-emerald-700" />
                   <div>
-                    <div className="text-sm font-semibold text-slate-900">
-                      Importer un fichier Excel
-                    </div>
+                    <div className="text-sm font-semibold text-slate-900">Importer les sites</div>
                     <div className="text-xs text-slate-500">
                       Mettre à jour les sites existants et créer les nouveaux
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={handleGridImportClick}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:bg-slate-50"
+                >
+                  <Database className="h-4 w-4 text-amber-700" />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">
+                      Importer GridTargetRule
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      Charger les cibles et redevances client
                     </div>
                   </div>
                 </button>
@@ -955,9 +1231,7 @@ export default function AdminSitesPage() {
             </div>
 
             <div className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-base font-bold tracking-tight text-slate-900">
-                Résumé
-              </h3>
+              <h3 className="text-base font-bold tracking-tight text-slate-900">Résumé</h3>
               <div className="mt-4 space-y-4">
                 <div className="rounded-2xl bg-slate-50 p-4">
                   <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
@@ -989,22 +1263,28 @@ export default function AdminSitesPage() {
                     />
                   </div>
                   <p className="mt-2 text-xs text-slate-500">
-                    {completeness}% des lignes ont les informations principales
-                    correctement renseignées.
+                    {completeness}% des lignes ont les informations principales correctement
+                    renseignées.
                   </p>
                 </div>
 
                 <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
                   <div className="flex items-start gap-3">
-                    <Factory className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                    <Settings2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
                     <div>
-                      Les opérations de création, modification, suppression et import
-                      sont directement connectées aux endpoints backend du module Sites.
+                      Les opérations de création, modification, suppression et import sont
+                      directement connectées aux endpoints backend du module Sites.
                     </div>
                   </div>
                 </div>
               </div>
             </div>
+
+            <GridTargetRulesPanel
+              rows={gridRules}
+              importing={importGridMutation.isPending}
+              onImport={handleGridImportClick}
+            />
           </div>
         </div>
 
