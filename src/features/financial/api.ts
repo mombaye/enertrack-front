@@ -187,11 +187,14 @@ export interface EvaluationStats {
 
 export const fetchEvaluationStats = async (params: {
   year: number;
-  month: number;
+  month?: number;
+  month_start?: number;
+  month_end?: number;
 }): Promise<EvaluationStats> => {
   const { data } = await api.get("/financial/evaluations/stats/", { params });
   return data;
 };
+
 
 export const runEvaluation = async (params: {
   year: number;
@@ -204,6 +207,8 @@ export const runEvaluation = async (params: {
 export const fetchEvaluations = async (params?: {
   year?: number;
   month?: number;
+  month_start?: number;
+  month_end?: number;
   statut?: "OK" | "NOK";
   hors_catalogue?: boolean;
   site?: string;
@@ -221,22 +226,14 @@ export const fetchEvaluations = async (params?: {
 export const exportEvaluationsCSV = (params?: {
   year?: number;
   month?: number;
+  month_start?: number;
+  month_end?: number;
   statut?: "OK" | "NOK";
   search?: string;
   typology?: string;
   zone?: string;
   recurrence_type?: "light" | "critique";
 }) => {
-  const base = api.defaults.baseURL || "";
-  const qp = new URLSearchParams();
-  qp.set("export", "csv");
-  if (params) {
-    Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== "") qp.set(k, String(v)); });
-  }
-  // Déclencher le téléchargement directement via href
-  const token = localStorage.getItem("access") || localStorage.getItem("token") || "";
-  const url = `${base}/financial/evaluations/?${qp.toString()}`;
-  // Utilise fetch pour récupérer le CSV avec l'auth header
   return api.get("/financial/evaluations/", {
     params: { ...params, export: "csv" },
     responseType: "blob",
@@ -244,7 +241,10 @@ export const exportEvaluationsCSV = (params?: {
     const href = URL.createObjectURL(data);
     const a = document.createElement("a");
     a.href = href;
-    a.download = `evaluations_${params?.year || "all"}_${params?.month || "all"}.csv`;
+    const suffix = params?.month
+      ? `${params?.year || "all"}_${params?.month}`
+      : `${params?.year || "all"}_${params?.month_start || 1}-${params?.month_end || 12}`;
+    a.download = `evaluations_${suffix}.csv`;
     a.click();
     URL.revokeObjectURL(href);
   });
@@ -252,29 +252,307 @@ export const exportEvaluationsCSV = (params?: {
 
 // ─── Dashboards ───────────────────────────────────────────────────────────────
 
-export const fetchFacturesVsRedevances = async (
-  year?: number
-): Promise<FacturesRedevancesPeriod[]> => {
-  const { data } = await api.get("/financial/dashboard/factures-vs-redevances/", {
-    params: year ? { year } : {},
-  });
+export const fetchFacturesVsRedevances = async (params?: {
+  year?: number;
+  month?: number;
+  month_start?: number;
+  month_end?: number;
+}): Promise<FacturesRedevancesPeriod[]> => {
+  const { data } = await api.get("/financial/dashboard/factures-vs-redevances/", { params });
   return data;
 };
 
 export const fetchMargeParSite = async (params?: {
   year?: number;
   month?: number;
+  month_start?: number;
+  month_end?: number;
   limit?: number;
 }): Promise<SiteMargeRow[]> => {
   const { data } = await api.get("/financial/dashboard/marge-par-site/", { params });
   return data;
 };
 
-export const fetchSitesRecurrents = async (
-  recurrence_type?: "light" | "critique"
-): Promise<SiteRecurrentRow[]> => {
-  const { data } = await api.get("/financial/dashboard/sites-recurrents/", {
-    params: recurrence_type ? { recurrence_type } : {},
-  });
+export const fetchSitesRecurrents = async (params?: {
+  year?: number;
+  month?: number;
+  month_start?: number;
+  month_end?: number;
+  recurrence_type?: "light" | "critique";
+}): Promise<SiteRecurrentRow[]> => {
+  const { data } = await api.get("/financial/dashboard/sites-recurrents/", { params });
+  return data;
+};
+
+
+
+export interface EvaluationDetailDiagnostic {
+  type: string;
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+  message: string;
+  detail: string;
+}
+
+export interface EvaluationDetail {
+  site: {
+    site_id: string;
+    name: string | null;
+    zone: string | null;
+    typology: string | null;
+    configuration: string | null;
+    grid_fee: boolean | null;
+    invoice_payment: string | null;
+  };
+  period: {
+    year: number;
+    month_start: number;
+    month_end: number;
+  };
+  contract_id: string | null;
+  current: {
+    period: string;
+    typology: string | null;
+    configuration: string | null;
+    load_w: number | null;
+    redevance: string | null;
+    montant_htva: string | null;
+    marge: string | null;
+    marge_statut: "OK" | "NOK" | null;
+    hors_catalogue: boolean;
+    recurrence_type: "light" | "critique" | null;
+    recurrence_mois: number;
+    periode_courte: boolean;
+    nb_jours_factures: number | null;
+  } | null;
+  summary: {
+    total_marge: string;
+    count_ok: number;
+    count_nok: number;
+    count_hors_catalogue: number;
+    count_periode_courte: number;
+    billing_total_ht: string;
+    billing_total_cosphi: string;
+    billing_total_penalite: string;
+    cert_count: number;
+    cert_status_counts: Record<string, number>;
+  };
+  history: Array<{
+    period: string;
+    year: number;
+    month: number;
+    redevance: string | null;
+    montant_htva: string | null;
+    marge: string | null;
+    marge_statut: "OK" | "NOK" | null;
+    load_w: number | null;
+    hors_catalogue: boolean;
+    periode_courte: boolean;
+    nb_jours: number | null;
+    recurrence_type: "light" | "critique" | null;
+    recurrence_mois_nok: number;
+  }>;
+  billing: {
+    summary: {
+      total_ht: string;
+      total_cosphi: string;
+      total_penalite: string;
+    };
+    rows: Array<{
+      period: string;
+      year: number;
+      month: number;
+      montant_hors_tva: string;
+      energie: string;
+      abonnement: string;
+      montant_cosinus_phi: string;
+      penalite_abonnement: string;
+      puissance_souscrite: string | null;
+      puissance_max: string | null;
+      cosphi: string | null;
+      nb_jours: number | null;
+    }>;
+  };
+  certification: {
+    summary: Record<string, number>;
+    rows: Array<{
+      period: string;
+      status: string;
+      certified_by_rule: string | null;
+      ratio_fms: string | null;
+      ratio_fms_30j: string | null;
+      energie_fms: string | null;
+      energie_fms_30j: string | null;
+      energie_senelec: string | null;
+      energie_senelec_30j: string | null;
+      montant_coherent: boolean | null;
+      variation_montant: string | null;
+      fms_available: boolean;
+      acm_available: boolean;
+      fms_error: string | null;
+      acm_error: string | null;
+    }>;
+  };
+  diagnostics: EvaluationDetailDiagnostic[];
+}
+
+export const fetchEvaluationDetail = async (
+  siteId: string,
+  params: { year: number; month_start?: number; month_end?: number; month?: number; }
+): Promise<EvaluationDetail> => {
+  const { data } = await api.get(`/financial/evaluations/${siteId}/detail/`, { params });
+  return data;
+};
+
+
+// src/features/financial/api.ts — Ajouter ces types et fonctions
+
+// ─── Analytics Types ──────────────────────────────────────────────────────────
+
+export interface AnalyticsSummary {
+  periode: string;
+  total_redevance: string;
+  total_facture: string;
+  total_marge: string;
+  marge_negative_totale: string;
+  marge_positive_totale: string;
+  avg_marge: string;
+  count_total: number;
+  count_ok: number;
+  count_nok: number;
+  taux_ok_pct: number;
+  taux_nok_pct: number;
+  count_hc: number;
+  count_pc: number;
+  count_no_load: number;
+  count_no_rule: number;
+  count_light: number;
+  count_critique: number;
+}
+
+export interface CauseDetail {
+  sites_count: number;
+  montant_facteur: string;
+  contribution_ecart: string;
+  pct_ecart: number;
+}
+
+export interface AnalyticsDecomposition {
+  total_ecart_negatif: string;
+  causes: {
+    cosphi: CauseDetail;
+    depassement_puissance: CauseDetail;
+    hors_catalogue: CauseDetail;
+    load_manquant: CauseDetail;
+    regle_manquante: CauseDetail;
+    autres: CauseDetail;
+  };
+}
+
+export interface EvolutionMonth {
+  period: string;
+  month: number;
+  total_redevance: string;
+  total_facture: string;
+  total_marge: string;
+  avg_marge: string;
+  count_ok: number;
+  count_nok: number;
+  count_hc: number;
+  taux_nok_pct: number;
+}
+
+export interface TopSiteNOK {
+  site_id: string;
+  site_name: string;
+  zone: string | null;
+  marge_totale: string;
+  marge_moyenne: string;
+  nb_mois_nok: number;
+  nb_hors_catalogue: number;
+  montant_cosphi: string;
+  montant_penalite: string;
+}
+
+export interface ImpactFacteur {
+  key: string;
+  label: string;
+  montant: string;
+  pct: number;
+  color: string;
+}
+
+export interface AnalyticsImpact {
+  total_ht: string;
+  facteurs: ImpactFacteur[];
+}
+
+export interface Recommandation {
+  priorite: "CRITIQUE" | "HAUTE" | "MOYENNE" | "BASSE";
+  categorie: string;
+  titre: string;
+  description: string;
+  action: string;
+  impact_potentiel: string;
+}
+
+export interface AnalyticsFullReport {
+  summary: AnalyticsSummary;
+  decomposition: AnalyticsDecomposition;
+  evolution: EvolutionMonth[];
+  top_sites: TopSiteNOK[];
+  impact: AnalyticsImpact;
+  recommandations: Recommandation[];
+}
+
+// ─── Analytics API ────────────────────────────────────────────────────────────
+
+export const fetchAnalyticsFullReport = async (params: {
+  year: number;
+  month_start: number;
+  month_end: number;
+}): Promise<AnalyticsFullReport> => {
+  const { data } = await api.get("/financial/analytics/full-report/", { params });
+  return data;
+};
+
+export const fetchAnalyticsSummary = async (params: {
+  year: number;
+  month_start: number;
+  month_end: number;
+}): Promise<AnalyticsSummary> => {
+  const { data } = await api.get("/financial/analytics/summary/", { params });
+  return data;
+};
+
+export const fetchAnalyticsDecomposition = async (params: {
+  year: number;
+  month_start: number;
+  month_end: number;
+}): Promise<AnalyticsDecomposition> => {
+  const { data } = await api.get("/financial/analytics/decomposition/", { params });
+  return data;
+};
+
+export const fetchAnalyticsEvolution = async (year: number): Promise<EvolutionMonth[]> => {
+  const { data } = await api.get("/financial/analytics/evolution/", { params: { year } });
+  return data;
+};
+
+export const fetchAnalyticsTopSites = async (params: {
+  year: number;
+  month_start: number;
+  month_end: number;
+  limit?: number;
+}): Promise<TopSiteNOK[]> => {
+  const { data } = await api.get("/financial/analytics/top-sites/", { params });
+  return data;
+};
+
+export const fetchAnalyticsRecommandations = async (params: {
+  year: number;
+  month_start: number;
+  month_end: number;
+}): Promise<Recommandation[]> => {
+  const { data } = await api.get("/financial/analytics/recommandations/", { params });
   return data;
 };

@@ -1,19 +1,19 @@
 // src/pages/BillingTrackingPage.tsx
 // Suivi facturation Sénélec — évolution mensuelle
-// Utilise SonatelBillingStatsAPIView (/billing/stats/) + ContractSiteLink pour la recherche de site
+// Utilise SonatelBillingStatsAPIView (/sonatel-billing/stats/) + ContractSiteLink pour la recherche de site
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, type ReactNode, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Legend,
+  Legend, ReferenceLine,
 } from "recharts";
 import {
   Calendar, Download, RefreshCw,
   DollarSign, Zap, AlertTriangle, Activity,
   BarChart2, ChevronUp, ChevronDown, Minus,
-  Search, X, Building2, Globe, TrendingUp,
+  Search, X, Building2, Globe, TrendingUp, CheckCircle2,
 } from "lucide-react";
 import { api } from "@/services/api";
 import * as XLSX from "xlsx";
@@ -27,7 +27,7 @@ interface EvoRow {
   nrj: string;
   abonnement: string;
   penalite_prime: string;
-  cosphi: string;
+  cosphi: string; // signé: + pénalité, - minoration
 }
 
 interface TopSite {
@@ -47,6 +47,30 @@ interface DistribPart {
   percent: number;
 }
 
+interface CertificationSummary {
+  total: number;
+  certified_total: number;
+  certified_fms: number;
+  certified_senelec: number;
+  needs_review: number;
+  unknown_contract: number;
+  fms_unavailable: number;
+  other: number;
+  taux_certification: number;
+}
+
+interface CertificationEvolutionRow {
+  period: string;
+  total: number;
+  certified_total: number;
+  certified_fms: number;
+  certified_senelec: number;
+  needs_review: number;
+  unknown_contract: number;
+  fms_unavailable: number;
+  other: number;
+}
+
 interface StatsResponse {
   range: { start: string; end: string };
   evolution: EvoRow[];
@@ -54,10 +78,15 @@ interface StatsResponse {
     conso_vs_montant: TopSite[];
     cosphi: TopSite[];
     pen_prime: TopSite[];
+    abonnement: TopSite[];
   };
   distribution_ht: {
     total_ht: string;
     parts: DistribPart[];
+  };
+  certification?: {
+    summary: CertificationSummary;
+    evolution: CertificationEvolutionRow[];
   };
 }
 
@@ -70,18 +99,23 @@ interface SiteOption {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
+
 const fmtM = (v: string | number) => {
-  const n = Number(v);
-  if (isNaN(n)) return "—";
-  if (Math.abs(n) >= 1_000_000) return `${fmt.format(Math.round(n / 1_000_000))} M`;
-  if (Math.abs(n) >= 1_000)    return `${fmt.format(Math.round(n / 1_000))} k`;
-  return fmt.format(Math.round(n));
+  const val = Number(v);
+  if (isNaN(val)) return "—";
+  const sign = val < 0 ? "-" : "";
+  const abs = Math.abs(val);
+  if (abs >= 1_000_000) return `${sign}${fmt.format(Math.round(abs / 1_000_000))} M`;
+  if (abs >= 1_000) return `${sign}${fmt.format(Math.round(abs / 1_000))} k`;
+  return fmt.format(Math.round(val));
 };
-const n = (v: string) => Number(v) || 0;
+
+const n = (v: string | number | null | undefined) => Number(v) || 0;
 
 function fmtDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+
 function defaultRange() {
   const now = new Date();
   return { start: fmtDate(new Date(now.getFullYear(), 0, 1)), end: fmtDate(now) };
@@ -109,31 +143,60 @@ async function searchSites(q: string): Promise<SiteOption[]> {
 
 function exportToExcel(data: StatsResponse, siteCode?: string) {
   const wb = XLSX.utils.book_new();
-  const evoRows = data.evolution.map(r => ({
-    "Période": r.period, "Nb Factures": r.invoices,
-    "Montant HT (FCFA)": Number(r.montant_ht), "Montant TTC (FCFA)": Number(r.montant_ttc),
-    "NRJ (FCFA)": Number(r.nrj), "Abonnement (FCFA)": Number(r.abonnement),
-    "Pénalité Prime (FCFA)": Number(r.penalite_prime), "Cos φ (FCFA)": Number(r.cosphi),
+
+  const evoRows = data.evolution.map((r) => ({
+    "Période": r.period,
+    "Nb Factures": r.invoices,
+    "Montant HT (FCFA)": Number(r.montant_ht),
+    "Montant TTC (FCFA)": Number(r.montant_ttc),
+    "NRJ (FCFA)": Number(r.nrj),
+    "Abonnement (FCFA)": Number(r.abonnement),
+    "Pénalité Prime (FCFA)": Number(r.penalite_prime),
+    "Cos φ (FCFA)": Number(r.cosphi),
   }));
   const ws1 = XLSX.utils.json_to_sheet(evoRows);
   ws1["!cols"] = [{ wch: 12 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 16 }, { wch: 18 }, { wch: 22 }, { wch: 14 }];
   XLSX.utils.book_append_sheet(wb, ws1, "Évolution mensuelle");
 
-  const topRows = data.top.conso_vs_montant.map(r => ({
-    "Site ID": r.site_id, "Site Nom": r.site_name,
-    "Montant HT (FCFA)": Number(r.montant_ht), "Cos φ (FCFA)": Number(r.montant_cosphi),
-    "Pénalité (FCFA)": Number(r.penalite_prime), "Abonnement (FCFA)": Number(r.abonnement),
+  const topRows = data.top.conso_vs_montant.map((r) => ({
+    "Site ID": r.site_id,
+    "Site Nom": r.site_name,
+    "Montant HT (FCFA)": Number(r.montant_ht),
+    "Cos φ (FCFA)": Number(r.montant_cosphi),
+    "Pénalité (FCFA)": Number(r.penalite_prime),
+    "Abonnement (FCFA)": Number(r.abonnement),
   }));
   const ws2 = XLSX.utils.json_to_sheet(topRows);
   ws2["!cols"] = [{ wch: 14 }, { wch: 28 }, { wch: 20 }, { wch: 14 }, { wch: 16 }, { wch: 18 }];
   XLSX.utils.book_append_sheet(wb, ws2, "Top Sites");
 
-  const distRows = data.distribution_ht.parts.map(p => ({
-    "Composante": p.label, "Montant (FCFA)": Number(p.value), "% du HT": p.percent,
+  const distRows = data.distribution_ht.parts.map((p) => ({
+    "Composante": p.label,
+    "Montant (FCFA)": Number(p.value),
+    "% du HT": p.percent,
   }));
   const ws3 = XLSX.utils.json_to_sheet(distRows);
   ws3["!cols"] = [{ wch: 20 }, { wch: 20 }, { wch: 10 }];
   XLSX.utils.book_append_sheet(wb, ws3, "Distribution HT");
+
+  if (data.certification) {
+    const ws4 = XLSX.utils.json_to_sheet([data.certification.summary]);
+    XLSX.utils.book_append_sheet(wb, ws4, "Certification résumé");
+
+    const certEvoRows = data.certification.evolution.map((r) => ({
+      "Période": r.period,
+      "Total": r.total,
+      "Certifiées": r.certified_total,
+      "Certifiées eFMS": r.certified_fms,
+      "Certifiées Sénélec": r.certified_senelec,
+      "À revoir": r.needs_review,
+      "Contrat inconnu": r.unknown_contract,
+      "FMS indisponible": r.fms_unavailable,
+      "Autres": r.other,
+    }));
+    const ws5 = XLSX.utils.json_to_sheet(certEvoRows);
+    XLSX.utils.book_append_sheet(wb, ws5, "Certification évolution");
+  }
 
   const start = data.range.start.replace(/-/g, "");
   const end = data.range.end.replace(/-/g, "");
@@ -143,20 +206,22 @@ function exportToExcel(data: StatsResponse, siteCode?: string) {
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const T = {
-  blue:    "#1B3FA0",
-  blueL:   "#EEF2FF",
-  orange:  "#D94F1E",
+  blue: "#1B3FA0",
+  blueL: "#EEF2FF",
+  orange: "#D94F1E",
   orangeL: "#FFF1EC",
-  red:     "#C8202E",
-  redL:    "#FFF0F0",
-  violet:  "#6D28D9",
+  red: "#C8202E",
+  redL: "#FFF0F0",
+  violet: "#6D28D9",
   violetL: "#F5F0FF",
-  cyan:    "#0E7490",
-  cyanL:   "#E0F7FA",
-  slate:   "#64748B",
-  slateL:  "#F8FAFC",
-  border:  "rgba(15,23,42,.08)",
-  text:    "#0F172A",
+  cyan: "#0E7490",
+  cyanL: "#E0F7FA",
+  green: "#10B981",
+  greenL: "#ECFDF5",
+  slate: "#64748B",
+  slateL: "#F8FAFC",
+  border: "rgba(15,23,42,.08)",
+  text: "#0F172A",
   textMid: "#475569",
   textSub: "#94A3B8",
 };
@@ -167,16 +232,24 @@ function Trend({ current, previous }: { current: number; previous: number }) {
   const pct = ((current - previous) / previous) * 100;
   const up = pct > 0;
   const same = Math.abs(pct) < 0.5;
-  const color = same ? T.slate : up ? T.red : "#10B981";
+  const color = same ? T.slate : up ? T.red : T.green;
   const Icon = same ? Minus : up ? ChevronUp : ChevronDown;
   return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", gap: 3,
-      fontSize: 11, fontWeight: 700, color,
-      background: same ? "#F1F5F9" : up ? "#FFF0F0" : "#F0FDF4",
-      borderRadius: 6, padding: "2px 7px",
-    }}>
-      <Icon size={10} />{same ? "stable" : `${Math.abs(pct).toFixed(1)}%`}
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 3,
+        fontSize: 11,
+        fontWeight: 700,
+        color,
+        background: same ? "#F1F5F9" : up ? "#FFF0F0" : "#F0FDF4",
+        borderRadius: 6,
+        padding: "2px 7px",
+      }}
+    >
+      <Icon size={10} />
+      {same ? "stable" : `${Math.abs(pct).toFixed(1)}%`}
     </span>
   );
 }
@@ -185,33 +258,49 @@ function Trend({ current, previous }: { current: number; previous: number }) {
 function KpiCard({
   label, value, sub, icon, accent, accentLight, trend, trendPrev,
 }: {
-  label: string; value: string; sub?: string;
-  icon: React.ReactNode; accent: string; accentLight: string;
-  trend?: number; trendPrev?: number;
+  label: string;
+  value: string;
+  sub?: string;
+  icon: ReactNode;
+  accent: string;
+  accentLight: string;
+  trend?: number;
+  trendPrev?: number;
 }) {
   return (
-    <div style={{
-      background: "white", borderRadius: 16, padding: "20px",
-      border: `1px solid ${T.border}`,
-      boxShadow: "0 1px 3px rgba(15,23,42,.05)",
-      display: "flex", flexDirection: "column", gap: 14,
-      transition: "box-shadow .2s, transform .2s",
-    }}
-      onMouseEnter={e => {
-        (e.currentTarget as HTMLDivElement).style.boxShadow = `0 8px 24px rgba(15,23,42,.1)`;
+    <div
+      style={{
+        background: "white",
+        borderRadius: 16,
+        padding: "20px",
+        border: `1px solid ${T.border}`,
+        boxShadow: "0 1px 3px rgba(15,23,42,.05)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 14,
+        transition: "box-shadow .2s, transform .2s",
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLDivElement).style.boxShadow = "0 8px 24px rgba(15,23,42,.1)";
         (e.currentTarget as HTMLDivElement).style.transform = "translateY(-2px)";
       }}
-      onMouseLeave={e => {
+      onMouseLeave={(e) => {
         (e.currentTarget as HTMLDivElement).style.boxShadow = "0 1px 3px rgba(15,23,42,.05)";
         (e.currentTarget as HTMLDivElement).style.transform = "translateY(0)";
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div style={{
-          width: 38, height: 38, borderRadius: 10,
-          background: accentLight,
-          display: "grid", placeItems: "center", color: accent,
-        }}>
+        <div
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: 10,
+            background: accentLight,
+            display: "grid",
+            placeItems: "center",
+            color: accent,
+          }}
+        >
           {icon}
         </div>
         {trend !== undefined && trendPrev !== undefined && (
@@ -219,16 +308,27 @@ function KpiCard({
         )}
       </div>
       <div>
-        <div style={{
-          fontSize: 10, fontWeight: 700, color: T.textSub,
-          letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 5,
-        }}>
+        <div
+          style={{
+            fontSize: 10,
+            fontWeight: 700,
+            color: T.textSub,
+            letterSpacing: ".1em",
+            textTransform: "uppercase",
+            marginBottom: 5,
+          }}
+        >
           {label}
         </div>
-        <div style={{
-          fontFamily: "'Clash Display', 'Syne', sans-serif",
-          fontSize: 24, fontWeight: 700, color: T.text, lineHeight: 1,
-        }}>
+        <div
+          style={{
+            fontFamily: "'Clash Display', 'Syne', sans-serif",
+            fontSize: 24,
+            fontWeight: 700,
+            color: T.text,
+            lineHeight: 1,
+          }}
+        >
           {value}
         </div>
         {sub && (
@@ -240,21 +340,33 @@ function KpiCard({
 }
 
 // ─── Section title ────────────────────────────────────────────────────────────
-function SectionTitle({ children, icon }: { children: React.ReactNode; icon?: React.ReactNode }) {
+function SectionTitle({ children, icon }: { children: ReactNode; icon?: ReactNode }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
       {icon && (
-        <div style={{
-          width: 26, height: 26, borderRadius: 7,
-          background: T.blueL, display: "grid", placeItems: "center", color: T.blue,
-        }}>
+        <div
+          style={{
+            width: 26,
+            height: 26,
+            borderRadius: 7,
+            background: T.blueL,
+            display: "grid",
+            placeItems: "center",
+            color: T.blue,
+          }}
+        >
           {icon}
         </div>
       )}
-      <span style={{
-        fontFamily: "'Clash Display', 'Syne', sans-serif",
-        fontSize: 14, fontWeight: 700, color: T.text, letterSpacing: "-.01em",
-      }}>
+      <span
+        style={{
+          fontFamily: "'Clash Display', 'Syne', sans-serif",
+          fontSize: 14,
+          fontWeight: 700,
+          color: T.text,
+          letterSpacing: "-.01em",
+        }}
+      >
         {children}
       </span>
     </div>
@@ -262,15 +374,18 @@ function SectionTitle({ children, icon }: { children: React.ReactNode; icon?: Re
 }
 
 // ─── Chart card ───────────────────────────────────────────────────────────────
-function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+function Card({ children, style }: { children: ReactNode; style?: CSSProperties }) {
   return (
-    <div style={{
-      background: "white", borderRadius: 16,
-      border: `1px solid ${T.border}`,
-      boxShadow: "0 1px 3px rgba(15,23,42,.05)",
-      padding: "22px",
-      ...style,
-    }}>
+    <div
+      style={{
+        background: "white",
+        borderRadius: 16,
+        border: `1px solid ${T.border}`,
+        boxShadow: "0 1px 3px rgba(15,23,42,.05)",
+        padding: "22px",
+        ...style,
+      }}
+    >
       {children}
     </div>
   );
@@ -278,32 +393,45 @@ function Card({ children, style }: { children: React.ReactNode; style?: React.CS
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 function Skeleton({ h }: { h: number }) {
-  return (
-    <div className="btp-skel" style={{ height: h, borderRadius: 10 }} />
-  );
+  return <div className="btp-skel" style={{ height: h, borderRadius: 10 }} />;
 }
 
 // ─── Custom Tooltip ───────────────────────────────────────────────────────────
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div style={{
-      background: "white", borderRadius: 12,
-      border: `1px solid ${T.border}`,
-      boxShadow: "0 8px 24px rgba(15,23,42,.12)",
-      padding: "12px 16px", minWidth: 180,
-    }}>
-      <div style={{
-        fontFamily: "'Clash Display', 'Syne', sans-serif",
-        fontWeight: 700, fontSize: 12, color: T.text, marginBottom: 8,
-      }}>
+    <div
+      style={{
+        background: "white",
+        borderRadius: 12,
+        border: `1px solid ${T.border}`,
+        boxShadow: "0 8px 24px rgba(15,23,42,.12)",
+        padding: "12px 16px",
+        minWidth: 180,
+      }}
+    >
+      <div
+        style={{
+          fontFamily: "'Clash Display', 'Syne', sans-serif",
+          fontWeight: 700,
+          fontSize: 12,
+          color: T.text,
+          marginBottom: 8,
+        }}
+      >
         {label}
       </div>
       {payload.map((p: any, i: number) => (
-        <div key={i} style={{
-          display: "flex", alignItems: "center",
-          justifyContent: "space-between", gap: 16, marginBottom: 3,
-        }}>
+        <div
+          key={i}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 16,
+            marginBottom: 3,
+          }}
+        >
           <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: T.textMid }}>
             <span style={{ width: 7, height: 7, borderRadius: "50%", background: p.color, display: "inline-block" }} />
             {p.name}
@@ -316,10 +444,6 @@ function CustomTooltip({ active, payload, label }: any) {
 }
 
 // ─── Top table ────────────────────────────────────────────────────────────────
-/**
- * Pour le Top Cos φ : on ne montre que les valeurs positives (pénalités réelles).
- * Les valeurs négatives (minoration = bonne nouvelle) sont exclues du classement.
- */
 function TopTable({
   rows, valueKey, color, filterPositive = false,
 }: {
@@ -328,18 +452,21 @@ function TopTable({
   color: string;
   filterPositive?: boolean;
 }) {
-  const filtered = filterPositive
-    ? rows.filter(r => Number(r[valueKey]) > 0)
-    : rows;
-
-  const max = Math.max(...filtered.map(r => Number(r[valueKey]) || 0), 1);
+  const filtered = filterPositive ? rows.filter((r) => Number(r[valueKey]) > 0) : rows;
+  const max = Math.max(...filtered.map((r) => Math.abs(Number(r[valueKey]) || 0)), 1);
 
   if (filtered.length === 0) {
     return (
-      <div style={{
-        display: "flex", flexDirection: "column", alignItems: "center",
-        justifyContent: "center", padding: "24px 0", gap: 6,
-      }}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "24px 0",
+          gap: 6,
+        }}
+      >
         <div style={{ fontSize: 20 }}>✓</div>
         <div style={{ fontSize: 12, color: T.textSub, fontWeight: 600 }}>
           Aucune pénalité sur la période
@@ -352,35 +479,51 @@ function TopTable({
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {filtered.slice(0, 8).map((r, i) => {
         const val = Number(r[valueKey]) || 0;
-        const pct = (val / max) * 100;
+        const pct = (Math.abs(val) / max) * 100;
         return (
-          <div key={r.site_id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{
-              fontFamily: "'Clash Display', 'Syne', sans-serif",
-              fontSize: 10, fontWeight: 700, color: T.textSub,
-              width: 18, textAlign: "right", flexShrink: 0,
-            }}>
+          <div key={`${r.site_id}-${i}`} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span
+              style={{
+                fontFamily: "'Clash Display', 'Syne', sans-serif",
+                fontSize: 10,
+                fontWeight: 700,
+                color: T.textSub,
+                width: 18,
+                textAlign: "right",
+                flexShrink: 0,
+              }}
+            >
               {i + 1}
             </span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{
-                  fontSize: 12, fontWeight: 600, color: T.textMid,
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  maxWidth: "58%",
-                }}>
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: T.textMid,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    maxWidth: "58%",
+                  }}
+                >
                   {r.site_id}
                 </span>
                 <span style={{ fontSize: 12, fontWeight: 700, color }}>
-                  {fmtM(String(val))}
+                  {fmtM(val)}
                 </span>
               </div>
               <div style={{ height: 4, background: "#F1F5F9", borderRadius: 99, overflow: "hidden" }}>
-                <div style={{
-                  height: "100%", width: `${pct}%`,
-                  background: color, borderRadius: 99,
-                  transition: "width .4s ease",
-                }} />
+                <div
+                  style={{
+                    height: "100%",
+                    width: `${pct}%`,
+                    background: color,
+                    borderRadius: 99,
+                    transition: "width .4s ease",
+                  }}
+                />
               </div>
             </div>
           </div>
@@ -436,34 +579,55 @@ function SiteSearchBar({
 
   return (
     <div ref={wrapperRef} style={{ position: "relative", minWidth: 280 }}>
-      <div style={{
-        display: "flex", alignItems: "center", gap: 8,
-        background: selectedSite ? T.blueL : "white",
-        border: `1.5px solid ${focused ? T.blue : selectedSite ? "rgba(27,63,160,.25)" : T.border}`,
-        borderRadius: 10, padding: "8px 12px",
-        transition: "border-color .15s, box-shadow .15s",
-        boxShadow: focused ? `0 0 0 3px ${T.blueL}` : "none",
-      }}>
-        {selectedSite
-          ? <Building2 size={13} color={T.blue} style={{ flexShrink: 0 }} />
-          : <Search size={13} color={focused ? T.blue : T.textSub} style={{ flexShrink: 0 }} />
-        }
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          background: selectedSite ? T.blueL : "white",
+          border: `1.5px solid ${focused ? T.blue : selectedSite ? "rgba(27,63,160,.25)" : T.border}`,
+          borderRadius: 10,
+          padding: "8px 12px",
+          transition: "border-color .15s, box-shadow .15s",
+          boxShadow: focused ? `0 0 0 3px ${T.blueL}` : "none",
+        }}
+      >
+        {selectedSite ? (
+          <Building2 size={13} color={T.blue} style={{ flexShrink: 0 }} />
+        ) : (
+          <Search size={13} color={focused ? T.blue : T.textSub} style={{ flexShrink: 0 }} />
+        )}
+
         {selectedSite ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
-            <span style={{
-              fontFamily: "'Clash Display', 'Syne', sans-serif",
-              fontSize: 12, fontWeight: 700, color: T.blue,
-              background: "rgba(27,63,160,.12)", borderRadius: 6, padding: "1px 8px",
-            }}>
+            <span
+              style={{
+                fontFamily: "'Clash Display', 'Syne', sans-serif",
+                fontSize: 12,
+                fontWeight: 700,
+                color: T.blue,
+                background: "rgba(27,63,160,.12)",
+                borderRadius: 6,
+                padding: "1px 8px",
+              }}
+            >
               {selectedSite.site_id}
             </span>
-            <button onClick={handleClear} style={{
-              background: "none", border: "none", cursor: "pointer",
-              color: T.textSub, display: "grid", placeItems: "center",
-              padding: 2, borderRadius: 4, transition: "color .1s",
-            }}
-              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.color = T.red}
-              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.color = T.textSub}
+            <button
+              onClick={handleClear}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: T.textSub,
+                display: "grid",
+                placeItems: "center",
+                padding: 2,
+                borderRadius: 4,
+                transition: "color .1s",
+              }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.color = T.red)}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.color = T.textSub)}
               title="Vue globale"
             >
               <X size={12} />
@@ -473,32 +637,58 @@ function SiteSearchBar({
           <input
             ref={inputRef}
             value={query}
-            onChange={e => { setQuery(e.target.value); setOpen(true); }}
-            onFocus={() => { setFocused(true); setOpen(true); }}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setOpen(true);
+            }}
+            onFocus={() => {
+              setFocused(true);
+              setOpen(true);
+            }}
             onBlur={() => setFocused(false)}
             placeholder="Rechercher un site..."
             style={{
-              background: "none", border: "none", outline: "none", flex: 1,
-              fontSize: 13, color: T.text, fontFamily: "'DM Sans', sans-serif",
+              background: "none",
+              border: "none",
+              outline: "none",
+              flex: 1,
+              fontSize: 13,
+              color: T.text,
+              fontFamily: "'DM Sans', sans-serif",
             }}
           />
         )}
+
         {isFetching && !selectedSite && (
-          <div className="btp-spin" style={{
-            width: 13, height: 13, borderRadius: "50%",
-            border: `2px solid ${T.blueL}`, borderTopColor: T.blue, flexShrink: 0,
-          }} />
+          <div
+            className="btp-spin"
+            style={{
+              width: 13,
+              height: 13,
+              borderRadius: "50%",
+              border: `2px solid ${T.blueL}`,
+              borderTopColor: T.blue,
+              flexShrink: 0,
+            }}
+          />
         )}
       </div>
 
       {showDropdown && !selectedSite && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0,
-          background: "white", borderRadius: 12,
-          border: `1px solid ${T.border}`,
-          boxShadow: "0 12px 40px rgba(15,23,42,.14)",
-          zIndex: 1000, overflow: "hidden",
-        }}>
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 6px)",
+            left: 0,
+            right: 0,
+            background: "white",
+            borderRadius: 12,
+            border: `1px solid ${T.border}`,
+            boxShadow: "0 12px 40px rgba(15,23,42,.14)",
+            zIndex: 1000,
+            overflow: "hidden",
+          }}
+        >
           {isFetching && results.length === 0 && (
             <div style={{ padding: "12px 16px", fontSize: 12, color: T.textSub, textAlign: "center" }}>
               Recherche en cours...
@@ -514,28 +704,46 @@ function SiteSearchBar({
               key={site.id}
               onMouseDown={() => handleSelect(site)}
               style={{
-                display: "flex", alignItems: "center", gap: 10,
-                width: "100%", padding: "10px 14px",
-                background: "none", border: "none", cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                width: "100%",
+                padding: "10px 14px",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
                 textAlign: "left",
-                borderBottom: i < results.length - 1 ? `1px solid #F8FAFC` : "none",
+                borderBottom: i < results.length - 1 ? "1px solid #F8FAFC" : "none",
                 transition: "background .1s",
               }}
-              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = T.slateL}
-              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = "none"}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = T.slateL)}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "none")}
             >
-              <div style={{
-                width: 28, height: 28, borderRadius: 7, flexShrink: 0,
-                background: T.blueL, display: "grid", placeItems: "center",
-              }}>
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 7,
+                  flexShrink: 0,
+                  background: T.blueL,
+                  display: "grid",
+                  placeItems: "center",
+                }}
+              >
                 <Building2 size={13} color={T.blue} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  fontFamily: "'Clash Display', 'Syne', sans-serif",
-                  fontSize: 12, fontWeight: 700, color: T.text,
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                }}>
+                <div
+                  style={{
+                    fontFamily: "'Clash Display', 'Syne', sans-serif",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: T.text,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
                   {site.site_id}
                 </div>
                 <div style={{ fontSize: 11, color: T.textSub, marginTop: 1 }}>
@@ -552,22 +760,30 @@ function SiteSearchBar({
 
 // ─── Metric pill button ───────────────────────────────────────────────────────
 function MetricBtn({
-  active, color, colorL, label, onClick,
+  active, color, label, onClick,
 }: {
-  active: boolean; color: string; colorL: string;
-  label: string; onClick: () => void;
+  active: boolean;
+  color: string;
+  label: string;
+  onClick: () => void;
 }) {
   return (
-    <button onClick={onClick} style={{
-      padding: "6px 14px", borderRadius: 8,
-      fontSize: 12, fontWeight: 600,
-      cursor: "pointer", transition: "all .15s",
-      border: `1px solid ${active ? color : T.border}`,
-      background: active ? color : "white",
-      color: active ? "white" : T.textMid,
-      boxShadow: active ? `0 3px 10px ${color}33` : "none",
-      fontFamily: "'DM Sans', sans-serif",
-    }}>
+    <button
+      onClick={onClick}
+      style={{
+        padding: "6px 14px",
+        borderRadius: 8,
+        fontSize: 12,
+        fontWeight: 600,
+        cursor: "pointer",
+        transition: "all .15s",
+        border: `1px solid ${active ? color : T.border}`,
+        background: active ? color : "white",
+        color: active ? "white" : T.textMid,
+        boxShadow: active ? `0 3px 10px ${color}33` : "none",
+        fontFamily: "'DM Sans', sans-serif",
+      }}
+    >
       {label}
     </button>
   );
@@ -578,7 +794,8 @@ export default function BillingTrackingPage() {
   const defRange = useMemo(() => defaultRange(), []);
   const [dateStart, setDateStart] = useState(defRange.start);
   const [dateEnd, setDateEnd] = useState(defRange.end);
-  const [activeMetric, setActiveMetric] = useState<"ht" | "nrj" | "penalite" | "cosphi">("ht");
+  const [activeMetric, setActiveMetric] = useState<"ht" | "nrj" | "abonnement" | "penalite" | "cosphi">("ht");
+  const [activeCertMetric, setActiveCertMetric] = useState<"global" | "fms" | "senelec" | "other">("global");
   const [selectedSite, setSelectedSite] = useState<SiteOption | null>(null);
   const siteCode = selectedSite?.site_id ?? undefined;
 
@@ -593,7 +810,7 @@ export default function BillingTrackingPage() {
 
   const chartData = useMemo(() => {
     if (!data?.evolution) return [];
-    return data.evolution.map(r => ({
+    return data.evolution.map((r) => ({
       period: r.period,
       label: r.period.slice(0, 7),
       ht: n(r.montant_ht),
@@ -601,24 +818,25 @@ export default function BillingTrackingPage() {
       nrj: n(r.nrj),
       abonnement: n(r.abonnement),
       penalite: n(r.penalite_prime),
-      // ✅ Pour l'affichage chart : valeur absolue du cos phi
-      // (valeur positive = pénalité, négative = minoration)
-      cosphi: Math.abs(n(r.cosphi)),
+      cosphi: n(r.cosphi),
       invoices: r.invoices,
     }));
   }, [data]);
 
   const kpis = useMemo(() => {
     if (!chartData.length) return null;
-    const sum = (k: keyof typeof chartData[0]) =>
+    const sum = (k: keyof (typeof chartData)[number]) =>
       chartData.reduce((a, r) => a + (Number(r[k]) || 0), 0);
+
     const last = chartData[chartData.length - 1];
     const prev = chartData[chartData.length - 2];
+
     return {
       totalHT: sum("ht"),
       totalNrj: sum("nrj"),
       totalPenalite: sum("penalite"),
       totalCosphi: sum("cosphi"),
+      totalAbonnement: sum("abonnement"),
       totalInvoices: sum("invoices"),
       lastHT: last?.ht ?? 0,
       prevHT: prev?.ht ?? 0,
@@ -630,21 +848,47 @@ export default function BillingTrackingPage() {
 
   const distribData = useMemo(() => {
     if (!data?.distribution_ht) return [];
-    return data.distribution_ht.parts.map(p => ({
+    return data.distribution_ht.parts.map((p) => ({
       name: p.label,
       value: n(p.value),
       percent: p.percent,
     }));
   }, [data]);
 
+  const certData = useMemo(() => {
+    if (!data?.certification?.evolution) return [];
+    return data.certification.evolution.map((r) => ({
+      period: r.period,
+      label: r.period.slice(0, 7),
+      global: r.total,
+      fms: r.certified_fms,
+      senelec: r.certified_senelec,
+      other: r.other,
+      certified_total: r.certified_total,
+      needs_review: r.needs_review,
+      unknown_contract: r.unknown_contract,
+      fms_unavailable: r.fms_unavailable,
+    }));
+  }, [data]);
+
   const metrics = {
-    ht:       { key: "ht",       label: "Montant HT",     color: T.blue,   colorL: T.blueL },
-    nrj:      { key: "nrj",      label: "NRJ",            color: T.orange,  colorL: T.orangeL },
-    penalite: { key: "penalite", label: "Pénalité Prime",  color: T.red,    colorL: T.redL },
-    cosphi:   { key: "cosphi",   label: "Cos φ",          color: T.violet, colorL: T.violetL },
-  };
+    ht: { key: "ht", label: "Montant HT", color: T.blue },
+    nrj: { key: "nrj", label: "NRJ", color: T.orange },
+    abonnement: { key: "abonnement", label: "Abonnement", color: T.cyan },
+    penalite: { key: "penalite", label: "Pénalité Prime", color: T.red },
+    cosphi: { key: "cosphi", label: "Cos φ", color: T.violet },
+  } as const;
+
+  const certMetricMap = {
+    global: { key: "global", label: "Global", color: T.blue },
+    fms: { key: "fms", label: "Certifiées eFMS", color: T.green },
+    senelec: { key: "senelec", label: "Certifiées Sénélec", color: T.orange },
+    other: { key: "other", label: "Autres", color: T.red },
+  } as const;
+
   const DISTRIB_COLORS = [T.blue, T.violet, T.red, T.orange];
   const mc = metrics[activeMetric];
+  const cm = certMetricMap[activeCertMetric];
 
   return (
     <>
@@ -683,114 +927,172 @@ export default function BillingTrackingPage() {
       `}</style>
 
       <div className="btp" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-
-        {/* ── Header ──────────────────────────────────────────────────────── */}
-        <div className="btp-fade" style={{
-          background: "white", borderRadius: 18,
-          border: `1px solid ${T.border}`,
-          boxShadow: "0 1px 3px rgba(15,23,42,.05)",
-          overflow: "hidden",
-        }}>
-          {/* Barre de couleur haut */}
-          <div style={{
-            height: 3,
-            background: `linear-gradient(90deg, ${T.blue} 0%, ${T.orange} 60%, transparent 100%)`,
-          }} />
+        <div
+          className="btp-fade"
+          style={{
+            background: "white",
+            borderRadius: 18,
+            border: `1px solid ${T.border}`,
+            boxShadow: "0 1px 3px rgba(15,23,42,.05)",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              height: 3,
+              background: `linear-gradient(90deg, ${T.blue} 0%, ${T.orange} 60%, transparent 100%)`,
+            }}
+          />
 
           <div style={{ padding: "20px 24px" }}>
-            {/* Titre + contrôles */}
-            <div style={{
-              display: "flex", alignItems: "flex-start",
-              justifyContent: "space-between", flexWrap: "wrap", gap: 14, marginBottom: 18,
-            }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: 14,
+                marginBottom: 18,
+              }}
+            >
               <div>
-                <div style={{
-                  display: "inline-flex", alignItems: "center", gap: 5,
-                  background: T.blueL, border: `1px solid rgba(27,63,160,.15)`,
-                  borderRadius: 100, padding: "3px 10px", marginBottom: 8,
-                }}>
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    background: T.blueL,
+                    border: "1px solid rgba(27,63,160,.15)",
+                    borderRadius: 100,
+                    padding: "3px 10px",
+                    marginBottom: 8,
+                  }}
+                >
                   <TrendingUp size={10} color={T.blue} />
-                  <span style={{
-                    fontSize: 10, fontWeight: 700, letterSpacing: ".1em",
-                    color: T.blue, textTransform: "uppercase",
-                  }}>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      letterSpacing: ".1em",
+                      color: T.blue,
+                      textTransform: "uppercase",
+                    }}
+                  >
                     Suivi Facturation
                   </span>
                 </div>
-                <h1 style={{
-                  fontFamily: "'Syne', sans-serif",
-                  fontSize: 22, fontWeight: 800, color: T.text,
-                  letterSpacing: "-.03em", margin: 0, lineHeight: 1.2,
-                }}>
+                <h1
+                  style={{
+                    fontFamily: "'Syne', sans-serif",
+                    fontSize: 22,
+                    fontWeight: 800,
+                    color: T.text,
+                    letterSpacing: "-.03em",
+                    margin: 0,
+                    lineHeight: 1.2,
+                  }}
+                >
                   Évolution de la facturation
                 </h1>
-                <p style={{
-                  fontSize: 13, color: T.textSub, margin: "5px 0 0",
-                  fontWeight: 400,
-                }}>
-                  Suivez mois par mois les montants, NRJ, pénalités et cos φ.
+                <p
+                  style={{
+                    fontSize: 13,
+                    color: T.textSub,
+                    margin: "5px 0 0",
+                    fontWeight: 400,
+                  }}
+                >
+                  Suivez mois par mois les montants, NRJ, abonnement, pénalités, cos φ et certification.
                 </p>
               </div>
 
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                {/* Date range */}
-                <div style={{
-                  display: "flex", alignItems: "center", gap: 8,
-                  background: T.slateL, border: `1px solid ${T.border}`,
-                  borderRadius: 10, padding: "8px 12px",
-                }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    background: T.slateL,
+                    border: `1px solid ${T.border}`,
+                    borderRadius: 10,
+                    padding: "8px 12px",
+                  }}
+                >
                   <Calendar size={12} color={T.textSub} />
                   <input
-                    type="date" value={dateStart}
-                    onChange={e => setDateStart(e.target.value)}
+                    type="date"
+                    value={dateStart}
+                    onChange={(e) => setDateStart(e.target.value)}
                     style={{
-                      background: "none", border: "none", outline: "none",
-                      fontSize: 13, color: T.text, fontFamily: "'DM Sans', sans-serif",
+                      background: "none",
+                      border: "none",
+                      outline: "none",
+                      fontSize: 13,
+                      color: T.text,
+                      fontFamily: "'DM Sans', sans-serif",
                     }}
                   />
                   <span style={{ color: T.textSub, fontSize: 11 }}>→</span>
                   <input
-                    type="date" value={dateEnd}
-                    onChange={e => setDateEnd(e.target.value)}
+                    type="date"
+                    value={dateEnd}
+                    onChange={(e) => setDateEnd(e.target.value)}
                     style={{
-                      background: "none", border: "none", outline: "none",
-                      fontSize: 13, color: T.text, fontFamily: "'DM Sans', sans-serif",
+                      background: "none",
+                      border: "none",
+                      outline: "none",
+                      fontSize: 13,
+                      color: T.text,
+                      fontFamily: "'DM Sans', sans-serif",
                     }}
                   />
                 </div>
 
-                {/* Refresh */}
                 <button
                   onClick={() => q.refetch()}
                   style={{
-                    width: 36, height: 36, borderRadius: 9,
-                    border: `1px solid ${T.border}`, background: "white",
-                    cursor: "pointer", display: "grid", placeItems: "center",
-                    color: T.textSub, transition: "all .15s",
+                    width: 36,
+                    height: 36,
+                    borderRadius: 9,
+                    border: `1px solid ${T.border}`,
+                    background: "white",
+                    cursor: "pointer",
+                    display: "grid",
+                    placeItems: "center",
+                    color: T.textSub,
+                    transition: "all .15s",
                   }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.blueL; (e.currentTarget as HTMLButtonElement).style.color = T.blue; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "white"; (e.currentTarget as HTMLButtonElement).style.color = T.textSub; }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = T.blueL;
+                    (e.currentTarget as HTMLButtonElement).style.color = T.blue;
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = "white";
+                    (e.currentTarget as HTMLButtonElement).style.color = T.textSub;
+                  }}
                 >
                   <RefreshCw size={13} style={{ animation: isLoading ? "spin 1s linear infinite" : "none" }} />
                 </button>
 
-                {/* Export */}
                 <button
                   disabled={!data}
                   onClick={() => data && exportToExcel(data, siteCode)}
                   style={{
-                    display: "flex", alignItems: "center", gap: 6,
-                    padding: "8px 16px", borderRadius: 9,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "8px 16px",
+                    borderRadius: 9,
                     background: data ? T.blue : "#CBD5E1",
-                    color: "white", border: "none",
-                    fontSize: 13, fontWeight: 600,
+                    color: "white",
+                    border: "none",
+                    fontSize: 13,
+                    fontWeight: 600,
                     cursor: data ? "pointer" : "not-allowed",
                     boxShadow: data ? `0 4px 12px ${T.blue}33` : "none",
                     transition: "all .15s",
                     fontFamily: "'DM Sans', sans-serif",
                   }}
-                  onMouseEnter={e => { if (data) (e.currentTarget as HTMLButtonElement).style.opacity = ".88"; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
                 >
                   <Download size={13} />
                   Exporter
@@ -798,35 +1100,43 @@ export default function BillingTrackingPage() {
               </div>
             </div>
 
-            {/* Barre de filtre site */}
-            <div style={{
-              display: "flex", alignItems: "center", gap: 12,
-              padding: "12px 16px", borderRadius: 12,
-              background: selectedSite ? T.blueL : T.slateL,
-              border: `1px solid ${selectedSite ? "rgba(27,63,160,.18)" : T.border}`,
-              transition: "all .2s",
-            }}>
-              {/* Scope */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "12px 16px",
+                borderRadius: 12,
+                background: selectedSite ? T.blueL : T.slateL,
+                border: `1px solid ${selectedSite ? "rgba(27,63,160,.18)" : T.border}`,
+                transition: "all .2s",
+              }}
+            >
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                <div style={{
-                  width: 32, height: 32, borderRadius: 9,
-                  background: selectedSite ? "rgba(27,63,160,.14)" : "#E2E8F0",
-                  display: "grid", placeItems: "center",
-                }}>
-                  {selectedSite
-                    ? <Building2 size={13} color={T.blue} />
-                    : <Globe size={13} color={T.textSub} />
-                  }
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 9,
+                    background: selectedSite ? "rgba(27,63,160,.14)" : "#E2E8F0",
+                    display: "grid",
+                    placeItems: "center",
+                  }}
+                >
+                  {selectedSite ? <Building2 size={13} color={T.blue} /> : <Globe size={13} color={T.textSub} />}
                 </div>
                 <div>
                   <div style={{ fontSize: 9, fontWeight: 700, color: T.textSub, textTransform: "uppercase", letterSpacing: ".1em" }}>
                     Vue active
                   </div>
-                  <div style={{
-                    fontFamily: "'Syne', sans-serif",
-                    fontSize: 12, fontWeight: 700,
-                    color: selectedSite ? T.blue : T.textMid,
-                  }}>
+                  <div
+                    style={{
+                      fontFamily: "'Syne', sans-serif",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: selectedSite ? T.blue : T.textMid,
+                    }}
+                  >
                     {selectedSite ? selectedSite.site_id : "Tous les sites"}
                   </div>
                 </div>
@@ -846,16 +1156,21 @@ export default function BillingTrackingPage() {
                 <button
                   onClick={() => setSelectedSite(null)}
                   style={{
-                    display: "flex", alignItems: "center", gap: 5,
-                    padding: "6px 12px", borderRadius: 8,
-                    background: "white", border: `1px solid ${T.border}`,
-                    cursor: "pointer", fontSize: 11, fontWeight: 600,
-                    color: T.textMid, flexShrink: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
+                    padding: "6px 12px",
+                    borderRadius: 8,
+                    background: "white",
+                    border: `1px solid ${T.border}`,
+                    cursor: "pointer",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: T.textMid,
+                    flexShrink: 0,
                     fontFamily: "'DM Sans', sans-serif",
                     transition: "all .15s",
                   }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#FCA5A5"; (e.currentTarget as HTMLButtonElement).style.color = T.red; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = T.border; (e.currentTarget as HTMLButtonElement).style.color = T.textMid; }}
                 >
                   <Globe size={10} /> Vue globale
                 </button>
@@ -864,7 +1179,6 @@ export default function BillingTrackingPage() {
           </div>
         </div>
 
-        {/* ── KPI Cards ──────────────────────────────────────────────────── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 12 }}>
           {isLoading ? (
             Array(5).fill(0).map((_, i) => (
@@ -874,67 +1188,95 @@ export default function BillingTrackingPage() {
             <>
               <div className="btp-fade">
                 <KpiCard
-                  label="Total HT" value={fmtM(kpis.totalHT)}
+                  label="Total HT"
+                  value={fmtM(kpis.totalHT)}
                   sub={`sur ${kpis.moisCount} mois`}
-                  icon={<DollarSign size={17} />} accent={T.blue} accentLight={T.blueL}
-                  trend={kpis.lastHT} trendPrev={kpis.prevHT}
+                  icon={<DollarSign size={17} />}
+                  accent={T.blue}
+                  accentLight={T.blueL}
+                  trend={kpis.lastHT}
+                  trendPrev={kpis.prevHT}
                 />
               </div>
+
               <div className="btp-fade">
                 <KpiCard
-                  label="Total NRJ" value={fmtM(kpis.totalNrj)}
+                  label="Total NRJ"
+                  value={fmtM(kpis.totalNrj)}
                   sub="Énergie facturée"
-                  icon={<Zap size={17} />} accent={T.orange} accentLight={T.orangeL}
+                  icon={<Zap size={17} />}
+                  accent={T.orange}
+                  accentLight={T.orangeL}
                 />
               </div>
+
               <div className="btp-fade">
                 <KpiCard
-                  label="Total Pénalités" value={fmtM(kpis.totalPenalite)}
-                  sub="Dépassement PS"
-                  icon={<AlertTriangle size={17} />} accent={T.red} accentLight={T.redL}
-                  trend={kpis.lastPenalite} trendPrev={kpis.prevPenalite}
+                  label="Total Pénalités"
+                  value={fmtM(kpis.totalPenalite)}
+                  sub="Dépassement puissance souscrite"
+                  icon={<AlertTriangle size={17} />}
+                  accent={T.red}
+                  accentLight={T.redL}
+                  trend={kpis.lastPenalite}
+                  trendPrev={kpis.prevPenalite}
                 />
               </div>
+
               <div className="btp-fade">
                 <KpiCard
-                  label="Total Cos φ" value={fmtM(kpis.totalCosphi)}
-                  sub="Facteur puissance"
-                  icon={<Activity size={17} />} accent={T.violet} accentLight={T.violetL}
+                  label="Total Cos φ"
+                  value={fmtM(kpis.totalCosphi)}
+                  sub={kpis.totalCosphi >= 0 ? "Pénalité facteur puissance" : "Minoration facteur puissance"}
+                  icon={<Activity size={17} />}
+                  accent={kpis.totalCosphi >= 0 ? T.violet : T.green}
+                  accentLight={kpis.totalCosphi >= 0 ? T.violetL : T.greenL}
                 />
               </div>
+
               <div className="btp-fade">
                 <KpiCard
-                  label="Factures traitées" value={fmt.format(kpis.totalInvoices)}
-                  sub={`Moy. ${fmt.format(Math.round(kpis.totalInvoices / Math.max(kpis.moisCount, 1)))} / mois`}
-                  icon={<BarChart2 size={17} />} accent={T.cyan} accentLight={T.cyanL}
+                  label="Total Abonnement"
+                  value={fmtM(kpis.totalAbonnement)}
+                  sub="Prime fixe + redevance + TCO"
+                  icon={<BarChart2 size={17} />}
+                  accent={T.cyan}
+                  accentLight={T.cyanL}
                 />
               </div>
             </>
           ) : null}
         </div>
 
-        {/* ── Graphe principal + Distribution ────────────────────────────── */}
         <div className="btp-fade" style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 12 }}>
           <Card>
-            <div style={{
-              display: "flex", alignItems: "center",
-              justifyContent: "space-between", marginBottom: 18, flexWrap: "wrap", gap: 10,
-            }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 18,
+                flexWrap: "wrap",
+                gap: 10,
+              }}
+            >
               <SectionTitle icon={<BarChart2 size={13} />}>Évolution mensuelle</SectionTitle>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {(Object.keys(metrics) as Array<keyof typeof metrics>).map(k => (
+                {(Object.keys(metrics) as Array<keyof typeof metrics>).map((k) => (
                   <MetricBtn
                     key={k}
                     active={activeMetric === k}
                     color={metrics[k].color}
-                    colorL={metrics[k].colorL}
                     label={metrics[k].label}
                     onClick={() => setActiveMetric(k)}
                   />
                 ))}
               </div>
             </div>
-            {isLoading ? <Skeleton h={260} /> : (
+
+            {isLoading ? (
+              <Skeleton h={260} />
+            ) : (
               <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={chartData} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
                   <defs>
@@ -945,11 +1287,15 @@ export default function BillingTrackingPage() {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
                   <XAxis dataKey="label" tick={{ fontSize: 11, fill: T.textSub, fontFamily: "'DM Sans'" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: T.textSub, fontFamily: "'DM Sans'" }} axisLine={false} tickLine={false} tickFormatter={v => fmtM(v)} width={52} />
+                  <YAxis tick={{ fontSize: 11, fill: T.textSub, fontFamily: "'DM Sans'" }} axisLine={false} tickLine={false} tickFormatter={(v) => fmtM(v)} width={52} />
+                  <ReferenceLine y={0} stroke="#CBD5E1" strokeDasharray="4 4" />
                   <Tooltip content={<CustomTooltip />} />
                   <Area
-                    type="monotone" dataKey={mc.key} name={mc.label}
-                    stroke={mc.color} strokeWidth={2.5}
+                    type="monotone"
+                    dataKey={mc.key}
+                    name={mc.label}
+                    stroke={mc.color}
+                    strokeWidth={2.5}
                     fill="url(#mainGrad)"
                     dot={{ fill: mc.color, r: 3, strokeWidth: 0 }}
                     activeDot={{ r: 5, strokeWidth: 0 }}
@@ -959,22 +1305,29 @@ export default function BillingTrackingPage() {
             )}
           </Card>
 
-          {/* Distribution HT */}
           <Card>
             <SectionTitle icon={<BarChart2 size={13} />}>Répartition HT</SectionTitle>
-            {isLoading ? <Skeleton h={260} /> : (
+            {isLoading ? (
+              <Skeleton h={260} />
+            ) : (
               <div>
                 <div style={{ marginBottom: 20 }}>
-                  <div style={{
-                    fontFamily: "'Syne', sans-serif",
-                    fontSize: 22, fontWeight: 800, color: T.text, lineHeight: 1,
-                  }}>
+                  <div
+                    style={{
+                      fontFamily: "'Syne', sans-serif",
+                      fontSize: 22,
+                      fontWeight: 800,
+                      color: T.text,
+                      lineHeight: 1,
+                    }}
+                  >
                     {fmtM(data?.distribution_ht.total_ht ?? "0")}
                   </div>
                   <div style={{ fontSize: 11, color: T.textSub, fontWeight: 500, marginTop: 3 }}>
                     FCFA total HT
                   </div>
                 </div>
+
                 {distribData.map((d, i) => (
                   <div key={d.name} style={{ marginBottom: 14 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5, alignItems: "baseline" }}>
@@ -983,18 +1336,22 @@ export default function BillingTrackingPage() {
                         <span style={{ fontSize: 12, fontWeight: 600, color: T.textMid }}>{d.name}</span>
                       </div>
                       <div>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: T.text }}>{fmtM(String(d.value))}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: T.text }}>{fmtM(d.value)}</span>
                         <span style={{ fontSize: 10, color: T.textSub, marginLeft: 5, fontWeight: 500 }}>
                           {d.percent.toFixed(1)}%
                         </span>
                       </div>
                     </div>
                     <div style={{ height: 5, background: "#F1F5F9", borderRadius: 99, overflow: "hidden" }}>
-                      <div style={{
-                        height: "100%", width: `${Math.min(d.percent, 100)}%`,
-                        background: DISTRIB_COLORS[i], borderRadius: 99,
-                        transition: "width .5s ease",
-                      }} />
+                      <div
+                        style={{
+                          height: "100%",
+                          width: `${Math.min(d.percent, 100)}%`,
+                          background: DISTRIB_COLORS[i],
+                          borderRadius: 99,
+                          transition: "width .5s ease",
+                        }}
+                      />
                     </div>
                   </div>
                 ))}
@@ -1003,33 +1360,36 @@ export default function BillingTrackingPage() {
           </Card>
         </div>
 
-        {/* ── Stacked bar ────────────────────────────────────────────────── */}
         <div className="btp-fade">
           <Card>
             <SectionTitle icon={<BarChart2 size={13} />}>Décomposition mensuelle du HT</SectionTitle>
-            {isLoading ? <Skeleton h={220} /> : (
+            {isLoading ? (
+              <Skeleton h={220} />
+            ) : (
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={chartData} margin={{ top: 5, right: 8, left: 8, bottom: 0 }} barSize={22}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
                   <XAxis dataKey="label" tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} tickFormatter={v => fmtM(v)} width={52} />
+                  <YAxis tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} tickFormatter={(v) => fmtM(v)} width={52} />
+                  <ReferenceLine y={0} stroke="#CBD5E1" strokeDasharray="4 4" />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend wrapperStyle={{ fontSize: 12, fontFamily: "'DM Sans'", paddingTop: 10 }} iconType="circle" iconSize={7} />
-                  <Bar dataKey="nrj"        name="NRJ"        stackId="a" fill={T.blue}   radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="abonnement" name="Abonnement" stackId="a" fill={T.cyan}   radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="cosphi"     name="Cos φ"      stackId="a" fill={T.violet} radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="penalite"   name="Pénalité"   stackId="a" fill={T.red}    radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="nrj" name="NRJ" stackId="a" fill={T.blue} radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="abonnement" name="Abonnement" stackId="a" fill={T.cyan} radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="cosphi" name="Cos φ" stackId="a" fill={T.violet} radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="penalite" name="Pénalité" stackId="a" fill={T.red} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
           </Card>
         </div>
 
-        {/* ── Factures line ──────────────────────────────────────────────── */}
-        <div className="btp-fade">
+        <div className="btp-fade" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Card>
             <SectionTitle icon={<Activity size={13} />}>Nombre de factures par mois</SectionTitle>
-            {isLoading ? <Skeleton h={150} /> : (
+            {isLoading ? (
+              <Skeleton h={150} />
+            ) : (
               <ResponsiveContainer width="100%" height={150}>
                 <LineChart data={chartData} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
@@ -1037,8 +1397,11 @@ export default function BillingTrackingPage() {
                   <YAxis tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} width={38} />
                   <Tooltip content={<CustomTooltip />} />
                   <Line
-                    type="monotone" dataKey="invoices" name="Factures"
-                    stroke={T.cyan} strokeWidth={2}
+                    type="monotone"
+                    dataKey="invoices"
+                    name="Factures"
+                    stroke={T.cyan}
+                    strokeWidth={2}
                     dot={{ fill: T.cyan, r: 3, strokeWidth: 0 }}
                     activeDot={{ r: 5, strokeWidth: 0 }}
                   />
@@ -1046,65 +1409,127 @@ export default function BillingTrackingPage() {
               </ResponsiveContainer>
             )}
           </Card>
+
+          <Card>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 18,
+                flexWrap: "wrap",
+                gap: 10,
+              }}
+            >
+              <SectionTitle icon={<CheckCircle2 size={13} />}>Certification des factures</SectionTitle>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {(Object.keys(certMetricMap) as Array<keyof typeof certMetricMap>).map((k) => (
+                  <MetricBtn
+                    key={k}
+                    active={activeCertMetric === k}
+                    color={certMetricMap[k].color}
+                    label={certMetricMap[k].label}
+                    onClick={() => setActiveCertMetric(k)}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {isLoading ? (
+              <Skeleton h={240} />
+            ) : data?.certification ? (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 10, marginBottom: 16 }}>
+                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.blueL, border: `1px solid ${T.border}` }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: T.blue }}>{fmt.format(data.certification.summary.total)}</div>
+                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Global</div>
+                  </div>
+                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.greenL, border: `1px solid ${T.border}` }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: T.green }}>{fmt.format(data.certification.summary.certified_fms)}</div>
+                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>eFMS</div>
+                  </div>
+                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.orangeL, border: `1px solid ${T.border}` }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: T.orange }}>{fmt.format(data.certification.summary.certified_senelec)}</div>
+                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Sénélec</div>
+                  </div>
+                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.redL, border: `1px solid ${T.border}` }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: T.red }}>{fmt.format(data.certification.summary.other)}</div>
+                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Autres</div>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <div style={{ fontSize: 12, color: T.textMid, fontWeight: 600 }}>
+                    Taux de certification : <span style={{ color: T.blue, fontWeight: 800 }}>{data.certification.summary.taux_certification}%</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: T.textSub }}>
+                    Review {fmt.format(data.certification.summary.needs_review)} · Unknown {fmt.format(data.certification.summary.unknown_contract)} · FMS indispo {fmt.format(data.certification.summary.fms_unavailable)}
+                  </div>
+                </div>
+
+                <ResponsiveContainer width="100%" height={170}>
+                  <BarChart data={certData} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} width={38} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey={cm.key} name={cm.label} fill={cm.color} radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </>
+            ) : (
+              <div style={{ color: T.textSub, fontSize: 12.5, textAlign: "center", padding: "24px 0" }}>
+                Aucune donnée de certification disponible
+              </div>
+            )}
+          </Card>
         </div>
 
-        {/* ── Top sites (vue globale uniquement) ─────────────────────────── */}
         {!selectedSite && (
           <div className="btp-fade" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <Card>
               <SectionTitle>Top sites — Montant HT</SectionTitle>
-              {isLoading
-                ? <Skeleton h={180} />
-                : <TopTable
-                    rows={data?.top.conso_vs_montant ?? []}
-                    valueKey="montant_ht"
-                    color={T.blue}
-                  />
-              }
+              {isLoading ? (
+                <Skeleton h={180} />
+              ) : (
+                <TopTable rows={data?.top.conso_vs_montant ?? []} valueKey="montant_ht" color={T.blue} />
+              )}
             </Card>
 
             <Card>
               <SectionTitle>Top sites — Pénalité</SectionTitle>
-              {isLoading
-                ? <Skeleton h={180} />
-                : <TopTable
-                    rows={data?.top.pen_prime ?? []}
-                    valueKey="penalite_prime"
-                    color={T.red}
-                  />
-              }
+              {isLoading ? (
+                <Skeleton h={180} />
+              ) : (
+                <TopTable rows={data?.top.pen_prime ?? []} valueKey="penalite_prime" color={T.red} />
+              )}
             </Card>
 
-            {/*
-              ✅ Cos φ : filterPositive=true
-              On n'affiche que les sites avec un cos phi POSITIF (pénalité réelle).
-              Les valeurs négatives (minoration = avantage) sont ignorées ici.
-              Le backend trie déjà par -montant_cosphi, donc les plus élevés en tête.
-            */}
             <Card>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 18 }}>
                 <SectionTitle>Top sites — Cos φ</SectionTitle>
-                <span style={{
-                  fontSize: 10, fontWeight: 600, color: T.violet,
-                  background: T.violetL, borderRadius: 6, padding: "2px 8px",
-                  flexShrink: 0,
-                }}>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: T.violet,
+                    background: T.violetL,
+                    borderRadius: 6,
+                    padding: "2px 8px",
+                    flexShrink: 0,
+                  }}
+                >
                   Pénalités uniquement
                 </span>
               </div>
-              {isLoading
-                ? <Skeleton h={180} />
-                : <TopTable
-                    rows={data?.top.cosphi ?? []}
-                    valueKey="montant_cosphi"
-                    color={T.violet}
-                    filterPositive={true}
-                  />
-              }
+              {isLoading ? (
+                <Skeleton h={180} />
+              ) : (
+                <TopTable rows={data?.top.cosphi ?? []} valueKey="montant_cosphi" color={T.violet} filterPositive={true} />
+              )}
             </Card>
           </div>
         )}
-
       </div>
     </>
   );
