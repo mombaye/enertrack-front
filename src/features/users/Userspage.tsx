@@ -440,14 +440,27 @@ export default function UsersPage() {
 
   const createMut = useMutation({
     mutationFn: (d: FormData) => {
-      const payload: any = { ...d };
-      if (!payload.password) delete payload.password;
-      delete payload.password2;
-      return usersApi.create(payload);
+      const payload = { ...d };
+      return usersApi.create(payload); // ne pas supprimer password2
     },
-    onSuccess: () => { toast.success("Utilisateur créé"); setModal(null); inv(); },
-    onError:   (e: any) => toast.error(e?.response?.data?.detail || "Erreur création"),
+    onSuccess: () => {
+      toast.success("Utilisateur créé");
+      setModal(null);
+      inv();
+    },
+    onError: (e: any) => {
+      const data = e?.response?.data;
+      const msg =
+        data?.detail ||
+        data?.password?.[0] ||
+        data?.password2?.[0] ||
+        data?.email?.[0] ||
+        data?.username?.[0] ||
+        "Erreur création";
+      toast.error(msg);
+    },
   });
+
   const updateMut = useMutation({
     mutationFn: ({ id, d }: { id: number; d: FormData }) => {
       const payload: any = { ...d };
