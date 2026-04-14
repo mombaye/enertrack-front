@@ -22,6 +22,9 @@ import {
   type AnalyticsFullReport,
   type EvaluationDetail,
 } from "./api";
+
+
+
 import {
   TrendingUp,
   TrendingDown,
@@ -51,6 +54,7 @@ import {
   CalendarRange,
 } from "lucide-react";
 import FinancialDataPage from "./FinancialDataPage";
+import FinancialSiteDetailModal from "./FinancialSiteDetailModal"; // ✅ NOUVEAU
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const MONTHS = [
@@ -407,7 +411,7 @@ function EvaluationTable({
   onOpenDetail,
 }: {
   items: FinancialEvaluation[];
-  onOpenDetail: (siteId: string) => void;
+  onOpenDetail: (siteId: string, siteName?: string) => void;  // ✅ + siteName
 }) {
   if (!items.length) return null;
 
@@ -428,11 +432,52 @@ function EvaluationTable({
             const marge = ev.marge ? parseFloat(ev.marge) : null;
             return (
               <tr key={ev.id} style={{ borderBottom: "1px solid rgba(0,0,0,.05)", background: i % 2 === 0 ? "white" : "rgba(248,250,252,.65)" }}>
+                
                 <td style={{ padding: "10px 12px" }}>
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>{ev.site_id}</div>
-                  <div style={{ fontSize: 11, color: "#94a3b8", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {ev.site_name}
-                  </div>
+                  <button
+                    onClick={() => onOpenDetail(ev.site_id, ev.site_name)}
+                    title={`Ouvrir l'analyse de ${ev.site_id}`}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                    onMouseEnter={e => {
+                      (e.currentTarget.querySelector(".site-id") as HTMLElement).style.color = "#1e3a8a";
+                      (e.currentTarget.querySelector(".site-id") as HTMLElement).style.textDecoration = "underline";
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget.querySelector(".site-id") as HTMLElement).style.color = "#0f172a";
+                      (e.currentTarget.querySelector(".site-id") as HTMLElement).style.textDecoration = "none";
+                    }}
+                  >
+                    <div
+                      className="site-id"
+                      style={{
+                        fontWeight: 700,
+                        color: "#0f172a",
+                        transition: "color 0.15s ease",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                    >
+                      {ev.site_id}
+                      <Eye size={11} style={{ opacity: 0.35, flexShrink: 0 }} />
+                    </div>
+                    <div style={{
+                      fontSize: 11,
+                      color: "#94a3b8",
+                      maxWidth: 140,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}>
+                      {ev.site_name}
+                    </div>
+                  </button>
                 </td>
 
                 <td style={{ padding: "10px 12px", whiteSpace: "nowrap", color: "#475569", fontWeight: 600 }}>
@@ -1448,6 +1493,15 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailData, setDetailData] = useState<EvaluationDetail | null>(null);
 
+
+  const [modalSite, setModalSite] = useState<{
+    siteId:     string;
+    siteName:   string;
+    year:       number;
+    monthStart: number;
+    monthEnd:   number;
+  } | null>(null);
+
   useEffect(() => {
     setEvalPage(1);
   }, [year, selectedMonthStart, selectedMonthEnd, filterStatut, filterSearch, filterTypo]);
@@ -1543,22 +1597,14 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
     loadAnalytics();
   }, [loadAnalytics]);
 
-  const openDetail = async (siteId: string) => {
-    setDetailOpen(true);
-    setDetailLoading(true);
-    setDetailData(null);
-    try {
-      const data = await fetchEvaluationDetail(siteId, {
-        year,
-        month_start: selectedMonthStart,
-        month_end: selectedMonthEnd,
-      } as any);
-      setDetailData(data);
-    } catch {
-      setDetailData(null);
-    } finally {
-      setDetailLoading(false);
-    }
+  const openDetail = (siteId: string, siteName?: string) => {
+    setModalSite({
+      siteId,
+      siteName:   siteName || siteId,
+      year,
+      monthStart: selectedMonthStart,
+      monthEnd:   selectedMonthEnd,
+    });
   };
 
   const handleEvaluate = async () => {
@@ -2426,7 +2472,24 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
         </div>
       )}
 
-      <AnalysisDrawer open={detailOpen} loading={detailLoading} detail={detailData} onClose={() => setDetailOpen(false)} />
+      <AnalysisDrawer
+          open={detailOpen}
+          loading={detailLoading}
+          detail={detailData}
+          onClose={() => setDetailOpen(false)}
+        />
+        
+        {/* ✅ NOUVEAU — Modal détail site avec comparaison conso multi-sources */}
+        {modalSite && (
+          <FinancialSiteDetailModal
+            siteId={modalSite.siteId}
+            siteName={modalSite.siteName}
+            year={modalSite.year}
+            monthStart={modalSite.monthStart}
+            monthEnd={modalSite.monthEnd}
+            onClose={() => setModalSite(null)}
+          />
+        )}
 
       {showUploadFee && (
         <UploadModal

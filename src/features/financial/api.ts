@@ -1,27 +1,10 @@
 // src/features/financial/services.ts
 import { api } from "@/services/api";
+import { SonatelBillingStats } from "../sonatelBilling/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface FinancialFeeRule {
-  id: number;
-  typology: string;
-  configuration: "INDOOR" | "OUTDOOR";
-  load_w: number;
-  redevance: string;
-  cible_kwh: string | null;
-  cible_kwh_j: string | null;
-}
 
-export interface SiteMonthlyLoad {
-  id: number;
-  site_id: string;
-  site_name: string;
-  year: number;
-  month: number;
-  load_w: number;
-  source: "aligne" | "previsionnel" | "manual" | "import";
-}
 
 export interface LoadsPage {
   count: number;
@@ -117,60 +100,8 @@ export interface SiteRecurrentRow {
   marge_moyenne: string;
 }
 
-// ─── Fee Rules ────────────────────────────────────────────────────────────────
 
-export const fetchFeeRules = async (params?: {
-  typology?: string;
-  configuration?: string;
-}): Promise<{ count: number; results: FinancialFeeRule[] }> => {
-  const { data } = await api.get("/financial/fee-rules/", { params });
-  return data;
-};
 
-export const importFeeRules = async (file: File): Promise<FeeRuleImportResult> => {
-  const form = new FormData();
-  form.append("file", file);
-  const { data } = await api.post("/financial/fee-rules/import/", form, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
-  return data;
-};
-
-// ─── Monthly Loads ────────────────────────────────────────────────────────────
-
-export const fetchMonthlyLoads = async (params?: {
-  site?: string;
-  year?: number;
-  month?: number;
-  source?: "import" | "manual";
-  search?: string;
-  page?: number;
-  page_size?: number;
-}): Promise<LoadsPage> => {
-  const { data } = await api.get("/financial/loads/", { params });
-  return data;
-};
-
-export const updateMonthlyLoad = async (
-  id: number,
-  load_w: number
-): Promise<SiteMonthlyLoad> => {
-  const { data } = await api.patch(`/financial/loads/${id}/`, { load_w });
-  return data;
-};
-
-export const importMonthlyLoads = async (
-  file: File,
-  format?: "alignement" | "proposition" | "simple"
-): Promise<LoadImportResult & { format_detecte: string; source_assignee: string; periode_couverte: string }> => {
-  const form = new FormData();
-  form.append("file", file);
-  if (format) form.append("format", format);
-  const { data } = await api.post("/financial/loads/import/", form, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
-  return data;
-};
 
 // ─── Evaluations ──────────────────────────────────────────────────────────────
 
@@ -285,6 +216,13 @@ export const fetchSitesRecurrents = async (params?: {
 };
 
 
+export function getSonatelBillingStats(params: {
+  start: string;
+  end: string;
+  site?: string;
+}) {
+  return api.get("/sonatel-billing/stats/", { params }).then((r) => r.data as SonatelBillingStats);
+}
 
 export interface EvaluationDetailDiagnostic {
   type: string;
@@ -556,3 +494,166 @@ export const fetchAnalyticsRecommandations = async (params: {
   const { data } = await api.get("/financial/analytics/recommandations/", { params });
   return data;
 };
+
+
+
+export type SiteMonthlyLoad = {
+  id: number;
+  site_id: string;
+  site_name: string;
+  year: number;
+  month: number;
+  load_w: number;
+  source: "aligne" | "previsionnel" | "manual" | "import";
+};
+
+export type FinancialFeeRule = {
+  id: number;
+  typology: string;
+  configuration: "OUTDOOR" | "INDOOR";
+  load_w: number;
+  redevance: string;
+  cible_kwh?: string | null;
+  cible_kwh_j?: string | null;
+};
+
+export type PagedResult<T> = {
+  count: number;
+  page: number;
+  page_size: number;
+  pages: number;
+  results: T[];
+};
+
+export async function fetchMonthlyLoads(params: {
+  search?: string;
+  year?: number;
+  month?: number;
+  source?: string;
+  page?: number;
+  page_size?: number;
+}) {
+  const { data } = await api.get<PagedResult<SiteMonthlyLoad>>("/financial/loads/", { params });
+  return data;
+}
+
+export async function updateMonthlyLoad(id: number, load_w: number) {
+  const { data } = await api.patch<SiteMonthlyLoad>(`/financial/loads/${id}/`, { load_w });
+  return data;
+}
+
+export async function importMonthlyLoads(file: File) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const { data } = await api.post("/financial/loads/import/", fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+}
+
+export async function fetchFeeRules(params: {
+  typology?: string;
+  configuration?: string;
+}) {
+  const { data } = await api.get<{ count: number; results: FinancialFeeRule[] }>("/financial/fee-rules/", {
+    params,
+  });
+  return data;
+}
+
+export async function importFeeRules(file: File) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const { data } = await api.post("/financial/fee-rules/import/", fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+}
+
+export type EvaluateFinancialMonthResult = {
+  message: string;
+  processed: number;
+  ok: number;
+  nok: number;
+  no_load: number;
+  no_fee_rule: number;
+  no_invoice: number;
+  hors_catalogue: number;
+  periode_courte?: number;
+};
+
+export async function evaluateFinancialMonth(params: { year: number; month: number }) {
+  const { data } = await api.post<EvaluateFinancialMonthResult>("/financial/evaluate/", params);
+  return data;
+}
+
+export async function evaluateFinancialRange(params: {
+  year: number;
+  month?: number;
+  month_start?: number;
+  month_end?: number;
+}) {
+  const year = Number(params.year);
+  if (!year) throw new Error("Année invalide");
+
+  if (params.month) {
+    const res = await evaluateFinancialMonth({ year, month: Number(params.month) });
+    return {
+      mode: "single" as const,
+      processed_months: 1,
+      months: [{ month: Number(params.month), ...res }],
+      totals: {
+        processed: res.processed || 0,
+        ok: res.ok || 0,
+        nok: res.nok || 0,
+        no_load: res.no_load || 0,
+        no_fee_rule: res.no_fee_rule || 0,
+        no_invoice: res.no_invoice || 0,
+        hors_catalogue: res.hors_catalogue || 0,
+        periode_courte: res.periode_courte || 0,
+      },
+    };
+  }
+
+  let ms = Number(params.month_start);
+  let me = Number(params.month_end);
+
+  if (!ms || !me) throw new Error("Choisis un mois ou une plage de mois");
+  if (ms > me) [ms, me] = [me, ms];
+
+  const months: Array<{ month: number } & EvaluateFinancialMonthResult> = [];
+
+  for (let m = ms; m <= me; m++) {
+    const res = await evaluateFinancialMonth({ year, month: m });
+    months.push({ month: m, ...res });
+  }
+
+  return {
+    mode: "range" as const,
+    processed_months: months.length,
+    months,
+    totals: months.reduce(
+      (acc, r) => {
+        acc.processed += r.processed || 0;
+        acc.ok += r.ok || 0;
+        acc.nok += r.nok || 0;
+        acc.no_load += r.no_load || 0;
+        acc.no_fee_rule += r.no_fee_rule || 0;
+        acc.no_invoice += r.no_invoice || 0;
+        acc.hors_catalogue += r.hors_catalogue || 0;
+        acc.periode_courte += r.periode_courte || 0;
+        return acc;
+      },
+      {
+        processed: 0,
+        ok: 0,
+        nok: 0,
+        no_load: 0,
+        no_fee_rule: 0,
+        no_invoice: 0,
+        hors_catalogue: 0,
+        periode_courte: 0,
+      }
+    ),
+  };
+}

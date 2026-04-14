@@ -21,6 +21,7 @@ export type SonatelInvoice = {
 
   montant_hors_tva: string | null;
   montant_ttc: string | null;
+  montant_cosinus_phi?: string | null;
 
   // ✅ données cibles
   abonnement_calcule: string | null;
@@ -28,6 +29,10 @@ export type SonatelInvoice = {
   energie_calculee: string | null;
 
   status: "CREATED" | "VALIDATED" | "CONTESTED";
+  
+  // ✅ FIX: Renommé de status_payment → payment_status (pour matcher le backend)
+  payment_status?: "PAID" | "UNPAID" | "OUT_OF_SCOPE" | null;
+  payment_status_updated_at?: string | null;
 };
 
 export type MonthlySynthesis = {
@@ -38,7 +43,7 @@ export type MonthlySynthesis = {
   numero_compte_contrat: string;
   numero_facture: string;
 
-  // ✅ enrichi côté serializer (pour “site partout”)
+  // ✅ enrichi côté serializer (pour "site partout")
   site_id?: string | null;
   site_name?: string | null;
 
@@ -106,11 +111,12 @@ function qs(params: Record<string, any>) {
 export async function listInvoices(params: {
   search?: string;
   status?: string;
-  site?: string; // site_id
+  site?: string;
   page?: number;
   page_size?: number;
-  start?: string; // ✅ NEW
-  end?: string;   // ✅ NEW
+  start?: string;
+  end?: string;
+  payment_status?: string;  // ✅ FIX: Renommé de status_payment → payment_status
 }) {
   const { data } = await api.get<DRFList<SonatelInvoice>>(`/sonatel-billing/records/${qs(params)}`);
   return data;
@@ -122,11 +128,11 @@ export async function listMonthly(params: {
   account?: string;
   facture?: string;
   status?: string;
-  site?: string; // site_id (si tu le gères côté backend)
+  site?: string;
   page?: number;
   page_size?: number;
-  start?: string; // ✅ NEW
-  end?: string;   // ✅ NEW
+  start?: string;
+  end?: string;
 }) {
   const { data } = await api.get<DRFList<MonthlySynthesis>>(`/sonatel-billing/monthly/${qs(params)}`);
   return data;
@@ -140,12 +146,12 @@ export async function listContractMonths(params: {
   site?: string;
   page?: number;
   page_size?: number;
+  start?: string;
+  end?: string;
 }) {
   const { data } = await api.get<DRFList<ContractMonth>>(`/sonatel-billing/contract-months/${qs(params)}`);
   return data;
 }
-
-
 
 // -------------------- IMPORTS --------------------
 export async function importInvoicesFile(file: File) {
@@ -177,10 +183,7 @@ export async function listBatchIssues(batchId: number, params: { severity?: stri
   return data;
 }
 
-
-
-
-
+// -------------------- STATS --------------------
 export type SonatelBillingStats = {
   range: { start: string; end: string };
   top: {
@@ -206,6 +209,5 @@ export type SonatelBillingStats = {
 };
 
 export function getSonatelBillingStats(params: { start: string; end: string }) {
-  // ⚠️ adapte si ton baseURL inclut déjà /api
   return api.get("/sonatel-billing/stats/", { params }).then((r) => r.data as SonatelBillingStats);
 }

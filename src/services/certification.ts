@@ -9,14 +9,14 @@ export type CertResultStatus =
   | "FMS_UNAVAILABLE"
   | "CERTIFIED_FMS"
   | "CERTIFIED_SENELEC"
-  | "NEEDS_REVIEW";
+  | "NEEDS_REVIEW"
+  | "MESURE_A_VERIFIER"; // ✅ v4 — alerte mesure (Conso_Facturée < 50% FMS ou Histo)
 
-// ✅ ACM_PERIODE et ACM_30J ajoutés (étape 7B)
 export type CertifiedByRule =
-  | "FMS_PERIODE"
-  | "FMS_30J"
-  | "ACM_PERIODE"
-  | "ACM_30J"
+  | "FMS_PERIODE"   // Grid primaire — période
+  | "FMS_30J"       // Grid primaire — 30j
+  | "ACM_PERIODE"   // ACM fallback  — période
+  | "ACM_30J"       // ACM fallback  — 30j
   | "HISTO_3MOIS";
 
 export type CertificationBatch = {
@@ -37,6 +37,7 @@ export type CertificationBatch = {
   needs_review: number;
   unknown_contract: number;
   fms_unavailable: number;
+  mesure_alert: number; // ✅ v4
 };
 
 export type CertificationBatchDetail = CertificationBatch & {
@@ -46,6 +47,7 @@ export type CertificationBatchDetail = CertificationBatch & {
     needs_review_pct: number;
     unknown_contract_pct: number;
     fms_unavailable_pct: number;
+    mesure_alert_pct: number; // ✅ v4
   };
 };
 
@@ -60,7 +62,7 @@ export type CertificationResult = {
   date_debut_periode: string;
   date_fin_periode: string;
   montant_ttc: string | null;
-  montant_hors_tva: string | null;         // ✅ NOUVEAU — exposé par le serializer
+  montant_hors_tva: string | null;
 
   // Infos site
   site: number | null;
@@ -77,7 +79,7 @@ export type CertificationResult = {
   nb_jours_facturation: number | null;
   conso_facturee_30j: string | null;
 
-  // Étape 5 — FMS Grid
+  // Étape 5 — FMS Grid (source PRIMAIRE)
   fms_available: boolean;
   conso_fms_periode: string | null;
   conso_fms_30j: string | null;
@@ -88,12 +90,12 @@ export type CertificationResult = {
   histo_last_conso: string | null;
   histo_3mois_avg: string | null;
 
-  // Étape 7A — Ratios FMS
+  // Étape 7A — Ratios FMS Grid
   ratio_fms_periode: string | null;
   ratio_fms_30j: string | null;
   ratio_histo_3mois: string | null;
 
-  // Étape 7B — Double-check AC Power Meter ✅ NOUVEAU
+  // Étape 7B — AC Power Meter (fallback si Grid absent)
   acm_available: boolean;
   estim_conso_acm_periode: string | null;
   estim_conso_acm_30j: string | null;
@@ -101,7 +103,10 @@ export type CertificationResult = {
   ratio_acm_30j: string | null;
   acm_error: string | null;
 
-  // Étape 8 — Cohérence montant ✅ NOUVEAU
+  // Étape 9 — Alerte mesure v4
+  flag_mesure_alert: boolean; // ✅ v4 — TRUE si Conso < 50% FMS ou Histo
+
+  // Étape 10 — Cohérence montant
   montant_htva_calcule: string | null;
   variation_montant_pct: string | null;
   montant_coherent: boolean | null;
@@ -122,6 +127,7 @@ export type BatchStatusPoll = {
     needs_review: number;
     unknown_contract: number;
     fms_unavailable: number;
+    mesure_alert: number; // ✅ v4
   };
 };
 
@@ -170,12 +176,13 @@ export async function listCertResults(params?: {
   site?: string;
   invoice?: string;
   fms_available?: boolean;
-  page?: number;       // ← ajouter
+  flag_mesure_alert?: boolean; // ✅ v4
+  page?: number;
   page_size?: number;
 }) {
   const { data } = await api.get(`${BASE}/results/`, { params });
-  return data;          // ← retirer le typage <CertificationResult[]> ici
-}                       //   car la réponse paginée n'est PAS un tableau direct
+  return data;
+}
 
 export async function checkEfmsHealth() {
   const { data } = await api.get<EfmsHealth>(`${BASE}/efms-health/`);

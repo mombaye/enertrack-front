@@ -23,10 +23,11 @@ const LINKS: LinkItem[] = [
 
   // ── FACTURATION ──────────────────────────────────────────────────────────────
   { to: "/billing/suivi", icon: <TrendingUp />, label: "Suivi Facturation", section: "FACTURATION", end: true },
-  { to: "/billing/sonatel",        icon: <Receipt />,      label: "Factures Sonatel",            section: "FACTURATION",    end: true },
+  
   { to: "/certification",          icon: <ShieldCheck />,  label: "Certification",              section: "FACTURATION",    end: true },
   // Sidebar.tsx — dans LINKS
   { to: "/modules/evaluation-financiere", icon: <DollarSign />, label: "Évaluation Financière", section: "FACTURATION" },
+  { to: "/billing/sonatel",        icon: <Receipt />,      label: "Base Factures",            section: "FACTURATION",    end: true },
 
   // ── MODULES ──────────────────────────────────────────────────────────────────
   { to: "/modules/estimation",              icon: <Calculator />,   label: "Estimation",                 section: "MODULES",        comingSoon: true },

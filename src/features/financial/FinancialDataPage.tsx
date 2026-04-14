@@ -1,20 +1,30 @@
-// src/features/financial/FinancialDataPage.tsx
-//
-// Page de gestion des données du module Évaluation Financière :
-//   - Onglet "Loads mensuels"   → liste paginée, filtres, édition inline (prévisionnels)
-//   - Onglet "Catalogue Redevances" → liste catalogue avec filtres
-//   - Boutons import sur les deux onglets
-//
+
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  fetchMonthlyLoads, updateMonthlyLoad, importMonthlyLoads,
-  fetchFeeRules,     importFeeRules,
-  type SiteMonthlyLoad, type FinancialFeeRule,
+  fetchMonthlyLoads,
+  updateMonthlyLoad,
+  importMonthlyLoads,
+  fetchFeeRules,
+  importFeeRules,
+  evaluateFinancialRange,
+  type SiteMonthlyLoad,
+  type FinancialFeeRule,
 } from "./api";
 import {
-  Upload, Search, ChevronLeft, ChevronRight,
-  Edit3, Check, X, Loader2, FileUp, RefreshCw,
-  Layers, Database, AlertCircle, Info, Filter,
+  Upload,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Edit3,
+  Check,
+  X,
+  Loader2,
+  FileUp,
+  RefreshCw,
+  Layers,
+  Database,
+  Info,
+  Wand2,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -158,6 +168,425 @@ function UploadModal({
   );
 }
 
+
+function EvaluateLoadsModal({
+  onClose,
+  onDone,
+  initialYear,
+  initialMonth,
+}: {
+  onClose: () => void;
+  onDone: () => void;
+  initialYear?: number | "";
+  initialMonth?: number | "";
+}) {
+  const [mode, setMode] = useState<"single" | "range">(initialMonth ? "single" : "range");
+  const [year, setYear] = useState<number | "">(initialYear || new Date().getFullYear());
+  const [month, setMonth] = useState<number | "">(initialMonth || "");
+  const [monthStart, setMonthStart] = useState<number | "">(1);
+  const [monthEnd, setMonthEnd] = useState<number | "">(12);
+
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    if (!year) {
+      setError("Choisis une année.");
+      return;
+    }
+
+    if (mode === "single" && !month) {
+      setError("Choisis un mois.");
+      return;
+    }
+
+    if (mode === "range" && (!monthStart || !monthEnd)) {
+      setError("Choisis une plage de mois.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const data = await evaluateFinancialRange({
+        year: Number(year),
+        month: mode === "single" ? Number(month) : undefined,
+        month_start: mode === "range" ? Number(monthStart) : undefined,
+        month_end: mode === "range" ? Number(monthEnd) : undefined,
+      });
+      setResult(data);
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || e?.message || "Erreur pendant le recalcul.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 450,
+        background: "rgba(15,23,42,.6)",
+        backdropFilter: "blur(8px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+      }}
+      onClick={(e) => e.target === e.currentTarget && !loading && onClose()}
+    >
+      <div
+        style={{
+          background: "white",
+          borderRadius: 22,
+          padding: 30,
+          maxWidth: 520,
+          width: "100%",
+          boxShadow: "0 32px 80px rgba(0,0,0,.2)",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
+          <div>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", margin: "0 0 3px" }}>
+              Mettre à jour les stats financières
+            </h3>
+            <p style={{ fontSize: 12, color: "#64748b", margin: 0 }}>
+              Recalcule les évaluations financières à partir des loads mensuels.
+            </p>
+          </div>
+
+          {!loading && (
+            <button
+              onClick={onClose}
+              style={{
+                background: "rgba(0,0,0,.06)",
+                border: "none",
+                borderRadius: 8,
+                padding: 6,
+                cursor: "pointer",
+                color: "#64748b",
+                display: "grid",
+                placeItems: "center",
+              }}
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        {!result ? (
+          <>
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              <button
+                onClick={() => setMode("single")}
+                style={{
+                  flex: 1,
+                  padding: "9px 0",
+                  borderRadius: 10,
+                  border: `1.5px solid ${mode === "single" ? "#1e3a8a" : "rgba(0,0,0,.1)"}`,
+                  background: mode === "single" ? "rgba(30,58,138,.06)" : "white",
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  color: mode === "single" ? "#1e3a8a" : "#374151",
+                  cursor: "pointer",
+                }}
+              >
+                Un mois
+              </button>
+              <button
+                onClick={() => setMode("range")}
+                style={{
+                  flex: 1,
+                  padding: "9px 0",
+                  borderRadius: 10,
+                  border: `1.5px solid ${mode === "range" ? "#1e3a8a" : "rgba(0,0,0,.1)"}`,
+                  background: mode === "range" ? "rgba(30,58,138,.06)" : "white",
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  color: mode === "range" ? "#1e3a8a" : "#374151",
+                  cursor: "pointer",
+                }}
+              >
+                Une plage
+              </button>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>
+                  Année
+                </label>
+                <select
+                  value={year}
+                  onChange={(e) => setYear(e.target.value ? Number(e.target.value) : "")}
+                  style={{
+                    width: "100%",
+                    padding: "9px 10px",
+                    borderRadius: 10,
+                    border: "1.5px solid rgba(0,0,0,.09)",
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    color: "#0f172a",
+                    background: "white",
+                    outline: "none",
+                  }}
+                >
+                  <option value="">Choisir</option>
+                  {[2024, 2025, 2026, 2027].map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {mode === "single" ? (
+                <div>
+                  <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>
+                    Mois
+                  </label>
+                  <select
+                    value={month}
+                    onChange={(e) => setMonth(e.target.value ? Number(e.target.value) : "")}
+                    style={{
+                      width: "100%",
+                      padding: "9px 10px",
+                      borderRadius: 10,
+                      border: "1.5px solid rgba(0,0,0,.09)",
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      color: "#0f172a",
+                      background: "white",
+                      outline: "none",
+                    }}
+                  >
+                    <option value="">Choisir</option>
+                    {MONTHS.map((m, i) => (
+                      <option key={i} value={i + 1}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>
+                      Début
+                    </label>
+                    <select
+                      value={monthStart}
+                      onChange={(e) => setMonthStart(e.target.value ? Number(e.target.value) : "")}
+                      style={{
+                        width: "100%",
+                        padding: "9px 10px",
+                        borderRadius: 10,
+                        border: "1.5px solid rgba(0,0,0,.09)",
+                        fontSize: 12.5,
+                        fontWeight: 600,
+                        color: "#0f172a",
+                        background: "white",
+                        outline: "none",
+                      }}
+                    >
+                      {MONTHS.map((m, i) => (
+                        <option key={i} value={i + 1}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>
+                      Fin
+                    </label>
+                    <select
+                      value={monthEnd}
+                      onChange={(e) => setMonthEnd(e.target.value ? Number(e.target.value) : "")}
+                      style={{
+                        width: "100%",
+                        padding: "9px 10px",
+                        borderRadius: 10,
+                        border: "1.5px solid rgba(0,0,0,.09)",
+                        fontSize: 12.5,
+                        fontWeight: 600,
+                        color: "#0f172a",
+                        background: "white",
+                        outline: "none",
+                      }}
+                    >
+                      {MONTHS.map((m, i) => (
+                        <option key={i} value={i + 1}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div
+              style={{
+                padding: "10px 12px",
+                borderRadius: 11,
+                background: "rgba(30,58,138,.05)",
+                border: "1px solid rgba(30,58,138,.1)",
+                fontSize: 12,
+                color: "#374151",
+                marginBottom: 12,
+                lineHeight: 1.5,
+              }}
+            >
+              Cette action recalcule les marges, statuts, périodes courtes et récurrences NOK pour toute la période choisie.
+            </div>
+
+            {error && (
+              <div
+                style={{
+                  padding: "9px 13px",
+                  borderRadius: 11,
+                  background: "rgba(220,38,38,.07)",
+                  border: "1px solid rgba(220,38,38,.15)",
+                  fontSize: 12,
+                  color: "#dc2626",
+                  marginBottom: 12,
+                }}
+              >
+                ⚠ {error}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={onClose}
+                style={{
+                  flex: 1,
+                  padding: "9px 0",
+                  borderRadius: 10,
+                  border: "1.5px solid rgba(0,0,0,.1)",
+                  background: "white",
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  color: "#374151",
+                  cursor: "pointer",
+                }}
+              >
+                Annuler
+              </button>
+
+              <button
+                disabled={loading}
+                onClick={submit}
+                style={{
+                  flex: 2,
+                  padding: "9px 0",
+                  borderRadius: 10,
+                  border: "none",
+                  background: loading
+                    ? "rgba(30,58,138,.25)"
+                    : "linear-gradient(135deg,#1e3a8a,#2d52b8)",
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  color: "white",
+                  cursor: loading ? "not-allowed" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                }}
+              >
+                {loading && <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} />}
+                {loading ? "Mise à jour en cours…" : "Appliquer"}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>✅</div>
+            <h4 style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", margin: "0 0 6px" }}>
+              Mise à jour terminée
+            </h4>
+
+            <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 14px" }}>
+              {result.mode === "single"
+                ? "Recalcul d’un mois terminé."
+                : `Recalcul terminé sur ${result.processed_months} mois.`}
+            </p>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 16 }}>
+              {[
+                { label: "Traités", value: result.totals.processed, color: "#1e3a8a" },
+                { label: "OK", value: result.totals.ok, color: "#059669" },
+                { label: "NOK", value: result.totals.nok, color: "#dc2626" },
+                { label: "P. courte", value: result.totals.periode_courte, color: "#c2410c" },
+              ].map((s) => (
+                <div
+                  key={s.label}
+                  style={{
+                    padding: "9px 10px",
+                    borderRadius: 11,
+                    background: "rgba(0,0,0,.03)",
+                    border: "1px solid rgba(0,0,0,.06)",
+                  }}
+                >
+                  <div style={{ fontSize: 18, fontWeight: 800, color: s.color }}>{s.value}</div>
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: "#94a3b8" }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+              {result.months.map((m: any) => (
+                <span
+                  key={m.month}
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "#1e3a8a",
+                    background: "rgba(30,58,138,.07)",
+                    border: "1px solid rgba(30,58,138,.12)",
+                    borderRadius: 999,
+                    padding: "4px 10px",
+                  }}
+                >
+                  {MONTHS[m.month - 1]} · {m.ok} OK / {m.nok} NOK
+                </span>
+              ))}
+            </div>
+
+            <button
+              onClick={() => {
+                onDone();
+                onClose();
+              }}
+              style={{
+                width: "100%",
+                padding: "9px 0",
+                borderRadius: 10,
+                border: "none",
+                background: "linear-gradient(135deg,#1e3a8a,#2d52b8)",
+                fontSize: 12.5,
+                fontWeight: 600,
+                color: "white",
+                cursor: "pointer",
+              }}
+            >
+              Fermer
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 // ─── Inline load editor ────────────────────────────────────────────────────────
 function InlineEdit({ load, onSaved }: { load: SiteMonthlyLoad; onSaved: (updated: SiteMonthlyLoad) => void }) {
   const [editing, setEditing] = useState(false);
@@ -231,7 +660,13 @@ function InlineEdit({ load, onSaved }: { load: SiteMonthlyLoad; onSaved: (update
 }
 
 // ─── Loads tab ─────────────────────────────────────────────────────────────────
-function LoadsTab({ onImport }: { onImport: () => void }) {
+function LoadsTab({
+  onImport,
+  onEvaluate,
+}: {
+  onImport: () => void;
+  onEvaluate: (initial: { year?: number | ""; month?: number | "" }) => void;
+}) {
   const [data,    setData]    = useState<SiteMonthlyLoad[]>([]);
   const [total,   setTotal]   = useState(0);
   const [pages,   setPages]   = useState(1);
@@ -315,7 +750,29 @@ function LoadsTab({ onImport }: { onImport: () => void }) {
           border:"1.5px solid rgba(0,0,0,.09)",background:"white",cursor:"pointer",
           color:"#64748b",display:"grid",placeItems:"center"}}>
           <RefreshCw size={14} style={loading?{animation:"spin 1s linear infinite"}:{}}/>
+
         </button>
+
+        <button
+          onClick={() => onEvaluate({ year, month })}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "7px 14px",
+            borderRadius: 10,
+            border: "1.5px solid rgba(30,58,138,.15)",
+            background: "white",
+            color: "#1e3a8a",
+            cursor: "pointer",
+            fontSize: 12.5,
+            fontWeight: 700,
+          }}
+        >
+          <Wand2 size={13} />
+          Mettre à jour stats
+        </button>
+
 
         {/* Import */}
         <button onClick={onImport}
@@ -545,7 +1002,8 @@ export default function FinancialDataPage() {
   const [showUploadLoad, setShowUploadLoad] = useState(false);
   const [showUploadFee,  setShowUploadFee]  = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-
+  const [showEvaluate, setShowEvaluate] = useState(false);
+  const [evaluateDefaults, setEvaluateDefaults] = useState<{ year?: number | ""; month?: number | "" }>({});
   return (
     <div style={{maxWidth:1200,margin:"0 auto"}}>
       <style>{`
@@ -596,10 +1054,17 @@ export default function FinancialDataPage() {
 
       {/* Tab content */}
       <div style={{animation:"fadeIn .25s ease"}} key={tab}>
-        {tab === "loads" ? (
-          <LoadsTab key={refreshKey} onImport={()=>setShowUploadLoad(true)}/>
+       {tab === "loads" ? (
+          <LoadsTab
+            key={refreshKey}
+            onImport={() => setShowUploadLoad(true)}
+            onEvaluate={(initial) => {
+              setEvaluateDefaults(initial);
+              setShowEvaluate(true);
+            }}
+          />
         ) : (
-          <FeeRulesTab key={refreshKey} onImport={()=>setShowUploadFee(true)}/>
+          <FeeRulesTab key={refreshKey} onImport={() => setShowUploadFee(true)} />
         )}
       </div>
 
@@ -611,6 +1076,15 @@ export default function FinancialDataPage() {
           accept=".xlsx,.xls,.csv"
           onClose={()=>{setShowUploadLoad(false);setRefreshKey(k=>k+1);}}
           onUpload={importMonthlyLoads}
+        />
+      )}
+      
+      {showEvaluate && (
+        <EvaluateLoadsModal
+          initialYear={evaluateDefaults.year}
+          initialMonth={evaluateDefaults.month}
+          onClose={() => setShowEvaluate(false)}
+          onDone={() => setRefreshKey((k) => k + 1)}
         />
       )}
       {showUploadFee && (

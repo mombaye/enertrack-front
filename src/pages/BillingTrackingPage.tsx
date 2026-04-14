@@ -1,24 +1,54 @@
 // src/pages/BillingTrackingPage.tsx
-// Suivi facturation Sénélec — évolution mensuelle
-// Utilise SonatelBillingStatsAPIView (/sonatel-billing/stats/) + ContractSiteLink pour la recherche de site
 
 import { useState, useMemo, useRef, useEffect, type ReactNode, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  AreaChart, Area, BarChart, Bar, LineChart, Line,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Legend, ReferenceLine,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
 } from "recharts";
 import {
-  Calendar, Download, RefreshCw,
-  DollarSign, Zap, AlertTriangle, Activity,
-  BarChart2, ChevronUp, ChevronDown, Minus,
-  Search, X, Building2, Globe, TrendingUp, CheckCircle2,
+  Calendar,
+  Download,
+  RefreshCw,
+  DollarSign,
+  Zap,
+  AlertTriangle,
+  Activity,
+  BarChart2,
+  ChevronUp,
+  ChevronDown,
+  Minus,
+  Search,
+  X,
+  Building2,
+  Globe,
+  TrendingUp,
+  CheckCircle2,
 } from "lucide-react";
 import { api } from "@/services/api";
 import * as XLSX from "xlsx";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+type GlobalScope =
+  | "ALL"
+  | "PAID"
+  | "UNPAID"
+  | "OUT_OF_SCOPE"
+  | "UNDEFINED"
+  | "CERTIFIED"
+  | "CONTESTED"
+  | "CREATED";
+
 interface EvoRow {
   period: string;
   invoices: number;
@@ -27,7 +57,7 @@ interface EvoRow {
   nrj: string;
   abonnement: string;
   penalite_prime: string;
-  cosphi: string; // signé: + pénalité, - minoration
+  cosphi: string;
 }
 
 interface TopSite {
@@ -55,6 +85,7 @@ interface CertificationSummary {
   needs_review: number;
   unknown_contract: number;
   fms_unavailable: number;
+  mesure_alert?: number;
   other: number;
   taux_certification: number;
 }
@@ -68,11 +99,47 @@ interface CertificationEvolutionRow {
   needs_review: number;
   unknown_contract: number;
   fms_unavailable: number;
+  mesure_alert?: number;
   other: number;
+}
+
+interface PaymentStatusSummary {
+  total: number;
+  paid: number;
+  unpaid: number;
+  out_of_scope: number;
+  undefined: number;
+  paid_pct: number;
+}
+
+interface PaymentStatusEvolutionRow {
+  period: string;
+  total: number;
+  paid: number;
+  unpaid: number;
+  out_of_scope: number;
+  undefined: number;
+}
+
+interface InvoiceCertificationSummary {
+  total: number;
+  certified: number;
+  contested: number;
+  created: number;
+  taux_certification: number;
+}
+
+interface InvoiceCertificationEvolutionRow {
+  period: string;
+  total: number;
+  certified: number;
+  contested: number;
+  created: number;
 }
 
 interface StatsResponse {
   range: { start: string; end: string };
+  scope?: string;
   evolution: EvoRow[];
   top: {
     conso_vs_montant: TopSite[];
@@ -83,6 +150,14 @@ interface StatsResponse {
   distribution_ht: {
     total_ht: string;
     parts: DistribPart[];
+  };
+  payment_statuses?: {
+    summary: PaymentStatusSummary;
+    evolution: PaymentStatusEvolutionRow[];
+  };
+  invoice_certification?: {
+    summary: InvoiceCertificationSummary;
+    evolution: InvoiceCertificationEvolutionRow[];
   };
   certification?: {
     summary: CertificationSummary;
@@ -102,7 +177,7 @@ const fmt = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 
 const fmtM = (v: string | number) => {
   const val = Number(v);
-  if (isNaN(val)) return "—";
+  if (Number.isNaN(val)) return "—";
   const sign = val < 0 ? "-" : "";
   const abs = Math.abs(val);
   if (abs >= 1_000_000) return `${sign}${fmt.format(Math.round(abs / 1_000_000))} M`;
@@ -118,11 +193,19 @@ function fmtDate(d: Date) {
 
 function defaultRange() {
   const now = new Date();
-  return { start: fmtDate(new Date(now.getFullYear(), 0, 1)), end: fmtDate(now) };
+  return {
+    start: fmtDate(new Date(now.getFullYear(), 0, 1)),
+    end: fmtDate(now),
+  };
 }
 
-async function fetchStats(start: string, end: string, siteCode?: string): Promise<StatsResponse> {
-  const params: Record<string, string> = { start, end };
+async function fetchStats(
+  start: string,
+  end: string,
+  siteCode?: string,
+  scope: GlobalScope = "ALL"
+): Promise<StatsResponse> {
+  const params: Record<string, string> = { start, end, scope };
   if (siteCode) params.site = siteCode;
   const { data } = await api.get("/sonatel-billing/stats/", { params });
   return data;
@@ -141,7 +224,7 @@ async function searchSites(q: string): Promise<SiteOption[]> {
   });
 }
 
-function exportToExcel(data: StatsResponse, siteCode?: string) {
+function exportToExcel(data: StatsResponse, siteCode?: string, scope: GlobalScope = "ALL") {
   const wb = XLSX.utils.book_new();
 
   const evoRows = data.evolution.map((r) => ({
@@ -155,7 +238,16 @@ function exportToExcel(data: StatsResponse, siteCode?: string) {
     "Cos φ (FCFA)": Number(r.cosphi),
   }));
   const ws1 = XLSX.utils.json_to_sheet(evoRows);
-  ws1["!cols"] = [{ wch: 12 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 16 }, { wch: 18 }, { wch: 22 }, { wch: 14 }];
+  ws1["!cols"] = [
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 20 },
+    { wch: 20 },
+    { wch: 16 },
+    { wch: 18 },
+    { wch: 22 },
+    { wch: 14 },
+  ];
   XLSX.utils.book_append_sheet(wb, ws1, "Évolution mensuelle");
 
   const topRows = data.top.conso_vs_montant.map((r) => ({
@@ -179,29 +271,25 @@ function exportToExcel(data: StatsResponse, siteCode?: string) {
   ws3["!cols"] = [{ wch: 20 }, { wch: 20 }, { wch: 10 }];
   XLSX.utils.book_append_sheet(wb, ws3, "Distribution HT");
 
-  if (data.certification) {
-    const ws4 = XLSX.utils.json_to_sheet([data.certification.summary]);
-    XLSX.utils.book_append_sheet(wb, ws4, "Certification résumé");
+  if (data.payment_statuses) {
+    const ws4 = XLSX.utils.json_to_sheet([data.payment_statuses.summary]);
+    XLSX.utils.book_append_sheet(wb, ws4, "Paiement résumé");
+  }
 
-    const certEvoRows = data.certification.evolution.map((r) => ({
-      "Période": r.period,
-      "Total": r.total,
-      "Certifiées": r.certified_total,
-      "Certifiées eFMS": r.certified_fms,
-      "Certifiées Sénélec": r.certified_senelec,
-      "À revoir": r.needs_review,
-      "Contrat inconnu": r.unknown_contract,
-      "FMS indisponible": r.fms_unavailable,
-      "Autres": r.other,
-    }));
-    const ws5 = XLSX.utils.json_to_sheet(certEvoRows);
-    XLSX.utils.book_append_sheet(wb, ws5, "Certification évolution");
+  if (data.invoice_certification) {
+    const ws5 = XLSX.utils.json_to_sheet([data.invoice_certification.summary]);
+    XLSX.utils.book_append_sheet(wb, ws5, "Certif billing résumé");
+  }
+
+  if (data.certification) {
+    const ws6 = XLSX.utils.json_to_sheet([data.certification.summary]);
+    XLSX.utils.book_append_sheet(wb, ws6, "Certification tech résumé");
   }
 
   const start = data.range.start.replace(/-/g, "");
   const end = data.range.end.replace(/-/g, "");
   const suffix = siteCode ? `_${siteCode}` : "";
-  XLSX.writeFile(wb, `suivi_facturation${suffix}_${start}_${end}.xlsx`);
+  XLSX.writeFile(wb, `suivi_facturation_${scope}${suffix}_${start}_${end}.xlsx`);
 }
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -234,6 +322,7 @@ function Trend({ current, previous }: { current: number; previous: number }) {
   const same = Math.abs(pct) < 0.5;
   const color = same ? T.slate : up ? T.red : T.green;
   const Icon = same ? Minus : up ? ChevronUp : ChevronDown;
+
   return (
     <span
       style={{
@@ -256,7 +345,14 @@ function Trend({ current, previous }: { current: number; previous: number }) {
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 function KpiCard({
-  label, value, sub, icon, accent, accentLight, trend, trendPrev,
+  label,
+  value,
+  sub,
+  icon,
+  accent,
+  accentLight,
+  trend,
+  trendPrev,
 }: {
   label: string;
   value: string;
@@ -303,10 +399,9 @@ function KpiCard({
         >
           {icon}
         </div>
-        {trend !== undefined && trendPrev !== undefined && (
-          <Trend current={trend} previous={trendPrev} />
-        )}
+        {trend !== undefined && trendPrev !== undefined && <Trend current={trend} previous={trendPrev} />}
       </div>
+
       <div>
         <div
           style={{
@@ -331,9 +426,7 @@ function KpiCard({
         >
           {value}
         </div>
-        {sub && (
-          <div style={{ fontSize: 11, color: T.textSub, marginTop: 4 }}>{sub}</div>
-        )}
+        {sub && <div style={{ fontSize: 11, color: T.textSub, marginTop: 4 }}>{sub}</div>}
       </div>
     </div>
   );
@@ -399,6 +492,7 @@ function Skeleton({ h }: { h: number }) {
 // ─── Custom Tooltip ───────────────────────────────────────────────────────────
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
+
   return (
     <div
       style={{
@@ -421,6 +515,7 @@ function CustomTooltip({ active, payload, label }: any) {
       >
         {label}
       </div>
+
       {payload.map((p: any, i: number) => (
         <div
           key={i}
@@ -445,7 +540,10 @@ function CustomTooltip({ active, payload, label }: any) {
 
 // ─── Top table ────────────────────────────────────────────────────────────────
 function TopTable({
-  rows, valueKey, color, filterPositive = false,
+  rows,
+  valueKey,
+  color,
+  filterPositive = false,
 }: {
   rows: TopSite[];
   valueKey: keyof TopSite;
@@ -468,9 +566,7 @@ function TopTable({
         }}
       >
         <div style={{ fontSize: 20 }}>✓</div>
-        <div style={{ fontSize: 12, color: T.textSub, fontWeight: 600 }}>
-          Aucune pénalité sur la période
-        </div>
+        <div style={{ fontSize: 12, color: T.textSub, fontWeight: 600 }}>Aucune donnée sur la période</div>
       </div>
     );
   }
@@ -480,6 +576,7 @@ function TopTable({
       {filtered.slice(0, 8).map((r, i) => {
         const val = Number(r[valueKey]) || 0;
         const pct = (Math.abs(val) / max) * 100;
+
         return (
           <div key={`${r.site_id}-${i}`} style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span
@@ -495,6 +592,7 @@ function TopTable({
             >
               {i + 1}
             </span>
+
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                 <span
@@ -510,10 +608,9 @@ function TopTable({
                 >
                   {r.site_id}
                 </span>
-                <span style={{ fontSize: 12, fontWeight: 700, color }}>
-                  {fmtM(val)}
-                </span>
+                <span style={{ fontSize: 12, fontWeight: 700, color }}>{fmtM(val)}</span>
               </div>
+
               <div style={{ height: 4, background: "#F1F5F9", borderRadius: 99, overflow: "hidden" }}>
                 <div
                   style={{
@@ -535,7 +632,9 @@ function TopTable({
 
 // ─── Site Search ──────────────────────────────────────────────────────────────
 function SiteSearchBar({
-  selectedSite, onSelect, onClear,
+  selectedSite,
+  onSelect,
+  onClear,
 }: {
   selectedSite: SiteOption | null;
   onSelect: (site: SiteOption) => void;
@@ -694,11 +793,13 @@ function SiteSearchBar({
               Recherche en cours...
             </div>
           )}
+
           {!isFetching && query.length >= 1 && results.length === 0 && (
             <div style={{ padding: "12px 16px", fontSize: 12, color: T.textSub, textAlign: "center" }}>
               Aucun site trouvé pour « {query} »
             </div>
           )}
+
           {results.map((site, i) => (
             <button
               key={site.id}
@@ -732,6 +833,7 @@ function SiteSearchBar({
               >
                 <Building2 size={13} color={T.blue} />
               </div>
+
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div
                   style={{
@@ -746,9 +848,7 @@ function SiteSearchBar({
                 >
                   {site.site_id}
                 </div>
-                <div style={{ fontSize: 11, color: T.textSub, marginTop: 1 }}>
-                  {site.numero_compte_contrat}
-                </div>
+                <div style={{ fontSize: 11, color: T.textSub, marginTop: 1 }}>{site.numero_compte_contrat}</div>
               </div>
             </button>
           ))}
@@ -760,7 +860,10 @@ function SiteSearchBar({
 
 // ─── Metric pill button ───────────────────────────────────────────────────────
 function MetricBtn({
-  active, color, label, onClick,
+  active,
+  color,
+  label,
+  onClick,
 }: {
   active: boolean;
   color: string;
@@ -789,24 +892,71 @@ function MetricBtn({
   );
 }
 
-// ─── Main page ─────────────────────────────────────────────────────────────────
+// ─── Main page ────────────────────────────────────────────────────────────────
 export default function BillingTrackingPage() {
   const defRange = useMemo(() => defaultRange(), []);
   const [dateStart, setDateStart] = useState(defRange.start);
   const [dateEnd, setDateEnd] = useState(defRange.end);
   const [activeMetric, setActiveMetric] = useState<"ht" | "nrj" | "abonnement" | "penalite" | "cosphi">("ht");
-  const [activeCertMetric, setActiveCertMetric] = useState<"global" | "fms" | "senelec" | "other">("global");
   const [selectedSite, setSelectedSite] = useState<SiteOption | null>(null);
+  const [globalScope, setGlobalScope] = useState<GlobalScope>("ALL");
+
   const siteCode = selectedSite?.site_id ?? undefined;
 
   const q = useQuery({
-    queryKey: ["billing-tracking", dateStart, dateEnd, siteCode],
-    queryFn: () => fetchStats(dateStart, dateEnd, siteCode),
+    queryKey: ["billing-tracking", dateStart, dateEnd, siteCode, globalScope],
+    queryFn: () => fetchStats(dateStart, dateEnd, siteCode, globalScope),
     staleTime: 5 * 60 * 1000,
   });
 
   const data = q.data;
   const isLoading = q.isLoading;
+
+  const scopeMeta: Record<GlobalScope, { label: string; color: string }> = {
+    ALL: { label: "Brut", color: T.blue },
+    PAID: { label: "Payées", color: T.green },
+    UNPAID: { label: "Impayées", color: T.red },
+    OUT_OF_SCOPE: { label: "Hors scope", color: T.orange },
+    UNDEFINED: { label: "Non défini", color: T.slate },
+    CERTIFIED: { label: "Certifiées", color: T.green },
+    CONTESTED: { label: "Contestées", color: T.red },
+    CREATED: { label: "Brutes à traiter", color: T.orange },
+  };
+
+  const paymentChartKey =
+    globalScope === "PAID"
+      ? "paid"
+      : globalScope === "UNPAID"
+      ? "unpaid"
+      : globalScope === "OUT_OF_SCOPE"
+      ? "out_of_scope"
+      : globalScope === "UNDEFINED"
+      ? "undefined"
+      : "total";
+
+  const billingCertChartKey =
+    globalScope === "CERTIFIED"
+      ? "certified"
+      : globalScope === "CONTESTED"
+      ? "contested"
+      : globalScope === "CREATED"
+      ? "created"
+      : "total";
+
+  const paymentChartMeta = {
+    total: { label: "Brut", color: T.blue },
+    paid: { label: "Payées", color: T.green },
+    unpaid: { label: "Impayées", color: T.red },
+    out_of_scope: { label: "Hors scope", color: T.orange },
+    undefined: { label: "Non défini", color: T.slate },
+  } as const;
+
+  const billingCertChartMeta = {
+    total: { label: "Brut", color: T.blue },
+    certified: { label: "Certifiées", color: T.green },
+    contested: { label: "Contestées", color: T.red },
+    created: { label: "Brutes à traiter", color: T.orange },
+  } as const;
 
   const chartData = useMemo(() => {
     if (!data?.evolution) return [];
@@ -825,8 +975,8 @@ export default function BillingTrackingPage() {
 
   const kpis = useMemo(() => {
     if (!chartData.length) return null;
-    const sum = (k: keyof (typeof chartData)[number]) =>
-      chartData.reduce((a, r) => a + (Number(r[k]) || 0), 0);
+
+    const sum = (k: keyof (typeof chartData)[number]) => chartData.reduce((a, r) => a + (Number(r[k]) || 0), 0);
 
     const last = chartData[chartData.length - 1];
     const prev = chartData[chartData.length - 2];
@@ -855,19 +1005,28 @@ export default function BillingTrackingPage() {
     }));
   }, [data]);
 
-  const certData = useMemo(() => {
-    if (!data?.certification?.evolution) return [];
-    return data.certification.evolution.map((r) => ({
+  const paymentData = useMemo(() => {
+    if (!data?.payment_statuses?.evolution) return [];
+    return data.payment_statuses.evolution.map((r) => ({
       period: r.period,
       label: r.period.slice(0, 7),
-      global: r.total,
-      fms: r.certified_fms,
-      senelec: r.certified_senelec,
-      other: r.other,
-      certified_total: r.certified_total,
-      needs_review: r.needs_review,
-      unknown_contract: r.unknown_contract,
-      fms_unavailable: r.fms_unavailable,
+      total: r.total,
+      paid: r.paid,
+      unpaid: r.unpaid,
+      out_of_scope: r.out_of_scope,
+      undefined: r.undefined,
+    }));
+  }, [data]);
+
+  const billingCertData = useMemo(() => {
+    if (!data?.invoice_certification?.evolution) return [];
+    return data.invoice_certification.evolution.map((r) => ({
+      period: r.period,
+      label: r.period.slice(0, 7),
+      total: r.total,
+      certified: r.certified,
+      contested: r.contested,
+      created: r.created,
     }));
   }, [data]);
 
@@ -879,16 +1038,8 @@ export default function BillingTrackingPage() {
     cosphi: { key: "cosphi", label: "Cos φ", color: T.violet },
   } as const;
 
-  const certMetricMap = {
-    global: { key: "global", label: "Global", color: T.blue },
-    fms: { key: "fms", label: "Certifiées eFMS", color: T.green },
-    senelec: { key: "senelec", label: "Certifiées Sénélec", color: T.orange },
-    other: { key: "other", label: "Autres", color: T.red },
-  } as const;
-
   const DISTRIB_COLORS = [T.blue, T.violet, T.red, T.orange];
   const mc = metrics[activeMetric];
-  const cm = certMetricMap[activeCertMetric];
 
   return (
     <>
@@ -944,7 +1095,7 @@ export default function BillingTrackingPage() {
             }}
           />
 
-          <div style={{ padding: "20px 24px" }}>
+          <div style={{ padding: "20px 24px 0" }}>
             <div
               style={{
                 display: "flex",
@@ -981,6 +1132,7 @@ export default function BillingTrackingPage() {
                     Suivi Facturation
                   </span>
                 </div>
+
                 <h1
                   style={{
                     fontFamily: "'Syne', sans-serif",
@@ -994,6 +1146,7 @@ export default function BillingTrackingPage() {
                 >
                   Évolution de la facturation
                 </h1>
+
                 <p
                   style={{
                     fontSize: 13,
@@ -1029,7 +1182,6 @@ export default function BillingTrackingPage() {
                       outline: "none",
                       fontSize: 13,
                       color: T.text,
-                      fontFamily: "'DM Sans', sans-serif",
                     }}
                   />
                   <span style={{ color: T.textSub, fontSize: 11 }}>→</span>
@@ -1043,7 +1195,6 @@ export default function BillingTrackingPage() {
                       outline: "none",
                       fontSize: 13,
                       color: T.text,
-                      fontFamily: "'DM Sans', sans-serif",
                     }}
                   />
                 </div>
@@ -1076,7 +1227,7 @@ export default function BillingTrackingPage() {
 
                 <button
                   disabled={!data}
-                  onClick={() => data && exportToExcel(data, siteCode)}
+                  onClick={() => data && exportToExcel(data, siteCode, globalScope)}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -1091,7 +1242,6 @@ export default function BillingTrackingPage() {
                     cursor: data ? "pointer" : "not-allowed",
                     boxShadow: data ? `0 4px 12px ${T.blue}33` : "none",
                     transition: "all .15s",
-                    fontFamily: "'DM Sans', sans-serif",
                   }}
                 >
                   <Download size={13} />
@@ -1110,6 +1260,7 @@ export default function BillingTrackingPage() {
                 background: selectedSite ? T.blueL : T.slateL,
                 border: `1px solid ${selectedSite ? "rgba(27,63,160,.18)" : T.border}`,
                 transition: "all .2s",
+                marginBottom: 16,
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
@@ -1126,7 +1277,15 @@ export default function BillingTrackingPage() {
                   {selectedSite ? <Building2 size={13} color={T.blue} /> : <Globe size={13} color={T.textSub} />}
                 </div>
                 <div>
-                  <div style={{ fontSize: 9, fontWeight: 700, color: T.textSub, textTransform: "uppercase", letterSpacing: ".1em" }}>
+                  <div
+                    style={{
+                      fontSize: 9,
+                      fontWeight: 700,
+                      color: T.textSub,
+                      textTransform: "uppercase",
+                      letterSpacing: ".1em",
+                    }}
+                  >
                     Vue active
                   </div>
                   <div
@@ -1145,11 +1304,7 @@ export default function BillingTrackingPage() {
               <div style={{ width: 1, height: 28, background: T.border }} />
 
               <div style={{ flex: 1 }}>
-                <SiteSearchBar
-                  selectedSite={selectedSite}
-                  onSelect={setSelectedSite}
-                  onClear={() => setSelectedSite(null)}
-                />
+                <SiteSearchBar selectedSite={selectedSite} onSelect={setSelectedSite} onClear={() => setSelectedSite(null)} />
               </div>
 
               {selectedSite && (
@@ -1168,7 +1323,6 @@ export default function BillingTrackingPage() {
                     fontWeight: 600,
                     color: T.textMid,
                     flexShrink: 0,
-                    fontFamily: "'DM Sans', sans-serif",
                     transition: "all .15s",
                   }}
                 >
@@ -1177,20 +1331,48 @@ export default function BillingTrackingPage() {
               )}
             </div>
           </div>
+
+          <div style={{ padding: "0 24px 20px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: T.textSub,
+                  textTransform: "uppercase",
+                  letterSpacing: ".08em",
+                }}
+              >
+                Filtre global
+              </span>
+
+              {(
+                ["ALL", "PAID", "UNPAID", "OUT_OF_SCOPE", "UNDEFINED", "CERTIFIED", "CONTESTED", "CREATED"] as GlobalScope[]
+              ).map((scope) => (
+                <MetricBtn
+                  key={scope}
+                  active={globalScope === scope}
+                  color={scopeMeta[scope].color}
+                  label={scopeMeta[scope].label}
+                  onClick={() => setGlobalScope(scope)}
+                />
+              ))}
+            </div>
+          </div>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 12 }}>
           {isLoading ? (
-            Array(5).fill(0).map((_, i) => (
-              <div key={i} className="btp-fade btp-skel" style={{ height: 118, borderRadius: 16 }} />
-            ))
+            Array(5)
+              .fill(0)
+              .map((_, i) => <div key={i} className="btp-fade btp-skel" style={{ height: 118, borderRadius: 16 }} />)
           ) : kpis ? (
             <>
               <div className="btp-fade">
                 <KpiCard
                   label="Total HT"
                   value={fmtM(kpis.totalHT)}
-                  sub={`sur ${kpis.moisCount} mois`}
+                  sub={`${scopeMeta[globalScope].label} · sur ${kpis.moisCount} mois`}
                   icon={<DollarSign size={17} />}
                   accent={T.blue}
                   accentLight={T.blueL}
@@ -1203,7 +1385,7 @@ export default function BillingTrackingPage() {
                 <KpiCard
                   label="Total NRJ"
                   value={fmtM(kpis.totalNrj)}
-                  sub="Énergie facturée"
+                  sub={scopeMeta[globalScope].label}
                   icon={<Zap size={17} />}
                   accent={T.orange}
                   accentLight={T.orangeL}
@@ -1214,7 +1396,7 @@ export default function BillingTrackingPage() {
                 <KpiCard
                   label="Total Pénalités"
                   value={fmtM(kpis.totalPenalite)}
-                  sub="Dépassement puissance souscrite"
+                  sub={scopeMeta[globalScope].label}
                   icon={<AlertTriangle size={17} />}
                   accent={T.red}
                   accentLight={T.redL}
@@ -1238,7 +1420,7 @@ export default function BillingTrackingPage() {
                 <KpiCard
                   label="Total Abonnement"
                   value={fmtM(kpis.totalAbonnement)}
-                  sub="Prime fixe + redevance + TCO"
+                  sub={scopeMeta[globalScope].label}
                   icon={<BarChart2 size={17} />}
                   accent={T.cyan}
                   accentLight={T.cyanL}
@@ -1246,6 +1428,179 @@ export default function BillingTrackingPage() {
               </div>
             </>
           ) : null}
+        </div>
+
+        <div className="btp-fade" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Card>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 18,
+                flexWrap: "wrap",
+                gap: 10,
+              }}
+            >
+              <SectionTitle icon={<CheckCircle2 size={13} />}>Statuts de paiement</SectionTitle>
+
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <MetricBtn active={globalScope === "ALL"} color={T.blue} label="Brut" onClick={() => setGlobalScope("ALL")} />
+                <MetricBtn active={globalScope === "PAID"} color={T.green} label="Payées" onClick={() => setGlobalScope("PAID")} />
+                <MetricBtn active={globalScope === "UNPAID"} color={T.red} label="Impayées" onClick={() => setGlobalScope("UNPAID")} />
+                <MetricBtn
+                  active={globalScope === "OUT_OF_SCOPE"}
+                  color={T.orange}
+                  label="Hors scope"
+                  onClick={() => setGlobalScope("OUT_OF_SCOPE")}
+                />
+                <MetricBtn
+                  active={globalScope === "UNDEFINED"}
+                  color={T.slate}
+                  label="Non défini"
+                  onClick={() => setGlobalScope("UNDEFINED")}
+                />
+              </div>
+            </div>
+
+            {isLoading ? (
+              <Skeleton h={240} />
+            ) : data?.payment_statuses ? (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0,1fr))", gap: 10, marginBottom: 16 }}>
+                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.blueL, border: `1px solid ${T.border}` }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: T.blue }}>{fmt.format(data.payment_statuses.summary.total)}</div>
+                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Brut</div>
+                  </div>
+                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.greenL, border: `1px solid ${T.border}` }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: T.green }}>{fmt.format(data.payment_statuses.summary.paid)}</div>
+                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Payées</div>
+                  </div>
+                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.redL, border: `1px solid ${T.border}` }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: T.red }}>{fmt.format(data.payment_statuses.summary.unpaid)}</div>
+                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Impayées</div>
+                  </div>
+                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.orangeL, border: `1px solid ${T.border}` }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: T.orange }}>{fmt.format(data.payment_statuses.summary.out_of_scope)}</div>
+                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Hors scope</div>
+                  </div>
+                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.slateL, border: `1px solid ${T.border}` }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: T.slate }}>{fmt.format(data.payment_statuses.summary.undefined)}</div>
+                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Non défini</div>
+                  </div>
+                </div>
+
+                <div style={{ fontSize: 12, color: T.textMid, fontWeight: 600, marginBottom: 10 }}>
+                  Taux payé : <span style={{ color: T.green, fontWeight: 800 }}>{data.payment_statuses.summary.paid_pct}%</span>
+                </div>
+
+                <ResponsiveContainer width="100%" height={170}>
+                  <BarChart data={paymentData} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} width={38} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar
+                      dataKey={paymentChartKey}
+                      name={paymentChartMeta[paymentChartKey].label}
+                      fill={paymentChartMeta[paymentChartKey].color}
+                      radius={[6, 6, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </>
+            ) : (
+              <div style={{ color: T.textSub, fontSize: 12.5, textAlign: "center", padding: "24px 0" }}>
+                Aucune donnée de paiement disponible
+              </div>
+            )}
+          </Card>
+
+          <Card>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 18,
+                flexWrap: "wrap",
+                gap: 10,
+              }}
+            >
+              <SectionTitle icon={<CheckCircle2 size={13} />}>Statuts de certification billing</SectionTitle>
+
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <MetricBtn active={globalScope === "ALL"} color={T.blue} label="Brut" onClick={() => setGlobalScope("ALL")} />
+                <MetricBtn
+                  active={globalScope === "CERTIFIED"}
+                  color={T.green}
+                  label="Certifiées"
+                  onClick={() => setGlobalScope("CERTIFIED")}
+                />
+                <MetricBtn
+                  active={globalScope === "CONTESTED"}
+                  color={T.red}
+                  label="Contestées"
+                  onClick={() => setGlobalScope("CONTESTED")}
+                />
+                <MetricBtn
+                  active={globalScope === "CREATED"}
+                  color={T.orange}
+                  label="Brutes à traiter"
+                  onClick={() => setGlobalScope("CREATED")}
+                />
+              </div>
+            </div>
+
+            {isLoading ? (
+              <Skeleton h={240} />
+            ) : data?.invoice_certification ? (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 10, marginBottom: 16 }}>
+                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.blueL, border: `1px solid ${T.border}` }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: T.blue }}>{fmt.format(data.invoice_certification.summary.total)}</div>
+                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Brut</div>
+                  </div>
+                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.greenL, border: `1px solid ${T.border}` }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: T.green }}>{fmt.format(data.invoice_certification.summary.certified)}</div>
+                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Certifiées</div>
+                  </div>
+                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.redL, border: `1px solid ${T.border}` }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: T.red }}>{fmt.format(data.invoice_certification.summary.contested)}</div>
+                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Contestées</div>
+                  </div>
+                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.orangeL, border: `1px solid ${T.border}` }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: T.orange }}>{fmt.format(data.invoice_certification.summary.created)}</div>
+                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Brutes à traiter</div>
+                  </div>
+                </div>
+
+                <div style={{ fontSize: 12, color: T.textMid, fontWeight: 600, marginBottom: 10 }}>
+                  Règle : <span style={{ color: T.green, fontWeight: 800 }}>Payée = Certifiée</span> · Taux de certification :
+                  <span style={{ color: T.blue, fontWeight: 800 }}> {data.invoice_certification.summary.taux_certification}%</span>
+                </div>
+
+                <ResponsiveContainer width="100%" height={170}>
+                  <BarChart data={billingCertData} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} width={38} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar
+                      dataKey={billingCertChartKey}
+                      name={billingCertChartMeta[billingCertChartKey].label}
+                      fill={billingCertChartMeta[billingCertChartKey].color}
+                      radius={[6, 6, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </>
+            ) : (
+              <div style={{ color: T.textSub, fontSize: 12.5, textAlign: "center", padding: "24px 0" }}>
+                Aucune donnée de certification billing disponible
+              </div>
+            )}
+          </Card>
         </div>
 
         <div className="btp-fade" style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 12 }}>
@@ -1261,6 +1616,7 @@ export default function BillingTrackingPage() {
               }}
             >
               <SectionTitle icon={<BarChart2 size={13} />}>Évolution mensuelle</SectionTitle>
+
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {(Object.keys(metrics) as Array<keyof typeof metrics>).map((k) => (
                   <MetricBtn
@@ -1286,8 +1642,14 @@ export default function BillingTrackingPage() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: T.textSub, fontFamily: "'DM Sans'" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: T.textSub, fontFamily: "'DM Sans'" }} axisLine={false} tickLine={false} tickFormatter={(v) => fmtM(v)} width={52} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: T.textSub }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v) => fmtM(v)}
+                    width={52}
+                  />
                   <ReferenceLine y={0} stroke="#CBD5E1" strokeDasharray="4 4" />
                   <Tooltip content={<CustomTooltip />} />
                   <Area
@@ -1307,6 +1669,7 @@ export default function BillingTrackingPage() {
 
           <Card>
             <SectionTitle icon={<BarChart2 size={13} />}>Répartition HT</SectionTitle>
+
             {isLoading ? (
               <Skeleton h={260} />
             ) : (
@@ -1324,7 +1687,7 @@ export default function BillingTrackingPage() {
                     {fmtM(data?.distribution_ht.total_ht ?? "0")}
                   </div>
                   <div style={{ fontSize: 11, color: T.textSub, fontWeight: 500, marginTop: 3 }}>
-                    FCFA total HT
+                    FCFA total HT · {scopeMeta[globalScope].label}
                   </div>
                 </div>
 
@@ -1342,6 +1705,7 @@ export default function BillingTrackingPage() {
                         </span>
                       </div>
                     </div>
+
                     <div style={{ height: 5, background: "#F1F5F9", borderRadius: 99, overflow: "hidden" }}>
                       <div
                         style={{
@@ -1360,33 +1724,10 @@ export default function BillingTrackingPage() {
           </Card>
         </div>
 
-        <div className="btp-fade">
-          <Card>
-            <SectionTitle icon={<BarChart2 size={13} />}>Décomposition mensuelle du HT</SectionTitle>
-            {isLoading ? (
-              <Skeleton h={220} />
-            ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={chartData} margin={{ top: 5, right: 8, left: 8, bottom: 0 }} barSize={22}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} tickFormatter={(v) => fmtM(v)} width={52} />
-                  <ReferenceLine y={0} stroke="#CBD5E1" strokeDasharray="4 4" />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 12, fontFamily: "'DM Sans'", paddingTop: 10 }} iconType="circle" iconSize={7} />
-                  <Bar dataKey="nrj" name="NRJ" stackId="a" fill={T.blue} radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="abonnement" name="Abonnement" stackId="a" fill={T.cyan} radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="cosphi" name="Cos φ" stackId="a" fill={T.violet} radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="penalite" name="Pénalité" stackId="a" fill={T.red} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-        </div>
-
         <div className="btp-fade" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Card>
             <SectionTitle icon={<Activity size={13} />}>Nombre de factures par mois</SectionTitle>
+
             {isLoading ? (
               <Skeleton h={150} />
             ) : (
@@ -1411,77 +1752,38 @@ export default function BillingTrackingPage() {
           </Card>
 
           <Card>
+            <SectionTitle icon={<CheckCircle2 size={13} />}>Vue appliquée</SectionTitle>
+
             <div
               style={{
+                minHeight: 150,
                 display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: 18,
-                flexWrap: "wrap",
+                flexDirection: "column",
+                justifyContent: "center",
                 gap: 10,
               }}
             >
-              <SectionTitle icon={<CheckCircle2 size={13} />}>Certification des factures</SectionTitle>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {(Object.keys(certMetricMap) as Array<keyof typeof certMetricMap>).map((k) => (
-                  <MetricBtn
-                    key={k}
-                    active={activeCertMetric === k}
-                    color={certMetricMap[k].color}
-                    label={certMetricMap[k].label}
-                    onClick={() => setActiveCertMetric(k)}
-                  />
-                ))}
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  width: "fit-content",
+                  padding: "8px 14px",
+                  borderRadius: 999,
+                  background: scopeMeta[globalScope].color,
+                  color: "white",
+                  fontWeight: 700,
+                  fontSize: 13,
+                }}
+              >
+                {scopeMeta[globalScope].label}
+              </div>
+
+              <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>
+                Toutes les statistiques principales du dashboard sont recalculées sur ce filtre global.
               </div>
             </div>
-
-            {isLoading ? (
-              <Skeleton h={240} />
-            ) : data?.certification ? (
-              <>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 10, marginBottom: 16 }}>
-                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.blueL, border: `1px solid ${T.border}` }}>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: T.blue }}>{fmt.format(data.certification.summary.total)}</div>
-                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Global</div>
-                  </div>
-                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.greenL, border: `1px solid ${T.border}` }}>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: T.green }}>{fmt.format(data.certification.summary.certified_fms)}</div>
-                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>eFMS</div>
-                  </div>
-                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.orangeL, border: `1px solid ${T.border}` }}>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: T.orange }}>{fmt.format(data.certification.summary.certified_senelec)}</div>
-                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Sénélec</div>
-                  </div>
-                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.redL, border: `1px solid ${T.border}` }}>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: T.red }}>{fmt.format(data.certification.summary.other)}</div>
-                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Autres</div>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                  <div style={{ fontSize: 12, color: T.textMid, fontWeight: 600 }}>
-                    Taux de certification : <span style={{ color: T.blue, fontWeight: 800 }}>{data.certification.summary.taux_certification}%</span>
-                  </div>
-                  <div style={{ fontSize: 11, color: T.textSub }}>
-                    Review {fmt.format(data.certification.summary.needs_review)} · Unknown {fmt.format(data.certification.summary.unknown_contract)} · FMS indispo {fmt.format(data.certification.summary.fms_unavailable)}
-                  </div>
-                </div>
-
-                <ResponsiveContainer width="100%" height={170}>
-                  <BarChart data={certData} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} width={38} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey={cm.key} name={cm.label} fill={cm.color} radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </>
-            ) : (
-              <div style={{ color: T.textSub, fontSize: 12.5, textAlign: "center", padding: "24px 0" }}>
-                Aucune donnée de certification disponible
-              </div>
-            )}
           </Card>
         </div>
 
@@ -1519,9 +1821,10 @@ export default function BillingTrackingPage() {
                     flexShrink: 0,
                   }}
                 >
-                  Pénalités uniquement
+                  Positifs uniquement
                 </span>
               </div>
+
               {isLoading ? (
                 <Skeleton h={180} />
               ) : (
