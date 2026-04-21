@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import {
   X, BarChart3, TableProperties, TrendingUp, TrendingDown,
   Zap, Sun, Activity, AlertTriangle, CheckCircle2, XCircle,
-  Info,
 } from "lucide-react";
 import { api } from "@/services/api";
 
@@ -28,19 +27,21 @@ const C = {
 // ═══════════════════════════════════════════════════════════════════
 
 type ConsoRow = {
-  period:         string;
-  month:          number;
-  conso_facturee: string | null;
-  conso_fms:      string | null;
-  conso_acm:      string | null;
-  conso_target:   string | null;
-  solar_kwh:      number | null;
-  unavail_hours:  number | null;
-  fms_available:  boolean;
-  acm_available:  boolean;
-  ratio_fms:      string | null;
-  nb_jours:       number | null;
-  cible_kwh_j:    string | null;
+  period:           string;
+  month:            number;
+  conso_facturee:   string | null;
+  montant_htva:     string | null;    // ← NEW : montant total HT (FCFA)
+  conso_fms:        string | null;
+  conso_acm:        string | null;
+  conso_target:     string | null;
+  solar_kwh:        number | null;
+  solar_target_kwh: string | null;    // ← NEW : target solaire (kWh)
+  unavail_hours:    number | null;
+  fms_available:    boolean;
+  acm_available:    boolean;
+  ratio_fms:        string | null;
+  nb_jours:         number | null;
+  cible_kwh_j:      string | null;
 };
 
 type MargeRow = {
@@ -124,7 +125,6 @@ function calcDelta(a: string | null, b: string | null): number | null {
   return ((fa - fb) / fb) * 100;
 }
 
-// ── Agrégats conso ──────────────────────────────────────────────────
 function sumKwh(rows: ConsoRow[], key: keyof ConsoRow): number | null {
   let total = 0, hasAny = false;
   for (const r of rows) {
@@ -153,13 +153,8 @@ function KpiCard({ label, value, sub, color, icon }: {
 }) {
   return (
     <div style={{
-      background:"#fff",
-      borderRadius:10,
-      padding:"11px 13px",
-      border:`1px solid ${C.slate[200]}`,
-      position:"relative",
-      overflow:"hidden",
-      minWidth:0,
+      background:"#fff", borderRadius:10, padding:"11px 13px",
+      border:`1px solid ${C.slate[200]}`, position:"relative", overflow:"hidden", minWidth:0,
     }}>
       <div style={{ position:"absolute", top:0, left:0, right:0, height:2, background:color }} />
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:4 }}>
@@ -168,19 +163,6 @@ function KpiCard({ label, value, sub, color, icon }: {
       </div>
       <div style={{ fontSize:15, fontWeight:700, color:C.navy[800], fontFamily:"'JetBrains Mono',monospace", wordBreak:"break-all" }}>{value}</div>
       {sub && <div style={{ fontSize:10, color:C.slate[500], marginTop:2 }}>{sub}</div>}
-    </div>
-  );
-}
-
-// ── Section label ────────────────────────────────────────────────────────────
-function CardSectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{
-      fontSize:9, fontWeight:800, color:C.slate[400],
-      textTransform:"uppercase", letterSpacing:"0.12em",
-      marginBottom:4, paddingLeft:2,
-    }}>
-      {children}
     </div>
   );
 }
@@ -205,11 +187,9 @@ function StatutBadge({ statut }: { statut: string | null }) {
   const ok = statut === "OK";
   return (
     <span style={{
-      display:"inline-flex", alignItems:"center", gap:4,
-      padding:"4px 10px", borderRadius:6,
+      display:"inline-flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:6,
       background: ok ? C.success.light : C.danger.light,
-      color: ok ? C.success.dark : C.danger.dark,
-      fontSize:11, fontWeight:700,
+      color: ok ? C.success.dark : C.danger.dark, fontSize:11, fontWeight:700,
     }}>
       {ok ? <CheckCircle2 style={{width:11,height:11}}/> : <XCircle style={{width:11,height:11}}/>}
       {statut}
@@ -222,8 +202,7 @@ function RecurrBadge({ type }: { type: string | null }) {
   const crit = type === "critique";
   return (
     <span style={{
-      display:"inline-flex", alignItems:"center", gap:4,
-      padding:"3px 8px", borderRadius:6,
+      display:"inline-flex", alignItems:"center", gap:4, padding:"3px 8px", borderRadius:6,
       background: crit ? C.danger.light : C.warning.light,
       color: crit ? C.danger.dark : C.warning.dark,
       fontSize:10, fontWeight:700, textTransform:"uppercase",
@@ -234,7 +213,9 @@ function RecurrBadge({ type }: { type: string | null }) {
   );
 }
 
-function MiniBar({ value, maxVal, color, width = 60 }: { value:number|null; maxVal:number; color:string; width?:number }) {
+function MiniBar({ value, maxVal, color, width = 60 }: {
+  value:number|null; maxVal:number; color:string; width?:number;
+}) {
   const pct = value && maxVal > 0 ? Math.min((value / maxVal) * 100, 100) : 0;
   return (
     <div style={{ display:"flex", alignItems:"center", gap:6 }}>
@@ -245,14 +226,13 @@ function MiniBar({ value, maxVal, color, width = 60 }: { value:number|null; maxV
   );
 }
 
-// ── Bar chart SVG ────────────────────────────────────────────────────────────
+// ── Bar chart ─────────────────────────────────────────────────────────────────
 function ConsoBarChart({ rows }: { rows: ConsoRow[] }) {
   if (!rows.length) return null;
-
   const CHART_W = 720, CHART_H = 260;
-  const PADDING = { top:24, right:16, bottom:48, left:60 };
-  const inner_w = CHART_W - PADDING.left - PADDING.right;
-  const inner_h = CHART_H - PADDING.top  - PADDING.bottom;
+  const PAD = { top:24, right:16, bottom:48, left:60 };
+  const iw = CHART_W - PAD.left - PAD.right;
+  const ih = CHART_H - PAD.top  - PAD.bottom;
 
   const parsed = rows.map(r => ({
     label:   MONTHS_FR[(r.month || 1) - 1],
@@ -264,12 +244,12 @@ function ConsoBarChart({ rows }: { rows: ConsoRow[] }) {
 
   const allVals = parsed.flatMap(d => [d.facture, d.fms, d.target]).filter((v): v is number => v !== null);
   const maxVal  = allVals.length ? Math.max(...allVals) * 1.1 : 1;
-  const BAR_GROUPS = 4;
-  const groupW = inner_w / parsed.length;
-  const barW   = Math.min(groupW / (BAR_GROUPS + 1), 18);
-  const barGap = (groupW - barW * BAR_GROUPS) / (BAR_GROUPS + 1);
-  const toY = (v: number | null) => v === null ? null : PADDING.top + inner_h - (v / maxVal) * inner_h;
-  const ticks = 5;
+  const N_SERIES = 4;
+  const groupW = iw / parsed.length;
+  const barW   = Math.min(groupW / (N_SERIES + 1), 18);
+  const barGap = (groupW - barW * N_SERIES) / (N_SERIES + 1);
+  const toY    = (v: number | null) => v === null ? null : PAD.top + ih - (v / maxVal) * ih;
+  const ticks  = 5;
 
   const SERIES = [
     { key:"facture", label:"Facturée", color:C.navy[500] },
@@ -282,28 +262,27 @@ function ConsoBarChart({ rows }: { rows: ConsoRow[] }) {
     <div style={{ overflowX:"auto" }}>
       <svg width={CHART_W} height={CHART_H} style={{ fontFamily:"inherit", display:"block" }}>
         {Array.from({ length: ticks + 1 }, (_, i) => {
-          const y = PADDING.top + (i / ticks) * inner_h;
+          const y = PAD.top + (i / ticks) * ih;
           const val = maxVal - (i / ticks) * maxVal;
           return (
             <g key={i}>
-              <line x1={PADDING.left} y1={y} x2={CHART_W - PADDING.right} y2={y}
+              <line x1={PAD.left} y1={y} x2={CHART_W - PAD.right} y2={y}
                 stroke={C.slate[200]} strokeWidth={1} strokeDasharray={i === ticks ? "none" : "4,3"} />
-              <text x={PADDING.left - 6} y={y + 4} textAnchor="end" fontSize={9} fill={C.slate[400]}>
+              <text x={PAD.left - 6} y={y + 4} textAnchor="end" fontSize={9} fill={C.slate[400]}>
                 {val >= 1000 ? `${(val/1000).toFixed(0)}k` : val.toFixed(0)}
               </text>
             </g>
           );
         })}
-
         {parsed.map((d, gi) => {
-          const groupX = PADDING.left + gi * groupW;
+          const gx = PAD.left + gi * groupW;
           return (
             <g key={gi}>
               {SERIES.map((s, si) => {
                 const val  = (d as Record<string, number | null>)[s.key];
                 const y    = toY(val);
-                const x    = groupX + barGap + si * (barW + barGap / 2);
-                const barH = val !== null && y !== null ? inner_h - (y - PADDING.top) : 0;
+                const x    = gx + barGap + si * (barW + barGap / 2);
+                const barH = val !== null && y !== null ? ih - (y - PAD.top) : 0;
                 return y !== null ? (
                   <g key={s.key}>
                     <rect x={x} y={y} width={barW} height={barH} rx={3} fill={s.color} opacity={0.85} />
@@ -315,18 +294,16 @@ function ConsoBarChart({ rows }: { rows: ConsoRow[] }) {
                   </g>
                 ) : null;
               })}
-              <text x={groupX + groupW / 2} y={CHART_H - PADDING.bottom + 14}
+              <text x={gx + groupW / 2} y={CHART_H - PAD.bottom + 14}
                 textAnchor="middle" fontSize={10} fill={C.slate[600]} fontWeight={600}>
                 {d.label}
               </text>
             </g>
           );
         })}
-
-        <text transform={`translate(12, ${PADDING.top + inner_h / 2}) rotate(-90)`}
+        <text transform={`translate(12, ${PAD.top + ih / 2}) rotate(-90)`}
           textAnchor="middle" fontSize={9} fill={C.slate[400]}>kWh</text>
       </svg>
-
       <div style={{ display:"flex", gap:16, justifyContent:"center", marginTop:8 }}>
         {SERIES.map(s => (
           <div key={s.key} style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:C.slate[600] }}>
@@ -339,90 +316,188 @@ function ConsoBarChart({ rows }: { rows: ConsoRow[] }) {
   );
 }
 
-// ── Table conso ──────────────────────────────────────────────────────────────
+// ── Table conso (UPDATED) ─────────────────────────────────────────────────────
 function ConsoTable({ consoRows, margeRows }: { consoRows:ConsoRow[]; margeRows:MargeRow[] }) {
   const mergeByMonth = (month: number) => margeRows.find(r => r.month === month);
+
   if (!consoRows.length) return (
     <div style={{ padding:"48px 24px", textAlign:"center", color:C.slate[400] }}>
       Aucune donnée de consommation disponible pour cette période.
     </div>
   );
 
-  const allFacture = consoRows.map(r => r.conso_facturee ? parseFloat(r.conso_facturee) : null).filter(Boolean) as number[];
+  const allFacture = consoRows
+    .map(r => r.conso_facturee ? parseFloat(r.conso_facturee) : null)
+    .filter(Boolean) as number[];
   const maxFacture = allFacture.length ? Math.max(...allFacture) : 1;
+
+  const TH = (label: string) => (
+    <th key={label} style={{
+      padding:"10px 12px", textAlign:"left", fontSize:9, fontWeight:700,
+      color:C.slate[500], textTransform:"uppercase", letterSpacing:"0.1em",
+      borderBottom:`1px solid ${C.slate[200]}`, whiteSpace:"nowrap",
+    }}>
+      {label}
+    </th>
+  );
 
   return (
     <div style={{ overflowX:"auto" }}>
       <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
         <thead>
           <tr style={{ background:C.slate[50] }}>
-            {["Mois","Jours","Conso Facturée","Conso FMS/ACM","Δ FMS/Fact","Conso Target","Δ Fact/Target","Solar kWh","Indispo (h)","Marge","Statut"].map(h => (
-              <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:9, fontWeight:700, color:C.slate[500], textTransform:"uppercase", letterSpacing:"0.1em", borderBottom:`1px solid ${C.slate[200]}`, whiteSpace:"nowrap" }}>
-                {h}
-              </th>
-            ))}
+            {[
+              "Mois", "Jours",
+              "Conso Facturée", "Coût /kWh",
+              "Conso FMS/ACM", "Δ Fact/FMS",
+              "Conso Target", "Δ Fact/Target",
+              "Solar kWh", "Target Sol.", "Δ Sol/Cible",
+              "Indispo (h)", "Marge", "Statut",
+            ].map(TH)}
           </tr>
         </thead>
         <tbody>
           {consoRows.map((r, i) => {
-            const marge    = mergeByMonth(r.month);
-            const fmsVal   = r.conso_fms || r.conso_acm;
-            const deltaFms = calcDelta(fmsVal, r.conso_facturee);
-            const deltaTgt = calcDelta(r.conso_facturee, r.conso_target);
-            const factN    = r.conso_facturee ? parseFloat(r.conso_facturee) : null;
-            const isNOK    = marge?.marge_statut === "NOK";
+            const marge      = mergeByMonth(r.month);
+            const fmsVal     = r.conso_fms || r.conso_acm;
+
+            // Δ Fact/FMS : positif = Sénélec facture plus que FMS mesure
+            const deltaFms   = calcDelta(r.conso_facturee, fmsVal);
+            const deltaTgt   = calcDelta(r.conso_facturee, r.conso_target);
+
+            const factN      = r.conso_facturee      ? parseFloat(r.conso_facturee)      : null;
+            const htvaT      = r.montant_htva         ? parseFloat(r.montant_htva)         : null;
+            const coutNrj    = factN && htvaT && factN > 0 ? htvaT / factN : null;
+
+            const solarAct   = typeof r.solar_kwh === "number" ? r.solar_kwh : null;
+            const solarTgt   = r.solar_target_kwh    ? parseFloat(r.solar_target_kwh)    : null;
+            const deltaSolar = solarAct !== null && solarTgt !== null && solarTgt > 0
+              ? ((solarAct - solarTgt) / solarTgt) * 100 : null;
+
+            const isNOK      = marge?.marge_statut === "NOK";
 
             return (
-              <tr key={r.period} style={{ borderBottom:`1px solid ${C.slate[100]}`, background: isNOK ? `${C.danger.light}60` : i % 2 === 0 ? "#fff" : C.slate[50] }}>
-                <td style={{ padding:"12px 14px", fontWeight:700, color:C.navy[800], whiteSpace:"nowrap" }}>
+              <tr key={r.period} style={{
+                borderBottom:`1px solid ${C.slate[100]}`,
+                background: isNOK ? `${C.danger.light}60` : i % 2 === 0 ? "#fff" : C.slate[50],
+              }}>
+
+                {/* Mois */}
+                <td style={{ padding:"12px 12px", fontWeight:700, color:C.navy[800], whiteSpace:"nowrap" }}>
                   <div style={{ fontFamily:"'JetBrains Mono',monospace" }}>{r.period}</div>
                   {marge?.recurrence_type && <div style={{ marginTop:3 }}><RecurrBadge type={marge.recurrence_type} /></div>}
                 </td>
-                <td style={{ padding:"12px 14px", color:C.slate[500], textAlign:"center" }}>{r.nb_jours ?? "—"}</td>
-                <td style={{ padding:"12px 14px" }}>
-                  <div style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:600, color:C.navy[700] }}>{fmtKwh(r.conso_facturee)}</div>
+
+                {/* Jours */}
+                <td style={{ padding:"12px 12px", color:C.slate[500], textAlign:"center" }}>
+                  {r.nb_jours ?? "—"}
+                </td>
+
+                {/* Conso Facturée */}
+                <td style={{ padding:"12px 12px" }}>
+                  <div style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:600, color:C.navy[700] }}>
+                    {fmtKwh(r.conso_facturee)}
+                  </div>
                   {factN !== null && <MiniBar value={factN} maxVal={maxFacture} color={C.navy[400]} />}
                 </td>
-                <td style={{ padding:"12px 14px" }}>
+
+                {/* Coût NRJ */}
+                <td style={{ padding:"12px 12px" }}>
+                  {coutNrj !== null ? (
+                    <div>
+                      <div style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:C.navy[600] }}>
+                        {fmt(coutNrj, 0)} F
+                      </div>
+                      <div style={{ fontSize:10, color:C.slate[400], marginTop:1 }}>/kWh</div>
+                    </div>
+                  ) : <span style={{ color:C.slate[300], fontSize:11 }}>—</span>}
+                </td>
+
+                {/* Conso FMS/ACM */}
+                <td style={{ padding:"12px 12px" }}>
                   {fmsVal ? (
                     <div>
-                      <div style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:600, color:C.info.main }}>{fmtKwh(fmsVal)}</div>
+                      <div style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:600, color:C.info.main }}>
+                        {fmtKwh(fmsVal)}
+                      </div>
                       <div style={{ fontSize:10, color:C.slate[400], marginTop:2 }}>
                         {r.conso_fms ? "FMS/Grid" : "ACM"}
-                        {!r.fms_available && !r.acm_available && <span style={{ color:C.warning.main }}> · indispo</span>}
+                        {!r.fms_available && !r.acm_available && (
+                          <span style={{ color:C.warning.main }}> · indispo</span>
+                        )}
                       </div>
                     </div>
                   ) : <span style={{ color:C.slate[300], fontSize:11 }}>indisponible</span>}
                 </td>
-                <td style={{ padding:"12px 14px" }}><DeltaBadge delta={deltaFms} /></td>
-                <td style={{ padding:"12px 14px" }}>
+
+                {/* Δ Fact/FMS */}
+                <td style={{ padding:"12px 12px" }}><DeltaBadge delta={deltaFms} /></td>
+
+                {/* Conso Target */}
+                <td style={{ padding:"12px 12px" }}>
                   {r.conso_target ? (
                     <div>
-                      <div style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:600, color:C.success.main }}>{fmtKwh(r.conso_target)}</div>
-                      {r.cible_kwh_j && <div style={{ fontSize:10, color:C.slate[400], marginTop:2 }}>{fmt(r.cible_kwh_j, 3)} kWh/j × {r.nb_jours}j</div>}
+                      <div style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:600, color:C.success.main }}>
+                        {fmtKwh(r.conso_target)}
+                      </div>
+                      {r.cible_kwh_j && (
+                        <div style={{ fontSize:10, color:C.slate[400], marginTop:2 }}>
+                          {fmt(r.cible_kwh_j, 3)} kWh/j × {r.nb_jours}j
+                        </div>
+                      )}
                     </div>
                   ) : <span style={{ color:C.slate[300], fontSize:11 }}>—</span>}
                 </td>
-                <td style={{ padding:"12px 14px" }}><DeltaBadge delta={deltaTgt} /></td>
-                <td style={{ padding:"12px 14px" }}>
-                  {r.solar_kwh !== null && r.solar_kwh !== undefined ? (
-                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+
+                {/* Δ Fact/Target */}
+                <td style={{ padding:"12px 12px" }}><DeltaBadge delta={deltaTgt} /></td>
+
+                {/* Solar kWh */}
+                <td style={{ padding:"12px 12px" }}>
+                  {solarAct !== null ? (
+                    <div style={{ display:"flex", alignItems:"center", gap:5 }}>
                       <Sun style={{ width:12, height:12, color:C.solar.main }} />
-                      <span style={{ fontFamily:"'JetBrains Mono',monospace", color:C.solar.dark, fontWeight:600 }}>{fmtKwh(r.solar_kwh)}</span>
+                      <span style={{ fontFamily:"'JetBrains Mono',monospace", color:C.solar.dark, fontWeight:600 }}>
+                        {fmtKwh(solarAct)}
+                      </span>
                     </div>
                   ) : <span style={{ color:C.slate[300], fontSize:11 }}>—</span>}
                 </td>
-                <td style={{ padding:"12px 14px", color:C.slate[500], fontFamily:"'JetBrains Mono',monospace" }}>
-                  {r.unavail_hours !== null && r.unavail_hours !== undefined ? `${fmt(r.unavail_hours, 1)} h` : "—"}
+
+                {/* Target Solaire */}
+                <td style={{ padding:"12px 12px" }}>
+                  {solarTgt !== null ? (
+                    <div style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:600, color:C.solar.main }}>
+                      {fmtKwh(solarTgt)}
+                    </div>
+                  ) : <span style={{ color:C.slate[300], fontSize:11 }}>—</span>}
                 </td>
-                <td style={{ padding:"12px 14px" }}>
+
+                {/* Δ Sol/Cible */}
+                <td style={{ padding:"12px 12px" }}><DeltaBadge delta={deltaSolar} /></td>
+
+                {/* Indispo */}
+                <td style={{ padding:"12px 12px", color:C.slate[500], fontFamily:"'JetBrains Mono',monospace" }}>
+                  {r.unavail_hours !== null && r.unavail_hours !== undefined
+                    ? `${fmt(r.unavail_hours, 1)} h` : "—"}
+                </td>
+
+                {/* Marge */}
+                <td style={{ padding:"12px 12px" }}>
                   {marge?.marge ? (
-                    <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color: parseFloat(marge.marge) >= 0 ? C.success.main : C.danger.main }}>
+                    <span style={{
+                      fontFamily:"'JetBrains Mono',monospace", fontWeight:700,
+                      color: parseFloat(marge.marge) >= 0 ? C.success.main : C.danger.main,
+                    }}>
                       {fmtMoney(marge.marge)}
                     </span>
                   ) : <span style={{ color:C.slate[300] }}>—</span>}
                 </td>
-                <td style={{ padding:"12px 14px" }}><StatutBadge statut={marge?.marge_statut ?? null} /></td>
+
+                {/* Statut */}
+                <td style={{ padding:"12px 12px" }}>
+                  <StatutBadge statut={marge?.marge_statut ?? null} />
+                </td>
               </tr>
             );
           })}
@@ -432,7 +507,7 @@ function ConsoTable({ consoRows, margeRows }: { consoRows:ConsoRow[]; margeRows:
   );
 }
 
-// ── Diagnostics ──────────────────────────────────────────────────────────────
+// ── Diagnostics ───────────────────────────────────────────────────────────────
 const SEV_CONFIG = {
   CRITICAL: { color:C.danger.main,  bg:C.danger.light,  label:"Critique" },
   HIGH:     { color:"#c2410c",      bg:"#ffedd5",        label:"Élevé"    },
@@ -453,7 +528,9 @@ function DiagnosticsPanel({ items }: { items: SiteDetail["diagnostics"] }) {
         return (
           <div key={i} style={{ padding:"12px 16px", borderRadius:10, background:cfg.bg, borderLeft:`3px solid ${cfg.color}` }}>
             <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
-              <span style={{ fontSize:9, fontWeight:700, textTransform:"uppercase", background:cfg.color, color:"#fff", padding:"2px 6px", borderRadius:4 }}>{cfg.label}</span>
+              <span style={{ fontSize:9, fontWeight:700, textTransform:"uppercase", background:cfg.color, color:"#fff", padding:"2px 6px", borderRadius:4 }}>
+                {cfg.label}
+              </span>
               <span style={{ fontSize:12, fontWeight:600, color:cfg.color }}>{d.message}</span>
             </div>
             <p style={{ fontSize:11, color:C.slate[600], margin:0 }}>{d.detail}</p>
@@ -478,8 +555,7 @@ export default function FinancialSiteDetailModal({
   const [section, setSection] = useState<"conso" | "marge" | "diag">("conso");
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     api
       .get(`/financial/evaluations/${siteId}/detail/`, {
         params: { year, month_start: monthStart, month_end: monthEnd },
@@ -494,26 +570,48 @@ export default function FinancialSiteDetailModal({
     return () => window.removeEventListener("keydown", handle);
   }, [onClose]);
 
-  const consoRows    = data?.conso_comparison?.rows ?? [];
-  const margeRows    = data?.history ?? [];
-  const totalMarge   = data?.summary.total_marge ?? null;
+  const consoRows  = data?.conso_comparison?.rows ?? [];
+  const margeRows  = data?.history ?? [];
+  const totalMarge = data?.summary.total_marge ?? null;
   const margePositif = totalMarge !== null && parseFloat(totalMarge) >= 0;
 
-  // ── Agrégats conso ──────────────────────────────────────────────
-  const totalFacturee    = sumKwh(consoRows, "conso_facturee");
-  const totalFms         = sumKwh(consoRows, "conso_fms") ?? sumKwh(consoRows, "conso_acm");
-  const totalTarget      = sumKwh(consoRows, "conso_target");
-  const totalSolar       = sumKwh(consoRows, "solar_kwh");
-  const ratioMoyFms      = avgRatio(consoRows);
-  const ratioFactTarget  = totalFacturee !== null && totalTarget !== null && totalTarget > 0
+  // ── Agrégats ──────────────────────────────────────────────────────
+  const totalFacturee  = sumKwh(consoRows, "conso_facturee");
+  const totalFms       = sumKwh(consoRows, "conso_fms") ?? sumKwh(consoRows, "conso_acm");
+  const totalTarget    = sumKwh(consoRows, "conso_target");
+  const totalSolar     = sumKwh(consoRows, "solar_kwh");
+  const totalSolarTgt  = sumKwh(consoRows, "solar_target_kwh");
+  const totalMontantHT = sumKwh(consoRows, "montant_htva");
+
+  // ratio_fms en base = FMS/Fact → on affiche Fact/FMS = 1/ratio
+  const ratioMoyFms     = avgRatio(consoRows);
+  const ratioMoyFactFms = ratioMoyFms !== null && ratioMoyFms > 0
+    ? (1 / ratioMoyFms) * 100 : null;
+
+  // Fact / Target
+  const ratioFactTarget = totalFacturee !== null && totalTarget !== null && totalTarget > 0
     ? (totalFacturee / totalTarget) * 100 : null;
+
+  // Coût NRJ moyen (FCFA/kWh) = Montant HT / Conso Facturée
+  const coutNrjMoyen = totalMontantHT !== null && totalFacturee !== null && totalFacturee > 0
+    ? totalMontantHT / totalFacturee : null;
+
+  // Solar vs Target
+  const ratioSolarVsTarget = totalSolar !== null && totalSolarTgt !== null && totalSolarTgt > 0
+    ? (totalSolar / totalSolarTgt) * 100 : null;
+
+  // Couleur ratio Fact/FMS
+  const factFmsColor = ratioMoyFactFms === null ? C.slate[400]
+    : Math.abs(ratioMoyFactFms - 100) < 5 ? C.success.main
+    : ratioMoyFactFms > 115 ? C.danger.main
+    : C.warning.main;
 
   return (
     <div
       style={{ position:"fixed", inset:0, zIndex:1000, background:"rgba(10,22,40,0.65)", backdropFilter:"blur(4px)", display:"flex", alignItems:"center", justifyContent:"center", padding:24, animation:"fadeIn 0.15s ease" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div style={{ background:"#fff", borderRadius:20, width:"100%", maxWidth:1140, maxHeight:"92vh", overflow:"hidden", display:"flex", flexDirection:"column", boxShadow:"0 25px 60px rgba(10,22,40,0.35)", animation:"slideUp 0.2s ease" }}>
+      <div style={{ background:"#fff", borderRadius:20, width:"100%", maxWidth:1200, maxHeight:"92vh", overflow:"hidden", display:"flex", flexDirection:"column", boxShadow:"0 25px 60px rgba(10,22,40,0.35)", animation:"slideUp 0.2s ease" }}>
 
         {/* ── Header ── */}
         <div style={{ background:`linear-gradient(135deg, ${C.navy[800]} 0%, ${C.navy[900]} 100%)`, padding:"18px 24px", display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:16, flexShrink:0 }}>
@@ -524,10 +622,19 @@ export default function FinancialSiteDetailModal({
               </div>
               {data?.current?.recurrence_type && <RecurrBadge type={data.current.recurrence_type} />}
             </div>
-            <h2 style={{ margin:0, fontSize:17, fontWeight:700, color:"#fff" }}>{siteName || data?.site?.name || siteId}</h2>
+            <h2 style={{ margin:0, fontSize:17, fontWeight:700, color:"#fff" }}>
+              {siteName || data?.site?.name || siteId}
+            </h2>
             <div style={{ fontSize:11.5, color:C.slate[300], marginTop:3 }}>
-              {data?.site?.typology && <span>{data.site.typology} · {data.site.configuration} · Load {data.current?.load_w ? `${(data.current.load_w / 1000).toFixed(1)} kW` : "—"}</span>}
-              <span style={{ marginLeft:8, color:C.slate[500] }}>{year} · Mois {monthStart}–{monthEnd}</span>
+              {data?.site?.typology && (
+                <span>
+                  {data.site.typology} · {data.site.configuration} · Load{" "}
+                  {data.current?.load_w ? `${(data.current.load_w / 1000).toFixed(1)} kW` : "—"}
+                </span>
+              )}
+              <span style={{ marginLeft:8, color:C.slate[500] }}>
+                {year} · Mois {monthStart}–{monthEnd}
+              </span>
             </div>
           </div>
 
@@ -535,7 +642,7 @@ export default function FinancialSiteDetailModal({
             {section === "conso" && (
               <div style={{ display:"flex", background:`${C.navy[700]}80`, borderRadius:8, padding:3 }}>
                 {([["table","Table",TableProperties],["chart","Graphe",BarChart3]] as const).map(([k, l, Icon]) => (
-                  <button key={k} onClick={() => setView(k as "table" | "chart")} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:6, border:"none", cursor:"pointer", background: view === k ? "#ffffff22" : "transparent", color: view === k ? "#fff" : C.slate[400], fontSize:12, fontWeight:view === k ? 600 : 400 }}>
+                  <button key={k} onClick={() => setView(k as "table"|"chart")} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:6, border:"none", cursor:"pointer", background: view === k ? "#ffffff22" : "transparent", color: view === k ? "#fff" : C.slate[400], fontSize:12, fontWeight:view === k ? 600 : 400 }}>
                     <Icon style={{width:13,height:13}}/>{l}
                   </button>
                 ))}
@@ -547,85 +654,87 @@ export default function FinancialSiteDetailModal({
           </div>
         </div>
 
-        {/* ── KPI Bar — 2 lignes ── */}
+        {/* ── KPI Bar — ratios uniquement ── */}
         {data && (
-          <div style={{ padding:"14px 24px 12px", background:C.slate[50], borderBottom:`1px solid ${C.slate[200]}`, flexShrink:0, display:"flex", flexDirection:"column", gap:10 }}>
+          <div style={{ padding:"12px 24px 10px", background:C.slate[50], borderBottom:`1px solid ${C.slate[200]}`, flexShrink:0 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))", gap:8 }}>
 
-            {/* Ligne 1 : Marges & pénalités */}
-            <div>
-              <CardSectionLabel>Marges & Pénalités</CardSectionLabel>
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:8 }}>
-                <KpiCard label="Marge totale" value={fmtMoney(data.summary.total_marge)} color={margePositif ? C.success.main : C.danger.main} icon={margePositif ? <TrendingUp style={{width:13,height:13}}/> : <TrendingDown style={{width:13,height:13}}/>} />
-                <KpiCard label="Mois OK / NOK" value={`${data.summary.count_ok} / ${data.summary.count_nok}`} color={data.summary.count_nok > 0 ? C.danger.main : C.success.main} icon={<Activity style={{width:13,height:13}}/>} />
-                <KpiCard label="Redevance (dernier)" value={fmtMoney(data.current?.redevance)} color={C.accent[500]} icon={<TrendingUp style={{width:13,height:13}}/>} />
-                <KpiCard label="Total HT Sénélec" value={fmtMoney(data.summary.billing_total_ht)} color={C.navy[600]} icon={<Zap style={{width:13,height:13}}/>} />
-                <KpiCard label="Pénalité Cos φ" value={fmtMoney(data.summary.billing_total_cosphi)} color={C.info.main} icon={<AlertTriangle style={{width:13,height:13}}/>} />
-                <KpiCard label="Pénalité Puiss." value={fmtMoney(data.summary.billing_total_penalite)} color={C.warning.main} icon={<AlertTriangle style={{width:13,height:13}}/>} />
-              </div>
+              {/* Marge & santé */}
+              <KpiCard
+                label="Marge totale"
+                value={fmtMoney(data.summary.total_marge)}
+                sub={`${data.summary.count_ok} OK · ${data.summary.count_nok} NOK`}
+                color={margePositif ? C.success.main : C.danger.main}
+                icon={margePositif
+                  ? <TrendingUp style={{width:13,height:13}}/>
+                  : <TrendingDown style={{width:13,height:13}}/>}
+              />
+
+              {/* Ratio Fact / FMS */}
+              <KpiCard
+                label="Ratio Fact / FMS"
+                value={ratioMoyFactFms !== null ? `${ratioMoyFactFms.toFixed(1)} %` : "—"}
+                sub={ratioMoyFactFms !== null
+                  ? Math.abs(ratioMoyFactFms - 100) < 5 ? "✓ cohérent"
+                    : ratioMoyFactFms > 100
+                      ? `▲ +${(ratioMoyFactFms - 100).toFixed(1)}% vs mesure FMS`
+                      : `▼ ${(ratioMoyFactFms - 100).toFixed(1)}% vs mesure FMS`
+                  : undefined}
+                color={factFmsColor}
+                icon={<Activity style={{width:13,height:13}}/>}
+              />
+
+              {/* Ratio Fact / Target */}
+              <KpiCard
+                label="Ratio Fact / Target"
+                value={ratioFactTarget !== null ? `${ratioFactTarget.toFixed(1)} %` : "—"}
+                sub={ratioFactTarget !== null
+                  ? ratioFactTarget > 90 && ratioFactTarget < 110 ? "✓ dans la cible"
+                    : ratioFactTarget > 110 ? "▲ sur-consommation" : "▼ sous-consommation"
+                  : undefined}
+                color={ratioFactTarget !== null && ratioFactTarget > 90 && ratioFactTarget < 110
+                  ? C.success.main : C.warning.main}
+                icon={<BarChart3 style={{width:13,height:13}}/>}
+              />
+
+              {/* Coût NRJ moyen */}
+              <KpiCard
+                label="Coût NRJ moyen"
+                value={coutNrjMoyen !== null ? `${fmt(coutNrjMoyen, 0)} F/kWh` : "—"}
+                sub="Montant HT / kWh facturé"
+                color={C.navy[500]}
+                icon={<Zap style={{width:13,height:13}}/>}
+              />
+
+              {/* Production solaire vs cible */}
+              {(totalSolar !== null || totalSolarTgt !== null) && (
+                <KpiCard
+                  label="Sol. Prod / Cible"
+                  value={ratioSolarVsTarget !== null ? `${ratioSolarVsTarget.toFixed(1)} %` : "—"}
+                  sub={totalSolar !== null
+                    ? `${fmtKwh(totalSolar)} produit`
+                    : totalSolarTgt !== null ? `Cible : ${fmtKwh(totalSolarTgt)}` : undefined}
+                  color={
+                    ratioSolarVsTarget === null ? C.slate[400]
+                    : ratioSolarVsTarget >= 90 ? C.success.main
+                    : ratioSolarVsTarget >= 70 ? C.warning.main
+                    : C.danger.main
+                  }
+                  icon={<Sun style={{width:13,height:13}}/>}
+                />
+              )}
             </div>
-
-            {/* Ligne 2 : Consommations */}
-            {consoRows.length > 0 && (
-              <div>
-                <CardSectionLabel>Consommations</CardSectionLabel>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:8 }}>
-                  <KpiCard
-                    label="Conso Facturée (cumul)"
-                    value={totalFacturee !== null ? fmtKwh(totalFacturee) : "—"}
-                    color={C.navy[500]}
-                    icon={<Zap style={{width:13,height:13}}/>}
-                  />
-                  <KpiCard
-                    label="Conso FMS / ACM (cumul)"
-                    value={totalFms !== null ? fmtKwh(totalFms) : "—"}
-                    color={C.info.main}
-                    icon={<Activity style={{width:13,height:13}}/>}
-                  />
-                  <KpiCard
-                    label="Ratio FMS / Fact. moy."
-                    value={ratioMoyFms !== null ? `${(ratioMoyFms * 100).toFixed(1)} %` : "—"}
-                    sub={ratioMoyFms !== null
-                      ? Math.abs(ratioMoyFms * 100 - 100) < 10 ? "✓ cohérent" : "⚠ écart important"
-                      : undefined}
-                    color={ratioMoyFms !== null && Math.abs(ratioMoyFms * 100 - 100) < 10 ? C.success.main : C.danger.main}
-                    icon={<Info style={{width:13,height:13}}/>}
-                  />
-                  <KpiCard
-                    label="Conso Target (cumul)"
-                    value={totalTarget !== null ? fmtKwh(totalTarget) : "—"}
-                    color={C.success.main}
-                    icon={<TrendingUp style={{width:13,height:13}}/>}
-                  />
-                  <KpiCard
-                    label="Fact. / Target moy."
-                    value={ratioFactTarget !== null ? `${ratioFactTarget.toFixed(1)} %` : "—"}
-                    sub={ratioFactTarget !== null
-                      ? ratioFactTarget > 90 && ratioFactTarget < 110 ? "✓ dans la cible"
-                        : ratioFactTarget > 110 ? "▲ sur-consommation" : "▼ sous-consommation"
-                      : undefined}
-                    color={ratioFactTarget !== null && ratioFactTarget > 90 && ratioFactTarget < 110 ? C.success.main : C.warning.main}
-                    icon={<BarChart3 style={{width:13,height:13}}/>}
-                  />
-                  <KpiCard
-                    label="Prod. solaire (cumul)"
-                    value={totalSolar !== null ? fmtKwh(totalSolar) : "—"}
-                    color={C.solar.main}
-                    icon={<Sun style={{width:13,height:13}}/>}
-                  />
-                </div>
-              </div>
-            )}
           </div>
         )}
 
         {/* ── Section tabs ── */}
         <div style={{ display:"flex", gap:4, padding:"12px 24px 0", borderBottom:`1px solid ${C.slate[200]}`, flexShrink:0 }}>
           {([
-            ["conso", "Consommation",    BarChart3],
+            ["conso", "Consommation",     BarChart3],
             ["marge", "Historique marge", TrendingUp],
             ["diag",  "Diagnostics",      AlertTriangle],
           ] as const).map(([k, l, Icon]) => (
-            <button key={k} onClick={() => setSection(k as "conso" | "marge" | "diag")} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:"8px 8px 0 0", border:"none", cursor:"pointer", background: section === k ? "#fff" : "transparent", borderBottom: section === k ? `2px solid ${C.navy[600]}` : "2px solid transparent", color: section === k ? C.navy[700] : C.slate[500], fontSize:12, fontWeight: section === k ? 700 : 500 }}>
+            <button key={k} onClick={() => setSection(k as "conso"|"marge"|"diag")} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:"8px 8px 0 0", border:"none", cursor:"pointer", background: section === k ? "#fff" : "transparent", borderBottom: section === k ? `2px solid ${C.navy[600]}` : "2px solid transparent", color: section === k ? C.navy[700] : C.slate[500], fontSize:12, fontWeight: section === k ? 700 : 500 }}>
               <Icon style={{width:13,height:13}}/>{l}
               {k === "diag" && data?.diagnostics.length ? (
                 <span style={{ background: data.diagnostics.some(d => d.severity === "CRITICAL") ? C.danger.main : C.warning.main, color:"#fff", fontSize:9, fontWeight:700, padding:"1px 5px", borderRadius:4 }}>
@@ -660,19 +769,25 @@ export default function FinancialSiteDetailModal({
                       Aucune donnée de consommation pour cette période.
                     </div>
                   )}
-                  {consoRows.length > 0 && view === "table" && <ConsoTable consoRows={consoRows} margeRows={margeRows} />}
+                  {consoRows.length > 0 && view === "table" && (
+                    <ConsoTable consoRows={consoRows} margeRows={margeRows} />
+                  )}
                   {consoRows.length > 0 && view === "chart" && (
                     <div style={{ padding:"8px 0" }}>
-                      <div style={{ marginBottom:12, fontSize:12, color:C.slate[500] }}>Comparaison des consommations (kWh) · {year}</div>
+                      <div style={{ marginBottom:12, fontSize:12, color:C.slate[500] }}>
+                        Comparaison des consommations (kWh) · {year}
+                      </div>
                       <ConsoBarChart rows={consoRows} />
                     </div>
                   )}
-                  <div style={{ padding:"12px 16px", background:C.slate[50], borderRadius:10, border:`1px solid ${C.slate[200]}`, fontSize:11, color:C.slate[500], display:"flex", gap:20, flexWrap:"wrap" }}>
-                    <span><strong style={{color:C.navy[600]}}>Facturée</strong> — kWh Sénélec certifiés</span>
-                    <span><strong style={{color:C.info.main}}>FMS/ACM</strong> — Grid Report ou AC Meter (eFMS)</span>
-                    <span><strong style={{color:C.success.main}}>Target</strong> — Cible catalogue (cible_kwh_j × jours)</span>
-                    <span><strong style={{color:C.solar.main}}>Solaire</strong> — Production PV fact_solar_mth</span>
-                    <span><strong>Δ</strong> : vert &lt;10% · ambre 10–20% · rouge &gt;20%</span>
+                  {/* Légende */}
+                  <div style={{ padding:"12px 16px", background:C.slate[50], borderRadius:10, border:`1px solid ${C.slate[200]}`, fontSize:11, color:C.slate[500], display:"flex", gap:16, flexWrap:"wrap" }}>
+                    <span><strong style={{color:C.navy[600]}}>Facturée</strong> — kWh Sénélec</span>
+                    <span><strong style={{color:C.info.main}}>FMS/ACM</strong> — Grid Report ou AC Meter</span>
+                    <span><strong style={{color:C.success.main}}>Target</strong> — cible_kwh_j × nb_jours</span>
+                    <span><strong style={{color:C.solar.main}}>Solaire</strong> — PV prod · Cible = Min(100%×Load×24×j ; Cap×24×j)</span>
+                    <span><strong>Δ Fact/FMS</strong> +% = Sénélec &gt; FMS · vert &lt;10% · ambre &lt;20% · rouge ≥20%</span>
+                    <span><strong>Coût NRJ</strong> = Montant HT / kWh facturé</span>
                   </div>
                 </div>
               )}
@@ -689,7 +804,7 @@ export default function FinancialSiteDetailModal({
                     </thead>
                     <tbody>
                       {margeRows.map((r, i) => {
-                        const isNOK = r.marge_statut === "NOK";
+                        const isNOK  = r.marge_statut === "NOK";
                         const margeN = r.marge ? parseFloat(r.marge) : null;
                         return (
                           <tr key={r.period} style={{ borderBottom:`1px solid ${C.slate[100]}`, background: isNOK ? `${C.danger.light}50` : i % 2 === 0 ? "#fff" : C.slate[50] }}>
@@ -721,7 +836,8 @@ export default function FinancialSiteDetailModal({
         {/* ── Footer ── */}
         <div style={{ padding:"12px 24px", borderTop:`1px solid ${C.slate[200]}`, display:"flex", alignItems:"center", justifyContent:"space-between", background:C.slate[50], flexShrink:0 }}>
           <div style={{ fontSize:11, color:C.slate[400] }}>
-            Évaluation financière · PAID + UNPAID uniquement · {year}-{String(monthStart).padStart(2,"0")} → {year}-{String(monthEnd).padStart(2,"0")}
+            Évaluation financière · PAID + UNPAID · {year}-{String(monthStart).padStart(2,"0")} → {year}-{String(monthEnd).padStart(2,"0")}
+            {" · "}x solaire = 100% (paramétrable dans Suivi Conso)
           </div>
           <button onClick={onClose} style={{ padding:"8px 18px", borderRadius:8, background:`linear-gradient(135deg, ${C.navy[700]}, ${C.navy[800]})`, color:"#fff", border:"none", fontSize:12, fontWeight:600, cursor:"pointer" }}>
             Fermer
@@ -732,7 +848,7 @@ export default function FinancialSiteDetailModal({
       <style>{`
         @keyframes fadeIn  { from { opacity:0 } to { opacity:1 } }
         @keyframes slideUp { from { opacity:0; transform:translateY(20px) } to { opacity:1; transform:translateY(0) } }
-        @keyframes spin    { to { transform:rotate(360deg) } }
+        @keyframes spin    { to   { transform:rotate(360deg) } }
       `}</style>
     </div>
   );

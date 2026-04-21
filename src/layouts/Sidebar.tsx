@@ -10,7 +10,7 @@ import {
 import camusatLogo from "@/assets/images/camusat-logo.png";
 import { useAuth } from "@/auth/AuthContext";
 
-type Section = "ANALYSE" | "FACTURATION" | "MODULES" | "ADMINISTRATION" | "RÉSEAU";
+type Section = "ANALYSE" | "FACTURATION" | "CONSO & ESTIMATION" | "MODULES" | "ADMINISTRATION" | "RÉSEAU";
 type LinkItem = {
   to: string; label: string; icon: React.ReactNode;
   adminOnly?: boolean; section?: Section; end?: boolean;
@@ -29,8 +29,13 @@ const LINKS: LinkItem[] = [
   { to: "/modules/evaluation-financiere", icon: <DollarSign />, label: "Évaluation Financière", section: "FACTURATION" },
   { to: "/billing/sonatel",        icon: <Receipt />,      label: "Base Factures",            section: "FACTURATION",    end: true },
 
+
+   // ── CONSO & ESTIMATION ──────────────────────────────────────────────────────────────────
+  { to: "/financial/suivi-conso", icon: <BarChart2 />, label: "Suivi Conso", section: "CONSO & ESTIMATION", end: true },
+  { to: "/modules/estimation", icon: <Calculator />,   label: "Estimation", section: "CONSO & ESTIMATION", end: true },
+
+
   // ── MODULES ──────────────────────────────────────────────────────────────────
-  { to: "/modules/estimation",              icon: <Calculator />,   label: "Estimation",                 section: "MODULES",        comingSoon: true },
   { to: "/modules/optimisation",           icon: <Zap />,          label: "Optim. Puissance & Tarif",   section: "MODULES",        comingSoon: true },
   { to: "/modules/suivi-conso",            icon: <BarChart2 />,    label: "Suivi Conso",                section: "MODULES",        comingSoon: true },
   { to: "/modules/suivi-penalites",        icon: <AlertTriangle />,label: "Suivi Pénalités",            section: "MODULES",        comingSoon: true },
@@ -212,13 +217,31 @@ function Inner({
 
   const groups = useMemo(() => {
     const m: Record<Section, LinkItem[]> = {
-      ANALYSE: [], FACTURATION: [], MODULES: [], ADMINISTRATION: [], RÉSEAU: [],
+      ANALYSE: [],
+      FACTURATION: [],
+      "CONSO & ESTIMATION": [],
+      MODULES: [],
+      ADMINISTRATION: [],
+      "RÉSEAU": [],
     };
-    for (const l of visible) m[(l.section || "ANALYSE") as Section].push(l);
+
+    for (const l of visible) {
+      m[l.section || "ANALYSE"].push(l);
+    }
+
     return m;
   }, [visible]);
 
-  const sections: Section[] = ["ANALYSE", "FACTURATION", "MODULES", "ADMINISTRATION", "RÉSEAU"];
+  const sections: Section[] = [
+    "ANALYSE",
+    "FACTURATION",
+    "CONSO & ESTIMATION",
+    "MODULES",
+    "ADMINISTRATION",
+    "RÉSEAU",
+  ];
+
+  
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>

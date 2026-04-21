@@ -1448,19 +1448,206 @@ function AnalysisOverview({
   );
 }
 
+
+const MONTHS_COURT = ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"];
+const periodKey = (y: number, m: number) => y * 100 + m;
+const keyToYM   = (k: number) => ({ year: Math.floor(k / 100), month: k % 100 });
+const fmtPer    = (y: number, m: number) => `${MONTHS_COURT[m - 1]} ${y}`;
+ 
+const PRESETS_FIN = [
+  { label:"Année 2026",       range:[periodKey(2026,1),  periodKey(2026,12)] },
+  { label:"Année 2025",       range:[periodKey(2025,1),  periodKey(2025,12)] },
+  { label:"Année 2024",       range:[periodKey(2024,1),  periodKey(2024,12)] },
+  { label:"Juil 24 → Jun 25", range:[periodKey(2024,7),  periodKey(2025,6)]  },
+  { label:"Oct 24 → Mar 25",  range:[periodKey(2024,10), periodKey(2025,3)]  },
+  { label:"Jan 25 → Jun 25",  range:[periodKey(2025,1),  periodKey(2025,6)]  },
+];
+ 
+function PeriodRangePicker({
+  startKey, endKey, onChange,
+}: {
+  startKey: number; endKey: number;
+  onChange: (s: number, e: number) => void;
+}) {
+  const [open, setOpen]       = useState(false);
+  const [sel,  setSel]        = useState<number | null>(null);
+  const [hov,  setHov]        = useState<number | null>(null);
+  const [ly,   setLy]         = useState(() => keyToYM(startKey).year);
+  const [ry,   setRy]         = useState(() => {
+    const ey = keyToYM(endKey).year;
+    return ey > keyToYM(startKey).year ? ey : keyToYM(startKey).year + 1;
+  });
+  const ref = useRef<HTMLDivElement>(null);
+ 
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false); setSel(null);
+      }
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+ 
+  function getCls(k: number) {
+    const lo = Math.min(startKey, endKey), hi = Math.max(startKey, endKey);
+    if (sel !== null) {
+      const hk = hov ?? k;
+      const sl = Math.min(sel, hk), sh = Math.max(sel, hk);
+      if (k === sel) return "start";
+      if (k === hk)  return "end";
+      if (k > sl && k < sh) return "inrange";
+      return "";
+    }
+    if (k === lo) return "start";
+    if (k === hi) return "end";
+    if (k > lo && k < hi) return "inrange";
+    return "";
+  }
+ 
+  function pick(y: number, mi: number) {
+    const k = periodKey(y, mi + 1);
+    if (!sel) { setSel(k); onChange(k, k); }
+    else {
+      onChange(Math.min(sel, k), Math.max(sel, k));
+      setSel(null); setOpen(false);
+    }
+  }
+ 
+  const navBtn: React.CSSProperties = {
+    width: 22, height: 22, borderRadius: 4,
+    border: "1.5px solid rgba(0,0,0,.1)", background: "white",
+    cursor: "pointer", fontSize: 12, color: "#374151",
+    display: "flex", alignItems: "center", justifyContent: "center",
+  };
+ 
+  function renderCal(year: number, setYear: (fn: (y: number) => number) => void) {
+    return (
+      <div style={{ flex: 1 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+          <button style={navBtn} onClick={() => setYear(y => y - 1)} disabled={year <= 2023}>‹</button>
+          <span style={{ fontSize:12, fontWeight:700, color:"#0f172a" }}>{year}</span>
+          <button style={navBtn} onClick={() => setYear(y => y + 1)} disabled={year >= 2030}>›</button>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:3 }}>
+          {MONTHS_COURT.map((mn, mi) => {
+            const k   = periodKey(year, mi + 1);
+            const cls = getCls(k);
+            return (
+              <div key={mi}
+                onClick={() => pick(year, mi)}
+                onMouseEnter={() => setHov(k)}
+                onMouseLeave={() => setHov(null)}
+                style={{
+                  padding:"5px 3px", borderRadius:6, fontSize:11.5,
+                  textAlign:"center", cursor:"pointer", transition:"background .1s",
+                  background: cls === "start" || cls === "end" ? "#1e3a8a"
+                            : cls === "inrange" ? "rgba(30,58,138,.1)" : "#fff",
+                  color: cls === "start" || cls === "end" ? "#fff"
+                       : cls === "inrange" ? "#1e3a8a" : "#374151",
+                  fontWeight: cls === "start" || cls === "end" ? 700 : 400,
+                  border: `1px solid ${cls ? "transparent" : "rgba(0,0,0,.08)"}`,
+                }}>
+                {mn}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+ 
+  const lo = Math.min(startKey, endKey), hi = Math.max(startKey, endKey);
+  const { year: sy, month: sm } = keyToYM(lo);
+  const { year: ey, month: em } = keyToYM(hi);
+  const label = lo === hi ? fmtPer(sy, sm) : `${fmtPer(sy, sm)} → ${fmtPer(ey, em)}`;
+ 
+  return (
+    <div ref={ref} style={{ position:"relative" }}>
+      {/* Trigger */}
+      <div
+        onClick={() => { setOpen(v => !v); setSel(null); }}
+        style={{
+          display:"flex", alignItems:"center", gap:7, padding:"7px 12px",
+          borderRadius:12, background:"white",
+          border: `1.5px solid ${open ? "#1e3a8a" : "rgba(0,0,0,.1)"}`,
+          boxShadow:"0 1px 4px rgba(0,0,0,.04)",
+          cursor:"pointer", whiteSpace:"nowrap", fontSize:12.5,
+        }}
+      >
+        <CalendarRange size={13} color={open ? "#1e3a8a" : "#94a3b8"} />
+        <span style={{ fontWeight:700, color:"#0f172a" }}>{label}</span>
+        <span style={{ fontSize:9, color:"#94a3b8" }}>{open ? "▲" : "▼"}</span>
+      </div>
+ 
+      {/* Popup */}
+      {open && (
+        <div style={{
+          position:"absolute", top:"calc(100% + 6px)", left:0, zIndex:500,
+          background:"#fff", border:"1.5px solid rgba(0,0,0,.1)",
+          borderRadius:16, boxShadow:"0 16px 48px rgba(0,0,0,.14)",
+          padding:"16px 16px 60px", width:480, display:"flex", gap:14,
+        }}>
+          {renderCal(ly, setLy)}
+          <div style={{ width:1, background:"rgba(0,0,0,.08)" }} />
+          {renderCal(ry, setRy)}
+ 
+          {/* Footer presets */}
+          <div style={{
+            position:"absolute", bottom:0, left:0, right:0,
+            borderTop:"1px solid rgba(0,0,0,.07)", padding:"8px 14px",
+            background:"#fff", borderRadius:"0 0 16px 16px",
+            display:"flex", flexWrap:"wrap", gap:4, alignItems:"center",
+          }}>
+            {PRESETS_FIN.map((p, i) => (
+              <button key={i}
+                onClick={() => {
+                  onChange(p.range[0] as number, p.range[1] as number);
+                  setSel(null); setOpen(false);
+                }}
+                style={{
+                  padding:"3px 9px", borderRadius:5,
+                  border:"1.5px solid rgba(0,0,0,.08)",
+                  background:"white", fontSize:10.5, color:"#374151",
+                  cursor:"pointer", fontWeight:500,
+                }}>
+                {p.label}
+              </button>
+            ))}
+            {sel !== null && (
+              <span style={{ fontSize:11, color:"#1e3a8a", marginLeft:"auto", fontWeight:600 }}>
+                Cliquer la date de fin…
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main module content ──────────────────────────────────────────────────────
 function FinancialModuleContent({ onLock }: { onLock: () => void }) {
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
 
-  const [year, setYear] = useState(currentYear);
-  const [monthStart, setMonthStart] = useState(Math.max(1, currentMonth - 2));
-  const [monthEnd, setMonthEnd] = useState(currentMonth);
+  const [startKey, setStartKey] = useState(
+    periodKey(currentYear, Math.max(1, currentMonth - 2))
+  );
+  const [endKey, setEndKey] = useState(
+    periodKey(currentYear, currentMonth)
+  );
   const [runMonth, setRunMonth] = useState(currentMonth);
-
-  const selectedMonthStart = Math.min(monthStart, monthEnd);
-  const selectedMonthEnd = Math.max(monthStart, monthEnd);
+  const [runYear,  setRunYear]  = useState(currentYear);   // ← NOUVEAU
+ 
+  // Bornes dérivées (utilisées dans tous les appels API)
+  const lo = Math.min(startKey, endKey);
+  const hi = Math.max(startKey, endKey);
+  const { year: yearStart, month: selectedMonthStart } = keyToYM(lo);
+  const { year: yearEnd,   month: selectedMonthEnd   } = keyToYM(hi);
+  // Rétrocompat : certains appels legacy utilisent encore `year`
+  const year = yearStart;
 
   const [evaluations, setEvaluations] = useState<FinancialEvaluation[]>([]);
   const [evalStats, setEvalStats] = useState<EvaluationStats | null>(null);
@@ -1509,9 +1696,10 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
   const loadStats = useCallback(async () => {
     try {
       const s = await fetchEvaluationStats({
-        year,
-        month_start: selectedMonthStart,
-        month_end: selectedMonthEnd,
+        year_start:   yearStart,
+        month_start:  selectedMonthStart,
+        year_end:     yearEnd,
+        month_end:    selectedMonthEnd,
       } as any);
       setEvalStats(s);
     } catch {
@@ -1523,11 +1711,12 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
     setLoadingEval(true);
     try {
       const params: any = {
-        year,
-        month_start: selectedMonthStart,
-        month_end: selectedMonthEnd,
-        page: evalPage,
-        page_size: 100,
+        year_start:   yearStart,
+        month_start:  selectedMonthStart,
+        year_end:     yearEnd,
+        month_end:    selectedMonthEnd,
+        page:       evalPage,
+        page_size:  100,
       };
       if (filterStatut) params.statut = filterStatut;
       if (filterSearch) params.search = filterSearch;
@@ -1548,9 +1737,9 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
     setLoadingChart(true);
     try {
       const [chart, marge, rec] = await Promise.all([
-        fetchFacturesVsRedevances({ year, month_start: selectedMonthStart, month_end: selectedMonthEnd } as any),
-        fetchMargeParSite({ year, month_start: selectedMonthStart, month_end: selectedMonthEnd } as any),
-        fetchSitesRecurrents({ year, month_start: selectedMonthStart, month_end: selectedMonthEnd } as any),
+        fetchFacturesVsRedevances({ year_start:yearStart, month_start:selectedMonthStart, year_end:yearEnd, month_end:selectedMonthEnd } as any),
+        fetchMargeParSite({         year_start:yearStart, month_start:selectedMonthStart, year_end:yearEnd, month_end:selectedMonthEnd } as any),
+        fetchSitesRecurrents({      year_start:yearStart, month_start:selectedMonthStart, year_end:yearEnd, month_end:selectedMonthEnd } as any),
       ]);
       setChartData(chart);
       setMargeData(marge);
@@ -1566,11 +1755,13 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
     if (activeTab !== "analyse") return;
     setLoadingAnalytics(true);
     try {
-      const data = await fetchAnalyticsFullReport({
-        year,
-        month_start: selectedMonthStart,
-        month_end: selectedMonthEnd,
+       const data = await fetchAnalyticsFullReport({
+        year_start:   yearStart,
+        month_start:  selectedMonthStart,
+        year_end:     yearEnd,
+        month_end:    selectedMonthEnd,
       });
+      
       setAnalytics(data);
     } catch {
       setAnalytics(null);
@@ -1599,11 +1790,11 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
 
   const openDetail = (siteId: string, siteName?: string) => {
     setModalSite({
-      siteId,
-      siteName:   siteName || siteId,
-      year,
-      monthStart: selectedMonthStart,
-      monthEnd:   selectedMonthEnd,
+        siteId,
+        siteName:   siteName || siteId,
+        year:       yearStart,   // année de début pour la modal site (mono-année)
+        monthStart: selectedMonthStart,
+        monthEnd:   selectedMonthEnd,
     });
   };
 
@@ -1612,7 +1803,7 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
     setEvalResult(null);
     setEvalError(null);
     try {
-      const res = await runEvaluation({ year, month: runMonth });
+      const res = await runEvaluation({ year: runYear, month: runMonth });
       setEvalResult(res);
       await Promise.all([loadStats(), loadEvaluations()]);
       if (activeTab === "dashboard" || activeTab === "recurrents") await loadChart();
@@ -1724,79 +1915,39 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
         </div>
 
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "7px 12px",
-              borderRadius: 14,
-              background: "white",
-              border: "1.5px solid rgba(0,0,0,.08)",
-              boxShadow: "0 1px 4px rgba(0,0,0,.04)",
+          <PeriodRangePicker
+            startKey={startKey}
+            endKey={endKey}
+            onChange={(s, e) => {
+              setStartKey(s);
+              setEndKey(e);
+              setEvalPage(1);
             }}
-          >
-            <CalendarRange size={14} color="#94a3b8" />
-            <select
-              value={monthStart}
-              onChange={(e) => setMonthStart(Number(e.target.value))}
-              style={{ border: "none", background: "none", outline: "none", fontSize: 12.5, fontWeight: 600, color: "#0f172a", cursor: "pointer" }}
-            >
-              {MONTHS.map((m, i) => (
-                <option key={i} value={i + 1}>
-                  De {m}
-                </option>
-              ))}
-            </select>
-            <span style={{ fontSize: 12, color: "#cbd5e1" }}>→</span>
-            <select
-              value={monthEnd}
-              onChange={(e) => setMonthEnd(Number(e.target.value))}
-              style={{ border: "none", background: "none", outline: "none", fontSize: 12.5, fontWeight: 600, color: "#0f172a", cursor: "pointer" }}
-            >
-              {MONTHS.map((m, i) => (
-                <option key={i} value={i + 1}>
-                  À {m}
-                </option>
-              ))}
-            </select>
-            <select
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
-              style={{ border: "none", background: "none", outline: "none", fontSize: 12.5, fontWeight: 700, color: "#0f172a", cursor: "pointer" }}
-            >
-              {[2024, 2025, 2026].map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-          </div>
+          />
 
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "7px 12px",
-              borderRadius: 12,
-              background: "white",
-              border: "1.5px solid rgba(0,0,0,.08)",
-              boxShadow: "0 1px 4px rgba(0,0,0,.04)",
-            }}
-          >
+          <div style={{
+            display:"flex", alignItems:"center", gap:6, padding:"7px 12px",
+            borderRadius:12, background:"white",
+            border:"1.5px solid rgba(0,0,0,.08)",
+            boxShadow:"0 1px 4px rgba(0,0,0,.04)",
+          }}>
             <Clock size={13} color="#94a3b8" />
-            <span style={{ fontSize: 11.5, color: "#64748b", fontWeight: 600 }}>Calcul mois</span>
+            <span style={{ fontSize:11.5, color:"#64748b", fontWeight:600 }}>Calculer</span>
             <select
               value={runMonth}
-              onChange={(e) => setRunMonth(Number(e.target.value))}
-              style={{ border: "none", background: "none", outline: "none", fontSize: 12.5, fontWeight: 700, color: "#0f172a", cursor: "pointer" }}
+              onChange={e => setRunMonth(Number(e.target.value))}
+              style={{ border:"none", background:"none", outline:"none",
+                fontSize:12.5, fontWeight:700, color:"#0f172a", cursor:"pointer" }}
             >
-              {MONTHS.map((m, i) => (
-                <option key={i} value={i + 1}>
-                  {m}
-                </option>
-              ))}
+              {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+            </select>
+            <select
+              value={runYear}
+              onChange={e => setRunYear(Number(e.target.value))}
+              style={{ border:"none", background:"none", outline:"none",
+                fontSize:12.5, fontWeight:700, color:"#1e3a8a", cursor:"pointer" }}
+            >
+              {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
             </select>
           </div>
 

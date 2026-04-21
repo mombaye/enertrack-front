@@ -32,6 +32,7 @@ import ComingSoonPage from "./components/Comingsoonpage";
 import { AlertTriangle, BarChart2, Server, Zap } from "lucide-react";
 import AdminSitesPage from "./features/sites/admin/AdminSitesPage";
 import FinancialPage from "./features/financial/FinancialPage";
+import SuiviConsoPage from "./features/suivi-conso/SuiviConsoPage";
 
 const queryClient = new QueryClient();
 
@@ -88,6 +89,9 @@ export default function App() {
                     <Route path="compute" element={<BillingComputePage />} />
                   </Route>
                 </Route>
+
+
+                <Route path="/financial/suivi-conso" element={<SuiviConsoPage />} />
 
 
                 <Route path="/modules/evaluation-financiere" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
