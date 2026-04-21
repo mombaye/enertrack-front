@@ -66,3 +66,40 @@ export const launchBatch = async ({ year, month }: { year: number; month: number
   const { data } = await api.post("/estimation/batches/launch/", { year, month });
   return data;
 };
+
+
+
+export interface HistoryImportResult {
+  message:               string;
+  total_parsed:          number;
+  periods:               number;
+  created_batches:       number;
+  updated_batches:       number;
+  created_results:       number;
+  updated_results:       number;
+  skipped_unknown_sites: number;
+  skipped_invalid_dates: number;
+}
+ 
+export const importEstimationHistory = async (
+  file: File,
+  onProgress?: (pct: number) => void
+): Promise<HistoryImportResult> => {
+  const fd = new FormData();
+  fd.append("file", file);
+
+  const { data } = await api.post<HistoryImportResult>(
+    "/estimation/history/import/",
+    fd,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) {
+          onProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      },
+    }
+  );
+
+  return data;
+};

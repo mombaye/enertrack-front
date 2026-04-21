@@ -8,11 +8,12 @@ import {
   CheckCircle2, XCircle, Clock, AlertTriangle, Download,
   Zap, Server, BarChart3, HelpCircle, Loader2,
   TrendingUp, Activity,
+  Upload,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { api } from "@/services/api";
 
-import {EstimationBatch, EstimationResult, fetchBatches, fetchBatchStatus, fetchResults, launchBatch } from '@/features/estimation/api' 
+import {EstimationBatch, EstimationResult, fetchBatches, fetchBatchStatus, fetchResults, HistoryImportResult, importEstimationHistory, launchBatch } from '@/features/estimation/api' 
 
 
 
@@ -177,6 +178,32 @@ export default function EstimationPage() {
   const [selectedBatch, setSelectedBatch] = useState<EstimationBatch | null>(null);
   const [resultPage,  setResultPage]  = useState(1);
   const [filterSource, setFilterSource] = useState("");
+
+  const [showImport,    setShowImport]    = useState(false);
+  const [importFile,    setImportFile]    = useState<File | null>(null);
+  const [importing,     setImporting]     = useState(false);
+  const [importPct,     setImportPct]     = useState(0);
+  const [importResult,  setImportResult]  = useState<HistoryImportResult | null>(null);
+  const [importError,   setImportError]   = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
+ 
+  async function handleImportHistory() {
+    if (!importFile) return;
+    setImporting(true);
+    setImportError(null);
+    setImportResult(null);
+    setImportPct(0);
+    try {
+      const res = await importEstimationHistory(importFile, setImportPct);
+      setImportResult(res);
+      qc.invalidateQueries({ queryKey: ["estimation-batches"] });
+    } catch (e: any) {
+      setImportError(e?.response?.data?.detail || "Erreur lors de l'import.");
+    } finally {
+      setImporting(false);
+    }
+  }
+ 
 
   // ── Queries
   const batchesQ = useQuery({
@@ -362,6 +389,22 @@ export default function EstimationPage() {
                 }
                 Lancer
               </button>
+
+                            <button
+                onClick={() => { setShowImport(true); setImportFile(null); setImportResult(null); setImportError(null); }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 7,
+                  padding: "9px 16px", borderRadius: 10,
+                  background: "white",
+                  color: "#475569", border: "1.5px solid rgba(0,0,0,.1)",
+                  fontSize: 13, fontWeight: 600, cursor: "pointer",
+                  fontFamily: "'DM Sans', sans-serif",
+                }}
+              >
+                <Upload size={14} />
+                Importer historique
+              </button>
+ 
             </div>
           </div>
         </div>
@@ -676,6 +719,190 @@ export default function EstimationPage() {
           </div>
         </div>
       </div>
+
+            {showImport && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 400,
+            background: "rgba(15,23,42,.6)", backdropFilter: "blur(8px)",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+          }}
+          onClick={e => e.target === e.currentTarget && !importing && setShowImport(false)}
+        >
+          <div style={{
+            background: "white", borderRadius: 24, padding: 32,
+            maxWidth: 500, width: "100%",
+            boxShadow: "0 32px 80px rgba(0,0,0,.22)",
+            animation: "ep-in .22s cubic-bezier(.34,1.4,.64,1)",
+          }}>
+            {/* Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", margin: "0 0 4px" }}>
+                  Importer l'historique des provisions
+                </h3>
+                <p style={{ fontSize: 12.5, color: "#64748b", margin: 0 }}>
+                  Fichier <strong>Provisions_GRID_Conso.xlsx</strong> — colonnes :
+                  site_ID · Conso_Kwh · Montant · Source · Mois
+                </p>
+              </div>
+              {!importing && (
+                <button
+                  onClick={() => setShowImport(false)}
+                  style={{ background: "rgba(0,0,0,.06)", border: "none", borderRadius: 9,
+                    padding: 6, cursor: "pointer", color: "#64748b", display: "grid", placeItems: "center" }}
+                >
+                  <XCircle size={15} />
+                </button>
+              )}
+            </div>
+ 
+            {!importResult ? (
+              <>
+                {/* Drop zone */}
+                <div
+                  onClick={() => importInputRef.current?.click()}
+                  style={{
+                    border: `2px dashed ${importFile ? "rgba(5,150,105,.4)" : "rgba(124,58,237,.2)"}`,
+                    borderRadius: 16, padding: "28px 20px", textAlign: "center",
+                    cursor: "pointer",
+                    background: importFile ? "rgba(5,150,105,.03)" : "rgba(248,250,252,1)",
+                    marginBottom: 16,
+                  }}
+                >
+                  <input
+                    ref={importInputRef}
+                    type="file"
+                    accept=".xlsx,.xls"
+                    style={{ display: "none" }}
+                    onChange={e => e.target.files?.[0] && setImportFile(e.target.files[0])}
+                  />
+                  <Upload size={28} color={importFile ? "#059669" : "#94a3b8"} style={{ marginBottom: 10 }} />
+                  {importFile ? (
+                    <div>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: "#059669", margin: "0 0 2px" }}>
+                        {importFile.name}
+                      </p>
+                      <p style={{ fontSize: 11.5, color: "#94a3b8", margin: 0 }}>
+                        {(importFile.size / 1024 / 1024).toFixed(1)} Mo
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: "#374151", margin: "0 0 2px" }}>
+                        Glisser-déposer ou cliquer
+                      </p>
+                      <p style={{ fontSize: 11.5, color: "#94a3b8", margin: 0 }}>.xlsx — Feuil1 requis</p>
+                    </div>
+                  )}
+                </div>
+ 
+                {/* Mapping info */}
+                <div style={{
+                  padding: "10px 14px", borderRadius: 12, marginBottom: 14,
+                  background: "rgba(124,58,237,.05)",
+                  border: "1px solid rgba(124,58,237,.12)",
+                  fontSize: 11.5, color: "#5b21b6",
+                }}>
+                  <strong>Mapping sources :</strong> gFMS → Grid · Estimation SENELEC → Historique ·
+                  Estimation Target → Target · Estimation Théorique → Théorique ·
+                  Hors Scope / Site démonté → Hors scope
+                </div>
+ 
+                {/* Progress */}
+                {importing && importPct > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                      <span style={{ fontSize: 12, color: "#64748b" }}>Upload en cours…</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "#7c3aed" }}>{importPct}%</span>
+                    </div>
+                    <div style={{ height: 4, background: "#f1f5f9", borderRadius: 99 }}>
+                      <div style={{ height: "100%", width: `${importPct}%`, background: "#7c3aed", borderRadius: 99, transition: "width .2s" }} />
+                    </div>
+                  </div>
+                )}
+ 
+                {importing && importPct === 100 && (
+                  <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8,
+                    padding: "10px 14px", borderRadius: 12,
+                    background: "rgba(124,58,237,.05)", border: "1px solid rgba(124,58,237,.12)" }}>
+                    <Loader2 size={14} color="#7c3aed" style={{ animation: "spin 1s linear infinite" }}/>
+                    <span style={{ fontSize: 12.5, color: "#7c3aed", fontWeight: 600 }}>
+                      Import en cours (67k lignes, ~20s)…
+                    </span>
+                  </div>
+                )}
+ 
+                {importError && (
+                  <div style={{ padding: "10px 14px", borderRadius: 12, marginBottom: 14,
+                    background: "rgba(220,38,38,.07)", border: "1px solid rgba(220,38,38,.15)",
+                    fontSize: 12.5, color: "#dc2626", fontWeight: 500 }}>
+                    ⚠ {importError}
+                  </div>
+                )}
+ 
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button onClick={() => setShowImport(false)} disabled={importing}
+                    style={{ flex: 1, padding: "9px 0", borderRadius: 12,
+                      border: "1.5px solid rgba(0,0,0,.1)", background: "white",
+                      fontSize: 13, fontWeight: 600, color: "#374151",
+                      cursor: importing ? "not-allowed" : "pointer" }}>
+                    Annuler
+                  </button>
+                  <button
+                    disabled={!importFile || importing}
+                    onClick={handleImportHistory}
+                    style={{ flex: 2, padding: "9px 0", borderRadius: 12, border: "none",
+                      background: importFile && !importing ? "#7c3aed" : "rgba(124,58,237,.25)",
+                      fontSize: 13, fontWeight: 600, color: "white",
+                      cursor: importFile && !importing ? "pointer" : "not-allowed",
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                    }}>
+                    {importing && <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />}
+                    {importing ? "Import en cours…" : "Importer"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              /* Résultat */
+              <div>
+                <div style={{ textAlign: "center", padding: "8px 0 20px" }}>
+                  <CheckCircle2 size={40} color="#059669" style={{ marginBottom: 10 }} />
+                  <h4 style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", margin: "0 0 4px" }}>
+                    Import terminé
+                  </h4>
+                  <p style={{ fontSize: 12.5, color: "#64748b", margin: "0 0 16px" }}>
+                    {importResult.periods} période(s) importée(s) · {importResult.total_parsed.toLocaleString("fr-FR")} lignes
+                  </p>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 16 }}>
+                    {[
+                      { label: "Batches créés",  value: importResult.created_batches,  color: "#059669" },
+                      { label: "Batches maj",    value: importResult.updated_batches,  color: "#0891b2" },
+                      { label: "Résultats créés",value: importResult.created_results,  color: "#7c3aed" },
+                      { label: "Résultats maj",  value: importResult.updated_results,  color: "#0891b2" },
+                      { label: "Sites inconnus", value: importResult.skipped_unknown_sites, color: "#f59e0b" },
+                      { label: "Dates invalides",value: importResult.skipped_invalid_dates, color: "#94a3b8" },
+                    ].map(s => (
+                      <div key={s.label} style={{ padding: "8px 10px", borderRadius: 10,
+                        background: "rgba(0,0,0,.03)", border: "1px solid rgba(0,0,0,.06)" }}>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: s.color,
+                          fontFamily: "'Outfit', sans-serif" }}>{s.value.toLocaleString("fr-FR")}</div>
+                        <div style={{ fontSize: 10.5, fontWeight: 600, color: "#94a3b8" }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <button onClick={() => setShowImport(false)}
+                  style={{ width: "100%", padding: "10px 0", borderRadius: 12, border: "none",
+                    background: "#7c3aed", fontSize: 13, fontWeight: 600, color: "white",
+                    cursor: "pointer" }}>
+                  Fermer
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }
