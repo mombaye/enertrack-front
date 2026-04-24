@@ -5,7 +5,8 @@ import {
   Home, User, Menu, X, Receipt,
   ChevronLeft, ChevronRight, Settings2, ShieldCheck,
   Calculator, Zap, BarChart2, AlertTriangle, Server,
-  Building2,TrendingUp, DollarSign
+  Building2,TrendingUp, DollarSign,
+  BrainCircuit
 } from "lucide-react";
 import camusatLogo from "@/assets/images/camusat-logo.png";
 import { useAuth } from "@/auth/AuthContext";
@@ -34,7 +35,7 @@ const LINKS: LinkItem[] = [
   { to: "/financial/suivi-conso", icon: <BarChart2 />, label: "Suivi Conso", section: "CONSO & ESTIMATION", end: true },
   { to: "/modules/estimation", icon: <Calculator />,   label: "Estimation", section: "CONSO & ESTIMATION", end: true },
 
-
+  { to: "/modules/prediction", icon: <BrainCircuit />, label: "Prédiction IA", section: "CONSO & ESTIMATION", end: true },
   // ── MODULES ──────────────────────────────────────────────────────────────────
   { to: "/modules/optimisation",           icon: <Zap />,          label: "Optim. Puissance & Tarif",   section: "MODULES",        comingSoon: true },
   { to: "/modules/suivi-conso",            icon: <BarChart2 />,    label: "Suivi Conso",                section: "MODULES",        comingSoon: true },

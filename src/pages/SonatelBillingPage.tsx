@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Search,
   Calendar,
@@ -23,7 +23,8 @@ import {
   SonatelInvoice,
   MonthlySynthesis,
   ContractMonth,
-  getSonatelBillingStats
+  getSonatelBillingStats,
+  updateInvoiceStatus
 } from "@/features/sonatelBilling/api";
 
 const COLORS = {
@@ -215,6 +216,122 @@ function Pagination({
   );
 }
 
+
+// ─── Composant cellule status certif éditable ───────────────────────────────
+function EditableStatusCell({ row }: { row: SonatelInvoice }) {
+  const [editing, setEditing] = useState(false);
+  const [optimistic, setOptimistic] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const current = optimistic ?? row.status;
+
+  const { mutate, isPending } = useMutation({
+    mutationFn: (status: string) => updateInvoiceStatus(row.id, { status }),
+    onMutate: (status) => setOptimistic(status),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sb-invoices"] }),
+    onError: () => setOptimistic(null),
+    onSettled: () => setEditing(false),
+  });
+
+  if (editing) {
+    return (
+      <select
+        autoFocus
+        defaultValue={current}
+        disabled={isPending}
+        onBlur={() => setEditing(false)}
+        onChange={(e) => mutate(e.target.value)}
+        style={{
+          padding: "4px 8px",
+          borderRadius: 8,
+          border: `1px solid ${COLORS.slate300}`,
+          fontSize: 12,
+          fontWeight: 700,
+          background: COLORS.white,
+          cursor: "pointer",
+          outline: "none",
+        }}
+      >
+        <option value="CREATED">Créée</option>
+        <option value="VALIDATED">Validée</option>
+        <option value="CONTESTED">Contestée</option>
+      </select>
+    );
+  }
+
+  return (
+    <span
+      title="Cliquer pour modifier"
+      onClick={() => setEditing(true)}
+      style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
+    >
+      <StatusPill v={current as any} />
+      <span style={{ fontSize: 10, color: COLORS.slate400 }}>✎</span>
+    </span>
+  );
+}
+
+// ─── Composant cellule paiement éditable ────────────────────────────────────
+function EditablePaymentCell({ row }: { row: SonatelInvoice }) {
+  const [editing, setEditing] = useState(false);
+  const [optimistic, setOptimistic] = useState<string | null | undefined>(undefined);
+  const queryClient = useQueryClient();
+
+  const current = optimistic !== undefined ? optimistic : row.payment_status;
+
+  const { mutate, isPending } = useMutation({
+    mutationFn: (payment_status: string) =>
+      updateInvoiceStatus(row.id, { payment_status }),
+    onMutate: (v) => setOptimistic(v),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sb-invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["sb-paid-count"] });
+      queryClient.invalidateQueries({ queryKey: ["sb-unpaid-count"] });
+      queryClient.invalidateQueries({ queryKey: ["sb-outscope-count"] });
+    },
+    onError: () => setOptimistic(undefined),
+    onSettled: () => setEditing(false),
+  });
+
+  if (editing) {
+    return (
+      <select
+        autoFocus
+        defaultValue={current ?? ""}
+        disabled={isPending}
+        onBlur={() => setEditing(false)}
+        onChange={(e) => mutate(e.target.value)}
+        style={{
+          padding: "4px 8px",
+          borderRadius: 8,
+          border: `1px solid ${COLORS.slate300}`,
+          fontSize: 12,
+          fontWeight: 700,
+          background: COLORS.white,
+          cursor: "pointer",
+          outline: "none",
+        }}
+      >
+        <option value="PAID">Payée</option>
+        <option value="UNPAID">Impayée</option>
+        <option value="OUT_OF_SCOPE">Hors scope</option>
+      </select>
+    );
+  }
+
+  return (
+    <span
+      title="Cliquer pour modifier"
+      onClick={() => setEditing(true)}
+      style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
+    >
+      <PayPill value={current} updatedAt={row.payment_status_updated_at} />
+      <span style={{ fontSize: 10, color: COLORS.slate400 }}>✎</span>
+    </span>
+  );
+}
+
+
 export default function SonatelBillingPage() {
   const defRange = useMemo(() => defaultRange(), []);
   const [tab, setTab] = useState<Tab>("INVOICES");
@@ -225,6 +342,7 @@ export default function SonatelBillingPage() {
   const [page, setPage] = useState(1);
   const [dateStart, setDateStart] = useState(defRange.start);
   const [dateEnd, setDateEnd] = useState(defRange.end);
+  
   const pageSize = 25;
 
   const tabs = [
@@ -409,8 +527,13 @@ const outScopeCountQ = useQuery({
       { key: "ttc", title: "TTC", render: (r) => amt((r as any).montant_ttc, COLORS.blue) },
       { key: "nrj", title: "NRJ", render: (r) => amt((r as any).energie_calculee, COLORS.green) },
       { key: "pen", title: "PenPrime", render: (r) => amt((r as any).penalite_abonnement_calculee, COLORS.red) },
-      { key: "status", title: "Certif.", render: (r) => <StatusPill v={(r as any).status} /> },
+      { key: "status", title: "Certif.", render: (r) => <EditableStatusCell row={r} /> },
       {
+        key: "pay",
+        title: "Paiement",
+        render: (r) => <EditablePaymentCell row={r} />,
+      },
+      /*{
         key: "pay",
         title: "Paiement",
         render: (r) => (
@@ -419,7 +542,7 @@ const outScopeCountQ = useQuery({
             updatedAt={(r as any).payment_status_updated_at}
           />
         ),
-      },
+      },*/
     ],
     [siteCol, mono, amt]
   );

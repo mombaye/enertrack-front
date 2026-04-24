@@ -208,6 +208,65 @@ export type SonatelBillingStats = {
   };
 };
 
-export function getSonatelBillingStats(params: { start: string; end: string }) {
+export function getSonatelBillingStats(params: { start: string; end: string}) {
   return api.get("/sonatel-billing/stats/", { params }).then((r) => r.data as SonatelBillingStats);
+}
+
+
+// Ajouter après listInvoices(...)
+
+export async function updateInvoiceStatus(
+  id: number,
+  payload: { status?: string; payment_status?: string }
+) {
+  const { data } = await api.patch<SonatelInvoice>(
+    `/sonatel-billing/records/${id}/update-status/`,
+    payload
+  );
+  return data;
+}
+
+// ─── Types FNP ───────────────────────────────────────────────────────────────
+export type FNPRow = {
+  site_id: string;
+  site_name: string | null;
+  numero_compte_contrat: string;
+  year: number;
+  month: number;
+  period: string;
+  est_conso: string | null;
+  est_montant_ht: string | null;
+  est_montant_ttc: string | null;
+  est_abonnement: string | null;
+  est_penalite: string | null;
+  est_nrj: string | null;
+  history_months: number;    // nb mois d'historique dispo pour l'estimation
+  last_invoice_period: string | null;
+  typology: string | null;
+};
+
+export type FNPSummary = {
+  fnp_count: number;
+  sites_count: number;
+  estimated_total_ht: string;
+  months_covered: number;
+  months_with_fnp: number;
+};
+
+export type FNPResponse = {
+  range: { start: string; end: string };
+  horizon: number;
+  summary: FNPSummary;
+  rows: FNPRow[];
+};
+
+export function getFNPSites(params: {
+  start: string;
+  end: string;
+  site?: string;
+  horizon?: number;
+}) {
+  return api
+    .get<FNPResponse>("/sonatel-billing/fnp/", { params })
+    .then((r) => r.data);
 }

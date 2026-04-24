@@ -34,9 +34,15 @@ import {
   Globe,
   TrendingUp,
   CheckCircle2,
+  PackageX, 
+  Clock, 
+  TrendingDown
 } from "lucide-react";
 import { api } from "@/services/api";
 import * as XLSX from "xlsx";
+import { getFNPSites, type FNPResponse } from "@/features/sonatelBilling/api";
+import FNPModal from "./FNPModal";
+
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type GlobalScope =
@@ -171,6 +177,18 @@ interface SiteOption {
   site_id: string;
   site_pk: number;
 }
+
+// Ajouter avec les autres interfaces
+interface FNPStats {
+  fnp_count: number;
+  sites_count: number;
+  estimated_total_ht: string;
+  estimated_total_ttc: string;
+  months_covered: number;
+  months_with_fnp: number;
+  no_history_count: number;
+}
+
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
@@ -902,12 +920,38 @@ export default function BillingTrackingPage() {
   const [globalScope, setGlobalScope] = useState<GlobalScope>("ALL");
 
   const siteCode = selectedSite?.site_id ?? undefined;
-
+  const [showFNPModal, setShowFNPModal] = useState(false);
   const q = useQuery({
     queryKey: ["billing-tracking", dateStart, dateEnd, siteCode, globalScope],
     queryFn: () => fetchStats(dateStart, dateEnd, siteCode, globalScope),
     staleTime: 5 * 60 * 1000,
   });
+
+  const fnpQ = useQuery({
+    queryKey: ["billing-fnp", dateStart, dateEnd, siteCode],
+    queryFn: () => getFNPSites({ start: dateStart, end: dateEnd, site: siteCode }),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const fnpData = fnpQ.data;
+  const fnpStats = fnpData?.summary;
+
+  // Chart data FNP par mois
+  const fnpChartData = useMemo(() => {
+    if (!fnpData?.rows) return [];
+    const byMonth: Record<string, { period: string; fnp_count: number; est_ht: number; sites: Set<string> }> = {};
+    for (const r of fnpData.rows) {
+      if (!byMonth[r.period]) {
+        byMonth[r.period] = { period: r.period, fnp_count: 0, est_ht: 0, sites: new Set() };
+      }
+      byMonth[r.period].fnp_count += 1;
+      byMonth[r.period].est_ht += r.est_montant_ht ? Number(r.est_montant_ht) : 0;
+      byMonth[r.period].sites.add(r.site_id);
+    }
+    return Object.values(byMonth)
+      .sort((a, b) => a.period.localeCompare(b.period))
+      .map((r) => ({ ...r, label: r.period.slice(0, 7), sites_count: r.sites.size }));
+  }, [fnpData]);
 
   const data = q.data;
   const isLoading = q.isLoading;
@@ -1426,6 +1470,31 @@ export default function BillingTrackingPage() {
                   accentLight={T.cyanL}
                 />
               </div>
+              {/* ✅ 2 cartes FNP supplémentaires dans la grille de KPIs */}
+              {!fnpQ.isLoading && fnpStats && (
+                <>
+                  <div className="btp-fade">
+                    <KpiCard
+                      label="Factures Non Parvenues"
+                      value={String(fnpStats.fnp_count)}
+                      sub={`${fnpStats.sites_count} site(s) · ${fnpStats.months_with_fnp} mois concerné(s)`}
+                      icon={<PackageX size={17} />}
+                      accent={fnpStats.fnp_count > 0 ? T.red : T.green}
+                      accentLight={fnpStats.fnp_count > 0 ? T.redL : T.greenL}
+                    />
+                  </div>
+                  <div className="btp-fade">
+                    <KpiCard
+                      label="HT estimé (FNP)"
+                      value={fmtM(fnpStats.estimated_total_ht)}
+                      sub={`Moy. ${fnpData?.horizon ?? 3} derniers mois · ${fnpStats.no_history_count} sans historique`}
+                      icon={<TrendingDown size={17} />}
+                      accent={T.orange}
+                      accentLight={T.orangeL}
+                    />
+                  </div>
+                </>
+              )}
             </>
           ) : null}
         </div>
@@ -1787,6 +1856,216 @@ export default function BillingTrackingPage() {
           </Card>
         </div>
 
+
+        {/* ─── Section FNP ──────────────────────────────────────────────────────────── */}
+        <div className="btp-fade" style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 12 }}>
+          <Card>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
+              <SectionTitle icon={<PackageX size={13} />}>
+                Factures Non Parvenues — évolution mensuelle
+              </SectionTitle>
+              {fnpStats && fnpStats.fnp_count > 0 && (
+                  <button
+                    onClick={() => setShowFNPModal(true)}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 7,
+                      padding: "7px 16px", borderRadius: 10,
+                      background: T.red, border: "none", color: "white",
+                      fontSize: 12, fontWeight: 600, cursor: "pointer",
+                      boxShadow: `0 4px 12px ${T.red}33`,
+                    }}
+                  >
+                    <PackageX size={12} />
+                    {fnpStats.fnp_count} FNP · Voir détail
+                  </button>
+                )}
+            </div>
+
+            {fnpQ.isLoading ? (
+              <Skeleton h={200} />
+            ) : fnpChartData.length === 0 ? (
+              <div style={{
+                display: "flex", flexDirection: "column", alignItems: "center",
+                justifyContent: "center", padding: "40px 0", gap: 8,
+              }}>
+                <div style={{ fontSize: 28 }}>✓</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: T.green }}>Aucune FNP sur la période</div>
+                <div style={{ fontSize: 12, color: T.textSub }}>Toutes les factures attendues ont été reçues.</div>
+              </div>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={fnpChartData} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} />
+                    <YAxis yAxisId="left" tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} width={32} />
+                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} width={52} tickFormatter={(v) => fmtM(v)} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar yAxisId="left" dataKey="fnp_count" name="Nb FNP" fill={T.red} radius={[5, 5, 0, 0]} opacity={0.85} />
+                    <Bar yAxisId="right" dataKey="est_ht" name="HT estimé" fill={T.orange} radius={[5, 5, 0, 0]} opacity={0.6} />
+                  </BarChart>
+                </ResponsiveContainer>
+
+                {/* Tableau détail FNP par mois */}
+                <div style={{
+                  marginTop: 16,
+                  borderRadius: 10,
+                  border: `1px solid ${T.border}`,
+                  overflow: "hidden",
+                }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: T.slateL }}>
+                        {["Mois", "Nb FNP", "Sites", "HT estimé", "TTC estimé"].map((h) => (
+                          <th key={h} style={{
+                            padding: "8px 12px", textAlign: "left",
+                            fontWeight: 700, color: T.textSub, fontSize: 10,
+                            textTransform: "uppercase", letterSpacing: ".08em",
+                            borderBottom: `1px solid ${T.border}`,
+                          }}>
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {fnpChartData.map((r, i) => {
+                        const monthRows = fnpData?.rows.filter((row) => row.period === r.period) ?? [];
+                        const estTtc = monthRows.reduce((s, row) => s + (row.est_montant_ttc ? Number(row.est_montant_ttc) : 0), 0);
+                        return (
+                          <tr key={r.period} style={{ borderBottom: `1px solid ${T.border}`, background: i % 2 === 0 ? "white" : T.slateL }}>
+                            <td style={{ padding: "8px 12px", fontWeight: 700, color: T.red, fontFamily: "monospace" }}>{r.label}</td>
+                            <td style={{ padding: "8px 12px" }}>
+                              <span style={{
+                                display: "inline-block", padding: "2px 8px", borderRadius: 999,
+                                background: T.redL, color: T.red, fontWeight: 700, fontSize: 11,
+                              }}>
+                                {r.fnp_count}
+                              </span>
+                            </td>
+                            <td style={{ padding: "8px 12px", color: T.textMid }}>{r.sites_count}</td>
+                            <td style={{ padding: "8px 12px", fontWeight: 700, color: T.text, fontFamily: "monospace" }}>
+                              {fmtM(r.est_ht)}
+                              <span style={{
+                                display: "inline-block", marginLeft: 5, padding: "1px 4px",
+                                borderRadius: 4, fontSize: 9, fontWeight: 700,
+                                background: T.orangeL, color: T.orange, verticalAlign: "middle",
+                              }}>EST</span>
+                            </td>
+                            <td style={{ padding: "8px 12px", fontWeight: 600, color: T.blue, fontFamily: "monospace" }}>
+                              {fmtM(estTtc)}
+                              <span style={{
+                                display: "inline-block", marginLeft: 5, padding: "1px 4px",
+                                borderRadius: 4, fontSize: 9, fontWeight: 700,
+                                background: T.orangeL, color: T.orange, verticalAlign: "middle",
+                              }}>EST</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </Card>
+
+          {/* ─── Panneau résumé estimation FNP ─────────────────────────────────────── */}
+          <Card>
+            <SectionTitle icon={<Clock size={13} />}>Résumé estimation FNP</SectionTitle>
+
+            {fnpQ.isLoading ? (
+              <Skeleton h={300} />
+            ) : !fnpStats ? (
+              <div style={{ color: T.textSub, fontSize: 12, textAlign: "center", padding: "24px 0" }}>
+                Aucune donnée
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {/* Taux de couverture mois */}
+                <div style={{
+                  padding: "14px 16px", borderRadius: 12,
+                  background: fnpStats.months_with_fnp === 0 ? T.greenL : T.redL,
+                  border: `1px solid ${fnpStats.months_with_fnp === 0 ? T.green : T.red}33`,
+                }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: T.textSub, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>
+                    Couverture mois
+                  </div>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                    <span style={{
+                      fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800,
+                      color: fnpStats.months_with_fnp === 0 ? T.green : T.red,
+                    }}>
+                      {fnpStats.months_with_fnp}
+                    </span>
+                    <span style={{ fontSize: 14, color: T.textMid, fontWeight: 600 }}>
+                      / {fnpStats.months_covered} mois avec FNP
+                    </span>
+                  </div>
+                  <div style={{ marginTop: 8, height: 6, background: "rgba(0,0,0,.06)", borderRadius: 99, overflow: "hidden" }}>
+                    <div style={{
+                      height: "100%",
+                      width: `${fnpStats.months_covered > 0 ? (fnpStats.months_with_fnp / fnpStats.months_covered) * 100 : 0}%`,
+                      background: fnpStats.months_with_fnp === 0 ? T.green : T.red,
+                      borderRadius: 99, transition: "width .5s ease",
+                    }} />
+                  </div>
+                </div>
+
+                {/* Montants estimés */}
+                {[
+                  { label: "Total HT estimé", value: fnpStats.estimated_total_ht, color: T.blue, light: T.blueL },
+                  { label: "Total TTC estimé", value: fnpStats.estimated_total_ttc ?? "0", color: T.cyan, light: T.cyanL },
+                ].map((item) => (
+                  <div key={item.label} style={{
+                    padding: "12px 14px", borderRadius: 12,
+                    background: item.light, border: `1px solid ${T.border}`,
+                  }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: T.textSub, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 4 }}>
+                      {item.label}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, color: item.color }}>
+                        {fmtM(item.value)}
+                      </span>
+                      <span style={{
+                        padding: "1px 6px", borderRadius: 4,
+                        background: T.orangeL, color: T.orange,
+                        fontSize: 9, fontWeight: 700,
+                      }}>EST</span>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Méta */}
+                <div style={{ padding: "10px 14px", borderRadius: 12, background: T.slateL, border: `1px solid ${T.border}` }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                    {[
+                      { label: "Sites concernés", value: String(fnpStats.sites_count), color: T.text },
+                      { label: "Horizon estimation", value: `${fnpData?.horizon ?? 3} mois`, color: T.textMid },
+                      { label: "Sans historique", value: String(fnpStats.no_history_count), color: fnpStats.no_history_count > 0 ? T.red : T.green },
+                    ].map((item) => (
+                      <div key={item.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: 11, color: T.textSub, fontWeight: 500 }}>{item.label}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: item.color }}>{item.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Note */}
+                <div style={{
+                  padding: "10px 12px", borderRadius: 10,
+                  background: T.orangeL, border: `1px solid ${T.orange}33`,
+                  fontSize: 11, color: T.orange, lineHeight: 1.5,
+                }}>
+                  <strong>Estimation</strong> basée sur la moyenne glissante des {fnpData?.horizon ?? 3} derniers mois de factures reçues par contrat.
+                </div>
+              </div>
+            )}
+          </Card>
+        </div>
+
         {!selectedSite && (
           <div className="btp-fade" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <Card>
@@ -1832,6 +2111,16 @@ export default function BillingTrackingPage() {
               )}
             </Card>
           </div>
+        )}
+
+        {showFNPModal && fnpData && (
+          <FNPModal
+            data={fnpData}
+            horizon={fnpData.horizon}
+            dateStart={dateStart}
+            dateEnd={dateEnd}
+            onClose={() => setShowFNPModal(false)}
+          />
         )}
       </div>
     </>
