@@ -15,6 +15,7 @@ import {
   ChevronDown,
   CloudRain,
   Database,
+  Download,
   Gauge,
   HelpCircle,
   Info,
@@ -168,6 +169,75 @@ export function getPrediction(params: {
 }) {
   return api.get<PredictionResponse>("/prediction/forecast/", { params }).then((r) => r.data);
 }
+
+
+export type PredictionBulkSummary = {
+  period_start: string;
+  period_end: string;
+  zone?: string | null;
+  sites_requested: number;
+  sites_processed: number;
+  sites_error: number;
+  months_predicted: number;
+  total_conso_pred: number;
+  total_ht_pred: number;
+  total_marge_pred: number;
+  months_marge_nok: number;
+  avg_confidence: number;
+};
+
+export type PredictionBulkResponse = {
+  mode: "bulk";
+  generated_at: string;
+  summary: PredictionBulkSummary;
+  results: PredictionResponse[];
+  errors: { "Site ID": string; Erreur: string }[];
+};
+
+export function getPredictionBulk(params: {
+  horizon?: number;
+  year_start?: number;
+  month_start?: number;
+  year_end?: number;
+  month_end?: number;
+  zone?: string;
+  search?: string;
+  limit?: number;
+}) {
+  return api
+    .get<PredictionBulkResponse>("/prediction/forecast-bulk/", { params })
+    .then((r) => r.data);
+}
+
+export async function exportPredictionBulkExcel(params: {
+  horizon?: number;
+  year_start?: number;
+  month_start?: number;
+  year_end?: number;
+  month_end?: number;
+  zone?: string;
+  search?: string;
+  limit?: number;
+}) {
+  const response = await api.get("/prediction/forecast-bulk/", {
+    params: { ...params, export: "xlsx" },
+    responseType: "blob",
+  });
+
+  const blob = new Blob([response.data], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `prediction_parc_${params.year_start || ""}_${params.month_start || ""}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Design tokens
@@ -460,6 +530,7 @@ function ChartTooltip({ active, payload, label }: any) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 type ViewTab = "forecast" | "details" | "factors";
+type PredictionMode = "site" | "bulk";
 
 export default function PredictionForecastPage() {
   const now = new Date();
@@ -467,6 +538,12 @@ export default function PredictionForecastPage() {
   const defaultEnd = periodKey(now.getFullYear(), Math.min(now.getMonth() + 6, 12));
 
   const [site, setSite] = useState("");
+  const [mode, setMode] = useState<PredictionMode>("site");
+  const [bulkData, setBulkData] = useState<PredictionBulkResponse | null>(null);
+  const [bulkZone, setBulkZone] = useState("");
+  const [bulkSearch, setBulkSearch] = useState("");
+  const [bulkLimit, setBulkLimit] = useState<number>(0);
+  const [exportingBulk, setExportingBulk] = useState(false);
   const [startKey, setStartKey] = useState(defaultStart);
   const [endKey, setEndKey] = useState(defaultEnd < defaultStart ? periodKey(now.getFullYear() + 1, 6) : defaultEnd);
   const [horizon, setHorizon] = useState(6);
@@ -482,29 +559,64 @@ export default function PredictionForecastPage() {
   const { year: ye, month: me } = keyToYM(Math.max(startKey, endKey));
 
   const runPrediction = useCallback(async () => {
-    const cleanSite = site.trim();
-    if (!cleanSite) {
-      setError("Renseigne d’abord un Site ID.");
-      return;
-    }
-
     setLoading(true);
     setError(null);
+
     try {
+      if (mode === "bulk") {
+        const res = await getPredictionBulk(
+          useInterval
+            ? {
+                year_start: ys,
+                month_start: ms,
+                year_end: ye,
+                month_end: me,
+                zone: bulkZone || undefined,
+                search: bulkSearch || undefined,
+                limit: bulkLimit || undefined,
+              }
+            : {
+                horizon,
+                zone: bulkZone || undefined,
+                search: bulkSearch || undefined,
+                limit: bulkLimit || undefined,
+              },
+        );
+
+        setBulkData(res);
+        setData(null);
+        setTab("forecast");
+        return;
+      }
+
+      const cleanSite = site.trim();
+      if (!cleanSite) {
+        setError("Renseigne d’abord un Site ID.");
+        return;
+      }
+
       const res = await getPrediction(
         useInterval
           ? { site: cleanSite, year_start: ys, month_start: ms, year_end: ye, month_end: me }
           : { site: cleanSite, horizon },
       );
+
       setData(res);
+      setBulkData(null);
       setTab("forecast");
     } catch (e: any) {
       setData(null);
-      setError(e?.response?.data?.detail || e?.response?.data?.site || e?.message || "Erreur lors de la prédiction.");
+      setBulkData(null);
+      setError(
+        e?.response?.data?.detail ||
+          e?.response?.data?.site ||
+          e?.message ||
+          "Erreur lors de la prédiction.",
+      );
     } finally {
       setLoading(false);
     }
-  }, [site, useInterval, ys, ms, ye, me, horizon]);
+  }, [mode, site, useInterval, ys, ms, ye, me, horizon, bulkZone, bulkSearch, bulkLimit]);
 
   const chartData = useMemo(() => {
     if (!data) return [];
@@ -611,18 +723,83 @@ export default function PredictionForecastPage() {
           </div>
 
           <div style={{ display: "flex", gap: 9, alignItems: "center", flexWrap: "wrap" }}>
-            <div style={{ position: "relative" }}>
-              <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,.58)" }} />
-              <input
-                className="pred-input"
-                value={site}
-                onChange={(e) => setSite(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && runPrediction()}
-                placeholder="Site ID ex: DBL_001"
-                style={{ ...inputStyle, paddingLeft: 34, width: 220, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
-              />
-            </div>
+            {mode === "site" ? (
+                <div style={{ position: "relative" }}>
+                  <Search
+                    size={14}
+                    style={{
+                      position: "absolute",
+                      left: 12,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      color: "rgba(255,255,255,.58)",
+                    }}
+                  />
+                  <input
+                    className="pred-input"
+                    value={site}
+                    onChange={(e) => setSite(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && runPrediction()}
+                    placeholder="Site ID ex: BKL_0004"
+                    style={{
+                      ...inputStyle,
+                      paddingLeft: 34,
+                      width: 220,
+                      fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                    }}
+                  />
+                </div>
+              ) : (
+                <>
+                  <input
+                    value={bulkZone}
+                    onChange={(e) => setBulkZone(e.target.value)}
+                    placeholder="Zone ex: DKR"
+                    style={{ ...inputStyle, width: 120 }}
+                  />
 
+                  <input
+                    value={bulkSearch}
+                    onChange={(e) => setBulkSearch(e.target.value)}
+                    placeholder="Recherche site..."
+                    style={{ ...inputStyle, width: 170 }}
+                  />
+
+                  <input
+                    type="number"
+                    value={bulkLimit || ""}
+                    onChange={(e) => setBulkLimit(Number(e.target.value || 0))}
+                    placeholder="Limite"
+                    style={{ ...inputStyle, width: 90 }}
+                  />
+                </>
+              )}
+
+            <div style={{ display: "flex", border: "1px solid rgba(255,255,255,.18)", borderRadius: 12, overflow: "hidden" }}>
+              {(["site", "bulk"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => {
+                    setMode(m);
+                    setError(null);
+                    setData(null);
+                    setBulkData(null);
+                  }}
+                  style={{
+                    border: "none",
+                    padding: "9px 12px",
+                    background: mode === m ? "#fff" : "rgba(255,255,255,.08)",
+                    color: mode === m ? C.blue[800] : "#fff",
+                    fontSize: 12,
+                    fontWeight: 950,
+                    cursor: "pointer",
+                  }}
+                >
+                  {m === "site" ? "Par site" : "Parc global"}
+                </button>
+              ))}
+            </div>
             <button type="button" onClick={() => setUseInterval((v) => !v)} style={{ ...buttonStyle, background: useInterval ? "rgba(255,255,255,.16)" : "rgba(255,255,255,.08)", color: "#fff", border: "1px solid rgba(255,255,255,.18)" }}>
               {useInterval ? <Calendar size={14} /> : <Layers size={14} />}
               {useInterval ? "Période" : "Horizon"}
@@ -640,6 +817,46 @@ export default function PredictionForecastPage() {
               {loading ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <RefreshCw size={14} />}
               Prédire
             </button>
+            {mode === "bulk" ? (
+                <button
+                  type="button"
+                  disabled={exportingBulk}
+                  onClick={async () => {
+                    setExportingBulk(true);
+                    try {
+                      await exportPredictionBulkExcel(
+                        useInterval
+                          ? {
+                              year_start: ys,
+                              month_start: ms,
+                              year_end: ye,
+                              month_end: me,
+                              zone: bulkZone || undefined,
+                              search: bulkSearch || undefined,
+                              limit: bulkLimit || undefined,
+                            }
+                          : {
+                              horizon,
+                              zone: bulkZone || undefined,
+                              search: bulkSearch || undefined,
+                              limit: bulkLimit || undefined,
+                            },
+                      );
+                    } finally {
+                      setExportingBulk(false);
+                    }
+                  }}
+                  style={{
+                    ...buttonStyle,
+                    background: "rgba(255,255,255,.12)",
+                    color: "#fff",
+                    border: "1px solid rgba(255,255,255,.18)",
+                  }}
+                >
+                  {exportingBulk ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Download size={14} />}
+                  Export Excel
+                </button>
+              ) : null}
           </div>
         </div>
 
@@ -696,6 +913,85 @@ export default function PredictionForecastPage() {
           <Card>
             <div style={{ padding: 66, display: "flex", alignItems: "center", justifyContent: "center", gap: 12, color: C.slate[500], fontWeight: 850 }}>
               <Loader2 size={24} style={{ animation: "spin 1s linear infinite", color: C.blue[600] }} /> Calcul de la prédiction hybride…
+            </div>
+          </Card>
+        ) : null}
+
+        {bulkData && !loading ? (
+          <Card>
+            <SectionTitle
+              icon={<Database size={18} />}
+              title="Prévision globale parc"
+              subtitle={`${bulkData.summary.period_start} → ${bulkData.summary.period_end}`}
+              right={<Badge tone="blue">{bulkData.summary.sites_processed} sites traités</Badge>}
+            />
+
+            <div style={{ padding: 16, display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12 }}>
+              <MiniMetric label="Conso prévue" value={fmtKwh(bulkData.summary.total_conso_pred)} icon={<Zap size={14} />} color={C.blue[600]} />
+              <MiniMetric label="HT prédit" value={fmtMoney(bulkData.summary.total_ht_pred)} icon={<Wallet size={14} />} color={C.orange.main} />
+              <MiniMetric label="Marge prévue" value={fmtMoney(bulkData.summary.total_marge_pred)} icon={<TrendingUp size={14} />} color={bulkData.summary.total_marge_pred >= 0 ? C.ok.main : C.nok.main} />
+              <MiniMetric label="Mois marge NOK" value={String(bulkData.summary.months_marge_nok)} icon={<XCircle size={14} />} color={bulkData.summary.months_marge_nok ? C.nok.main : C.ok.main} />
+              <MiniMetric label="Confiance moyenne" value={fmtConfidence(bulkData.summary.avg_confidence)} icon={<Gauge size={14} />} color={confidenceColor(bulkData.summary.avg_confidence)} />
+            </div>
+
+            <div style={{ padding: "0 16px 16px", overflow: "auto", maxHeight: 420 }}>
+              <table style={{ width: "100%", minWidth: 900, borderCollapse: "separate", borderSpacing: 0, fontSize: 12 }}>
+                <thead>
+                  <tr>
+                    <Th>Site</Th>
+                    <Th>Zone</Th>
+                    <Th right>Conso prévue</Th>
+                    <Th right>HT prédit</Th>
+                    <Th right>Marge</Th>
+                    <Th center>Mois NOK</Th>
+                    <Th center>Confiance moy.</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bulkData.results.map((r) => {
+                    const totalConso = r.predictions.reduce((a, p) => a + n(p.conso_pred), 0);
+                    const totalHt = r.predictions.reduce((a, p) => a + n(p.ht_pred), 0);
+                    const totalMarge = r.predictions.reduce((a, p) => a + n(p.marge_pred), 0);
+                    const nok = r.predictions.filter((p) => !p.marge_ok).length;
+                    const conf = r.predictions.length
+                      ? r.predictions.reduce((a, p) => a + n(p.confidence), 0) / r.predictions.length
+                      : 0;
+
+                    return (
+                      <tr key={r.site_id} className="pred-row">
+                        <Td>
+                          <strong style={{ color: C.blue[800], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
+                            {r.site_id}
+                          </strong>
+                          <div style={{ fontSize: 11, color: C.slate[500] }}>{r.site_name || "—"}</div>
+                        </Td>
+                        <Td>{r.zone_normalized || r.zone || "—"}</Td>
+                        <Td right>{fmtKwh(totalConso)}</Td>
+                        <Td right>{fmtMoney(totalHt)}</Td>
+                        <Td right>
+                          <strong style={{ color: totalMarge >= 0 ? C.ok.dark : C.nok.dark }}>
+                            {fmtMoney(totalMarge)}
+                          </strong>
+                        </Td>
+                        <Td center>
+                          <Badge tone={nok ? "nok" : "ok"}>{nok}</Badge>
+                        </Td>
+                        <Td center>
+                          <Badge tone={conf >= 0.78 ? "ok" : conf >= 0.62 ? "warn" : "nok"}>
+                            {fmtConfidence(conf)}
+                          </Badge>
+                        </Td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {bulkData.errors.length ? (
+                <div style={{ marginTop: 12, padding: 12, borderRadius: 14, background: C.warn.light, color: C.warn.dark, fontSize: 12 }}>
+                  {bulkData.errors.length} site(s) non traités. Les détails sont disponibles dans l’export Excel.
+                </div>
+              ) : null}
             </div>
           </Card>
         ) : null}
