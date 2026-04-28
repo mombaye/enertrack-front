@@ -1,737 +1,979 @@
-// src/features/prediction/PredictionPage.tsx — light v4
-// Fond blanc · design moderne · stats globales par défaut · export tous sites · fix zone DBL→DIOURBEL
-import { useState, useMemo, useRef, useEffect, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ComposedChart, Bar, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { BrainCircuit, Search, X, Building2, Globe, Download, RefreshCw,
-  CloudRain, Thermometer, Info, CheckCircle2, Calendar, Activity,
-  Cpu, FileSpreadsheet, Layers, Zap, PackageX, TrendingDown, TrendingUp } from "lucide-react";
+// src/features/prediction/PredictionForecastPage.tsx
+// V2 — Front prédiction consommation EnerTrack
+// Objectif : prédiction hybride avec historique, prévision, mois partiels, météo, événements et marge prévisionnelle.
+
+import { useCallback, useMemo, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import {
+  Activity,
+  AlertCircle,
+  ArrowDownRight,
+  ArrowUpRight,
+  BarChart3,
+  Calendar,
+  CheckCircle2,
+  ChevronDown,
+  CloudRain,
+  Database,
+  Gauge,
+  HelpCircle,
+  Info,
+  Layers,
+  LineChart as LineIcon,
+  Loader2,
+  MapPin,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Sun,
+  Target,
+  ThermometerSun,
+  TrendingDown,
+  TrendingUp,
+  Wallet,
+  X,
+  XCircle,
+  Zap,
+} from "lucide-react";
+import {
+  Area,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ComposedChart,
+  Legend,
+  Line,
+  ReferenceArea,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { api } from "@/services/api";
-import * as XLSX from "xlsx";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-type Factor    = { feature: string; impact: number };
-type EvInfo    = { name: string; date: string };
-type Meteo     = { temp_max_mean?: number; precip_total?: number };
-type PredMonth = {
-  period: string; year: number; month: number;
-  conso_pred: number; ht_pred: number; marge_pred: number; marge_ok: boolean;
-  ic_lo: number; ic_hi: number; confidence: number; fnp_score: number;
-  top_factors: Factor[]; events: EvInfo[]; meteo: Meteo;
-};
-type PredResp  = {
-  site_id: string; zone: string; horizon: number;
-  generated_at: string; model_version: string;
-  historic: { period: string; conso: number; ht: number }[];
-  predictions: PredMonth[];
-};
-type Site      = { id: number; site_id: string; numero_compte_contrat: string };
-type GlobalStats = {
-  evolution: { period: string; invoices: number; montant_ht: string }[];
-  distribution_ht: { total_ht: string };
-  payment_statuses?: { summary: { total: number; paid: number; paid_pct: number } };
+// ─────────────────────────────────────────────────────────────────────────────
+// API types + helper
+// Tu peux aussi déplacer ces types dans src/features/prediction/api.ts
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type PredictionEvent = {
+  name: string;
+  date: string;
+  window_start?: string;
+  window_end?: string;
+  days_in_month?: number;
+  zone_weight?: number;
+  pressure?: number;
 };
 
-// ─── Design system ────────────────────────────────────────────────────────────
-const T = {
-  // Neutrals
-  bg:     "#F8FAFC",
-  card:   "#FFFFFF",
-  border: "rgba(15,23,42,0.07)",
-  borderM:"rgba(15,23,42,0.13)",
-  // Text
-  t1: "#0F172A", t2: "#475569", t3: "#94A3B8",
-  // Brand
-  blue:   "#1D4ED8", blueL: "#EFF6FF", blueMid:"#3B82F6",
-  indigo: "#4F46E5", indigoL:"#EEF2FF",
-  // Semantic
-  green:  "#059669", greenL: "#ECFDF5",
-  red:    "#DC2626", redL:   "#FFF5F5",
-  amber:  "#D97706", amberL: "#FFFBEB",
-  cyan:   "#0891B2", cyanL:  "#ECFEFF",
-  violet: "#7C3AED", violetL:"#F5F3FF",
-  // Mono
-  mono: "'Fira Code','Cascadia Code',ui-monospace,monospace",
+export type PredictionMeteo = {
+  temp_max_mean?: number;
+  temp_min_mean?: number;
+  precip_total?: number;
+  humidity_max?: number;
+  et0_mean?: number;
+  is_hivernage?: number;
+  meteo_source?: string;
 };
 
-// ─── Zone normalization ───────────────────────────────────────────────────────
-const ZMAP: Record<string,string> = {
-  DBL:"DIOURBEL",DIB:"DIOURBEL",DIO:"DIOURBEL",DKR:"DKR",DAK:"DKR",
-  THI:"THIES",TH:"THIES",LOU:"LOUGA",LG:"LOUGA",KAO:"KAOLACK",KAL:"KAOLACK",
-  ZIG:"ZIGUINCHOR",ZI:"ZIGUINCHOR",SLO:"SAINT-LOUIS",SL:"SAINT-LOUIS",SLOU:"SAINT-LOUIS",
-  TAM:"TAMBACOUNDA",TB:"TAMBACOUNDA",KOL:"KOLDA",FAT:"FATICK",FT:"FATICK",
-  MAT:"MATAM",KAF:"KAFFRINE",SED:"SEDHIOU",KED:"KEDOUGOU",
-};
-const nz = (z: string) => ZMAP[z?.toUpperCase()] ?? z?.toUpperCase() ?? "DKR";
-
-// ─── Feature labels ───────────────────────────────────────────────────────────
-const FL: Record<string,string> = {
-  conso_lag_1m:"Conso M−1", rolling_3m_conso:"Moyenne 3 mois", conso_lag_3m:"Conso M−3",
-  is_hivernage_meteo:"Hivernage (pluie)", event_magal_pressure:"Magal · zone",
-  event_gamou_pressure:"Gamou · zone", event_tabaski_pressure:"Tabaski",
-  event_korite_pressure:"Korité", total_event_pressure:"Pression événements",
-  load_w:"Load site (W)", precip_total:"Précipitations", temp_max_mean:"Température max",
-  recurrence_score:"Récurrence NOK",
+export type PredictionBaseline = {
+  lag_1m?: number;
+  lag_3m?: number;
+  lag_6m?: number;
+  lag_12m?: number;
+  same_month_avg?: number;
+  rolling_3m?: number;
+  rolling_6m?: number;
+  trend_3m_vs_12m?: number;
 };
 
-const MONTHS = ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"];
-const fmtP = (p: string) => { const [y,m] = p.split("-"); return `${MONTHS[+m-1]} ${y}`; };
-const fmtN = (v: number|string, u?: string) => {
-  const val = Number(v); if (isNaN(val)) return "—";
-  const abs = Math.abs(val), sign = val < 0 ? "−" : "";
-  const s = abs >= 1e6 ? `${sign}${(abs/1e6).toFixed(1)} M` : abs >= 1e3 ? `${sign}${Math.round(abs/1e3).toLocaleString("fr-FR")} k` : `${sign}${Math.round(val).toLocaleString("fr-FR")}`;
-  return u ? `${s} ${u}` : s;
-};
-const fmtK = (v: number) => v >= 1000 ? `${(v/1000).toFixed(1)} MWh` : `${Math.round(v).toLocaleString("fr-FR")} kWh`;
-
-// ─── API ──────────────────────────────────────────────────────────────────────
-const fetchPred   = (s: string, h: number): Promise<PredResp> => api.get("/prediction/forecast/", { params: { site: s, horizon: h } }).then(r => r.data);
-const fetchGlobal = (start: string, end: string): Promise<GlobalStats> => api.get("/sonatel-billing/stats/", { params: { start, end } }).then(r => r.data);
-const fetchSites  = (): Promise<Site[]> => api.get("/sonatel-billing/contract-site-links/", { params: { limit: 500 } }).then(r => Array.isArray(r.data) ? r.data : (r.data.results ?? []));
-const searchSites = (q: string): Promise<Site[]> => api.get("/sonatel-billing/contract-site-links/", { params: { search: q, limit: 20 } }).then(r => {
-  const list = Array.isArray(r.data) ? r.data : (r.data.results ?? []);
-  const seen = new Set<string>();
-  return list.filter((s: Site) => !seen.has(s.site_id) && seen.add(s.site_id));
-});
-const year0 = () => {
-  const n = new Date(), f = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-  return { start: f(new Date(n.getFullYear(),0,1)), end: f(n) };
+export type PredictionEstimationSignal = {
+  available?: boolean;
+  source?: string | null;
+  conso_estimee_kwh?: number | null;
+  source_score?: number;
 };
 
-// ─── Export ───────────────────────────────────────────────────────────────────
-async function exportAll(sites: Site[], h: number, onP: (n: number, t: number) => void) {
-  const wb = XLSX.utils.book_new(), summary: any[] = [];
-  for (let i = 0; i < sites.length; i++) {
-    onP(i+1, sites.length);
-    try {
-      const d = await fetchPred(sites[i].site_id, h);
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(d.predictions.map(p => ({
-        "Site": sites[i].site_id, "Période": p.period, "Conso kWh": Math.round(p.conso_pred),
-        "HT FCFA": Math.round(p.ht_pred), "Marge": Math.round(p.marge_pred),
-        "Statut": p.marge_ok ? "OK" : "NOK", "FNP %": Math.round(p.fnp_score*100),
-        "Confiance %": Math.round(p.confidence*100), "Événements": p.events.map(e => e.name).join(", ")||"—",
-      }))), sites[i].site_id.slice(0,31));
-      summary.push({ "Site": sites[i].site_id, "Zone": d.zone,
-        "Conso moy kWh": Math.round(d.predictions.reduce((s,p) => s+p.conso_pred, 0)/d.predictions.length),
-        "Total HT FCFA": Math.round(d.predictions.reduce((s,p) => s+p.ht_pred, 0)),
-        "FNP max %": Math.round(Math.max(...d.predictions.map(p => p.fnp_score))*100), "Modèle": d.model_version });
-    } catch {}
+export type PredictionMonth = {
+  period: string;
+  year: number;
+  month: number;
+
+  conso_pred: number;
+  conso_full_month_model?: number | null;
+  conso_rule_based?: number | null;
+  conso_ml?: number | null;
+
+  observed_kwh?: number;
+  remaining_pred_kwh?: number;
+  is_partial_month?: boolean;
+  observed_days?: number;
+  remaining_days?: number;
+
+  ht_pred: number;
+  redevance?: number;
+  marge_pred: number;
+  marge_ok: boolean;
+
+  ic_lo: number;
+  ic_hi: number;
+  confidence: number;
+  fnp_score: number;
+
+  baseline?: PredictionBaseline;
+  events?: PredictionEvent[];
+  event_pressure?: number;
+  meteo?: PredictionMeteo;
+  estimation?: PredictionEstimationSignal;
+  explanation?: string[];
+
+  // Compat ancienne version
+  top_factors?: { feature: string; impact: number }[];
+};
+
+export type PredictionHistoricMonth = {
+  period: string;
+  conso?: number;
+  conso_full?: number;
+  ht?: number;
+  days?: number;
+  is_partial?: boolean;
+};
+
+export type PredictionResponse = {
+  site_id: string;
+  site_name?: string | null;
+  zone?: string;
+  zone_raw?: string;
+  zone_normalized?: string;
+  horizon: number;
+  period_start?: string;
+  period_end?: string;
+  generated_at: string;
+  model_version: string;
+  model_used?: boolean;
+  historic: PredictionHistoricMonth[];
+  predictions: PredictionMonth[];
+};
+
+export function getPrediction(params: {
+  site: string;
+  horizon?: number;
+  year_start?: number;
+  month_start?: number;
+  year_end?: number;
+  month_end?: number;
+}) {
+  return api.get<PredictionResponse>("/prediction/forecast/", { params }).then((r) => r.data);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Design tokens
+// ─────────────────────────────────────────────────────────────────────────────
+
+const C = {
+  blue: {
+    950: "#010E2A",
+    900: "#021A40",
+    800: "#032566",
+    700: "#0A3D96",
+    600: "#1A56C4",
+    500: "#3272E0",
+    300: "#91B9F8",
+    200: "#C0D8FB",
+    100: "#E4EFFE",
+    50: "#F2F6FE",
+  },
+  slate: {
+    950: "#020617",
+    900: "#0F172A",
+    800: "#1E293B",
+    700: "#334155",
+    600: "#475569",
+    500: "#64748B",
+    400: "#94A3B8",
+    300: "#CBD5E1",
+    200: "#E2E8F0",
+    100: "#F1F5F9",
+    50: "#F8FAFC",
+  },
+  ok: { main: "#059669", light: "#D1FAE5", mid: "#A7F3D0", dark: "#065F46" },
+  nok: { main: "#DC2626", light: "#FEE2E2", mid: "#FECACA", dark: "#991B1B" },
+  warn: { main: "#D97706", light: "#FEF3C7", mid: "#FDE68A", dark: "#92400E" },
+  cyan: { main: "#0891B2", light: "#CFFAFE", dark: "#0E7490" },
+  purple: { main: "#7C3AED", light: "#EDE9FE", dark: "#5B21B6" },
+  orange: { main: "#EA580C", light: "#FFEDD5", dark: "#C2410C" },
+  rose: { main: "#DB2777", light: "#FCE7F3", dark: "#9D174D" },
+};
+
+const HDR = "linear-gradient(135deg,#010E2A 0%,#032566 54%,#0A3D96 100%)";
+const PAGE_BG = "linear-gradient(180deg,#F8FAFC 0%,#EEF4FF 100%)";
+const MONTHS_FR = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const periodKey = (y: number, m: number) => y * 100 + m;
+const keyToYM = (k: number) => ({ year: Math.floor(k / 100), month: k % 100 });
+const fmtPeriod = (y: number, m: number) => `${MONTHS_FR[m - 1]} ${y}`;
+
+function n(v: number | string | null | undefined): number {
+  if (v === null || v === undefined || v === "") return 0;
+  const parsed = typeof v === "number" ? v : Number(String(v).replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function maybe(v: number | string | null | undefined): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const parsed = typeof v === "number" ? v : Number(String(v).replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function fmtKwh(v: number | string | null | undefined): string {
+  const value = maybe(v);
+  if (value === null) return "—";
+  if (Math.abs(value) >= 1000) return `${(value / 1000).toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MWh`;
+  return `${value.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} kWh`;
+}
+
+function fmtMoney(v: number | string | null | undefined): string {
+  const value = maybe(v);
+  if (value === null) return "—";
+  if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} M FCFA`;
+  return `${value.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} FCFA`;
+}
+
+function fmtPct(v: number | null | undefined): string {
+  if (v === null || v === undefined || !Number.isFinite(v)) return "—";
+  return `${v > 0 ? "+" : ""}${v.toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+}
+
+function fmtConfidence(v: number | null | undefined): string {
+  if (v === null || v === undefined || !Number.isFinite(v)) return "—";
+  return `${Math.round(v * 100)}%`;
+}
+
+function fmtDate(d?: string | null): string {
+  if (!d) return "—";
+  const parsed = new Date(d);
+  if (Number.isNaN(parsed.getTime())) return d;
+  return parsed.toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function mwhTick(v: number) {
+  if (Math.abs(v) >= 1000) return `${Math.round(v / 1000)} MWh`;
+  return `${Math.round(v)} kWh`;
+}
+
+function moneyTick(v: number) {
+  if (Math.abs(v) >= 1_000_000) return `${Math.round(v / 1_000_000)}M`;
+  if (Math.abs(v) >= 1000) return `${Math.round(v / 1000)}k`;
+  return `${Math.round(v)}`;
+}
+
+function periodFromKey(k: number) {
+  const { year, month } = keyToYM(k);
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+function buildMonthOptions(fromYear = 2024, toYear = new Date().getFullYear() + 2) {
+  const out: Array<{ key: number; label: string }> = [];
+  for (let y = fromYear; y <= toYear; y += 1) {
+    for (let m = 1; m <= 12; m += 1) out.push({ key: periodKey(y, m), label: fmtPeriod(y, m) });
   }
-  if (summary.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "Résumé global");
-  XLSX.writeFile(wb, `predictions_h${h}_${new Date().toISOString().slice(0,10)}.xlsx`);
-}
-function exportOne(d: PredResp) {
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(d.predictions.map(p => ({
-    "Période": p.period, "Conso kWh": Math.round(p.conso_pred), "IC bas": Math.round(p.ic_lo), "IC haut": Math.round(p.ic_hi),
-    "HT FCFA": Math.round(p.ht_pred), "Marge": Math.round(p.marge_pred), "Statut": p.marge_ok ? "OK" : "NOK",
-    "FNP %": Math.round(p.fnp_score*100), "Confiance %": Math.round(p.confidence*100), "Précip mm": Math.round(p.meteo?.precip_total??0),
-  }))), "Prédictions");
-  XLSX.writeFile(wb, `pred_${d.site_id}_${d.generated_at}.xlsx`);
+  return out;
 }
 
-// ─── UI Components ────────────────────────────────────────────────────────────
+function cleanEventName(name: string) {
+  const map: Record<string, string> = {
+    magal: "Magal",
+    gamou: "Gamou",
+    tabaski: "Tabaski",
+    korite: "Korité",
+    tamkharit: "Tamkharit",
+    magal_darou: "Magal Darou",
+    layene: "Appel Layène",
+  };
+  return map[name] || name.replaceAll("_", " ");
+}
 
-const Card = ({ children, style = {} }: { children: ReactNode; style?: React.CSSProperties }) => (
-  <div style={{ background: T.card, borderRadius: 14, border: `1px solid ${T.border}`, boxShadow: "0 1px 4px rgba(15,23,42,.05), 0 0 0 0.5px rgba(15,23,42,.04)", ...style }}>{children}</div>
-);
+function confidenceColor(conf: number) {
+  if (conf >= 0.78) return C.ok.main;
+  if (conf >= 0.62) return C.warn.main;
+  return C.nok.main;
+}
 
-const Lbl = ({ children }: { children: ReactNode }) => (
-  <div style={{ fontSize: 9, fontWeight: 700, color: T.t3, letterSpacing: ".12em", textTransform: "uppercase" as const, marginBottom: 5 }}>{children}</div>
-);
+function riskTone(score: number): "ok" | "warn" | "nok" {
+  if (score >= 0.65) return "nok";
+  if (score >= 0.35) return "warn";
+  return "ok";
+}
 
-// KPI card — colored gradient top bar
-function KpiCard({ label, value, sub, color, colorL, icon, trend }:
-  { label: string; value: string; sub?: string; color: string; colorL: string; icon: ReactNode; trend?: "up"|"down"|"neutral" }) {
+function riskLabel(score: number) {
+  if (score >= 0.65) return "Risque élevé";
+  if (score >= 0.35) return "Risque moyen";
+  return "Risque faible";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UI atoms
+// ─────────────────────────────────────────────────────────────────────────────
+
+function Badge({ children, tone = "slate" }: { children: ReactNode; tone?: "slate" | "blue" | "ok" | "nok" | "warn" | "cyan" | "purple" | "orange" | "rose" }) {
+  const map = {
+    slate: { bg: C.slate[100], color: C.slate[700], border: C.slate[200] },
+    blue: { bg: C.blue[100], color: C.blue[700], border: C.blue[200] },
+    ok: { bg: C.ok.light, color: C.ok.dark, border: C.ok.mid },
+    nok: { bg: C.nok.light, color: C.nok.dark, border: C.nok.mid },
+    warn: { bg: C.warn.light, color: C.warn.dark, border: C.warn.mid },
+    cyan: { bg: C.cyan.light, color: C.cyan.dark, border: "#A5F3FC" },
+    purple: { bg: C.purple.light, color: C.purple.dark, border: "#DDD6FE" },
+    orange: { bg: C.orange.light, color: C.orange.dark, border: "#FDBA74" },
+    rose: { bg: C.rose.light, color: C.rose.dark, border: "#FBCFE8" },
+  }[tone];
+
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 9px", borderRadius: 999, border: `1px solid ${map.border}`, background: map.bg, color: map.color, fontSize: 10.5, fontWeight: 900, whiteSpace: "nowrap" }}>
+      {children}
+    </span>
+  );
+}
+
+function HelpTip({ text, light = false }: { text: string; light?: boolean }) {
+  return <HelpCircle size={12} style={{ color: light ? "rgba(255,255,255,.58)" : C.slate[400], cursor: "help" }} title={text} />;
+}
+
+function Card({ children, style }: { children: ReactNode; style?: CSSProperties }) {
+  return (
+    <div style={{ background: "rgba(255,255,255,.94)", border: `1px solid ${C.slate[200]}`, borderRadius: 20, boxShadow: "0 18px 45px rgba(15,23,42,.07)", overflow: "hidden", ...style }}>
+      {children}
+    </div>
+  );
+}
+
+function SectionTitle({ icon, title, subtitle, right }: { icon: ReactNode; title: string; subtitle?: string; right?: ReactNode }) {
+  return (
+    <div style={{ padding: "16px 18px", borderBottom: `1px solid ${C.slate[100]}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 13, background: C.blue[50], color: C.blue[700], display: "flex", alignItems: "center", justifyContent: "center" }}>{icon}</div>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 950, color: C.blue[950], letterSpacing: "-.02em" }}>{title}</div>
+          {subtitle ? <div style={{ fontSize: 11.5, color: C.slate[500], marginTop: 2 }}>{subtitle}</div> : null}
+        </div>
+      </div>
+      {right}
+    </div>
+  );
+}
+
+function KpiCard({ label, value, sub, icon, accent, help, danger }: { label: string; value: string; sub?: string; icon: ReactNode; accent: string; help?: string; danger?: boolean }) {
+  return (
+    <div style={{ position: "relative", overflow: "hidden", borderRadius: 18, background: "rgba(255,255,255,.09)", border: "1px solid rgba(255,255,255,.14)", padding: "15px 16px", minHeight: 92, boxShadow: "inset 0 1px 0 rgba(255,255,255,.12)" }}>
+      <div style={{ position: "absolute", inset: 0, background: `radial-gradient(circle at 90% 12%,${accent}33,transparent 32%)` }} />
+      <div style={{ position: "relative", display: "flex", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ fontSize: 10, fontWeight: 950, color: "rgba(255,255,255,.52)", letterSpacing: ".08em", textTransform: "uppercase" }}>{label}</div>
+            {help ? <HelpTip text={help} light /> : null}
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 950, color: danger ? "#FCA5A5" : "#fff", marginTop: 8, letterSpacing: "-.03em", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</div>
+          {sub ? <div style={{ fontSize: 11, color: "rgba(255,255,255,.48)", marginTop: 4 }}>{sub}</div> : null}
+        </div>
+        <div style={{ width: 38, height: 38, borderRadius: 14, background: "rgba(255,255,255,.10)", color: accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</div>
+      </div>
+      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 3, background: `linear-gradient(90deg,${accent},transparent)` }} />
+    </div>
+  );
+}
+
+function EmptyState({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div style={{ padding: 58, textAlign: "center", color: C.slate[500] }}>
+      <div style={{ width: 56, height: 56, borderRadius: 18, background: C.slate[100], margin: "0 auto 14px", display: "flex", alignItems: "center", justifyContent: "center", color: C.slate[400] }}>
+        <Search size={23} />
+      </div>
+      <div style={{ fontSize: 15, fontWeight: 950, color: C.slate[700] }}>{title}</div>
+      <div style={{ fontSize: 12, marginTop: 5 }}>{subtitle}</div>
+    </div>
+  );
+}
+
+function ProgressBar({ value, color }: { value: number; color: string }) {
+  const pct = Math.max(0, Math.min(100, value));
+  return (
+    <div style={{ height: 8, background: C.slate[100], borderRadius: 999, overflow: "hidden" }}>
+      <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: color }} />
+    </div>
+  );
+}
+
+function PeriodSelect({ startKey, endKey, onChange }: { startKey: number; endKey: number; onChange: (s: number, e: number) => void }) {
+  const options = useMemo(() => buildMonthOptions(2024, new Date().getFullYear() + 2), []);
+  const common: CSSProperties = { height: 38, borderRadius: 12, border: "1px solid rgba(255,255,255,.20)", background: "rgba(255,255,255,.10)", color: "#fff", padding: "0 10px", fontSize: 12, fontWeight: 900, outline: "none" };
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <Calendar size={15} color="rgba(255,255,255,.65)" />
+      <select value={Math.min(startKey, endKey)} onChange={(e) => onChange(Number(e.target.value), endKey)} style={common}>
+        {options.map((o) => <option key={o.key} value={o.key} style={{ color: C.slate[800] }}>{o.label}</option>)}
+      </select>
+      <span style={{ color: "rgba(255,255,255,.45)", fontWeight: 900 }}>→</span>
+      <select value={Math.max(startKey, endKey)} onChange={(e) => onChange(startKey, Number(e.target.value))} style={common}>
+        {options.map((o) => <option key={o.key} value={o.key} style={{ color: C.slate[800] }}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function ChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{ background: "#fff", border: `1px solid ${C.slate[200]}`, borderRadius: 14, padding: "10px 12px", boxShadow: "0 16px 40px rgba(15,23,42,.14)", minWidth: 220 }}>
+      <div style={{ fontSize: 12, fontWeight: 950, color: C.blue[950], marginBottom: 8 }}>{label}</div>
+      <div style={{ display: "grid", gap: 6 }}>
+        {payload.filter((p: any) => p.value !== null && p.value !== undefined).map((p: any) => {
+          const key = String(p.dataKey || "");
+          const isMoney = key.includes("marge") || key.includes("ht") || key.includes("redevance");
+          const isPct = key.includes("confidence") || key.includes("fnp");
+          return (
+            <div key={p.dataKey} style={{ display: "flex", justifyContent: "space-between", gap: 14, fontSize: 11.5 }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: C.slate[600] }}>
+                <span style={{ width: 8, height: 8, borderRadius: 999, background: p.color || p.fill }} />
+                {p.name || p.dataKey}
+              </span>
+              <strong style={{ color: C.slate[800], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
+                {isPct ? fmtConfidence(Number(p.value)) : isMoney ? fmtMoney(p.value) : fmtKwh(p.value)}
+              </strong>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Page
+// ─────────────────────────────────────────────────────────────────────────────
+
+type ViewTab = "forecast" | "details" | "factors";
+
+export default function PredictionForecastPage() {
+  const now = new Date();
+  const defaultStart = periodKey(now.getFullYear(), now.getMonth() + 1);
+  const defaultEnd = periodKey(now.getFullYear(), Math.min(now.getMonth() + 6, 12));
+
+  const [site, setSite] = useState("");
+  const [startKey, setStartKey] = useState(defaultStart);
+  const [endKey, setEndKey] = useState(defaultEnd < defaultStart ? periodKey(now.getFullYear() + 1, 6) : defaultEnd);
+  const [horizon, setHorizon] = useState(6);
+  const [useInterval, setUseInterval] = useState(true);
+  const [tab, setTab] = useState<ViewTab>("forecast");
+  const [showHelp, setShowHelp] = useState(true);
+
+  const [data, setData] = useState<PredictionResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const { year: ys, month: ms } = keyToYM(Math.min(startKey, endKey));
+  const { year: ye, month: me } = keyToYM(Math.max(startKey, endKey));
+
+  const runPrediction = useCallback(async () => {
+    const cleanSite = site.trim();
+    if (!cleanSite) {
+      setError("Renseigne d’abord un Site ID.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await getPrediction(
+        useInterval
+          ? { site: cleanSite, year_start: ys, month_start: ms, year_end: ye, month_end: me }
+          : { site: cleanSite, horizon },
+      );
+      setData(res);
+      setTab("forecast");
+    } catch (e: any) {
+      setData(null);
+      setError(e?.response?.data?.detail || e?.response?.data?.site || e?.message || "Erreur lors de la prédiction.");
+    } finally {
+      setLoading(false);
+    }
+  }, [site, useInterval, ys, ms, ye, me, horizon]);
+
+  const chartData = useMemo(() => {
+    if (!data) return [];
+    const historic = (data.historic || []).map((h) => ({
+      period: h.period,
+      label: h.period.slice(5),
+      historic: n(h.conso_full ?? h.conso),
+      historic_raw: n(h.conso),
+      prediction: null as number | null,
+      ic_lo: null as number | null,
+      ic_hi: null as number | null,
+      observed: null as number | null,
+      remaining: null as number | null,
+      marge: null as number | null,
+      confidence: null as number | null,
+      type: "Historique",
+    }));
+
+    const preds = (data.predictions || []).map((p) => ({
+      period: p.period,
+      label: p.period.slice(5),
+      historic: null as number | null,
+      historic_raw: null as number | null,
+      prediction: n(p.conso_pred),
+      ic_lo: n(p.ic_lo),
+      ic_hi: n(p.ic_hi),
+      observed: n(p.observed_kwh),
+      remaining: n(p.remaining_pred_kwh),
+      marge: n(p.marge_pred),
+      ht: n(p.ht_pred),
+      redevance: n(p.redevance),
+      confidence: n(p.confidence),
+      fnp: n(p.fnp_score),
+      type: "Prévision",
+    }));
+
+    return [...historic, ...preds];
+  }, [data]);
+
+  const stats = useMemo(() => {
+    const preds = data?.predictions || [];
+    const totalPred = preds.reduce((a, p) => a + n(p.conso_pred), 0);
+    const totalObserved = preds.reduce((a, p) => a + n(p.observed_kwh), 0);
+    const totalRemaining = preds.reduce((a, p) => a + n(p.remaining_pred_kwh), 0);
+    const totalHt = preds.reduce((a, p) => a + n(p.ht_pred), 0);
+    const totalMarge = preds.reduce((a, p) => a + n(p.marge_pred), 0);
+    const avgConf = preds.length ? preds.reduce((a, p) => a + n(p.confidence), 0) / preds.length : 0;
+    const avgRisk = preds.length ? preds.reduce((a, p) => a + n(p.fnp_score), 0) / preds.length : 0;
+    const partialCount = preds.filter((p) => p.is_partial_month).length;
+    const eventCount = preds.reduce((a, p) => a + (p.events?.length || 0), 0);
+    const nokCount = preds.filter((p) => !p.marge_ok).length;
+    return { totalPred, totalObserved, totalRemaining, totalHt, totalMarge, avgConf, avgRisk, partialCount, eventCount, nokCount };
+  }, [data]);
+
+  const nextPrediction = data?.predictions?.[0] || null;
+  const zoneNorm = data?.zone_normalized || data?.zone || "—";
+  const zoneRaw = data?.zone_raw && data.zone_raw !== zoneNorm ? data.zone_raw : null;
+
+  const buttonStyle: CSSProperties = {
+    border: "none",
+    borderRadius: 12,
+    padding: "9px 12px",
+    fontSize: 12,
+    fontWeight: 950,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 7,
+    cursor: "pointer",
+  };
+
+  const inputStyle: CSSProperties = {
+    height: 38,
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,.20)",
+    background: "rgba(255,255,255,.10)",
+    color: "#fff",
+    padding: "0 12px",
+    fontSize: 12,
+    fontWeight: 900,
+    outline: "none",
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: PAGE_BG, color: C.slate[800] }}>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeUp { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
+        .pred-row:hover { background:#EFF6FF !important; }
+        .pred-input::placeholder { color: rgba(255,255,255,.45); }
+      `}</style>
+
+      <div style={{ background: HDR, color: "#fff", padding: "22px 24px 18px", boxShadow: "0 18px 45px rgba(1,14,42,.24)" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 9px", background: "rgba(255,255,255,.10)", border: "1px solid rgba(255,255,255,.14)", borderRadius: 999, fontSize: 11, fontWeight: 950, color: "rgba(255,255,255,.72)" }}>
+              <Sparkles size={13} /> Module prédiction · Conso intelligente
+            </div>
+            <h1 style={{ margin: "12px 0 4px", fontSize: 28, lineHeight: 1.1, letterSpacing: "-.04em", fontWeight: 950 }}>
+              Prévision consommation, météo & événements
+            </h1>
+            <div style={{ fontSize: 13, color: "rgba(255,255,255,.62)", maxWidth: 900 }}>
+              Prévision hybride basée sur l’historique factures, eFMS, estimations, météo, saisonnalité annuelle et événements mensuels.
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 9, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ position: "relative" }}>
+              <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,.58)" }} />
+              <input
+                className="pred-input"
+                value={site}
+                onChange={(e) => setSite(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && runPrediction()}
+                placeholder="Site ID ex: DBL_001"
+                style={{ ...inputStyle, paddingLeft: 34, width: 220, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
+              />
+            </div>
+
+            <button type="button" onClick={() => setUseInterval((v) => !v)} style={{ ...buttonStyle, background: useInterval ? "rgba(255,255,255,.16)" : "rgba(255,255,255,.08)", color: "#fff", border: "1px solid rgba(255,255,255,.18)" }}>
+              {useInterval ? <Calendar size={14} /> : <Layers size={14} />}
+              {useInterval ? "Période" : "Horizon"}
+            </button>
+
+            {useInterval ? (
+              <PeriodSelect startKey={startKey} endKey={endKey} onChange={(s, e) => { setStartKey(s); setEndKey(e); }} />
+            ) : (
+              <select value={horizon} onChange={(e) => setHorizon(Number(e.target.value))} style={inputStyle}>
+                {[3, 6, 9, 12, 18].map((h) => <option key={h} value={h} style={{ color: C.slate[800] }}>{h} mois</option>)}
+              </select>
+            )}
+
+            <button type="button" onClick={runPrediction} disabled={loading} style={{ ...buttonStyle, background: "#fff", color: loading ? C.slate[400] : C.blue[800] }}>
+              {loading ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <RefreshCw size={14} />}
+              Prédire
+            </button>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(150px,1fr))", gap: 12, marginTop: 18 }}>
+          <KpiCard label="Conso prévue" value={data ? fmtKwh(stats.totalPred) : "—"} sub={data ? `${data.predictions.length} mois prévus` : "Lancer une prédiction"} accent={C.blue[300]} icon={<Zap size={22} />} help="Somme des consommations prédites sur la période." />
+          <KpiCard label="Déjà observé" value={data ? fmtKwh(stats.totalObserved) : "—"} sub={data && stats.partialCount ? `${stats.partialCount} mois partiel(s)` : "Mois partiels"} accent={C.cyan.main} icon={<Database size={22} />} help="Part déjà facturée ou observée pour les mois partiels." />
+          <KpiCard label="Reste estimé" value={data ? fmtKwh(stats.totalRemaining) : "—"} sub="Projection fin de mois" accent={C.purple.main} icon={<Target size={22} />} help="Consommation restante prédite pour les mois partiels." />
+          <KpiCard label="Marge prévue" value={data ? fmtMoney(stats.totalMarge) : "—"} sub={data ? `${stats.nokCount} mois marge NOK` : "Prévision financière"} accent={stats.totalMarge < 0 ? C.nok.main : C.ok.main} danger={stats.totalMarge < 0} icon={stats.totalMarge < 0 ? <TrendingDown size={22} /> : <TrendingUp size={22} />} help="Redevance - montant HT prédit." />
+          <KpiCard label="Confiance" value={data ? fmtConfidence(stats.avgConf) : "—"} sub={data ? data.model_used ? "Modèle ML actif" : "Fallback règle" : "Qualité prévision"} accent={confidenceColor(stats.avgConf)} icon={<Gauge size={22} />} help="Indice de confiance moyen sur la période." />
+          <KpiCard label="Événements" value={data ? String(stats.eventCount) : "—"} sub={data ? `${zoneNorm}${zoneRaw ? ` · ${zoneRaw}` : ""}` : "Zone normalisée"} accent={stats.eventCount ? C.warn.main : C.slate[300]} icon={<MapPin size={22} />} help="Événements religieux ou mensuels détectés sur la zone." />
+        </div>
+      </div>
+
+      <div style={{ padding: 22, display: "grid", gap: 16 }}>
+        {showHelp ? (
+          <Card style={{ animation: "fadeUp .22s ease-out" }}>
+            <div style={{ padding: "14px 16px", display: "flex", alignItems: "flex-start", gap: 13 }}>
+              <div style={{ width: 38, height: 38, borderRadius: 14, background: C.blue[50], color: C.blue[700], display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Info size={19} /></div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 950, color: C.blue[950] }}>Comment lire la prédiction</div>
+                    <div style={{ fontSize: 12.5, color: C.slate[600], marginTop: 4, lineHeight: 1.55 }}>
+                      Pour un mois partiel, la prévision devient <strong>déjà consommé + reste estimé</strong>. Le modèle tient aussi compte du même mois des années précédentes, de la tendance récente, de la météo et des événements détectés sur la zone normalisée.
+                    </div>
+                  </div>
+                  <button onClick={() => setShowHelp(false)} type="button" style={{ border: "none", background: C.slate[100], color: C.slate[500], width: 28, height: 28, borderRadius: 9, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><X size={14} /></button>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginTop: 12 }}>
+                  <HelpBox tone="blue" icon={<LineIcon size={14} />} title="Historique" text="Compare la tendance récente et le même mois de N-1 / N-2." />
+                  <HelpBox tone="cyan" icon={<Activity size={14} />} title="eFMS & estimation" text="Utilise les signaux ACM, Grid et EstimationResult quand ils sont disponibles." />
+                  <HelpBox tone="warn" icon={<CloudRain size={14} />} title="Météo & événements" text="Intègre hivernage, chaleur, pluie, Magal, Gamou, Korité, Tabaski…" />
+                  <HelpBox tone="purple" icon={<Target size={14} />} title="Mois partiel" text="Sépare la consommation observée et le reste prédit." />
+                </div>
+              </div>
+            </div>
+          </Card>
+        ) : null}
+
+        {error ? (
+          <div style={{ padding: "14px 16px", borderRadius: 16, background: C.nok.light, border: `1px solid ${C.nok.mid}`, color: C.nok.dark, display: "flex", alignItems: "center", gap: 10, fontSize: 13, fontWeight: 800 }}>
+            <AlertCircle size={18} /> {error}
+          </div>
+        ) : null}
+
+        {!data && !loading ? (
+          <Card>
+            <EmptyState title="Aucune prédiction lancée" subtitle="Renseigne un Site ID, choisis une période ou un horizon, puis clique sur Prédire." />
+          </Card>
+        ) : null}
+
+        {loading ? (
+          <Card>
+            <div style={{ padding: 66, display: "flex", alignItems: "center", justifyContent: "center", gap: 12, color: C.slate[500], fontWeight: 850 }}>
+              <Loader2 size={24} style={{ animation: "spin 1s linear infinite", color: C.blue[600] }} /> Calcul de la prédiction hybride…
+            </div>
+          </Card>
+        ) : null}
+
+        {data && !loading ? (
+          <>
+            <Card>
+              <div style={{ padding: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <Badge tone="blue"><ShieldCheck size={12} /> {data.site_id}</Badge>
+                  {data.site_name ? <span style={{ fontSize: 13, fontWeight: 900, color: C.slate[700] }}>{data.site_name}</span> : null}
+                  <Badge tone="cyan"><MapPin size={12} /> Zone {zoneNorm}</Badge>
+                  {zoneRaw ? <Badge tone="warn">Normalisée depuis {zoneRaw}</Badge> : null}
+                  <Badge tone={data.model_used === false ? "warn" : "ok"}>{data.model_used === false ? "Fallback règle" : "Modèle ML"}</Badge>
+                  <span style={{ fontSize: 12, color: C.slate[500] }}>Généré le {fmtDate(data.generated_at)} · {data.model_version}</span>
+                </div>
+              </div>
+            </Card>
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              {([
+                ["forecast", "Prévision", <LineIcon size={14} />],
+                ["details", "Détail mensuel", <BarChart3 size={14} />],
+                ["factors", "Facteurs & explications", <Sparkles size={14} />],
+              ] as const).map(([key, label, icon]) => (
+                <button key={key} type="button" onClick={() => setTab(key)} style={{ border: `1px solid ${tab === key ? C.blue[600] : C.slate[200]}`, background: tab === key ? C.blue[700] : "#fff", color: tab === key ? "#fff" : C.slate[600], borderRadius: 999, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 950, cursor: "pointer", boxShadow: tab === key ? "0 10px 24px rgba(10,61,150,.22)" : "0 1px 2px rgba(0,0,0,.04)" }}>
+                  {icon} {label}
+                </button>
+              ))}
+            </div>
+
+            {tab === "forecast" ? <ForecastTab data={data} chartData={chartData} nextPrediction={nextPrediction} /> : null}
+            {tab === "details" ? <DetailsTab predictions={data.predictions || []} /> : null}
+            {tab === "factors" ? <FactorsTab predictions={data.predictions || []} historic={data.historic || []} /> : null}
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function HelpBox({ tone, icon, title, text }: { tone: "blue" | "cyan" | "warn" | "purple"; icon: ReactNode; title: string; text: string }) {
+  const map = {
+    blue: { bg: C.blue[50], color: C.blue[800], border: C.blue[200] },
+    cyan: { bg: C.cyan.light, color: C.cyan.dark, border: "#A5F3FC" },
+    warn: { bg: C.warn.light, color: C.warn.dark, border: C.warn.mid },
+    purple: { bg: C.purple.light, color: C.purple.dark, border: "#DDD6FE" },
+  }[tone];
+  return <div style={{ padding: 12, borderRadius: 14, background: map.bg, border: `1px solid ${map.border}` }}><div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 950, color: map.color }}>{icon} {title}</div><div style={{ fontSize: 11.5, color: map.color, marginTop: 5, lineHeight: 1.45 }}>{text}</div></div>;
+}
+
+function ForecastTab({ data, chartData, nextPrediction }: { data: PredictionResponse; chartData: any[]; nextPrediction: PredictionMonth | null }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1.35fr .65fr", gap: 16 }}>
+      <Card>
+        <SectionTitle icon={<TrendingUp size={18} />} title="Courbe historique + prévision" subtitle="Avec intervalle de confiance et séparation observé / reste estimé" />
+        <div style={{ height: 410, padding: "18px 20px 10px" }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={chartData} margin={{ top: 8, right: 18, bottom: 8, left: 4 }}>
+              <defs>
+                <linearGradient id="histFill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.blue[500]} stopOpacity={0.18} /><stop offset="95%" stopColor={C.blue[500]} stopOpacity={0} /></linearGradient>
+                <linearGradient id="predFill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.purple.main} stopOpacity={0.16} /><stop offset="95%" stopColor={C.purple.main} stopOpacity={0} /></linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={C.slate[100]} vertical={false} />
+              <XAxis dataKey="period" tick={{ fontSize: 11, fill: C.slate[500] }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: C.slate[500] }} axisLine={false} tickLine={false} tickFormatter={mwhTick} width={66} />
+              <Tooltip content={<ChartTooltip />} />
+              <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+              <Area type="monotone" dataKey="historic" name="Historique normalisé" stroke={C.blue[600]} fill="url(#histFill)" strokeWidth={2.6} dot={{ r: 3 }} connectNulls />
+              <ReferenceArea y1={0} y2={0} />
+              <Area type="monotone" dataKey="prediction" name="Prévision" stroke={C.purple.main} fill="url(#predFill)" strokeWidth={2.8} dot={{ r: 3 }} connectNulls />
+              <Line type="monotone" dataKey="ic_lo" name="IC bas" stroke={C.slate[300]} strokeWidth={1.3} strokeDasharray="4 4" dot={false} connectNulls />
+              <Line type="monotone" dataKey="ic_hi" name="IC haut" stroke={C.slate[300]} strokeWidth={1.3} strokeDasharray="4 4" dot={false} connectNulls />
+              <Bar dataKey="observed" name="Déjà observé" fill={C.cyan.main} radius={[6, 6, 0, 0]} opacity={0.45} />
+              <Bar dataKey="remaining" name="Reste estimé" fill={C.warn.main} radius={[6, 6, 0, 0]} opacity={0.36} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
+
+      <div style={{ display: "grid", gap: 16 }}>
+        <Card>
+          <SectionTitle icon={<Gauge size={18} />} title="Prochain mois" subtitle={nextPrediction ? nextPrediction.period : "—"} />
+          {nextPrediction ? <NextMonthCard p={nextPrediction} /> : <EmptyState title="Aucune prévision" subtitle="Aucun mois disponible." />}
+        </Card>
+
+        <Card>
+          <SectionTitle icon={<MapPin size={18} />} title="Événements détectés" subtitle="Sur la période prédite" />
+          <div style={{ padding: 14, display: "grid", gap: 8, maxHeight: 280, overflow: "auto" }}>
+            {data.predictions.flatMap((p) => (p.events || []).map((e) => ({ ...e, period: p.period }))).length ? data.predictions.flatMap((p) => (p.events || []).map((e) => ({ ...e, period: p.period }))).map((e, i) => (
+              <div key={`${e.name}-${e.period}-${i}`} style={{ padding: "10px 11px", borderRadius: 14, background: C.warn.light, border: `1px solid ${C.warn.mid}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <strong style={{ color: C.warn.dark, fontSize: 12 }}>{cleanEventName(e.name)}</strong>
+                  <span style={{ color: C.slate[500], fontSize: 11, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{e.period}</span>
+                </div>
+                <div style={{ marginTop: 4, color: C.slate[600], fontSize: 11.5 }}>{fmtDate(e.date)} · pression {n(e.pressure).toLocaleString("fr-FR", { maximumFractionDigits: 2 })}</div>
+              </div>
+            )) : <div style={{ padding: 20, textAlign: "center", color: C.slate[400], fontSize: 12 }}>Aucun événement détecté.</div>}
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function NextMonthCard({ p }: { p: PredictionMonth }) {
+  const risk = riskTone(n(p.fnp_score));
+  const confColor = confidenceColor(n(p.confidence));
+  const observedPct = p.conso_pred ? Math.min(100, (n(p.observed_kwh) / n(p.conso_pred)) * 100) : 0;
+
+  return (
+    <div style={{ padding: 16, display: "grid", gap: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 28, fontWeight: 950, color: C.blue[800], letterSpacing: "-.04em", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{fmtKwh(p.conso_pred)}</div>
+          <div style={{ fontSize: 12, color: C.slate[500], marginTop: 2 }}>Intervalle : {fmtKwh(p.ic_lo)} → {fmtKwh(p.ic_hi)}</div>
+        </div>
+        <Badge tone={p.marge_ok ? "ok" : "nok"}>{p.marge_ok ? <CheckCircle2 size={12} /> : <XCircle size={12} />} Marge {p.marge_ok ? "OK" : "NOK"}</Badge>
+      </div>
+
+      {p.is_partial_month ? (
+        <div style={{ padding: 12, borderRadius: 15, background: C.cyan.light, border: "1px solid #A5F3FC" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12, fontWeight: 900, color: C.cyan.dark }}>
+            <span>Mois partiel</span>
+            <span>{p.observed_days || 0}j observés · {p.remaining_days || 0}j restants</span>
+          </div>
+          <div style={{ marginTop: 9 }}><ProgressBar value={observedPct} color={C.cyan.main} /></div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10, fontSize: 11.5 }}>
+            <div><span style={{ color: C.slate[500] }}>Déjà consommé</span><br /><strong style={{ color: C.cyan.dark }}>{fmtKwh(p.observed_kwh)}</strong></div>
+            <div><span style={{ color: C.slate[500] }}>Reste estimé</span><br /><strong style={{ color: C.warn.dark }}>{fmtKwh(p.remaining_pred_kwh)}</strong></div>
+          </div>
+        </div>
+      ) : null}
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <MiniMetric label="HT prédit" value={fmtMoney(p.ht_pred)} icon={<Wallet size={14} />} color={C.orange.main} />
+        <MiniMetric label="Marge" value={fmtMoney(p.marge_pred)} icon={p.marge_pred >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />} color={p.marge_pred >= 0 ? C.ok.main : C.nok.main} />
+        <MiniMetric label="Confiance" value={fmtConfidence(p.confidence)} icon={<Gauge size={14} />} color={confColor} />
+        <MiniMetric label="Risque FNP" value={riskLabel(n(p.fnp_score))} icon={<AlertCircle size={14} />} color={risk === "nok" ? C.nok.main : risk === "warn" ? C.warn.main : C.ok.main} />
+      </div>
+    </div>
+  );
+}
+
+function MiniMetric({ label, value, icon, color }: { label: string; value: string; icon: ReactNode; color: string }) {
+  return <div style={{ padding: 11, borderRadius: 14, background: C.slate[50], border: `1px solid ${C.slate[200]}` }}><div style={{ display: "flex", alignItems: "center", gap: 6, color, fontSize: 11, fontWeight: 950 }}>{icon} {label}</div><div style={{ marginTop: 5, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontWeight: 950, color: C.slate[800], fontSize: 12 }}>{value}</div></div>;
+}
+
+function DetailsTab({ predictions }: { predictions: PredictionMonth[] }) {
   return (
     <Card>
-      <div style={{ height: 3, background: color, borderRadius: "14px 14px 0 0", margin: "-1px -1px 0" }}/>
-      <div style={{ padding: "14px 16px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 9, background: colorL, display: "grid", placeItems: "center", color }}>{icon}</div>
-          {trend && (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 2, fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 999,
-              background: trend==="up" ? T.redL : trend==="down" ? T.greenL : "#F1F5F9",
-              color: trend==="up" ? T.red : trend==="down" ? T.green : T.t3 }}>
-              {trend==="up" ? <TrendingUp size={9}/> : trend==="down" ? <TrendingDown size={9}/> : null}
-            </span>
-          )}
-        </div>
-        <Lbl>{label}</Lbl>
-        <div style={{ fontSize: 22, fontWeight: 800, color: T.t1, lineHeight: 1, letterSpacing: "-.02em" }}>{value}</div>
-        {sub && <div style={{ fontSize: 10, color: T.t3, marginTop: 4 }}>{sub}</div>}
+      <SectionTitle icon={<BarChart3 size={18} />} title="Détail mensuel des prévisions" subtitle="Consommation, finance, confiance, météo et événements" right={<Badge tone="blue">{predictions.length} mois</Badge>} />
+      <div style={{ overflow: "auto", maxHeight: "calc(100vh - 280px)" }}>
+        <table style={{ width: "100%", minWidth: 1420, borderCollapse: "separate", borderSpacing: 0, fontSize: 11.5 }}>
+          <thead>
+            <tr>
+              <Th>Période</Th>
+              <Th right>Prévision</Th>
+              <Th right>IC bas</Th>
+              <Th right>IC haut</Th>
+              <Th right>Observé</Th>
+              <Th right>Reste</Th>
+              <Th center>Mois partiel</Th>
+              <Th right>HT prédit</Th>
+              <Th right>Redevance</Th>
+              <Th right>Marge</Th>
+              <Th center>Statut</Th>
+              <Th center>Confiance</Th>
+              <Th center>Risque FNP</Th>
+              <Th center>Météo</Th>
+              <Th center>Événements</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {predictions.map((p, i) => {
+              const risk = riskTone(n(p.fnp_score));
+              return (
+                <tr key={p.period} className="pred-row" style={{ background: p.marge_ok ? (i % 2 ? C.slate[50] : "#fff") : "#FFF7F7" }}>
+                  <Td><strong style={{ color: C.blue[800], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{p.period}</strong></Td>
+                  <Td right><strong style={{ color: C.blue[700], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{fmtKwh(p.conso_pred)}</strong></Td>
+                  <Td right>{fmtKwh(p.ic_lo)}</Td>
+                  <Td right>{fmtKwh(p.ic_hi)}</Td>
+                  <Td right>{fmtKwh(p.observed_kwh)}</Td>
+                  <Td right>{fmtKwh(p.remaining_pred_kwh)}</Td>
+                  <Td center>{p.is_partial_month ? <Badge tone="cyan">{p.observed_days}j + {p.remaining_days}j</Badge> : <span style={{ color: C.slate[400] }}>—</span>}</Td>
+                  <Td right>{fmtMoney(p.ht_pred)}</Td>
+                  <Td right>{fmtMoney(p.redevance)}</Td>
+                  <Td right><strong style={{ color: p.marge_pred >= 0 ? C.ok.dark : C.nok.dark, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{fmtMoney(p.marge_pred)}</strong></Td>
+                  <Td center><Badge tone={p.marge_ok ? "ok" : "nok"}>{p.marge_ok ? "Marge OK" : "Marge NOK"}</Badge></Td>
+                  <Td center><Badge tone={p.confidence >= 0.78 ? "ok" : p.confidence >= 0.62 ? "warn" : "nok"}>{fmtConfidence(p.confidence)}</Badge></Td>
+                  <Td center><Badge tone={risk}>{riskLabel(n(p.fnp_score))}</Badge></Td>
+                  <Td center><WeatherMini meteo={p.meteo} /></Td>
+                  <Td center>{p.events?.length ? <Badge tone="warn">{p.events.length} événement(s)</Badge> : <span style={{ color: C.slate[400] }}>—</span>}</Td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </Card>
   );
 }
 
-// SHAP bar
-function ShapRow({ feature, impact }: Factor) {
-  const pos = impact >= 0, col = pos ? T.blue : T.amber, pct = Math.min(Math.abs(impact)*120, 100);
-  return (
-    <div style={{ marginBottom: 10 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-        <span style={{ fontSize: 11, color: T.t2 }}>{FL[feature] || feature.replace(/_/g," ")}</span>
-        <span style={{ fontSize: 10, fontWeight: 700, color: col }}>{pos?"+":"−"}{Math.abs(impact*100).toFixed(1)}%</span>
-      </div>
-      <div style={{ height: 4, background: "#F1F5F9", borderRadius: 99, overflow: "hidden" }}>
-        <div style={{ height: "100%", width: `${pct}%`, background: col, borderRadius: 99, opacity: 0.75 }}/>
-      </div>
-    </div>
-  );
+function WeatherMini({ meteo }: { meteo?: PredictionMeteo }) {
+  if (!meteo) return <span style={{ color: C.slate[400] }}>—</span>;
+  return <span style={{ display: "inline-flex", alignItems: "center", gap: 7, color: C.slate[600], fontSize: 11 }}><ThermometerSun size={12} color={C.orange.main} />{n(meteo.temp_max_mean).toFixed(1)}° <CloudRain size={12} color={C.cyan.main} />{n(meteo.precip_total).toFixed(0)}mm</span>;
 }
 
-// Event colors
-const EV_C: Record<string,{ color: string; bg: string }> = {
-  magal:{ color:"#991B1B", bg:"#FEF2F2" }, gamou:{ color:"#1E40AF", bg:"#EFF6FF" },
-  tabaski:{ color:"#065F46", bg:"#ECFDF5" }, korite:{ color:"#5B21B6", bg:"#F5F3FF" },
-  tamkharit:{ color:"#374151", bg:"#F9FAFB" }, layene:{ color:"#92400E", bg:"#FFFBEB" },
-  magal_darou:{ color:"#991B1B", bg:"#FEF2F2" },
-};
-const EvPill = ({ name }: { name: string }) => {
-  const key = name.toLowerCase().replace(/\s+/g,"_");
-  const cfg = EV_C[key] ?? { color: T.t2, bg: "#F8FAFC" };
-  return <span style={{ display:"inline-block", padding:"2px 8px", borderRadius:999, fontSize:9, fontWeight:700, background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.color}22`, marginRight:4, marginBottom:2 }}>{name}</span>;
-};
+function FactorsTab({ predictions, historic }: { predictions: PredictionMonth[]; historic: PredictionHistoricMonth[] }) {
+  const factorRows = predictions.map((p) => ({
+    period: p.period,
+    lag12: n(p.baseline?.lag_12m),
+    same: n(p.baseline?.same_month_avg),
+    rolling3: n(p.baseline?.rolling_3m),
+    ml: n(p.conso_ml),
+    rule: n(p.conso_rule_based),
+    pred: n(p.conso_pred),
+  }));
 
-// Tooltip
-function LightTip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null;
   return (
-    <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 14px", boxShadow: "0 8px 24px rgba(15,23,42,.12)", fontSize: 11 }}>
-      <div style={{ fontWeight: 700, color: T.t1, marginBottom: 6 }}>{label}</div>
-      {payload.map((p: any, i: number) => p.value != null && (
-        <div key={i} style={{ display: "flex", gap: 10, marginBottom: 2, alignItems: "center" }}>
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: p.color || p.stroke, flexShrink: 0, display: "inline-block" }}/>
-          <span style={{ color: T.t2, minWidth: 80 }}>{p.name}</span>
-          <span style={{ fontWeight: 700, color: T.t1 }}>{p.value > 10000 ? fmtN(p.value) : fmtK(p.value)}</span>
+    <div style={{ display: "grid", gridTemplateColumns: "1.1fr .9fr", gap: 16 }}>
+      <Card>
+        <SectionTitle icon={<Layers size={18} />} title="Comparaison des signaux" subtitle="Même mois N-1, moyenne saisonnière, tendance récente, ML et règle" />
+        <div style={{ height: 350, padding: 18 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={factorRows} margin={{ top: 8, right: 18, bottom: 8, left: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={C.slate[100]} vertical={false} />
+              <XAxis dataKey="period" tick={{ fontSize: 11, fill: C.slate[500] }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: C.slate[500] }} axisLine={false} tickLine={false} tickFormatter={mwhTick} width={66} />
+              <Tooltip content={<ChartTooltip />} />
+              <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+              <Bar dataKey="same" name="Même mois moy." fill={C.slate[300]} opacity={0.35} radius={[6, 6, 0, 0]} />
+              <Line type="monotone" dataKey="rolling3" name="Rolling 3m" stroke={C.cyan.main} strokeWidth={2.2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="ml" name="ML" stroke={C.purple.main} strokeWidth={2.2} strokeDasharray="6 4" dot={false} />
+              <Line type="monotone" dataKey="rule" name="Règle" stroke={C.warn.main} strokeWidth={2.2} strokeDasharray="3 4" dot={false} />
+              <Line type="monotone" dataKey="pred" name="Final" stroke={C.blue[700]} strokeWidth={2.8} dot={{ r: 3 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
         </div>
-      ))}
-    </div>
-  );
-}
+      </Card>
 
-// Site search
-function SiteSearch({ sel, onSel, onClr }: { sel: Site|null; onSel(s: Site): void; onClr(): void }) {
-  const [q, setQ] = useState(""), [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const { data: res = [], isFetching } = useQuery({ queryKey: ["psearch", q], queryFn: () => searchSites(q), enabled: q.length >= 1, staleTime: 30_000 });
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h);
-  }, []);
-
-  if (sel) return (
-    <div style={{ display: "flex", alignItems: "center", gap: 7, background: T.blueL, border: `1.5px solid ${T.blue}33`, borderRadius: 9, padding: "6px 12px" }}>
-      <Building2 size={12} color={T.blue}/>
-      <span style={{ fontFamily: T.mono, fontSize: 12, color: T.blue, fontWeight: 700 }}>{sel.site_id}</span>
-      <span style={{ fontSize: 11, color: T.t3 }}>{sel.numero_compte_contrat}</span>
-      <button onClick={onClr} style={{ marginLeft: 4, background: "none", border: "none", cursor: "pointer", color: T.t3, display: "grid", placeItems: "center" }}><X size={11}/></button>
-    </div>
-  );
-
-  return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 7, background: T.card, border: `1.5px solid ${open ? T.blue+"88" : T.border}`, borderRadius: 9, padding: "6px 12px", minWidth: 220, boxShadow: open ? `0 0 0 3px ${T.blueL}` : "none", transition: "all .15s" }}>
-        <Search size={12} color={T.t3}/>
-        <input value={q} onChange={e => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder="Chercher un site…" style={{ background: "none", border: "none", outline: "none", fontSize: 12, color: T.t1, flex: 1 }}/>
-        {isFetching && <div style={{ width: 12, height: 12, borderRadius: "50%", border: `2px solid ${T.blueL}`, borderTopColor: T.blue, animation: "spin .7s linear infinite" }}/>}
-      </div>
-      {open && q.length >= 1 && (
-        <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, zIndex: 200, overflow: "hidden", boxShadow: "0 12px 40px rgba(15,23,42,.12)" }}>
-          {!isFetching && res.length === 0 && <div style={{ padding: "10px 14px", fontSize: 11, color: T.t3 }}>Aucun site trouvé</div>}
-          {res.map((s, i) => (
-            <button key={s.id} onMouseDown={() => { onSel(s); setQ(""); }}
-              style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "9px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left", borderBottom: i < res.length-1 ? `1px solid ${T.border}` : "none" }}
-              onMouseEnter={e => (e.currentTarget.style.background = T.blueL)} onMouseLeave={e => (e.currentTarget.style.background = "none")}>
-              <div style={{ width: 26, height: 26, borderRadius: 7, background: T.blueL, display: "grid", placeItems: "center" }}><Building2 size={12} color={T.blue}/></div>
-              <div><div style={{ fontSize: 12, fontWeight: 700, color: T.t1 }}>{s.site_id}</div><div style={{ fontSize: 10, color: T.t3 }}>{s.numero_compte_contrat}</div></div>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Export modal
-function ExportModal({ onClose, horizon, pred }: { onClose(): void; horizon: number; pred: PredResp|null }) {
-  const [mode, setMode] = useState<"all"|"one">("all");
-  const [prog, setProg] = useState(0), [tot, setTot] = useState(0), [running, setRunning] = useState(false);
-  const sitesQ = useQuery({ queryKey: ["allsites"], queryFn: fetchSites, staleTime: 5*60_000 });
-  async function go() {
-    if (mode === "one" && pred) { exportOne(pred); onClose(); return; }
-    const sites = sitesQ.data ?? []; setTot(sites.length); setProg(0); setRunning(true);
-    await exportAll(sites, horizon, n => setProg(n));
-    setRunning(false); onClose();
-  }
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 9000, background: "rgba(15,23,42,.45)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={e => e.target === e.currentTarget && onClose()}>
-      <Card style={{ width: 440, boxShadow: "0 24px 80px rgba(15,23,42,.18), 0 0 0 1px rgba(15,23,42,.06)" }}>
-        <div style={{ padding: "22px 24px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-            <div><div style={{ fontSize: 16, fontWeight: 800, color: T.t1, letterSpacing: "-.02em" }}>Export Excel</div><div style={{ fontSize: 11, color: T.t3, marginTop: 2 }}>Horizon {horizon} mois</div></div>
-            <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${T.border}`, background: T.bg, cursor: "pointer", display: "grid", placeItems: "center", color: T.t2 }}><X size={12}/></button>
-          </div>
-          {[
-            { id:"all", icon:<Layers size={15}/>, label:"Tous les sites", sub:`${sitesQ.data?.length??"…"} sites · 1 feuille/site + résumé global` },
-            { id:"one", icon:<Building2 size={15}/>, label:"Site actuel uniquement", sub: pred ? pred.site_id : "Sélectionner un site", disabled: !pred },
-          ].map(opt => (
-            <div key={opt.id} onClick={() => !opt.disabled && setMode(opt.id as "all"|"one")}
-              style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 11, marginBottom: 8, cursor: opt.disabled ? "not-allowed" : "pointer",
-                background: mode===opt.id ? T.blueL : T.bg, border: `1.5px solid ${mode===opt.id ? T.blue+"55" : T.border}`, opacity: opt.disabled ? 0.45 : 1, transition: "all .15s" }}>
-              <div style={{ width: 36, height: 36, borderRadius: 9, background: mode===opt.id ? T.blue : "#E2E8F0", display: "grid", placeItems: "center", color: mode===opt.id ? "white" : T.t2 }}>{opt.icon}</div>
-              <div><div style={{ fontSize: 12, fontWeight: 700, color: T.t1 }}>{opt.label}</div><div style={{ fontSize: 10, color: T.t3, marginTop: 2 }}>{opt.sub}</div></div>
-              <div style={{ marginLeft: "auto", width: 17, height: 17, borderRadius: "50%", border: `2px solid ${mode===opt.id ? T.blue : T.t3}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                {mode===opt.id && <div style={{ width: 8, height: 8, borderRadius: "50%", background: T.blue }}/>}
+      <Card>
+        <SectionTitle icon={<Sparkles size={18} />} title="Explications par mois" subtitle="Pourquoi le modèle prédit cette valeur" />
+        <div style={{ padding: 14, display: "grid", gap: 10, maxHeight: 350, overflow: "auto" }}>
+          {predictions.map((p) => (
+            <div key={p.period} style={{ padding: 12, borderRadius: 15, background: "#fff", border: `1px solid ${C.slate[200]}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+                <strong style={{ color: C.blue[800], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{p.period}</strong>
+                <Badge tone={p.marge_ok ? "ok" : "nok"}>{fmtKwh(p.conso_pred)}</Badge>
               </div>
+              <div style={{ display: "grid", gap: 6 }}>
+                {(p.explanation || []).length ? p.explanation?.map((x, i) => <div key={i} style={{ display: "flex", gap: 7, color: C.slate[600], fontSize: 12, lineHeight: 1.45 }}><CheckCircle2 size={13} color={C.ok.main} style={{ marginTop: 1, flexShrink: 0 }} />{x}</div>) : <div style={{ color: C.slate[400], fontSize: 12 }}>Aucune explication retournée.</div>}
+              </div>
+              {p.estimation?.available ? <div style={{ marginTop: 8 }}><Badge tone="purple">Signal estimation : {p.estimation.source} · {fmtKwh(p.estimation.conso_estimee_kwh)}</Badge></div> : null}
             </div>
           ))}
-          {running && (
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: T.t3, marginBottom: 5 }}>
-                <span>Traitement des sites…</span><span style={{ fontFamily: T.mono }}>{prog}/{tot}</span>
-              </div>
-              <div style={{ height: 4, background: "#E2E8F0", borderRadius: 99 }}>
-                <div style={{ height: "100%", borderRadius: 99, width: `${tot ? (prog/tot)*100 : 0}%`, background: `linear-gradient(90deg,${T.blue},${T.cyan})`, transition: "width .3s" }}/>
-              </div>
-            </div>
-          )}
-          <button onClick={go} disabled={running} style={{ width: "100%", padding: "11px", borderRadius: 10, background: running ? "#E2E8F0" : T.blue, border: "none", cursor: running ? "not-allowed" : "pointer", color: "white", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, boxShadow: running ? "none" : "0 4px 14px rgba(29,78,216,.3)", transition: "all .15s" }}>
-            <FileSpreadsheet size={14}/>{running ? `Export… (${prog}/${tot})` : "Lancer l'export"}
-          </button>
+        </div>
+      </Card>
+
+      <Card style={{ gridColumn: "1 / -1" }}>
+        <SectionTitle icon={<Database size={18} />} title="Historique utilisé" subtitle="Derniers mois facturés, avec normalisation mois complet si partiel" />
+        <div style={{ overflow: "auto" }}>
+          <table style={{ width: "100%", minWidth: 820, borderCollapse: "separate", borderSpacing: 0, fontSize: 11.5 }}>
+            <thead><tr><Th>Période</Th><Th right>Conso brute</Th><Th right>Conso normalisée</Th><Th right>Montant HT</Th><Th right>Jours</Th><Th center>Partiel</Th></tr></thead>
+            <tbody>
+              {historic.map((h, i) => <tr key={h.period} className="pred-row" style={{ background: i % 2 ? C.slate[50] : "#fff" }}><Td><strong style={{ color: C.blue[800] }}>{h.period}</strong></Td><Td right>{fmtKwh(h.conso)}</Td><Td right>{fmtKwh(h.conso_full ?? h.conso)}</Td><Td right>{fmtMoney(h.ht)}</Td><Td right>{h.days || "—"}</Td><Td center>{h.is_partial ? <Badge tone="warn">Partiel</Badge> : <span style={{ color: C.slate[400] }}>—</span>}</Td></tr>)}
+            </tbody>
+          </table>
         </div>
       </Card>
     </div>
   );
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
-export default function PredictionPage() {
-  const [site, setSite] = useState<Site|null>(null);
-  const [horizon, setH] = useState(6);
-  const [showExp, setExp] = useState(false);
-  const { start, end } = year0();
-  const siteId = site?.site_id;
+function Th({ children, right, center }: { children: ReactNode; right?: boolean; center?: boolean }) {
+  return <th style={{ position: "sticky", top: 0, zIndex: 5, padding: "10px 12px", background: C.blue[900], color: "rgba(255,255,255,.88)", fontSize: 10, fontWeight: 950, textTransform: "uppercase", letterSpacing: ".08em", textAlign: right ? "right" : center ? "center" : "left", borderBottom: `1px solid ${C.blue[700]}`, whiteSpace: "nowrap" }}>{children}</th>;
+}
 
-  const gQ = useQuery({ queryKey: ["pglobal", start, end], queryFn: () => fetchGlobal(start, end), staleTime: 10*60_000 });
-  const pQ = useQuery({ queryKey: ["ppred", siteId, horizon], queryFn: () => fetchPred(siteId!, horizon), enabled: !!siteId, staleTime: 5*60_000 });
-  const pred = pQ.data, global = gQ.data, loading = pQ.isLoading;
-
-  const chartData = useMemo(() => {
-    if (!pred) return [];
-    return [
-      ...pred.historic.map(h => ({ label: fmtP(h.period), histo: Math.round(h.conso), pred: null as number|null, ic_lo: null as number|null, ic_hi: null as number|null })),
-      ...pred.predictions.map(p => ({ label: fmtP(p.period), histo: null as number|null, pred: Math.round(p.conso_pred), ic_lo: Math.round(p.ic_lo), ic_hi: Math.round(p.ic_hi) })),
-    ];
-  }, [pred]);
-
-  const globalChart = useMemo(() => global?.evolution?.slice(-12).map(r => ({ label: fmtP(r.period), ht: Number(r.montant_ht) })) || [], [global]);
-
-  const kpis = useMemo(() => {
-    if (!pred?.predictions.length) return null;
-    const p = pred.predictions;
-    return { conso: p.reduce((s,r) => s+r.conso_pred, 0)/p.length, ht: p.reduce((s,r) => s+r.ht_pred, 0), marge: p.reduce((s,r) => s+r.marge_pred, 0)/p.length, fnp: Math.max(...p.map(r => r.fnp_score)) };
-  }, [pred]);
-
-  const gkpis = useMemo(() => {
-    if (!global) return null;
-    return { ht: Number(global.distribution_ht?.total_ht ?? 0), paid: global.payment_statuses?.summary.paid ?? 0, total: global.payment_statuses?.summary.total ?? 0, pct: global.payment_statuses?.summary.paid_pct ?? 0 };
-  }, [global]);
-
-  const topF = useMemo(() => {
-    if (!pred?.predictions.length) return [];
-    const a: Record<string,number> = {};
-    pred.predictions.forEach(p => p.top_factors.forEach(f => { a[f.feature] = (a[f.feature]||0) + Math.abs(f.impact); }));
-    return Object.entries(a).map(([feature, sum]) => ({ feature, impact: sum/pred.predictions.length })).sort((a,b) => b.impact-a.impact).slice(0,8);
-  }, [pred]);
-
-  const events = useMemo(() => {
-    if (!pred) return [];
-    const seen = new Set<string>(), evs: {name:string;date:string;period:string}[] = [];
-    pred.predictions.forEach(p => p.events.forEach(ev => { const k = `${ev.name}-${ev.date}`; if (!seen.has(k)) { seen.add(k); evs.push({ ...ev, period: p.period }); } }));
-    return evs.sort((a,b) => a.date.localeCompare(b.date));
-  }, [pred]);
-
-  const meteo = useMemo(() => pred?.predictions.map(p => ({ label: fmtP(p.period), temp: Math.round(p.meteo?.temp_max_mean??32), precip: Math.round(p.meteo?.precip_total??0), isHiv: (p.meteo?.precip_total??0)>20, events: p.events })) || [], [pred]);
-
-  const sk = (h: number) => (
-    <div style={{ height: h, borderRadius: 8, background: "linear-gradient(90deg,#F1F5F9 25%,#E8EFF6 50%,#F1F5F9 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.4s infinite" }}/>
-  );
-  const cc = (c: number) => c >= 0.85 ? T.green : c >= 0.70 ? T.amber : T.red;
-
-  return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=DM+Sans:wght@400;500;600;700;800&display=swap');
-        @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
-        @keyframes spin{to{transform:rotate(360deg)}}
-        @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
-        .pf{animation:fadeIn .3s ease both}
-      `}</style>
-
-      <div style={{ fontFamily:"'DM Sans',sans-serif", display:"flex", flexDirection:"column", gap:14 }}>
-
-        {/* ── HEADER ── */}
-        <Card style={{ overflow:"hidden" }}>
-          {/* Top gradient accent */}
-          <div style={{ height:3, background:`linear-gradient(90deg,${T.blue},${T.violet},${T.cyan})` }}/>
-          <div style={{ padding:"18px 22px" }}>
-
-            <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:14, flexWrap:"wrap", marginBottom:16 }}>
-              {/* Brand */}
-              <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                <div style={{ width:42, height:42, borderRadius:11, background:`linear-gradient(135deg,${T.blue},${T.violet})`, display:"grid", placeItems:"center", boxShadow:`0 4px 12px ${T.blue}44` }}>
-                  <BrainCircuit size={20} color="white"/>
-                </div>
-                <div>
-                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                    <h1 style={{ fontSize:18, fontWeight:800, color:T.t1, margin:0, letterSpacing:"-.025em" }}>Prédiction IA</h1>
-                    <span style={{ fontSize:9, fontWeight:700, padding:"3px 8px", borderRadius:999, background:pred?.model_version==="lgbm_v1"?T.greenL:T.amberL, color:pred?.model_version==="lgbm_v1"?T.green:T.amber, border:`1px solid ${pred?.model_version==="lgbm_v1"?T.green:T.amber}33`, letterSpacing:".08em", textTransform:"uppercase" as const }}>
-                      {pred?.model_version==="lgbm_v1"?"LightGBM":"Rule-based"}
-                    </span>
-                  </div>
-                  <p style={{ fontSize:12, color:T.t3, margin:"3px 0 0" }}>Conso · HT · marge · FNP · météo · événements hégirien</p>
-                </div>
-              </div>
-
-              {/* Controls */}
-              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                <div style={{ display:"flex", background:T.bg, borderRadius:9, border:`1px solid ${T.border}`, overflow:"hidden" }}>
-                  {[3,6,12].map(h => (
-                    <button key={h} onClick={() => setH(h)} style={{ padding:"7px 14px", fontSize:12, fontWeight:600, cursor:"pointer", border:"none", background:horizon===h?T.blue:"transparent", color:horizon===h?"white":T.t2, transition:"all .15s" }}>{h} mois</button>
-                  ))}
-                </div>
-                <button onClick={() => setExp(true)} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:9, background:T.blue, border:"none", color:"white", fontSize:12, fontWeight:600, cursor:"pointer", boxShadow:`0 2px 8px ${T.blue}44` }}>
-                  <Download size={13}/> Export
-                </button>
-                <button onClick={() => { gQ.refetch(); pQ.refetch(); }} style={{ width:36, height:36, borderRadius:9, border:`1px solid ${T.border}`, background:T.bg, display:"grid", placeItems:"center", cursor:"pointer", color:T.t3 }}>
-                  <RefreshCw size={13} style={{ animation:loading?"spin 1s linear infinite":"none" }}/>
-                </button>
-              </div>
-            </div>
-
-            {/* Site bar */}
-            <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", borderRadius:11, background:site?T.blueL:T.bg, border:`1.5px solid ${site?T.blue+"33":T.border}`, transition:"all .2s" }}>
-              <div style={{ width:30, height:30, borderRadius:8, background:site?"rgba(29,78,216,.12)":"#E2E8F0", display:"grid", placeItems:"center" }}>
-                {site ? <Building2 size={13} color={T.blue}/> : <Globe size={13} color={T.t3}/>}
-              </div>
-              <div>
-                <div style={{ fontSize:9, fontWeight:700, color:T.t3, textTransform:"uppercase" as const, letterSpacing:".1em" }}>Site analysé</div>
-                <div style={{ fontSize:12, fontWeight:700, color:site?T.blue:T.t2, marginTop:1 }}>
-                  {site ? `${site.site_id} · ${site.numero_compte_contrat}` : "Vue globale — sélectionner un site pour la prédiction IA"}
-                </div>
-              </div>
-              <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:8 }}>
-                {pred && (
-                  <div style={{ display:"flex", alignItems:"center", gap:5, padding:"4px 10px", borderRadius:7, background:pred.model_version==="lgbm_v1"?T.greenL:T.amberL, border:`1px solid ${pred.model_version==="lgbm_v1"?T.green:T.amber}33` }}>
-                    <div style={{ width:6, height:6, borderRadius:"50%", background:pred.model_version==="lgbm_v1"?T.green:T.amber }}/>
-                    <span style={{ fontSize:10, fontWeight:600, color:pred.model_version==="lgbm_v1"?T.green:T.amber }}>
-                      {pred.model_version==="lgbm_v1"?"LightGBM actif":"Mode règles"} · {pred.generated_at}
-                    </span>
-                  </div>
-                )}
-                <SiteSearch sel={site} onSel={setSite} onClr={() => setSite(null)}/>
-                {site && <button onClick={() => setSite(null)} style={{ fontSize:10, color:T.t3, background:"none", border:`1px solid ${T.border}`, borderRadius:7, padding:"5px 10px", cursor:"pointer", display:"flex", alignItems:"center", gap:4 }}><Globe size={10}/> Vue globale</button>}
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        {/* ── GLOBAL KPIs ── */}
-        {gQ.isLoading
-          ? <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>{[1,2,3,4].map(i => <div key={i}>{sk(90)}</div>)}</div>
-          : gkpis && (
-            <div className="pf" style={{ display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:12 }}>
-              <KpiCard label="Total HT — parc" value={fmtN(gkpis.ht,"FCFA")} sub={`${start.slice(0,4)} → maintenant`} color={T.blue} colorL={T.blueL} icon={<TrendingUp size={16}/>}/>
-              <KpiCard label="Factures payées" value={gkpis.paid.toLocaleString("fr-FR")} sub={`${gkpis.pct.toFixed(1)}% · sur ${gkpis.total.toLocaleString("fr-FR")}`} color={T.green} colorL={T.greenL} icon={<CheckCircle2 size={16}/>}/>
-              <KpiCard label="Horizon actif" value={`${horizon} mois`} sub={site?`Site · ${site.site_id}`:"Sélectionner un site"} color={T.violet} colorL={T.violetL} icon={<Activity size={16}/>}/>
-              <KpiCard label="Zone normalisée" value={pred?nz(pred.zone):"—"} sub={pred?`Code brut : ${pred.zone}`:"Après sélection"} color={T.cyan} colorL={T.cyanL} icon={<Globe size={16}/>}/>
-            </div>
-          )
-        }
-
-        {/* ── GLOBAL CHART (pas de site) ── */}
-        {!site && (
-          <Card>
-            <div style={{ padding:"18px 20px" }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-                <div>
-                  <Lbl>Évolution mensuelle HT — parc complet</Lbl>
-                  <div style={{ fontSize:12, color:T.t3 }}>Sélectionner un site ci-dessus pour lancer la prédiction IA</div>
-                </div>
-                <div style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 10px", background:T.blueL, border:`1px solid ${T.blue}33`, borderRadius:7 }}>
-                  <div style={{ width:7, height:7, borderRadius:"50%", background:T.green }}/>
-                  <span style={{ fontSize:10, fontWeight:600, color:T.blue }}>Live</span>
-                </div>
-              </div>
-              {gQ.isLoading ? sk(180) : (
-                <ResponsiveContainer width="100%" height={180}>
-                  <ComposedChart data={globalChart} margin={{ top:4, right:8, left:8, bottom:0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
-                    <XAxis dataKey="label" tick={{ fontSize:10, fill:T.t3 }} axisLine={false} tickLine={false}/>
-                    <YAxis tick={{ fontSize:10, fill:T.t3 }} axisLine={false} tickLine={false} width={52} tickFormatter={v => fmtN(v)}/>
-                    <Tooltip content={<LightTip/>}/>
-                    <defs>
-                      <linearGradient id="blueGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={T.blue} stopOpacity={0.15}/>
-                        <stop offset="95%" stopColor={T.blue} stopOpacity={0.01}/>
-                      </linearGradient>
-                    </defs>
-                    <Area type="monotone" dataKey="ht" name="HT (FCFA)" stroke={T.blue} strokeWidth={2} fill="url(#blueGrad)" dot={false}/>
-                  </ComposedChart>
-                </ResponsiveContainer>
-              )}
-              <div style={{ marginTop:14, padding:"11px 14px", borderRadius:10, background:T.blueL, border:`1px solid ${T.blue}22`, display:"flex", alignItems:"center", gap:8 }}>
-                <BrainCircuit size={14} color={T.blue}/>
-                <span style={{ fontSize:11, color:T.blue }}>
-                  Prédiction disponible par site : conso, HT, marge, score FNP, facteurs SHAP, météo et événements sénégalais.
-                </span>
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {/* ── SITE KPIs ── */}
-        {site && (loading
-          ? <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>{[1,2,3,4].map(i => <div key={i}>{sk(92)}</div>)}</div>
-          : kpis && (
-            <div className="pf" style={{ display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:12 }}>
-              <KpiCard label="Conso moy. prédite" value={fmtK(Math.round(kpis.conso))} sub={`par mois · ${horizon}m`} color={T.blue} colorL={T.blueL} icon={<Zap size={16}/>}/>
-              <KpiCard label="Total HT préd." value={fmtN(Math.round(kpis.ht),"FCFA")} sub="IC ±9%" color={T.cyan} colorL={T.cyanL} icon={<TrendingUp size={16}/>}/>
-              <KpiCard label="Marge moy." value={`${kpis.marge>=0?"+":""}${fmtN(Math.round(kpis.marge),"FCFA")}`} sub={kpis.marge>=0?"Redevance couverte":"Dépassement prévu"} color={kpis.marge>=0?T.green:T.red} colorL={kpis.marge>=0?T.greenL:T.redL} icon={kpis.marge>=0?<CheckCircle2 size={16}/>:<TrendingDown size={16}/>} trend={kpis.marge>=0?"down":"up"}/>
-              <KpiCard label="Score FNP max" value={`${Math.round(kpis.fnp*100)} %`} sub={kpis.fnp>0.5?"Risque élevé · relancer":kpis.fnp>0.25?"Risque modéré":"Risque faible"} color={kpis.fnp>0.5?T.red:kpis.fnp>0.25?T.amber:T.green} colorL={kpis.fnp>0.5?T.redL:kpis.fnp>0.25?T.amberL:T.greenL} icon={<PackageX size={16}/>} trend={kpis.fnp>0.5?"up":"neutral"}/>
-            </div>
-          )
-        )}
-
-        {/* ── CHART + SHAP ── */}
-        {site && (
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 280px", gap:14 }}>
-            <Card>
-              <div style={{ padding:"18px 20px" }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
-                  <div>
-                    <Lbl>Prévision conso facturée (kWh)</Lbl>
-                    <div style={{ display:"flex", gap:14, marginTop:4 }}>
-                      {[{c:T.red,l:"Historique",dash:true},{c:T.blue,l:"Prédit"},{c:"rgba(59,130,246,.12)",l:"IC 80%",solid:true}].map(x => (
-                        <div key={x.l} style={{ display:"flex", alignItems:"center", gap:5, fontSize:10, color:T.t3 }}>
-                          <div style={{ width:14, height:x.solid?7:2, background:x.c, borderRadius:2, opacity:x.dash?.5:1 }}/>{x.l}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  {pred && <span style={{ fontSize:10, color:T.t3 }}>{pred.model_version==="lgbm_v1"?"● LightGBM":"● Mode règles"}</span>}
-                </div>
-                {loading ? sk(240) : (
-                  <ResponsiveContainer width="100%" height={240}>
-                    <ComposedChart data={chartData} margin={{ top:4, right:8, left:8, bottom:0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
-                      <XAxis dataKey="label" tick={{ fontSize:10, fill:T.t3 }} axisLine={false} tickLine={false}/>
-                      <YAxis tick={{ fontSize:10, fill:T.t3 }} axisLine={false} tickLine={false} width={52} tickFormatter={fmtK}/>
-                      <Tooltip content={<LightTip/>}/>
-                      <defs>
-                        <linearGradient id="icGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={T.blue} stopOpacity={0.08}/>
-                          <stop offset="95%" stopColor={T.blue} stopOpacity={0.01}/>
-                        </linearGradient>
-                      </defs>
-                      <Area type="monotone" dataKey="ic_hi" stroke="none" fill="url(#icGrad)" activeDot={false} name="IC haut"/>
-                      <Area type="monotone" dataKey="ic_lo" stroke="none" fill="white" activeDot={false} name="IC bas"/>
-                      <Bar dataKey="histo" name="Historique" fill={T.red+"18"} stroke={T.red} strokeWidth={1.5} radius={[3,3,0,0]} barSize={18}/>
-                      <Bar dataKey="pred" name="Prédit" fill={T.blue+"18"} stroke={T.blue} strokeWidth={1.5} radius={[3,3,0,0]} barSize={18}/>
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-            </Card>
-
-            <Card>
-              <div style={{ padding:"18px 20px" }}>
-                <Lbl>Facteurs d'influence (SHAP)</Lbl>
-                <div style={{ fontSize:11, color:T.t3, marginBottom:14 }}>Importance moy. sur {horizon} mois prédits</div>
-                {loading ? sk(200) : topF.length === 0
-                  ? <div style={{ fontSize:11, color:T.t3, textAlign:"center", padding:"20px 0" }}>Mode rule-based<br/>SHAP indisponible</div>
-                  : topF.map(f => <ShapRow key={f.feature} {...f}/>)
-                }
-              </div>
-            </Card>
-          </div>
-        )}
-
-        {/* ── EVENTS + METEO ── */}
-        {site && (
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
-            <Card>
-              <div style={{ padding:"18px 20px" }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
-                  <Lbl>Événements · zone {pred ? nz(pred.zone) : "—"}</Lbl>
-                  <span style={{ fontSize:10, color:T.t3 }}>hijri-converter</span>
-                </div>
-                {loading ? sk(140) : events.length === 0 ? (
-                  <div style={{ padding:"24px 0", textAlign:"center", display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
-                    <div style={{ width:40, height:40, borderRadius:"50%", background:T.greenL, display:"grid", placeItems:"center" }}>
-                      <CheckCircle2 size={18} color={T.green}/>
-                    </div>
-                    <div style={{ fontSize:12, color:T.t2 }}>Aucun événement dans la fenêtre de prédiction</div>
-                    {pred && pred.zone !== nz(pred.zone) && (
-                      <div style={{ fontSize:10, color:T.t3, padding:"4px 10px", background:T.bg, borderRadius:6, border:`1px solid ${T.border}` }}>
-                        Zone normalisée : {pred.zone} → {nz(pred.zone)}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                    {events.map((ev, i) => {
-                      const key = ev.name.toLowerCase().replace(/\s+/g,"_");
-                      const cfg = EV_C[key] ?? { color: T.t2, bg: T.bg };
-                      const daysTo = Math.round((new Date(ev.date).getTime() - Date.now()) / 86400000);
-                      const urgent = daysTo < 21;
-                      return (
-                        <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:10, background:T.bg, borderLeft:`3px solid ${cfg.color}`, border:`1px solid ${T.border}`, borderLeftWidth:3, borderLeftColor:cfg.color }}>
-                          <div style={{ flex:1 }}>
-                            <div style={{ fontSize:12, fontWeight:700, color:T.t1 }}>{ev.name}</div>
-                            <div style={{ fontSize:10, color:T.t3, marginTop:2 }}>{ev.date} · prédiction {fmtP(ev.period)}</div>
-                          </div>
-                          <div style={{ padding:"3px 9px", borderRadius:6, fontSize:10, fontWeight:700, background:urgent?T.redL:T.amberL, color:urgent?T.red:T.amber }}>
-                            {daysTo > 0 ? `J−${daysTo}` : "En cours"}
-                          </div>
-                        </div>
-                      );
-                    })}
-                    <div style={{ padding:"9px 12px", borderRadius:9, background:T.blueL, border:`1px solid ${T.blue}22`, display:"flex", gap:7, alignItems:"flex-start" }}>
-                      <Info size={12} color={T.blue} style={{ flexShrink:0, marginTop:1 }}/>
-                      <span style={{ fontSize:10, color:T.blue }}>Pression = jours_fenêtre × poids_zone. Zone {pred?.zone} normalisée → {pred ? nz(pred.zone) : "—"}.</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Card>
-
-            <Card>
-              <div style={{ padding:"18px 20px" }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
-                  <Lbl>Météo mensuelle · open-meteo</Lbl>
-                  <span style={{ fontSize:10, color:T.t3 }}>archive + prévisions</span>
-                </div>
-                {loading ? sk(190) : (
-                  <div style={{ display:"flex", flexDirection:"column" }}>
-                    {meteo.map((r, i) => (
-                      <div key={i} style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 0", borderBottom:i<meteo.length-1?`1px solid ${T.border}`:"none" }}>
-                        <div style={{ width:52, fontSize:11, fontWeight:600, color:T.t1, flexShrink:0 }}>{r.label}</div>
-                        <div style={{ display:"flex", gap:5, alignItems:"center", flex:1 }}>
-                          <span style={{ display:"inline-flex", alignItems:"center", gap:3, padding:"2px 7px", borderRadius:5, fontSize:10, fontWeight:600, background:r.temp>35?T.redL:T.amberL, color:r.temp>35?T.red:T.amber }}>
-                            <Thermometer size={10}/>{r.temp}°C
-                          </span>
-                          <span style={{ display:"inline-flex", alignItems:"center", gap:3, padding:"2px 7px", borderRadius:5, fontSize:10, fontWeight:600, background:r.isHiv?T.blueL:"#F8FAFC", color:r.isHiv?T.blue:T.t3 }}>
-                            <CloudRain size={10}/>{r.precip} mm
-                          </span>
-                          {r.isHiv && <span style={{ padding:"2px 6px", borderRadius:4, fontSize:9, fontWeight:700, background:T.greenL, color:T.green }}>Hivernage</span>}
-                        </div>
-                        <div style={{ flexShrink:0 }}>{r.events.map((ev,j) => <EvPill key={j} name={ev.name}/>)}</div>
-                      </div>
-                    ))}
-                    <div style={{ marginTop:10, padding:"8px 10px", background:T.bg, borderRadius:8, fontSize:10, color:T.t3, display:"flex", alignItems:"center", gap:5 }}>
-                      <Globe size={11}/> Source : open-meteo.com · données historiques & prévisions
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Card>
-          </div>
-        )}
-
-        {/* ── TABLE ── */}
-        {site && (
-          <Card style={{ overflow:"hidden" }}>
-            <div style={{ padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", borderBottom:`1px solid ${T.border}`, background:T.bg }}>
-              <div>
-                <div style={{ fontSize:14, fontWeight:700, color:T.t1 }}>Détail mois par mois</div>
-                {pred && <div style={{ fontSize:11, color:T.t3, marginTop:2 }}>{pred.predictions.length} mois prédits · généré le {pred.generated_at}</div>}
-              </div>
-              {pred && (
-                <button onClick={() => exportOne(pred)} style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 14px", borderRadius:8, border:`1px solid ${T.border}`, background:T.card, color:T.t2, fontSize:11, fontWeight:600, cursor:"pointer" }}>
-                  <Download size={12}/> Excel
-                </button>
-              )}
-            </div>
-            {loading ? <div style={{ padding:20 }}>{sk(180)}</div> : pred ? (
-              <div style={{ overflowX:"auto" }}>
-                <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11 }}>
-                  <thead>
-                    <tr style={{ background:T.bg }}>
-                      {["Mois","Conso préd.","IC 80%","HT préd.","Marge","Statut","FNP","Confiance","Facteurs clés","Événements"].map(h => (
-                        <th key={h} style={{ padding:"9px 12px", textAlign:"left", fontSize:9, fontWeight:700, color:T.t3, textTransform:"uppercase" as const, letterSpacing:".08em", borderBottom:`1px solid ${T.border}`, whiteSpace:"nowrap" }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pred.predictions.map((p, i) => (
-                      <tr key={i} style={{ borderBottom:`1px solid ${T.border}`, background:i%2===0?T.card:"#FAFBFC" }}>
-                        <td style={{ padding:"10px 12px", fontWeight:700, fontFamily:T.mono, fontSize:11, color:T.blue }}>{fmtP(p.period)}</td>
-                        <td style={{ padding:"10px 12px", fontFamily:T.mono, fontSize:11, color:T.t1 }}>{fmtK(Math.round(p.conso_pred))}</td>
-                        <td style={{ padding:"10px 12px", fontSize:10, color:T.t3 }}>{fmtK(Math.round(p.ic_lo))} – {fmtK(Math.round(p.ic_hi))}</td>
-                        <td style={{ padding:"10px 12px", fontFamily:T.mono, fontSize:11, color:T.t1 }}>{fmtN(Math.round(p.ht_pred))} FCFA</td>
-                        <td style={{ padding:"10px 12px", fontFamily:T.mono, fontSize:11, fontWeight:700, color:p.marge_ok?T.green:T.red }}>{p.marge_pred>=0?"+":""}{fmtN(Math.round(p.marge_pred))}</td>
-                        <td style={{ padding:"10px 12px" }}>
-                          <span style={{ padding:"2px 8px", borderRadius:5, fontSize:10, fontWeight:700, background:p.marge_ok?T.greenL:T.redL, color:p.marge_ok?T.green:T.red }}>{p.marge_ok?"OK":"NOK"}</span>
-                        </td>
-                        <td style={{ padding:"10px 12px" }}>
-                          <span style={{ padding:"2px 8px", borderRadius:5, fontSize:10, fontWeight:700, background:p.fnp_score>0.5?T.redL:p.fnp_score>0.25?T.amberL:T.greenL, color:p.fnp_score>0.5?T.red:p.fnp_score>0.25?T.amber:T.green }}>{Math.round(p.fnp_score*100)}%</span>
-                        </td>
-                        <td style={{ padding:"10px 12px" }}>
-                          <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-                            <div style={{ height:4, width:40, background:"#F1F5F9", borderRadius:99, overflow:"hidden" }}>
-                              <div style={{ height:"100%", width:`${Math.round(p.confidence*100)}%`, background:cc(p.confidence), borderRadius:99 }}/>
-                            </div>
-                            <span style={{ fontSize:10, color:cc(p.confidence), fontWeight:600 }}>{p.confidence>=0.85?"Haute":p.confidence>=0.70?"Moy.":"Faible"}</span>
-                          </div>
-                        </td>
-                        <td style={{ padding:"10px 12px", maxWidth:200 }}>
-                          <div style={{ display:"flex", flexWrap:"wrap", gap:3 }}>
-                            {p.top_factors.slice(0,3).map((f,j) => (
-                              <span key={j} style={{ display:"inline-block", padding:"1px 6px", borderRadius:4, fontSize:9, fontWeight:600, background:f.impact>=0?T.blueL:T.amberL, color:f.impact>=0?T.blue:T.amber }}>
-                                {(FL[f.feature]||f.feature).split(" ")[0]} {f.impact>=0?"+":"−"}{Math.abs(f.impact*100).toFixed(0)}%
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td style={{ padding:"10px 12px" }}>
-                          {p.events.length>0 ? p.events.map((ev,j) => <EvPill key={j} name={ev.name}/>) : <span style={{ fontSize:10, color:T.t3 }}>—</span>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
-          </Card>
-        )}
-
-        {/* ── FOOTER ── */}
-        {site && pred && (
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
-            {[
-              { icon:<Cpu size={13}/>, color:T.blue, colorL:T.blueL, title:"Modèle", lines:[`LightGBM · ${pred.model_version}`,"Walk-forward validation","MAE cible < 8%"] },
-              { icon:<Calendar size={13}/>, color:T.violet, colorL:T.violetL, title:"Événements", lines:["hijri-converter · calendrier islamique","Gamou · Magal · Tabaski · Korité",`Zone: ${pred.zone} → ${nz(pred.zone)}`] },
-              { icon:<CloudRain size={13}/>, color:T.cyan, colorL:T.cyanL, title:"Météo", lines:["open-meteo.com · gratuit","Temp · précipitations · humidité","Hivernage juin–octobre"] },
-            ].map((b, i) => (
-              <Card key={i}>
-                <div style={{ padding:"13px 16px" }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:8 }}>
-                    <div style={{ width:28, height:28, borderRadius:7, background:b.colorL, display:"grid", placeItems:"center", color:b.color }}>{b.icon}</div>
-                    <span style={{ fontSize:12, fontWeight:700, color:T.t1 }}>{b.title}</span>
-                  </div>
-                  {b.lines.map((l, j) => <div key={j} style={{ fontSize:10, color:T.t3, marginBottom:3 }}>· {l}</div>)}
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
-
-        {showExp && <ExportModal onClose={() => setExp(false)} horizon={horizon} pred={pred??null}/>}
-      </div>
-    </>
-  );
+function Td({ children, right, center }: { children: ReactNode; right?: boolean; center?: boolean }) {
+  return <td style={{ padding: "11px 12px", borderBottom: `1px solid ${C.slate[200]}`, borderRight: `1px solid ${C.slate[100]}`, color: C.slate[700], textAlign: right ? "right" : center ? "center" : "left", verticalAlign: "middle" }}>{children}</td>;
 }

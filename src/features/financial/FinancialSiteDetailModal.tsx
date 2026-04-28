@@ -1,539 +1,690 @@
 // src/features/financial/FinancialSiteDetailModal.tsx
+// V2 — Drawer d'analyse financière site
+// Focus : marges financières, redevances, factures HTVA, billing, diagnostics et comparaison conso.
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import {
-  X, BarChart3, TableProperties, TrendingUp, TrendingDown,
-  Zap, Sun, Activity, AlertTriangle, CheckCircle2, XCircle,
+  Activity,
+  AlertCircle,
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
+  BadgeDollarSign,
+  BarChart3,
+  CheckCircle2,
+  ChevronRight,
+  Database,
+  Eye,
+  Gauge,
+  Info,
+  Layers,
+  LineChart as LineIcon,
+  Loader2,
+  PanelRightClose,
+  ReceiptText,
+  ShieldCheck,
+  Sparkles,
+  Sun,
+  TableProperties,
+  Target,
+  TrendingDown,
+  TrendingUp,
+  Wallet,
+  X,
+  XCircle,
+  Zap,
 } from "lucide-react";
+import {
+  Area,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ComposedChart,
+  Legend,
+  Line,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { api } from "@/services/api";
 
-// ═══════════════════════════════════════════════════════════════════
-// DESIGN TOKENS
-// ═══════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
+// Design tokens
+// ─────────────────────────────────────────────────────────────────────────────
 
 const C = {
-  navy:    { 900:"#0a1628", 800:"#0f2140", 700:"#163058", 600:"#1e4175", 500:"#2563a8", 400:"#4a90d9", 100:"#e6f1fc", 50:"#f3f8fe" },
-  accent:  { 500:"#e85d04", 400:"#f97316", 100:"#ffedd5" },
-  success: { main:"#059669", light:"#d1fae5", dark:"#065f46" },
-  danger:  { main:"#dc2626", light:"#fee2e2", dark:"#991b1b" },
-  warning: { main:"#d97706", light:"#fef3c7", dark:"#92400e" },
-  info:    { main:"#7c3aed", light:"#ede9fe" },
-  solar:   { main:"#ca8a04", light:"#fef9c3", dark:"#713f12" },
-  slate:   { 900:"#0f172a", 800:"#1e293b", 700:"#334155", 600:"#475569", 500:"#64748b", 400:"#94a3b8", 300:"#cbd5e1", 200:"#e2e8f0", 100:"#f1f5f9", 50:"#f8fafc" },
+  blue: {
+    950: "#010E2A",
+    900: "#021A40",
+    800: "#032566",
+    700: "#0A3D96",
+    600: "#1A56C4",
+    500: "#3272E0",
+    300: "#91B9F8",
+    100: "#E4EFFE",
+    50: "#F2F6FE",
+  },
+  slate: {
+    950: "#020617",
+    900: "#0F172A",
+    800: "#1E293B",
+    700: "#334155",
+    600: "#475569",
+    500: "#64748B",
+    400: "#94A3B8",
+    300: "#CBD5E1",
+    200: "#E2E8F0",
+    100: "#F1F5F9",
+    50: "#F8FAFC",
+  },
+  ok: { main: "#059669", light: "#D1FAE5", mid: "#A7F3D0", dark: "#065F46" },
+  nok: { main: "#DC2626", light: "#FEE2E2", mid: "#FECACA", dark: "#991B1B" },
+  warn: { main: "#D97706", light: "#FEF3C7", mid: "#FDE68A", dark: "#92400E" },
+  cyan: { main: "#0891B2", light: "#CFFAFE", dark: "#0E7490" },
+  purple: { main: "#7C3AED", light: "#EDE9FE", dark: "#5B21B6" },
+  solar: { main: "#F59E0B", light: "#FEF3C7", dark: "#B45309" },
+  orange: { main: "#E8401C", light: "#FFEDD5", dark: "#C2410C" },
 };
 
-// ═══════════════════════════════════════════════════════════════════
-// TYPES
-// ═══════════════════════════════════════════════════════════════════
+const HDR = "linear-gradient(135deg,#010E2A 0%,#032566 54%,#0A3D96 100%)";
+const MONTHS_FR = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Types compatibles avec l'API actuelle
+// ─────────────────────────────────────────────────────────────────────────────
 
 type ConsoRow = {
-  period:           string;
-  month:            number;
-  conso_facturee:   string | null;
-  montant_htva:     string | null;    // ← NEW : montant total HT (FCFA)
-  conso_fms:        string | null;
-  conso_acm:        string | null;
-  conso_target:     string | null;
-  solar_kwh:        number | null;
-  solar_target_kwh: string | null;    // ← NEW : target solaire (kWh)
-  unavail_hours:    number | null;
-  fms_available:    boolean;
-  acm_available:    boolean;
-  ratio_fms:        string | null;
-  nb_jours:         number | null;
-  cible_kwh_j:      string | null;
+  period: string;
+  month: number;
+  conso_facturee: string | null;
+  montant_htva: string | null;
+  conso_fms: string | null;
+  conso_acm: string | null;
+  conso_target: string | null;
+  solar_kwh: number | null;
+  solar_target_kwh: string | null;
+  unavail_hours: number | null;
+  fms_available: boolean;
+  acm_available: boolean;
+  ratio_fms: string | null;
+  nb_jours: number | null;
+  cible_kwh_j: string | null;
 };
 
 type MargeRow = {
-  period:           string;
-  month:            number;
-  redevance:        string | null;
-  montant_htva:     string | null;
-  marge:            string | null;
-  marge_statut:     "OK" | "NOK" | null;
-  load_w:           number | null;
-  hors_catalogue:   boolean;
-  recurrence_type:  string | null;
+  period: string;
+  month: number;
+  redevance: string | null;
+  montant_htva: string | null;
+  marge: string | null;
+  marge_statut: "OK" | "NOK" | null;
+  load_w: number | null;
+  hors_catalogue: boolean;
+  recurrence_type: string | null;
+  recurrence_mois_nok?: number | null;
+};
+
+type BillingRow = {
+  period: string;
+  montant_hors_tva?: string | null;
+  montant_htva?: string | null;
+  energie?: string | null;
+  abonnement?: string | null;
+  montant_cosinus_phi?: string | null;
+  penalite_abonnement?: string | null;
+  nb_jours?: number | null;
+};
+
+type CertificationRow = {
+  period: string;
+  status: string | null;
+  ratio_fms?: string | null;
+  variation_montant?: string | null;
+};
+
+type Diagnostic = {
+  type: string;
+  severity: string;
+  message: string;
+  detail: string;
 };
 
 type SiteDetail = {
-  site: { site_id:string; name:string; zone:string; typology:string; configuration:string };
-  period: { year:number; month_start:number; month_end:number };
-  summary: {
-    total_marge:string; count_ok:number; count_nok:number;
-    count_hors_catalogue:number; billing_total_ht:string;
-    billing_total_cosphi:string; billing_total_penalite:string;
+  site: {
+    site_id: string;
+    name: string | null;
+    zone: string | null;
+    typology: string | null;
+    configuration: string | null;
   };
-  current: { marge_statut:string; recurrence_type:string|null; redevance:string|null; montant_htva:string|null; load_w:number|null } | null;
+  period: { year: number; month_start: number; month_end: number };
+  summary: {
+    total_marge: string;
+    count_ok: number;
+    count_nok: number;
+    count_hors_catalogue: number;
+    billing_total_ht: string;
+    billing_total_cosphi: string;
+    billing_total_penalite: string;
+  };
+  current: {
+    marge_statut: string | null;
+    recurrence_type: string | null;
+    redevance: string | null;
+    montant_htva: string | null;
+    load_w: number | null;
+  } | null;
   history: MargeRow[];
   conso_comparison: { rows: ConsoRow[] };
-  diagnostics: Array<{ type:string; severity:string; message:string; detail:string }>;
+  diagnostics: Diagnostic[];
+  billing?: { rows: BillingRow[] };
+  certification?: { summary?: Record<string, number | string>; rows?: CertificationRow[] };
 };
 
 export type FinancialSiteDetailModalProps = {
-  siteId:     string;
-  siteName?:  string;
-  year:       number;
+  siteId: string;
+  siteName?: string;
+  year: number;
   monthStart: number;
-  monthEnd:   number;
-  onClose:    () => void;
+  monthEnd: number;
+  onClose: () => void;
 };
 
-// ═══════════════════════════════════════════════════════════════════
-// UTILS
-// ═══════════════════════════════════════════════════════════════════
+type TabKey = "overview" | "marge" | "conso" | "billing" | "diagnostics";
+type DisplayMode = "chart" | "table";
 
-const MONTHS_FR = ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"];
+// ─────────────────────────────────────────────────────────────────────────────
+// Utils
+// ─────────────────────────────────────────────────────────────────────────────
 
-function fmt(v: string | number | null | undefined, decimals = 0): string {
-  if (v === null || v === undefined || v === "") return "—";
-  const n = typeof v === "string" ? parseFloat(v) : v;
-  if (isNaN(n)) return "—";
-  return n.toLocaleString("fr-FR", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+function toNum(v: string | number | null | undefined): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = typeof v === "number" ? v : Number(String(v).replace(",", "."));
+  return Number.isFinite(n) ? n : null;
 }
 
-function fmtKwh(v: string | number | null | undefined): string {
-  if (v === null || v === undefined || v === "") return "—";
-  const n = typeof v === "string" ? parseFloat(v) : v;
-  if (isNaN(n)) return "—";
-  return `${n.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 1 })} kWh`;
+function n(v: string | number | null | undefined): number {
+  return toNum(v) ?? 0;
+}
+
+function fmt(v: string | number | null | undefined, decimals = 0): string {
+  const value = toNum(v);
+  if (value === null) return "—";
+  return value.toLocaleString("fr-FR", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
 function fmtMoney(v: string | number | null | undefined): string {
-  if (v === null || v === undefined || v === "") return "—";
-  const n = typeof v === "string" ? parseFloat(v) : v;
-  if (isNaN(n)) return "—";
-  return `${n.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} F`;
-}
-
-function deltaColor(delta: number | null): string {
-  if (delta === null) return C.slate[400];
-  if (Math.abs(delta) < 10) return C.success.main;
-  if (Math.abs(delta) < 20) return C.warning.main;
-  return C.danger.main;
-}
-
-function deltaLabel(delta: number | null): string {
-  if (delta === null) return "—";
-  return `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}%`;
-}
-
-function calcDelta(a: string | null, b: string | null): number | null {
-  if (!a || !b) return null;
-  const fa = parseFloat(a), fb = parseFloat(b);
-  if (isNaN(fa) || isNaN(fb) || fb === 0) return null;
-  return ((fa - fb) / fb) * 100;
-}
-
-function sumKwh(rows: ConsoRow[], key: keyof ConsoRow): number | null {
-  let total = 0, hasAny = false;
-  for (const r of rows) {
-    const v = r[key];
-    if (v !== null && v !== undefined) {
-      const n = typeof v === "string" ? parseFloat(v as string) : Number(v);
-      if (!isNaN(n)) { total += n; hasAny = true; }
-    }
+  const value = toNum(v);
+  if (value === null) return "—";
+  if (Math.abs(value) >= 1_000_000) {
+    return `${(value / 1_000_000).toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} M FCFA`;
   }
-  return hasAny ? total : null;
+  return `${value.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} FCFA`;
 }
 
-function avgRatio(rows: ConsoRow[]): number | null {
-  const vals = rows
-    .map(r => r.ratio_fms ? parseFloat(r.ratio_fms) : null)
-    .filter((v): v is number => v !== null);
-  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+function fmtKwh(v: string | number | null | undefined): string {
+  const value = toNum(v);
+  if (value === null) return "—";
+  if (Math.abs(value) >= 1000) {
+    return `${(value / 1000).toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MWh`;
+  }
+  return `${value.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} kWh`;
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// SUB-COMPONENTS
-// ═══════════════════════════════════════════════════════════════════
+function fmtPct(v: number | null): string {
+  if (v === null || !Number.isFinite(v)) return "—";
+  return `${v > 0 ? "+" : ""}${v.toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+}
 
-function KpiCard({ label, value, sub, color, icon }: {
-  label:string; value:string; sub?:string; color:string; icon:React.ReactNode;
-}) {
+function monthLabel(period: string, month?: number): string {
+  if (month && MONTHS_FR[month - 1]) return MONTHS_FR[month - 1];
+  if (period?.length >= 7) {
+    const m = Number(period.slice(5, 7));
+    return MONTHS_FR[m - 1] || period;
+  }
+  return period || "—";
+}
+
+function deltaPct(a: string | number | null | undefined, b: string | number | null | undefined): number | null {
+  const av = toNum(a);
+  const bv = toNum(b);
+  if (av === null || bv === null || bv === 0) return null;
+  return (av / bv - 1) * 100;
+}
+
+function sum(rows: Array<Record<string, any>>, key: string): number | null {
+  let total = 0;
+  let has = false;
+  rows.forEach((r) => {
+    const v = toNum(r[key]);
+    if (v !== null) {
+      total += v;
+      has = true;
+    }
+  });
+  return has ? total : null;
+}
+
+function avg(vals: Array<number | null>): number | null {
+  const real = vals.filter((v): v is number => v !== null && Number.isFinite(v));
+  if (!real.length) return null;
+  return real.reduce((a, b) => a + b, 0) / real.length;
+}
+
+function colorByValue(value: number | null, positiveGood = true): string {
+  if (value === null) return C.slate[400];
+  if (value === 0) return C.slate[500];
+  if (positiveGood) return value >= 0 ? C.ok.main : C.nok.main;
+  return value <= 0 ? C.ok.main : C.nok.main;
+}
+
+function safeStatus(status?: string | null) {
+  if (!status) return { label: "—", bg: C.slate[100], color: C.slate[500], border: C.slate[200] };
+  const ok = status === "OK" || status.includes("CERTIFIED");
+  const nok = status === "NOK" || status.includes("REVIEW") || status.includes("UNAVAILABLE");
+  if (ok) return { label: status, bg: C.ok.light, color: C.ok.dark, border: C.ok.mid };
+  if (nok) return { label: status, bg: C.nok.light, color: C.nok.dark, border: C.nok.mid };
+  return { label: status, bg: C.warn.light, color: C.warn.dark, border: C.warn.mid };
+}
+
+function severityConfig(severity: string) {
+  const s = severity?.toUpperCase();
+  if (s === "CRITICAL") return { label: "Critique", bg: C.nok.light, color: C.nok.dark, border: C.nok.mid, icon: <AlertTriangle size={15} /> };
+  if (s === "HIGH" || s === "HAUTE") return { label: "Élevé", bg: C.orange.light, color: C.orange.dark, border: "#FDBA74", icon: <AlertCircle size={15} /> };
+  if (s === "MEDIUM" || s === "MOYENNE") return { label: "Moyen", bg: C.warn.light, color: C.warn.dark, border: C.warn.mid, icon: <Info size={15} /> };
+  return { label: "Faible", bg: C.ok.light, color: C.ok.dark, border: C.ok.mid, icon: <CheckCircle2 size={15} /> };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UI atoms
+// ─────────────────────────────────────────────────────────────────────────────
+
+function Badge({ children, tone = "slate" }: { children: ReactNode; tone?: "slate" | "blue" | "ok" | "nok" | "warn" | "purple" | "cyan" | "orange" }) {
+  const map = {
+    slate: { bg: C.slate[100], color: C.slate[700], border: C.slate[200] },
+    blue: { bg: C.blue[100], color: C.blue[700], border: "#BFDBFE" },
+    ok: { bg: C.ok.light, color: C.ok.dark, border: C.ok.mid },
+    nok: { bg: C.nok.light, color: C.nok.dark, border: C.nok.mid },
+    warn: { bg: C.warn.light, color: C.warn.dark, border: C.warn.mid },
+    purple: { bg: C.purple.light, color: C.purple.dark, border: "#DDD6FE" },
+    cyan: { bg: C.cyan.light, color: C.cyan.dark, border: "#A5F3FC" },
+    orange: { bg: C.orange.light, color: C.orange.dark, border: "#FDBA74" },
+  }[tone];
+
   return (
-    <div style={{
-      background:"#fff", borderRadius:10, padding:"11px 13px",
-      border:`1px solid ${C.slate[200]}`, position:"relative", overflow:"hidden", minWidth:0,
-    }}>
-      <div style={{ position:"absolute", top:0, left:0, right:0, height:2, background:color }} />
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:4 }}>
-        <span style={{ fontSize:9, fontWeight:700, color:C.slate[500], textTransform:"uppercase", letterSpacing:"0.07em", lineHeight:1.3 }}>{label}</span>
-        <span style={{ color, opacity:0.65, flexShrink:0 }}>{icon}</span>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 9px", borderRadius: 999, background: map.bg, color: map.color, border: `1px solid ${map.border}`, fontSize: 10.5, fontWeight: 900, whiteSpace: "nowrap" }}>
+      {children}
+    </span>
+  );
+}
+
+function StatusBadge({ status }: { status?: string | null }) {
+  const s = safeStatus(status);
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 999, background: s.bg, color: s.color, border: `1px solid ${s.border}`, fontSize: 10.5, fontWeight: 950 }}>
+      {status === "OK" || status?.includes("CERTIFIED") ? <CheckCircle2 size={12} /> : status ? <XCircle size={12} /> : null}
+      {s.label}
+    </span>
+  );
+}
+
+function DeltaBadge({ value }: { value: number | null }) {
+  if (value === null) return <span style={{ color: C.slate[400], fontSize: 11 }}>—</span>;
+  const abs = Math.abs(value);
+  const tone = abs <= 10 ? "ok" : abs <= 20 ? "warn" : "nok";
+  return (
+    <Badge tone={tone}>
+      {value >= 0 ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
+      {fmtPct(value)}
+    </Badge>
+  );
+}
+
+function KpiCard({ label, value, sub, icon, color, hint }: { label: string; value: string; sub?: string; icon: ReactNode; color: string; hint?: string }) {
+  return (
+    <div style={{ position: "relative", overflow: "hidden", borderRadius: 18, background: "#fff", border: `1px solid ${C.slate[200]}`, padding: "14px 15px", boxShadow: "0 12px 30px rgba(15,23,42,.06)" }} title={hint}>
+      <div style={{ position: "absolute", inset: 0, background: `radial-gradient(circle at 92% 10%,${color}22,transparent 30%)` }} />
+      <div style={{ position: "relative", display: "flex", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 10, color: C.slate[500], fontWeight: 950, textTransform: "uppercase", letterSpacing: ".08em" }}>{label}</div>
+          <div style={{ marginTop: 7, color, fontSize: 18, fontWeight: 950, letterSpacing: "-.03em", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</div>
+          {sub ? <div style={{ marginTop: 4, fontSize: 11, color: C.slate[500], whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sub}</div> : null}
+        </div>
+        <div style={{ width: 38, height: 38, borderRadius: 14, background: `${color}12`, color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</div>
       </div>
-      <div style={{ fontSize:15, fontWeight:700, color:C.navy[800], fontFamily:"'JetBrains Mono',monospace", wordBreak:"break-all" }}>{value}</div>
-      {sub && <div style={{ fontSize:10, color:C.slate[500], marginTop:2 }}>{sub}</div>}
     </div>
   );
 }
 
-function DeltaBadge({ delta }: { delta: number | null }) {
-  if (delta === null) return <span style={{ color:C.slate[300], fontSize:11 }}>—</span>;
-  const col = deltaColor(delta);
-  const bg  = Math.abs(delta) < 10 ? C.success.light : Math.abs(delta) < 20 ? C.warning.light : C.danger.light;
+function Panel({ children, style }: { children: ReactNode; style?: CSSProperties }) {
   return (
-    <span style={{
-      display:"inline-block", padding:"3px 8px", borderRadius:6,
-      background:bg, color:col, fontSize:11, fontWeight:700,
-      fontFamily:"'JetBrains Mono',monospace", whiteSpace:"nowrap",
-    }}>
-      {deltaLabel(delta)}
-    </span>
+    <div style={{ background: "#fff", border: `1px solid ${C.slate[200]}`, borderRadius: 20, boxShadow: "0 14px 38px rgba(15,23,42,.06)", overflow: "hidden", ...style }}>
+      {children}
+    </div>
   );
 }
 
-function StatutBadge({ statut }: { statut: string | null }) {
-  if (!statut) return <span style={{ color:C.slate[300] }}>—</span>;
-  const ok = statut === "OK";
+function PanelTitle({ icon, title, subtitle, right }: { icon: ReactNode; title: string; subtitle?: string; right?: ReactNode }) {
   return (
-    <span style={{
-      display:"inline-flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:6,
-      background: ok ? C.success.light : C.danger.light,
-      color: ok ? C.success.dark : C.danger.dark, fontSize:11, fontWeight:700,
-    }}>
-      {ok ? <CheckCircle2 style={{width:11,height:11}}/> : <XCircle style={{width:11,height:11}}/>}
-      {statut}
-    </span>
+    <div style={{ padding: "15px 17px", borderBottom: `1px solid ${C.slate[100]}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+      <div style={{ display: "flex", gap: 11, alignItems: "center" }}>
+        <div style={{ width: 35, height: 35, borderRadius: 13, background: C.blue[50], color: C.blue[700], display: "flex", alignItems: "center", justifyContent: "center" }}>{icon}</div>
+        <div>
+          <div style={{ fontSize: 14.5, fontWeight: 950, color: C.blue[950], letterSpacing: "-.02em" }}>{title}</div>
+          {subtitle ? <div style={{ fontSize: 11.5, color: C.slate[500], marginTop: 2 }}>{subtitle}</div> : null}
+        </div>
+      </div>
+      {right}
+    </div>
   );
 }
 
-function RecurrBadge({ type }: { type: string | null }) {
-  if (!type) return null;
-  const crit = type === "critique";
+function EmptyBlock({ title, text }: { title: string; text: string }) {
   return (
-    <span style={{
-      display:"inline-flex", alignItems:"center", gap:4, padding:"3px 8px", borderRadius:6,
-      background: crit ? C.danger.light : C.warning.light,
-      color: crit ? C.danger.dark : C.warning.dark,
-      fontSize:10, fontWeight:700, textTransform:"uppercase",
-    }}>
-      <AlertTriangle style={{width:9,height:9}}/>
-      {crit ? "Critique" : "Light"}
-    </span>
+    <div style={{ padding: 46, textAlign: "center", color: C.slate[500] }}>
+      <div style={{ width: 52, height: 52, borderRadius: 18, background: C.slate[100], margin: "0 auto 14px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Database size={22} color={C.slate[400]} />
+      </div>
+      <div style={{ fontSize: 15, fontWeight: 900, color: C.slate[700] }}>{title}</div>
+      <div style={{ fontSize: 12, marginTop: 5 }}>{text}</div>
+    </div>
   );
 }
 
-function MiniBar({ value, maxVal, color, width = 60 }: {
-  value:number|null; maxVal:number; color:string; width?:number;
-}) {
-  const pct = value && maxVal > 0 ? Math.min((value / maxVal) * 100, 100) : 0;
+function MoneyCell({ value, positiveGood = true }: { value?: string | number | null; positiveGood?: boolean }) {
+  const val = toNum(value);
+  return <strong style={{ color: colorByValue(val, positiveGood), fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{fmtMoney(value)}</strong>;
+}
+
+function ChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
   return (
-    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-      <div style={{ width, height:6, background:C.slate[100], borderRadius:99, overflow:"hidden" }}>
-        <div style={{ height:"100%", width:`${pct}%`, background:color, borderRadius:99, transition:"width 0.4s ease" }} />
+    <div style={{ background: "#fff", border: `1px solid ${C.slate[200]}`, borderRadius: 14, padding: "10px 12px", boxShadow: "0 16px 40px rgba(15,23,42,.14)", minWidth: 210 }}>
+      <div style={{ fontSize: 12, fontWeight: 950, color: C.blue[950], marginBottom: 8 }}>{label}</div>
+      <div style={{ display: "grid", gap: 6 }}>
+        {payload.filter((p: any) => p.value !== null && p.value !== undefined).map((p: any) => {
+          const isMoney = ["marge", "redevance", "facture", "ht", "abonnement", "cosphi", "penalite"].includes(String(p.dataKey));
+          return (
+            <div key={p.dataKey} style={{ display: "flex", justifyContent: "space-between", gap: 14, fontSize: 11.5 }}>
+              <span style={{ display: "flex", gap: 6, alignItems: "center", color: C.slate[600] }}>
+                <span style={{ width: 8, height: 8, borderRadius: 999, background: p.color || p.fill }} />
+                {p.name || p.dataKey}
+              </span>
+              <strong style={{ color: C.slate[800], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
+                {isMoney ? fmtMoney(p.value) : fmtKwh(p.value)}
+              </strong>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-// ── Bar chart ─────────────────────────────────────────────────────────────────
-function ConsoBarChart({ rows }: { rows: ConsoRow[] }) {
-  if (!rows.length) return null;
-  const CHART_W = 720, CHART_H = 260;
-  const PAD = { top:24, right:16, bottom:48, left:60 };
-  const iw = CHART_W - PAD.left - PAD.right;
-  const ih = CHART_H - PAD.top  - PAD.bottom;
+// ─────────────────────────────────────────────────────────────────────────────
+// Tables
+// ─────────────────────────────────────────────────────────────────────────────
 
-  const parsed = rows.map(r => ({
-    label:   MONTHS_FR[(r.month || 1) - 1],
-    facture: r.conso_facturee ? parseFloat(r.conso_facturee) : null,
-    fms:     r.conso_fms ? parseFloat(r.conso_fms) : (r.conso_acm ? parseFloat(r.conso_acm) : null),
-    target:  r.conso_target  ? parseFloat(r.conso_target)  : null,
-    solar:   r.solar_kwh ?? null,
+function TableShell({ children, minWidth = 980 }: { children: ReactNode; minWidth?: number }) {
+  return (
+    <div style={{ overflow: "auto", border: `1px solid ${C.slate[200]}`, borderRadius: 16 }}>
+      <table style={{ width: "100%", minWidth, borderCollapse: "separate", borderSpacing: 0, fontSize: 12 }}>{children}</table>
+    </div>
+  );
+}
+
+function Th({ children, right, center }: { children: ReactNode; right?: boolean; center?: boolean }) {
+  return (
+    <th style={{ position: "sticky", top: 0, zIndex: 2, padding: "10px 12px", background: C.blue[900], color: "rgba(255,255,255,.88)", textAlign: right ? "right" : center ? "center" : "left", fontSize: 10, fontWeight: 950, textTransform: "uppercase", letterSpacing: ".08em", borderBottom: `1px solid ${C.blue[700]}`, whiteSpace: "nowrap" }}>{children}</th>
+  );
+}
+
+function Td({ children, right, center }: { children: ReactNode; right?: boolean; center?: boolean }) {
+  return <td style={{ padding: "11px 12px", textAlign: right ? "right" : center ? "center" : "left", borderBottom: `1px solid ${C.slate[100]}`, color: C.slate[700], verticalAlign: "middle" }}>{children}</td>;
+}
+
+function MargeTable({ rows }: { rows: MargeRow[] }) {
+  if (!rows.length) return <EmptyBlock title="Aucune marge" text="Aucune évaluation financière disponible sur la période." />;
+
+  return (
+    <TableShell minWidth={960}>
+      <thead>
+        <tr>
+          <Th>Période</Th>
+          <Th right>Load</Th>
+          <Th right>Redevance</Th>
+          <Th right>Montant HT</Th>
+          <Th right>Marge</Th>
+          <Th center>Statut</Th>
+          <Th center>Récurrence</Th>
+          <Th center>HC</Th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, i) => {
+          const isNok = r.marge_statut === "NOK";
+          return (
+            <tr key={r.period} style={{ background: isNok ? "#FFF7F7" : i % 2 ? C.slate[50] : "#fff" }}>
+              <Td><strong style={{ color: C.blue[800], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{r.period}</strong></Td>
+              <Td right>{r.load_w ? `${r.load_w.toLocaleString("fr-FR")} W` : "—"}</Td>
+              <Td right><MoneyCell value={r.redevance} /></Td>
+              <Td right><MoneyCell value={r.montant_htva} positiveGood={false} /></Td>
+              <Td right><MoneyCell value={r.marge} /></Td>
+              <Td center><StatusBadge status={r.marge_statut} /></Td>
+              <Td center>{r.recurrence_type ? <Badge tone={r.recurrence_type === "critique" ? "nok" : "warn"}>{r.recurrence_type}{r.recurrence_mois_nok ? ` · ${r.recurrence_mois_nok}m` : ""}</Badge> : <span style={{ color: C.slate[400] }}>—</span>}</Td>
+              <Td center>{r.hors_catalogue ? <Badge tone="warn">HC</Badge> : <span style={{ color: C.slate[400] }}>—</span>}</Td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </TableShell>
+  );
+}
+
+function ConsoTable({ rows }: { rows: ConsoRow[] }) {
+  if (!rows.length) return <EmptyBlock title="Aucune consommation" text="Aucune donnée de consommation disponible pour ce site sur la période." />;
+
+  return (
+    <TableShell minWidth={1180}>
+      <thead>
+        <tr>
+          <Th>Période</Th>
+          <Th right>Jours</Th>
+          <Th right>Facturée</Th>
+          <Th right>FMS/Grid</Th>
+          <Th right>ACM</Th>
+          <Th center>Δ FMS</Th>
+          <Th right>Target</Th>
+          <Th center>Δ Target</Th>
+          <Th right>Solaire</Th>
+          <Th right>Target sol.</Th>
+          <Th center>Δ Sol.</Th>
+          <Th right>Indispo</Th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, i) => {
+          const fmsMain = r.conso_fms || r.conso_acm;
+          const solarDelta = r.solar_kwh !== null && r.solar_target_kwh ? deltaPct(r.solar_kwh, r.solar_target_kwh) : null;
+          return (
+            <tr key={r.period} style={{ background: i % 2 ? C.slate[50] : "#fff" }}>
+              <Td><strong style={{ color: C.blue[800], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{r.period}</strong></Td>
+              <Td right>{r.nb_jours ?? "—"}</Td>
+              <Td right><strong style={{ color: C.blue[700], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{fmtKwh(r.conso_facturee)}</strong></Td>
+              <Td right>{r.conso_fms ? <strong style={{ color: C.cyan.dark, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{fmtKwh(r.conso_fms)}</strong> : <span style={{ color: C.slate[400] }}>—</span>}</Td>
+              <Td right>{r.conso_acm ? <strong style={{ color: C.purple.dark, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{fmtKwh(r.conso_acm)}</strong> : <span style={{ color: C.slate[400] }}>—</span>}</Td>
+              <Td center><DeltaBadge value={deltaPct(fmsMain, r.conso_facturee)} /></Td>
+              <Td right>{fmtKwh(r.conso_target)}</Td>
+              <Td center><DeltaBadge value={deltaPct(r.conso_facturee, r.conso_target)} /></Td>
+              <Td right>{r.solar_kwh !== null ? <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: C.solar.dark, fontWeight: 900 }}><Sun size={12} />{fmtKwh(r.solar_kwh)}</span> : <span style={{ color: C.slate[400] }}>—</span>}</Td>
+              <Td right>{fmtKwh(r.solar_target_kwh)}</Td>
+              <Td center><DeltaBadge value={solarDelta} /></Td>
+              <Td right>{r.unavail_hours !== null && r.unavail_hours !== undefined ? `${fmt(r.unavail_hours, 1)} h` : "—"}</Td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </TableShell>
+  );
+}
+
+function BillingTable({ rows }: { rows: BillingRow[] }) {
+  if (!rows.length) return <EmptyBlock title="Aucun billing" text="Aucune ligne billing disponible pour la période." />;
+
+  return (
+    <TableShell minWidth={900}>
+      <thead>
+        <tr>
+          <Th>Période</Th>
+          <Th right>HT</Th>
+          <Th right>Énergie</Th>
+          <Th right>Abonnement</Th>
+          <Th right>Cos φ</Th>
+          <Th right>Pénalité PS</Th>
+          <Th right>Jours</Th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, i) => (
+          <tr key={r.period} style={{ background: i % 2 ? C.slate[50] : "#fff" }}>
+            <Td><strong style={{ color: C.blue[800], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{r.period}</strong></Td>
+            <Td right><MoneyCell value={r.montant_hors_tva ?? r.montant_htva} positiveGood={false} /></Td>
+            <Td right>{fmtKwh(r.energie)}</Td>
+            <Td right>{fmtMoney(r.abonnement)}</Td>
+            <Td right>{fmtMoney(r.montant_cosinus_phi)}</Td>
+            <Td right>{fmtMoney(r.penalite_abonnement)}</Td>
+            <Td right>{r.nb_jours ?? "—"}</Td>
+          </tr>
+        ))}
+      </tbody>
+    </TableShell>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Charts
+// ─────────────────────────────────────────────────────────────────────────────
+
+function MargeChart({ rows }: { rows: MargeRow[] }) {
+  if (!rows.length) return <EmptyBlock title="Aucune marge" text="Aucune donnée à afficher dans le graphique." />;
+  const data = rows.map((r) => ({
+    label: monthLabel(r.period, r.month),
+    marge: toNum(r.marge),
+    redevance: toNum(r.redevance),
+    facture: toNum(r.montant_htva),
   }));
 
-  const allVals = parsed.flatMap(d => [d.facture, d.fms, d.target]).filter((v): v is number => v !== null);
-  const maxVal  = allVals.length ? Math.max(...allVals) * 1.1 : 1;
-  const N_SERIES = 4;
-  const groupW = iw / parsed.length;
-  const barW   = Math.min(groupW / (N_SERIES + 1), 18);
-  const barGap = (groupW - barW * N_SERIES) / (N_SERIES + 1);
-  const toY    = (v: number | null) => v === null ? null : PAD.top + ih - (v / maxVal) * ih;
-  const ticks  = 5;
+  return (
+    <div style={{ height: 340, padding: "16px 18px 8px" }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={data} margin={{ top: 8, right: 18, bottom: 8, left: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={C.slate[100]} vertical={false} />
+          <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.slate[500] }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fontSize: 11, fill: C.slate[500] }} axisLine={false} tickLine={false} tickFormatter={(v) => `${Math.round(Number(v) / 1_000_000)}M`} width={58} />
+          <Tooltip content={<ChartTooltip />} />
+          <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+          <Bar dataKey="marge" name="Marge" radius={[6, 6, 0, 0]}>
+            {data.map((d, i) => <Cell key={i} fill={(d.marge ?? 0) >= 0 ? C.ok.main : C.nok.main} />)}
+          </Bar>
+          <Line type="monotone" dataKey="redevance" name="Redevance" stroke={C.blue[600]} strokeWidth={2.2} dot={{ r: 3 }} connectNulls />
+          <Line type="monotone" dataKey="facture" name="Facture HT" stroke={C.orange.main} strokeWidth={2.2} dot={{ r: 3 }} connectNulls />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
 
-  const SERIES = [
-    { key:"facture", label:"Facturée", color:C.navy[500] },
-    { key:"fms",     label:"FMS/ACM",  color:C.info.main },
-    { key:"target",  label:"Target",   color:C.success.main },
-    { key:"solar",   label:"Solaire",  color:C.solar.main },
-  ] as const;
+function ConsoChart({ rows }: { rows: ConsoRow[] }) {
+  if (!rows.length) return <EmptyBlock title="Aucune consommation" text="Aucune donnée à afficher dans le graphique." />;
+  const data = rows.map((r) => ({
+    label: monthLabel(r.period, r.month),
+    facturee: toNum(r.conso_facturee),
+    fms: toNum(r.conso_fms) ?? toNum(r.conso_acm),
+    target: toNum(r.conso_target),
+    solar: toNum(r.solar_kwh),
+  }));
 
   return (
-    <div style={{ overflowX:"auto" }}>
-      <svg width={CHART_W} height={CHART_H} style={{ fontFamily:"inherit", display:"block" }}>
-        {Array.from({ length: ticks + 1 }, (_, i) => {
-          const y = PAD.top + (i / ticks) * ih;
-          const val = maxVal - (i / ticks) * maxVal;
-          return (
-            <g key={i}>
-              <line x1={PAD.left} y1={y} x2={CHART_W - PAD.right} y2={y}
-                stroke={C.slate[200]} strokeWidth={1} strokeDasharray={i === ticks ? "none" : "4,3"} />
-              <text x={PAD.left - 6} y={y + 4} textAnchor="end" fontSize={9} fill={C.slate[400]}>
-                {val >= 1000 ? `${(val/1000).toFixed(0)}k` : val.toFixed(0)}
-              </text>
-            </g>
-          );
-        })}
-        {parsed.map((d, gi) => {
-          const gx = PAD.left + gi * groupW;
-          return (
-            <g key={gi}>
-              {SERIES.map((s, si) => {
-                const val  = (d as Record<string, number | null>)[s.key];
-                const y    = toY(val);
-                const x    = gx + barGap + si * (barW + barGap / 2);
-                const barH = val !== null && y !== null ? ih - (y - PAD.top) : 0;
-                return y !== null ? (
-                  <g key={s.key}>
-                    <rect x={x} y={y} width={barW} height={barH} rx={3} fill={s.color} opacity={0.85} />
-                    {barH > 16 && (
-                      <text x={x + barW / 2} y={y - 3} textAnchor="middle" fontSize={8} fill={s.color} fontWeight={600}>
-                        {val! >= 1000 ? `${(val!/1000).toFixed(1)}k` : val!.toFixed(0)}
-                      </text>
-                    )}
-                  </g>
-                ) : null;
-              })}
-              <text x={gx + groupW / 2} y={CHART_H - PAD.bottom + 14}
-                textAnchor="middle" fontSize={10} fill={C.slate[600]} fontWeight={600}>
-                {d.label}
-              </text>
-            </g>
-          );
-        })}
-        <text transform={`translate(12, ${PAD.top + ih / 2}) rotate(-90)`}
-          textAnchor="middle" fontSize={9} fill={C.slate[400]}>kWh</text>
-      </svg>
-      <div style={{ display:"flex", gap:16, justifyContent:"center", marginTop:8 }}>
-        {SERIES.map(s => (
-          <div key={s.key} style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:C.slate[600] }}>
-            <div style={{ width:12, height:12, borderRadius:3, background:s.color }} />
-            {s.label}
-          </div>
-        ))}
+    <div style={{ height: 340, padding: "16px 18px 8px" }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={data} margin={{ top: 8, right: 18, bottom: 8, left: 4 }}>
+          <defs>
+            <linearGradient id="factFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={C.blue[500]} stopOpacity={0.18} />
+              <stop offset="95%" stopColor={C.blue[500]} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke={C.slate[100]} vertical={false} />
+          <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.slate[500] }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fontSize: 11, fill: C.slate[500] }} axisLine={false} tickLine={false} tickFormatter={(v) => (Number(v) >= 1000 ? `${Math.round(Number(v) / 1000)} MWh` : `${v}`)} width={66} />
+          <Tooltip content={<ChartTooltip />} />
+          <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+          <Area type="monotone" dataKey="facturee" name="Facturée" stroke={C.blue[600]} fill="url(#factFill)" strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
+          <Line type="monotone" dataKey="fms" name="FMS/ACM" stroke={C.cyan.main} strokeWidth={2.2} strokeDasharray="6 4" dot={false} connectNulls />
+          <Line type="monotone" dataKey="target" name="Target" stroke={C.ok.main} strokeWidth={2.1} dot={{ r: 3 }} connectNulls />
+          <Line type="monotone" dataKey="solar" name="Solaire" stroke={C.solar.main} strokeWidth={2.1} dot={{ r: 3 }} connectNulls />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function BillingChart({ rows }: { rows: BillingRow[] }) {
+  if (!rows.length) return <EmptyBlock title="Aucun billing" text="Aucune donnée à afficher dans le graphique." />;
+  const data = rows.map((r) => ({
+    label: monthLabel(r.period),
+    ht: toNum(r.montant_hors_tva ?? r.montant_htva),
+    abonnement: toNum(r.abonnement),
+    cosphi: toNum(r.montant_cosinus_phi),
+    penalite: toNum(r.penalite_abonnement),
+  }));
+
+  return (
+    <div style={{ height: 330, padding: "16px 18px 8px" }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} margin={{ top: 8, right: 18, bottom: 8, left: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={C.slate[100]} vertical={false} />
+          <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.slate[500] }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fontSize: 11, fill: C.slate[500] }} axisLine={false} tickLine={false} tickFormatter={(v) => `${Math.round(Number(v) / 1_000_000)}M`} width={58} />
+          <Tooltip content={<ChartTooltip />} />
+          <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+          <Bar dataKey="ht" name="HT" fill={C.blue[600]} radius={[6, 6, 0, 0]} />
+          <Bar dataKey="abonnement" name="Abonnement" fill={C.cyan.main} radius={[6, 6, 0, 0]} />
+          <Bar dataKey="cosphi" name="Cos φ" fill={C.warn.main} radius={[6, 6, 0, 0]} />
+          <Bar dataKey="penalite" name="Pénalité PS" fill={C.nok.main} radius={[6, 6, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function DiagnosticsPanel({ diagnostics }: { diagnostics: Diagnostic[] }) {
+  if (!diagnostics.length) {
+    return (
+      <div style={{ padding: 18, background: C.ok.light, color: C.ok.dark, border: `1px solid ${C.ok.mid}`, borderRadius: 16, display: "flex", alignItems: "center", gap: 10, fontWeight: 800 }}>
+        <CheckCircle2 size={18} /> Aucun diagnostic critique sur la période.
       </div>
-    </div>
-  );
-}
-
-// ── Table conso (UPDATED) ─────────────────────────────────────────────────────
-function ConsoTable({ consoRows, margeRows }: { consoRows:ConsoRow[]; margeRows:MargeRow[] }) {
-  const mergeByMonth = (month: number) => margeRows.find(r => r.month === month);
-
-  if (!consoRows.length) return (
-    <div style={{ padding:"48px 24px", textAlign:"center", color:C.slate[400] }}>
-      Aucune donnée de consommation disponible pour cette période.
-    </div>
-  );
-
-  const allFacture = consoRows
-    .map(r => r.conso_facturee ? parseFloat(r.conso_facturee) : null)
-    .filter(Boolean) as number[];
-  const maxFacture = allFacture.length ? Math.max(...allFacture) : 1;
-
-  const TH = (label: string) => (
-    <th key={label} style={{
-      padding:"10px 12px", textAlign:"left", fontSize:9, fontWeight:700,
-      color:C.slate[500], textTransform:"uppercase", letterSpacing:"0.1em",
-      borderBottom:`1px solid ${C.slate[200]}`, whiteSpace:"nowrap",
-    }}>
-      {label}
-    </th>
-  );
+    );
+  }
 
   return (
-    <div style={{ overflowX:"auto" }}>
-      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
-        <thead>
-          <tr style={{ background:C.slate[50] }}>
-            {[
-              "Mois", "Jours",
-              "Conso Facturée", "Coût /kWh",
-              "Conso FMS/ACM", "Δ Fact/FMS",
-              "Conso Target", "Δ Fact/Target",
-              "Solar kWh", "Target Sol.", "Δ Sol/Cible",
-              "Indispo (h)", "Marge", "Statut",
-            ].map(TH)}
-          </tr>
-        </thead>
-        <tbody>
-          {consoRows.map((r, i) => {
-            const marge      = mergeByMonth(r.month);
-            const fmsVal     = r.conso_fms || r.conso_acm;
-
-            // Δ Fact/FMS : positif = Sénélec facture plus que FMS mesure
-            const deltaFms   = calcDelta(r.conso_facturee, fmsVal);
-            const deltaTgt   = calcDelta(r.conso_facturee, r.conso_target);
-
-            const factN      = r.conso_facturee      ? parseFloat(r.conso_facturee)      : null;
-            const htvaT      = r.montant_htva         ? parseFloat(r.montant_htva)         : null;
-            const coutNrj    = factN && htvaT && factN > 0 ? htvaT / factN : null;
-
-            const solarAct   = typeof r.solar_kwh === "number" ? r.solar_kwh : null;
-            const solarTgt   = r.solar_target_kwh    ? parseFloat(r.solar_target_kwh)    : null;
-            const deltaSolar = solarAct !== null && solarTgt !== null && solarTgt > 0
-              ? ((solarAct - solarTgt) / solarTgt) * 100 : null;
-
-            const isNOK      = marge?.marge_statut === "NOK";
-
-            return (
-              <tr key={r.period} style={{
-                borderBottom:`1px solid ${C.slate[100]}`,
-                background: isNOK ? `${C.danger.light}60` : i % 2 === 0 ? "#fff" : C.slate[50],
-              }}>
-
-                {/* Mois */}
-                <td style={{ padding:"12px 12px", fontWeight:700, color:C.navy[800], whiteSpace:"nowrap" }}>
-                  <div style={{ fontFamily:"'JetBrains Mono',monospace" }}>{r.period}</div>
-                  {marge?.recurrence_type && <div style={{ marginTop:3 }}><RecurrBadge type={marge.recurrence_type} /></div>}
-                </td>
-
-                {/* Jours */}
-                <td style={{ padding:"12px 12px", color:C.slate[500], textAlign:"center" }}>
-                  {r.nb_jours ?? "—"}
-                </td>
-
-                {/* Conso Facturée */}
-                <td style={{ padding:"12px 12px" }}>
-                  <div style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:600, color:C.navy[700] }}>
-                    {fmtKwh(r.conso_facturee)}
-                  </div>
-                  {factN !== null && <MiniBar value={factN} maxVal={maxFacture} color={C.navy[400]} />}
-                </td>
-
-                {/* Coût NRJ */}
-                <td style={{ padding:"12px 12px" }}>
-                  {coutNrj !== null ? (
-                    <div>
-                      <div style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:C.navy[600] }}>
-                        {fmt(coutNrj, 0)} F
-                      </div>
-                      <div style={{ fontSize:10, color:C.slate[400], marginTop:1 }}>/kWh</div>
-                    </div>
-                  ) : <span style={{ color:C.slate[300], fontSize:11 }}>—</span>}
-                </td>
-
-                {/* Conso FMS/ACM */}
-                <td style={{ padding:"12px 12px" }}>
-                  {fmsVal ? (
-                    <div>
-                      <div style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:600, color:C.info.main }}>
-                        {fmtKwh(fmsVal)}
-                      </div>
-                      <div style={{ fontSize:10, color:C.slate[400], marginTop:2 }}>
-                        {r.conso_fms ? "FMS/Grid" : "ACM"}
-                        {!r.fms_available && !r.acm_available && (
-                          <span style={{ color:C.warning.main }}> · indispo</span>
-                        )}
-                      </div>
-                    </div>
-                  ) : <span style={{ color:C.slate[300], fontSize:11 }}>indisponible</span>}
-                </td>
-
-                {/* Δ Fact/FMS */}
-                <td style={{ padding:"12px 12px" }}><DeltaBadge delta={deltaFms} /></td>
-
-                {/* Conso Target */}
-                <td style={{ padding:"12px 12px" }}>
-                  {r.conso_target ? (
-                    <div>
-                      <div style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:600, color:C.success.main }}>
-                        {fmtKwh(r.conso_target)}
-                      </div>
-                      {r.cible_kwh_j && (
-                        <div style={{ fontSize:10, color:C.slate[400], marginTop:2 }}>
-                          {fmt(r.cible_kwh_j, 3)} kWh/j × {r.nb_jours}j
-                        </div>
-                      )}
-                    </div>
-                  ) : <span style={{ color:C.slate[300], fontSize:11 }}>—</span>}
-                </td>
-
-                {/* Δ Fact/Target */}
-                <td style={{ padding:"12px 12px" }}><DeltaBadge delta={deltaTgt} /></td>
-
-                {/* Solar kWh */}
-                <td style={{ padding:"12px 12px" }}>
-                  {solarAct !== null ? (
-                    <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-                      <Sun style={{ width:12, height:12, color:C.solar.main }} />
-                      <span style={{ fontFamily:"'JetBrains Mono',monospace", color:C.solar.dark, fontWeight:600 }}>
-                        {fmtKwh(solarAct)}
-                      </span>
-                    </div>
-                  ) : <span style={{ color:C.slate[300], fontSize:11 }}>—</span>}
-                </td>
-
-                {/* Target Solaire */}
-                <td style={{ padding:"12px 12px" }}>
-                  {solarTgt !== null ? (
-                    <div style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:600, color:C.solar.main }}>
-                      {fmtKwh(solarTgt)}
-                    </div>
-                  ) : <span style={{ color:C.slate[300], fontSize:11 }}>—</span>}
-                </td>
-
-                {/* Δ Sol/Cible */}
-                <td style={{ padding:"12px 12px" }}><DeltaBadge delta={deltaSolar} /></td>
-
-                {/* Indispo */}
-                <td style={{ padding:"12px 12px", color:C.slate[500], fontFamily:"'JetBrains Mono',monospace" }}>
-                  {r.unavail_hours !== null && r.unavail_hours !== undefined
-                    ? `${fmt(r.unavail_hours, 1)} h` : "—"}
-                </td>
-
-                {/* Marge */}
-                <td style={{ padding:"12px 12px" }}>
-                  {marge?.marge ? (
-                    <span style={{
-                      fontFamily:"'JetBrains Mono',monospace", fontWeight:700,
-                      color: parseFloat(marge.marge) >= 0 ? C.success.main : C.danger.main,
-                    }}>
-                      {fmtMoney(marge.marge)}
-                    </span>
-                  ) : <span style={{ color:C.slate[300] }}>—</span>}
-                </td>
-
-                {/* Statut */}
-                <td style={{ padding:"12px 12px" }}>
-                  <StatutBadge statut={marge?.marge_statut ?? null} />
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// ── Diagnostics ───────────────────────────────────────────────────────────────
-const SEV_CONFIG = {
-  CRITICAL: { color:C.danger.main,  bg:C.danger.light,  label:"Critique" },
-  HIGH:     { color:"#c2410c",      bg:"#ffedd5",        label:"Élevé"    },
-  MEDIUM:   { color:C.warning.main, bg:C.warning.light, label:"Moyen"    },
-  LOW:      { color:C.success.main, bg:C.success.light, label:"Faible"   },
-};
-
-function DiagnosticsPanel({ items }: { items: SiteDetail["diagnostics"] }) {
-  if (!items.length) return (
-    <div style={{ padding:"16px 20px", background:C.success.light, borderRadius:10, color:C.success.dark, fontSize:13, display:"flex", alignItems:"center", gap:8 }}>
-      <CheckCircle2 style={{width:15,height:15}}/> Aucun diagnostic — site en bonne santé financière.
-    </div>
-  );
-  return (
-    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-      {items.map((d, i) => {
-        const cfg = SEV_CONFIG[d.severity as keyof typeof SEV_CONFIG] || SEV_CONFIG.MEDIUM;
+    <div style={{ display: "grid", gap: 10 }}>
+      {diagnostics.map((d, i) => {
+        const cfg = severityConfig(d.severity);
         return (
-          <div key={i} style={{ padding:"12px 16px", borderRadius:10, background:cfg.bg, borderLeft:`3px solid ${cfg.color}` }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
-              <span style={{ fontSize:9, fontWeight:700, textTransform:"uppercase", background:cfg.color, color:"#fff", padding:"2px 6px", borderRadius:4 }}>
-                {cfg.label}
-              </span>
-              <span style={{ fontSize:12, fontWeight:600, color:cfg.color }}>{d.message}</span>
+          <div key={`${d.type}-${i}`} style={{ padding: "13px 15px", borderRadius: 16, background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, fontWeight: 950 }}>
+                {cfg.icon} {d.message}
+              </div>
+              <span style={{ fontSize: 10, fontWeight: 950, textTransform: "uppercase" }}>{cfg.label}</span>
             </div>
-            <p style={{ fontSize:11, color:C.slate[600], margin:0 }}>{d.detail}</p>
+            <div style={{ marginTop: 5, fontSize: 12, lineHeight: 1.5, color: C.slate[700] }}>{d.detail}</div>
           </div>
         );
       })}
@@ -541,315 +692,302 @@ function DiagnosticsPanel({ items }: { items: SiteDetail["diagnostics"] }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// MAIN MODAL
-// ═══════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
+// Main component
+// ─────────────────────────────────────────────────────────────────────────────
 
-export default function FinancialSiteDetailModal({
-  siteId, siteName, year, monthStart, monthEnd, onClose,
-}: FinancialSiteDetailModalProps) {
-  const [data,    setData]    = useState<SiteDetail | null>(null);
+export default function FinancialSiteDetailModal({ siteId, siteName, year, monthStart, monthEnd, onClose }: FinancialSiteDetailModalProps) {
+  const [data, setData] = useState<SiteDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState<string | null>(null);
-  const [view,    setView]    = useState<"table" | "chart">("table");
-  const [section, setSection] = useState<"conso" | "marge" | "diag">("conso");
+  const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<TabKey>("overview");
+  const [displayMode, setDisplayMode] = useState<DisplayMode>("chart");
 
   useEffect(() => {
-    setLoading(true); setError(null);
+    setLoading(true);
+    setError(null);
+    setData(null);
+
     api
-      .get(`/financial/evaluations/${siteId}/detail/`, {
+      .get<SiteDetail>(`/financial/evaluations/${siteId}/detail/`, {
         params: { year, month_start: monthStart, month_end: monthEnd },
       })
-      .then(r => { setData(r.data); setLoading(false); })
-      .catch(e => { setError(e?.response?.data?.detail || "Erreur de chargement"); setLoading(false); });
+      .then((res) => setData(res.data))
+      .catch((e) => setError(e?.response?.data?.detail || e?.message || "Erreur de chargement de l’analyse."))
+      .finally(() => setLoading(false));
   }, [siteId, year, monthStart, monthEnd]);
 
   useEffect(() => {
-    const handle = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const handle = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
     window.addEventListener("keydown", handle);
     return () => window.removeEventListener("keydown", handle);
   }, [onClose]);
 
-  const consoRows  = data?.conso_comparison?.rows ?? [];
-  const margeRows  = data?.history ?? [];
-  const totalMarge = data?.summary.total_marge ?? null;
-  const margePositif = totalMarge !== null && parseFloat(totalMarge) >= 0;
+  const consoRows = data?.conso_comparison?.rows ?? [];
+  const margeRows = data?.history ?? [];
+  const billingRows = data?.billing?.rows ?? [];
+  const certificationRows = data?.certification?.rows ?? [];
 
-  // ── Agrégats ──────────────────────────────────────────────────────
-  const totalFacturee  = sumKwh(consoRows, "conso_facturee");
-  const totalFms       = sumKwh(consoRows, "conso_fms") ?? sumKwh(consoRows, "conso_acm");
-  const totalTarget    = sumKwh(consoRows, "conso_target");
-  const totalSolar     = sumKwh(consoRows, "solar_kwh");
-  const totalSolarTgt  = sumKwh(consoRows, "solar_target_kwh");
-  const totalMontantHT = sumKwh(consoRows, "montant_htva");
+  const aggregates = useMemo(() => {
+    const totalMarge = toNum(data?.summary.total_marge);
+    const totalFacturee = sum(consoRows as any[], "conso_facturee");
+    const totalFms = sum(consoRows as any[], "conso_fms") ?? sum(consoRows as any[], "conso_acm");
+    const totalTarget = sum(consoRows as any[], "conso_target");
+    const totalSolar = sum(consoRows as any[], "solar_kwh");
+    const totalSolarTarget = sum(consoRows as any[], "solar_target_kwh");
+    const totalRedevance = sum(margeRows as any[], "redevance");
+    const totalFacture = sum(margeRows as any[], "montant_htva") ?? toNum(data?.summary.billing_total_ht);
+    const totalCosphi = toNum(data?.summary.billing_total_cosphi);
+    const totalPenalite = toNum(data?.summary.billing_total_penalite);
 
-  // ratio_fms en base = FMS/Fact → on affiche Fact/FMS = 1/ratio
-  const ratioMoyFms     = avgRatio(consoRows);
-  const ratioMoyFactFms = ratioMoyFms !== null && ratioMoyFms > 0
-    ? (1 / ratioMoyFms) * 100 : null;
+    const gapFms = totalFacturee !== null && totalFms !== null && totalFms > 0 ? (totalFacturee / totalFms - 1) * 100 : null;
+    const gapTarget = totalFacturee !== null && totalTarget !== null && totalTarget > 0 ? (totalFacturee / totalTarget - 1) * 100 : null;
+    const gapSolar = totalSolar !== null && totalSolarTarget !== null && totalSolarTarget > 0 ? (totalSolar / totalSolarTarget - 1) * 100 : null;
+    const costKwh = totalFacturee !== null && totalFacture !== null && totalFacturee > 0 ? totalFacture / totalFacturee : null;
 
-  // Fact / Target
-  const ratioFactTarget = totalFacturee !== null && totalTarget !== null && totalTarget > 0
-    ? (totalFacturee / totalTarget) * 100 : null;
+    return { totalMarge, totalFacturee, totalFms, totalTarget, totalSolar, totalSolarTarget, totalRedevance, totalFacture, totalCosphi, totalPenalite, gapFms, gapTarget, gapSolar, costKwh };
+  }, [consoRows, margeRows, data]);
 
-  // Coût NRJ moyen (FCFA/kWh) = Montant HT / Conso Facturée
-  const coutNrjMoyen = totalMontantHT !== null && totalFacturee !== null && totalFacturee > 0
-    ? totalMontantHT / totalFacturee : null;
+  const statusPie = useMemo(() => {
+    const ok = data?.summary.count_ok ?? margeRows.filter((r) => r.marge_statut === "OK").length;
+    const nok = data?.summary.count_nok ?? margeRows.filter((r) => r.marge_statut === "NOK").length;
+    const hc = data?.summary.count_hors_catalogue ?? margeRows.filter((r) => r.hors_catalogue).length;
+    return [
+      { name: "Marge OK", value: ok, color: C.ok.main },
+      { name: "Marge NOK", value: nok, color: C.nok.main },
+      { name: "Hors catalogue", value: hc, color: C.warn.main },
+    ];
+  }, [data, margeRows]);
 
-  // Solar vs Target
-  const ratioSolarVsTarget = totalSolar !== null && totalSolarTgt !== null && totalSolarTgt > 0
-    ? (totalSolar / totalSolarTgt) * 100 : null;
+  const currentStatus = safeStatus(data?.current?.marge_statut);
+  const displayTitle = siteName || data?.site.name || siteId;
+  const periodText = `${MONTHS_FR[monthStart - 1]} ${year} → ${MONTHS_FR[monthEnd - 1]} ${year}`;
 
-  // Couleur ratio Fact/FMS
-  const factFmsColor = ratioMoyFactFms === null ? C.slate[400]
-    : Math.abs(ratioMoyFactFms - 100) < 5 ? C.success.main
-    : ratioMoyFactFms > 115 ? C.danger.main
-    : C.warning.main;
+  const tabs: Array<{ key: TabKey; label: string; icon: ReactNode; count?: number }> = [
+    { key: "overview", label: "Synthèse", icon: <Sparkles size={14} /> },
+    { key: "marge", label: "Marge", icon: <BadgeDollarSign size={14} />, count: margeRows.length },
+    { key: "conso", label: "Consommation", icon: <Activity size={14} />, count: consoRows.length },
+    { key: "billing", label: "Billing", icon: <ReceiptText size={14} />, count: billingRows.length },
+    { key: "diagnostics", label: "Diagnostics", icon: <AlertTriangle size={14} />, count: data?.diagnostics?.length || 0 },
+  ];
 
   return (
     <div
-      style={{ position:"fixed", inset:0, zIndex:1000, background:"rgba(10,22,40,0.65)", backdropFilter:"blur(4px)", display:"flex", alignItems:"center", justifyContent:"center", padding:24, animation:"fadeIn 0.15s ease" }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+      style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(2,6,23,.62)", backdropFilter: "blur(7px)", display: "flex", justifyContent: "flex-end" }}
     >
-      <div style={{ background:"#fff", borderRadius:20, width:"100%", maxWidth:1200, maxHeight:"92vh", overflow:"hidden", display:"flex", flexDirection:"column", boxShadow:"0 25px 60px rgba(10,22,40,0.35)", animation:"slideUp 0.2s ease" }}>
+      <style>{`
+        @keyframes slideInRight { from { transform: translateX(28px); opacity:.3; } to { transform: translateX(0); opacity:1; } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .fsd-row:hover { background: #EFF6FF !important; }
+      `}</style>
 
-        {/* ── Header ── */}
-        <div style={{ background:`linear-gradient(135deg, ${C.navy[800]} 0%, ${C.navy[900]} 100%)`, padding:"18px 24px", display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:16, flexShrink:0 }}>
-          <div>
-            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:5 }}>
-              <div style={{ background:`${C.accent[400]}22`, border:`1px solid ${C.accent[400]}44`, borderRadius:8, padding:"3px 9px", fontSize:11, fontWeight:700, fontFamily:"'JetBrains Mono',monospace", color:C.accent[400] }}>
-                {siteId}
+      <div style={{ width: "min(1240px, 100vw)", height: "100vh", background: "linear-gradient(180deg,#F8FAFC 0%,#EEF4FF 100%)", boxShadow: "-24px 0 70px rgba(2,6,23,.28)", display: "flex", flexDirection: "column", animation: "slideInRight .20s ease-out" }}>
+        {/* Header */}
+        <div style={{ background: HDR, color: "#fff", padding: "20px 22px 16px", flexShrink: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <Badge tone="blue"><Eye size={12} /> Analyse site</Badge>
+                <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12, fontWeight: 950, color: "rgba(255,255,255,.85)" }}>{siteId}</span>
+                {data?.current?.recurrence_type ? <Badge tone={data.current.recurrence_type === "critique" ? "nok" : "warn"}>{data.current.recurrence_type}</Badge> : null}
+                {data?.summary.count_hors_catalogue ? <Badge tone="warn">{data.summary.count_hors_catalogue} HC</Badge> : null}
               </div>
-              {data?.current?.recurrence_type && <RecurrBadge type={data.current.recurrence_type} />}
+
+              <h2 style={{ margin: "11px 0 5px", fontSize: 25, lineHeight: 1.08, fontWeight: 950, letterSpacing: "-.04em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {displayTitle}
+              </h2>
+
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 12.5, color: "rgba(255,255,255,.62)" }}>
+                <span>{periodText}</span>
+                {data?.site.zone ? <span>· Zone {data.site.zone}</span> : null}
+                {data?.site.typology ? <span>· {data.site.typology}</span> : null}
+                {data?.site.configuration ? <span>· {data.site.configuration}</span> : null}
+                {data?.current?.load_w ? <span>· Load {(data.current.load_w / 1000).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} kW</span> : null}
+              </div>
             </div>
-            <h2 style={{ margin:0, fontSize:17, fontWeight:700, color:"#fff" }}>
-              {siteName || data?.site?.name || siteId}
-            </h2>
-            <div style={{ fontSize:11.5, color:C.slate[300], marginTop:3 }}>
-              {data?.site?.typology && (
-                <span>
-                  {data.site.typology} · {data.site.configuration} · Load{" "}
-                  {data.current?.load_w ? `${(data.current.load_w / 1000).toFixed(1)} kW` : "—"}
+
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {data?.current?.marge_statut ? (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 999, background: "rgba(255,255,255,.10)", border: "1px solid rgba(255,255,255,.15)", color: currentStatus.color, fontWeight: 950, fontSize: 12 }}>
+                  {data.current.marge_statut === "OK" ? <CheckCircle2 size={15} /> : <XCircle size={15} />}
+                  Marge {data.current.marge_statut}
                 </span>
-              )}
-              <span style={{ marginLeft:8, color:C.slate[500] }}>
-                {year} · Mois {monthStart}–{monthEnd}
-              </span>
+              ) : null}
+
+              <button onClick={onClose} type="button" style={{ width: 38, height: 38, borderRadius: 14, border: "1px solid rgba(255,255,255,.18)", background: "rgba(255,255,255,.10)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }} title="Fermer">
+                <PanelRightClose size={18} />
+              </button>
             </div>
           </div>
+        </div>
 
-          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            {section === "conso" && (
-              <div style={{ display:"flex", background:`${C.navy[700]}80`, borderRadius:8, padding:3 }}>
-                {([["table","Table",TableProperties],["chart","Graphe",BarChart3]] as const).map(([k, l, Icon]) => (
-                  <button key={k} onClick={() => setView(k as "table"|"chart")} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:6, border:"none", cursor:"pointer", background: view === k ? "#ffffff22" : "transparent", color: view === k ? "#fff" : C.slate[400], fontSize:12, fontWeight:view === k ? 600 : 400 }}>
-                    <Icon style={{width:13,height:13}}/>{l}
+        {/* Loading / error */}
+        {loading ? (
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 12, color: C.slate[500], fontWeight: 800 }}>
+            <Loader2 size={26} style={{ animation: "spin .8s linear infinite", color: C.blue[600] }} /> Chargement de l’analyse financière…
+          </div>
+        ) : error ? (
+          <div style={{ flex: 1, padding: 22 }}>
+            <Panel>
+              <div style={{ padding: 22, color: C.nok.dark, background: C.nok.light, display: "flex", alignItems: "center", gap: 10 }}>
+                <XCircle size={18} /> {error}
+              </div>
+            </Panel>
+          </div>
+        ) : data ? (
+          <>
+            {/* KPI strip */}
+            <div style={{ padding: 18, display: "grid", gridTemplateColumns: "repeat(6,minmax(145px,1fr))", gap: 10, flexShrink: 0 }}>
+              <KpiCard label="Marge cumulée" value={fmtMoney(aggregates.totalMarge)} sub={`${data.summary.count_ok} OK · ${data.summary.count_nok} NOK`} color={colorByValue(aggregates.totalMarge)} icon={aggregates.totalMarge !== null && aggregates.totalMarge < 0 ? <TrendingDown size={19} /> : <TrendingUp size={19} />} />
+              <KpiCard label="Redevance" value={fmtMoney(aggregates.totalRedevance)} sub="Total attendu" color={C.blue[600]} icon={<Wallet size={19} />} />
+              <KpiCard label="Montant HTVA" value={fmtMoney(aggregates.totalFacture)} sub="Facturé Sénélec" color={C.orange.main} icon={<ReceiptText size={19} />} />
+              <KpiCard label="Écart Fact/FMS" value={fmtPct(aggregates.gapFms)} sub="Facturée vs mesure" color={Math.abs(aggregates.gapFms ?? 0) <= 10 ? C.ok.main : C.warn.main} icon={<Gauge size={19} />} />
+              <KpiCard label="Coût moyen" value={aggregates.costKwh !== null ? `${fmt(aggregates.costKwh)} FCFA/kWh` : "—"} sub="HTVA / kWh" color={C.cyan.main} icon={<Zap size={19} />} />
+              <KpiCard label="Pénalités" value={fmtMoney((aggregates.totalCosphi ?? 0) + (aggregates.totalPenalite ?? 0))} sub="Cos φ + puissance" color={C.nok.main} icon={<AlertTriangle size={19} />} />
+            </div>
+
+            {/* Tabs */}
+            <div style={{ padding: "0 18px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexShrink: 0 }}>
+              <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+                {tabs.map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => setTab(t.key)}
+                    style={{ border: `1px solid ${tab === t.key ? C.blue[600] : C.slate[200]}`, background: tab === t.key ? C.blue[700] : "#fff", color: tab === t.key ? "#fff" : C.slate[600], borderRadius: 999, padding: "9px 13px", display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 950, cursor: "pointer", boxShadow: tab === t.key ? "0 10px 24px rgba(10,61,150,.22)" : "0 1px 2px rgba(0,0,0,.04)" }}
+                  >
+                    {t.icon} {t.label}
+                    {typeof t.count === "number" ? <span style={{ opacity: .75 }}>({t.count})</span> : null}
                   </button>
                 ))}
               </div>
-            )}
-            <button onClick={onClose} style={{ width:32, height:32, borderRadius:"50%", background:`${C.navy[700]}80`, border:"none", cursor:"pointer", display:"grid", placeItems:"center", color:C.slate[300] }}>
-              <X style={{width:16,height:16}}/>
-            </button>
-          </div>
-        </div>
 
-        {/* ── KPI Bar — ratios uniquement ── */}
-        {data && (
-          <div style={{ padding:"12px 24px 10px", background:C.slate[50], borderBottom:`1px solid ${C.slate[200]}`, flexShrink:0 }}>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))", gap:8 }}>
-
-              {/* Marge & santé */}
-              <KpiCard
-                label="Marge totale"
-                value={fmtMoney(data.summary.total_marge)}
-                sub={`${data.summary.count_ok} OK · ${data.summary.count_nok} NOK`}
-                color={margePositif ? C.success.main : C.danger.main}
-                icon={margePositif
-                  ? <TrendingUp style={{width:13,height:13}}/>
-                  : <TrendingDown style={{width:13,height:13}}/>}
-              />
-
-              {/* Ratio Fact / FMS */}
-              <KpiCard
-                label="Ratio Fact / FMS"
-                value={ratioMoyFactFms !== null ? `${ratioMoyFactFms.toFixed(1)} %` : "—"}
-                sub={ratioMoyFactFms !== null
-                  ? Math.abs(ratioMoyFactFms - 100) < 5 ? "✓ cohérent"
-                    : ratioMoyFactFms > 100
-                      ? `▲ +${(ratioMoyFactFms - 100).toFixed(1)}% vs mesure FMS`
-                      : `▼ ${(ratioMoyFactFms - 100).toFixed(1)}% vs mesure FMS`
-                  : undefined}
-                color={factFmsColor}
-                icon={<Activity style={{width:13,height:13}}/>}
-              />
-
-              {/* Ratio Fact / Target */}
-              <KpiCard
-                label="Ratio Fact / Target"
-                value={ratioFactTarget !== null ? `${ratioFactTarget.toFixed(1)} %` : "—"}
-                sub={ratioFactTarget !== null
-                  ? ratioFactTarget > 90 && ratioFactTarget < 110 ? "✓ dans la cible"
-                    : ratioFactTarget > 110 ? "▲ sur-consommation" : "▼ sous-consommation"
-                  : undefined}
-                color={ratioFactTarget !== null && ratioFactTarget > 90 && ratioFactTarget < 110
-                  ? C.success.main : C.warning.main}
-                icon={<BarChart3 style={{width:13,height:13}}/>}
-              />
-
-              {/* Coût NRJ moyen */}
-              <KpiCard
-                label="Coût NRJ moyen"
-                value={coutNrjMoyen !== null ? `${fmt(coutNrjMoyen, 0)} F/kWh` : "—"}
-                sub="Montant HT / kWh facturé"
-                color={C.navy[500]}
-                icon={<Zap style={{width:13,height:13}}/>}
-              />
-
-              {/* Production solaire vs cible */}
-              {(totalSolar !== null || totalSolarTgt !== null) && (
-                <KpiCard
-                  label="Sol. Prod / Cible"
-                  value={ratioSolarVsTarget !== null ? `${ratioSolarVsTarget.toFixed(1)} %` : "—"}
-                  sub={totalSolar !== null
-                    ? `${fmtKwh(totalSolar)} produit`
-                    : totalSolarTgt !== null ? `Cible : ${fmtKwh(totalSolarTgt)}` : undefined}
-                  color={
-                    ratioSolarVsTarget === null ? C.slate[400]
-                    : ratioSolarVsTarget >= 90 ? C.success.main
-                    : ratioSolarVsTarget >= 70 ? C.warning.main
-                    : C.danger.main
-                  }
-                  icon={<Sun style={{width:13,height:13}}/>}
-                />
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ── Section tabs ── */}
-        <div style={{ display:"flex", gap:4, padding:"12px 24px 0", borderBottom:`1px solid ${C.slate[200]}`, flexShrink:0 }}>
-          {([
-            ["conso", "Consommation",     BarChart3],
-            ["marge", "Historique marge", TrendingUp],
-            ["diag",  "Diagnostics",      AlertTriangle],
-          ] as const).map(([k, l, Icon]) => (
-            <button key={k} onClick={() => setSection(k as "conso"|"marge"|"diag")} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:"8px 8px 0 0", border:"none", cursor:"pointer", background: section === k ? "#fff" : "transparent", borderBottom: section === k ? `2px solid ${C.navy[600]}` : "2px solid transparent", color: section === k ? C.navy[700] : C.slate[500], fontSize:12, fontWeight: section === k ? 700 : 500 }}>
-              <Icon style={{width:13,height:13}}/>{l}
-              {k === "diag" && data?.diagnostics.length ? (
-                <span style={{ background: data.diagnostics.some(d => d.severity === "CRITICAL") ? C.danger.main : C.warning.main, color:"#fff", fontSize:9, fontWeight:700, padding:"1px 5px", borderRadius:4 }}>
-                  {data.diagnostics.length}
-                </span>
+              {(tab === "marge" || tab === "conso" || tab === "billing") ? (
+                <div style={{ display: "flex", border: `1px solid ${C.slate[200]}`, borderRadius: 13, overflow: "hidden", background: "#fff" }}>
+                  {(["chart", "table"] as const).map((m) => (
+                    <button key={m} type="button" onClick={() => setDisplayMode(m)} style={{ border: "none", padding: "8px 12px", fontSize: 12, fontWeight: 950, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, background: displayMode === m ? C.blue[700] : "#fff", color: displayMode === m ? "#fff" : C.slate[600] }}>
+                      {m === "chart" ? <LineIcon size={13} /> : <TableProperties size={13} />}
+                      {m === "chart" ? "Graphique" : "Tableau"}
+                    </button>
+                  ))}
+                </div>
               ) : null}
-            </button>
-          ))}
-        </div>
-
-        {/* ── Content ── */}
-        <div style={{ flex:1, overflowY:"auto", padding:"20px 24px" }}>
-          {loading && (
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", padding:60, gap:12, color:C.slate[500] }}>
-              <div style={{ width:20, height:20, border:`2px solid ${C.navy[200]}`, borderTopColor:C.navy[600], borderRadius:"50%", animation:"spin 0.8s linear infinite" }} />
-              Chargement des données…
             </div>
-          )}
 
-          {error && (
-            <div style={{ padding:"16px 20px", borderRadius:10, background:C.danger.light, color:C.danger.dark, fontSize:13, display:"flex", alignItems:"center", gap:8 }}>
-              <XCircle style={{width:16,height:16}}/> {error}
-            </div>
-          )}
+            {/* Body */}
+            <div style={{ flex: 1, overflow: "auto", padding: "0 18px 20px" }}>
+              {tab === "overview" ? (
+                <div style={{ display: "grid", gridTemplateColumns: "1.3fr .7fr", gap: 16 }}>
+                  <Panel>
+                    <PanelTitle icon={<BarChart3 size={18} />} title="Évolution financière" subtitle="Marge, redevance et montant HTVA" />
+                    <MargeChart rows={margeRows} />
+                  </Panel>
 
-          {!loading && !error && data && (
-            <>
-              {section === "conso" && (
-                <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-                  {consoRows.length === 0 && (
-                    <div style={{ padding:"48px 24px", textAlign:"center", color:C.slate[400], fontSize:13 }}>
-                      Aucune donnée de consommation pour cette période.
-                    </div>
-                  )}
-                  {consoRows.length > 0 && view === "table" && (
-                    <ConsoTable consoRows={consoRows} margeRows={margeRows} />
-                  )}
-                  {consoRows.length > 0 && view === "chart" && (
-                    <div style={{ padding:"8px 0" }}>
-                      <div style={{ marginBottom:12, fontSize:12, color:C.slate[500] }}>
-                        Comparaison des consommations (kWh) · {year}
+                  <div style={{ display: "grid", gap: 16 }}>
+                    <Panel>
+                      <PanelTitle icon={<ShieldCheck size={18} />} title="Répartition" subtitle="Statuts marge" />
+                      <div style={{ height: 210, padding: 10 }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={statusPie} dataKey="value" nameKey="name" innerRadius={48} outerRadius={76} paddingAngle={3}>
+                              {statusPie.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
+                            </Pie>
+                            <Tooltip />
+                          </PieChart>
+                        </ResponsiveContainer>
                       </div>
-                      <ConsoBarChart rows={consoRows} />
-                    </div>
-                  )}
-                  {/* Légende */}
-                  <div style={{ padding:"12px 16px", background:C.slate[50], borderRadius:10, border:`1px solid ${C.slate[200]}`, fontSize:11, color:C.slate[500], display:"flex", gap:16, flexWrap:"wrap" }}>
-                    <span><strong style={{color:C.navy[600]}}>Facturée</strong> — kWh Sénélec</span>
-                    <span><strong style={{color:C.info.main}}>FMS/ACM</strong> — Grid Report ou AC Meter</span>
-                    <span><strong style={{color:C.success.main}}>Target</strong> — cible_kwh_j × nb_jours</span>
-                    <span><strong style={{color:C.solar.main}}>Solaire</strong> — PV prod · Cible = Min(100%×Load×24×j ; Cap×24×j)</span>
-                    <span><strong>Δ Fact/FMS</strong> +% = Sénélec &gt; FMS · vert &lt;10% · ambre &lt;20% · rouge ≥20%</span>
-                    <span><strong>Coût NRJ</strong> = Montant HT / kWh facturé</span>
-                  </div>
-                </div>
-              )}
-
-              {section === "marge" && (
-                <div style={{ overflowX:"auto" }}>
-                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
-                    <thead>
-                      <tr style={{ background:C.slate[50] }}>
-                        {["Mois","Load (W)","Redevance","Montant HT","Marge","Statut","Récurrence","Hors cat."].map(h => (
-                          <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:9, fontWeight:700, color:C.slate[500], textTransform:"uppercase", letterSpacing:"0.1em", borderBottom:`1px solid ${C.slate[200]}`, whiteSpace:"nowrap" }}>{h}</th>
+                      <div style={{ display: "grid", gap: 7, padding: "0 16px 16px" }}>
+                        {statusPie.map((s) => (
+                          <div key={s.name} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: C.slate[600] }}>
+                            <span style={{ display: "flex", alignItems: "center", gap: 7 }}><span style={{ width: 8, height: 8, borderRadius: 999, background: s.color }} />{s.name}</span>
+                            <strong style={{ color: C.slate[800] }}>{s.value}</strong>
+                          </div>
                         ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {margeRows.map((r, i) => {
-                        const isNOK  = r.marge_statut === "NOK";
-                        const margeN = r.marge ? parseFloat(r.marge) : null;
-                        return (
-                          <tr key={r.period} style={{ borderBottom:`1px solid ${C.slate[100]}`, background: isNOK ? `${C.danger.light}50` : i % 2 === 0 ? "#fff" : C.slate[50] }}>
-                            <td style={{ padding:"11px 14px", fontWeight:600, color:C.navy[800], fontFamily:"'JetBrains Mono',monospace" }}>{r.period}</td>
-                            <td style={{ padding:"11px 14px", color:C.slate[600], fontFamily:"'JetBrains Mono',monospace" }}>{r.load_w ? r.load_w.toLocaleString("fr-FR") : "—"}</td>
-                            <td style={{ padding:"11px 14px", fontFamily:"'JetBrains Mono',monospace", color:C.navy[700] }}>{fmtMoney(r.redevance)}</td>
-                            <td style={{ padding:"11px 14px", fontFamily:"'JetBrains Mono',monospace", color:C.slate[700] }}>{fmtMoney(r.montant_htva)}</td>
-                            <td style={{ padding:"11px 14px", fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color: margeN !== null ? (margeN >= 0 ? C.success.main : C.danger.main) : C.slate[400] }}>{fmtMoney(r.marge)}</td>
-                            <td style={{ padding:"11px 14px" }}><StatutBadge statut={r.marge_statut} /></td>
-                            <td style={{ padding:"11px 14px" }}><RecurrBadge type={r.recurrence_type} /></td>
-                            <td style={{ padding:"11px 14px", textAlign:"center" }}>
-                              {r.hors_catalogue
-                                ? <span style={{ fontSize:10, fontWeight:700, color:C.warning.main, background:C.warning.light, padding:"2px 7px", borderRadius:4 }}>HC</span>
-                                : <span style={{ color:C.slate[300] }}>—</span>}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                      </div>
+                    </Panel>
+
+                    <Panel>
+                      <PanelTitle icon={<Sparkles size={18} />} title="Diagnostic rapide" subtitle="Points à surveiller" />
+                      <div style={{ padding: 14 }}>
+                        <DiagnosticsPanel diagnostics={(data.diagnostics || []).slice(0, 3)} />
+                      </div>
+                    </Panel>
+                  </div>
+
+                  <Panel style={{ gridColumn: "1 / -1" }}>
+                    <PanelTitle icon={<Activity size={18} />} title="Consommations multi-sources" subtitle="Facturée, FMS/ACM, target et solaire" />
+                    <ConsoChart rows={consoRows} />
+                  </Panel>
                 </div>
-              )}
+              ) : null}
 
-              {section === "diag" && <DiagnosticsPanel items={data.diagnostics} />}
-            </>
-          )}
-        </div>
+              {tab === "marge" ? (
+                <Panel>
+                  <PanelTitle icon={<BadgeDollarSign size={18} />} title="Historique des marges" subtitle="Redevance - montant HTVA réel" right={<Badge tone={aggregates.totalMarge !== null && aggregates.totalMarge < 0 ? "nok" : "ok"}>{fmtMoney(aggregates.totalMarge)}</Badge>} />
+                  <div style={{ padding: 16 }}>{displayMode === "chart" ? <MargeChart rows={margeRows} /> : <MargeTable rows={margeRows} />}</div>
+                </Panel>
+              ) : null}
 
-        {/* ── Footer ── */}
-        <div style={{ padding:"12px 24px", borderTop:`1px solid ${C.slate[200]}`, display:"flex", alignItems:"center", justifyContent:"space-between", background:C.slate[50], flexShrink:0 }}>
-          <div style={{ fontSize:11, color:C.slate[400] }}>
-            Évaluation financière · PAID + UNPAID · {year}-{String(monthStart).padStart(2,"0")} → {year}-{String(monthEnd).padStart(2,"0")}
-            {" · "}x solaire = 100% (paramétrable dans Suivi Conso)
-          </div>
-          <button onClick={onClose} style={{ padding:"8px 18px", borderRadius:8, background:`linear-gradient(135deg, ${C.navy[700]}, ${C.navy[800]})`, color:"#fff", border:"none", fontSize:12, fontWeight:600, cursor:"pointer" }}>
-            Fermer
-          </button>
-        </div>
+              {tab === "conso" ? (
+                <Panel>
+                  <PanelTitle icon={<Activity size={18} />} title="Comparaison consommation" subtitle="Facturée vs FMS/ACM vs target vs solaire" right={<Badge tone="cyan">Δ FMS {fmtPct(aggregates.gapFms)}</Badge>} />
+                  <div style={{ padding: 16 }}>{displayMode === "chart" ? <ConsoChart rows={consoRows} /> : <ConsoTable rows={consoRows} />}</div>
+                </Panel>
+              ) : null}
+
+              {tab === "billing" ? (
+                <Panel>
+                  <PanelTitle icon={<ReceiptText size={18} />} title="Détail billing" subtitle="HTVA, énergie, abonnement, cos φ et pénalités" right={<Badge tone="orange">Pénalités {fmtMoney((aggregates.totalCosphi ?? 0) + (aggregates.totalPenalite ?? 0))}</Badge>} />
+                  <div style={{ padding: 16 }}>{displayMode === "chart" ? <BillingChart rows={billingRows} /> : <BillingTable rows={billingRows} />}</div>
+                </Panel>
+              ) : null}
+
+              {tab === "diagnostics" ? (
+                <div style={{ display: "grid", gap: 16 }}>
+                  <Panel>
+                    <PanelTitle icon={<AlertTriangle size={18} />} title="Diagnostics automatiques" subtitle="Causes potentielles et alertes détectées" />
+                    <div style={{ padding: 16 }}><DiagnosticsPanel diagnostics={data.diagnostics || []} /></div>
+                  </Panel>
+
+                  {certificationRows.length ? (
+                    <Panel>
+                      <PanelTitle icon={<ShieldCheck size={18} />} title="Certification" subtitle="Statuts certification sur la période" />
+                      <div style={{ padding: 16 }}>
+                        <TableShell minWidth={760}>
+                          <thead><tr><Th>Période</Th><Th center>Statut</Th><Th right>Ratio FMS</Th><Th right>Variation montant</Th></tr></thead>
+                          <tbody>
+                            {certificationRows.map((r, i) => (
+                              <tr key={`${r.period}-${i}`} style={{ background: i % 2 ? C.slate[50] : "#fff" }}>
+                                <Td><strong>{r.period}</strong></Td>
+                                <Td center><StatusBadge status={r.status} /></Td>
+                                <Td right>{r.ratio_fms || "—"}</Td>
+                                <Td right>{r.variation_montant || "—"}</Td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </TableShell>
+                      </div>
+                    </Panel>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: "12px 18px", borderTop: `1px solid ${C.slate[200]}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, background: "rgba(255,255,255,.75)", flexShrink: 0 }}>
+              <div style={{ fontSize: 11.5, color: C.slate[500], display: "flex", alignItems: "center", gap: 7 }}>
+                <Info size={13} /> Marge = Redevance - Montant HTVA réel · NOK si marge négative.
+              </div>
+              <button onClick={onClose} type="button" style={{ padding: "9px 16px", borderRadius: 12, border: "none", background: C.blue[800], color: "#fff", fontSize: 12, fontWeight: 950, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}>
+                Fermer <ChevronRight size={14} />
+              </button>
+            </div>
+          </>
+        ) : null}
       </div>
-
-      <style>{`
-        @keyframes fadeIn  { from { opacity:0 } to { opacity:1 } }
-        @keyframes slideUp { from { opacity:0; transform:translateY(20px) } to { opacity:1; transform:translateY(0) } }
-        @keyframes spin    { to   { transform:rotate(360deg) } }
-      `}</style>
     </div>
   );
 }

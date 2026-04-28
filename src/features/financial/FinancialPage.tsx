@@ -1,173 +1,344 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { financialLock, isFinancialUnlocked, financialUnlock } from "./FinancialAccessGate";
-import FinancialAccessGate from "./FinancialAccessGate";
+// src/features/financial/FinancialPage.tsx
+// V2 — Page financière complète
+// Focus : marges financières, redevances, montant HTVA, récurrence NOK, imports et analyse site.
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import {
-  importFeeRules,
-  importMonthlyLoads,
-  runEvaluation,
-  fetchEvaluations,
-  fetchEvaluationStats,
+  Activity,
+  AlertCircle,
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
+  BarChart3,
+  Calendar,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Database,
+  Download,
+  Eye,
+  FileUp,
+  Filter,
+  HelpCircle,
+  Layers,
+  LineChart as LineIcon,
+  Loader2,
+  Lock,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  TrendingDown,
+  TrendingUp,
+  Upload,
+  Wallet,
+  X,
+  XCircle,
+} from "lucide-react";
+import {
+  Area,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ComposedChart,
+  Legend,
+  Line,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { financialLock, financialUnlock, isFinancialUnlocked } from "./FinancialAccessGate";
+import FinancialAccessGate from "./FinancialAccessGate";
+import FinancialDataPage from "./FinancialDataPage";
+import FinancialSiteDetailModal from "./FinancialSiteDetailModal";
+import {
   exportEvaluationsCSV,
+  fetchAnalyticsFullReport,
+  fetchEvaluationStats,
+  fetchEvaluations,
   fetchFacturesVsRedevances,
   fetchMargeParSite,
   fetchSitesRecurrents,
-  fetchAnalyticsFullReport,
-  fetchEvaluationDetail,
-  type FinancialEvaluation,
+  importFeeRules,
+  importMonthlyLoads,
+  runEvaluation,
+  type AnalyticsFullReport,
   type EvaluationStats,
+  type EvaluateResult,
   type FacturesRedevancesPeriod,
+  type FinancialEvaluation,
   type SiteMargeRow,
   type SiteRecurrentRow,
-  type EvaluateResult,
-  type AnalyticsFullReport,
-  type EvaluationDetail,
 } from "./api";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Design tokens
+// ─────────────────────────────────────────────────────────────────────────────
 
+const C = {
+  blue: {
+    950: "#010E2A",
+    900: "#021A40",
+    800: "#032566",
+    700: "#0A3D96",
+    600: "#1A56C4",
+    500: "#3272E0",
+    300: "#91B9F8",
+    100: "#E4EFFE",
+    50: "#F2F6FE",
+  },
+  slate: {
+    950: "#020617",
+    900: "#0F172A",
+    800: "#1E293B",
+    700: "#334155",
+    600: "#475569",
+    500: "#64748B",
+    400: "#94A3B8",
+    300: "#CBD5E1",
+    200: "#E2E8F0",
+    100: "#F1F5F9",
+    50: "#F8FAFC",
+  },
+  ok: { main: "#059669", light: "#D1FAE5", mid: "#A7F3D0", dark: "#065F46" },
+  nok: { main: "#DC2626", light: "#FEE2E2", mid: "#FECACA", dark: "#991B1B" },
+  warn: { main: "#D97706", light: "#FEF3C7", mid: "#FDE68A", dark: "#92400E" },
+  cyan: { main: "#0891B2", light: "#CFFAFE", dark: "#0E7490" },
+  purple: { main: "#7C3AED", light: "#EDE9FE", dark: "#5B21B6" },
+  orange: { main: "#E8401C", light: "#FFEDD5", dark: "#C2410C" },
+};
 
-import {
-  TrendingUp,
-  TrendingDown,
-  Upload,
-  RefreshCw,
-  AlertCircle,
-  Clock,
-  BarChart3,
-  ArrowUpRight,
-  Layers,
-  ChevronRight,
-  Lock,
-  CheckCircle2,
-  XCircle,
-  X,
-  FileUp,
-  Loader2,
-  ArrowDown,
-  ArrowUp,
-  Minus,
-  Search,
-  Download,
-  ChevronLeft,
-  Eye,
-  Sparkles,
-  PanelRightClose,
-  CalendarRange,
-} from "lucide-react";
-import FinancialDataPage from "./FinancialDataPage";
-import FinancialSiteDetailModal from "./FinancialSiteDetailModal"; // ✅ NOUVEAU
+const PAGE_BG = "linear-gradient(180deg,#F8FAFC 0%,#EEF4FF 100%)";
+const HDR = "linear-gradient(135deg,#010E2A 0%,#032566 55%,#0A3D96 100%)";
+const MONTHS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
+const ZONES = ["DKR", "THIES", "DIOURBEL", "LOUGA", "KAOLACK", "ZIGUINCHOR", "SAINT-LOUIS", "TAMBACOUNDA", "KOLDA", "FATICK", "MATAM", "KAFFRINE", "SEDHIOU", "KEDOUGOU"];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-const MONTHS = [
-  "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
-  "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
-];
+type TabKey = "evaluations" | "dashboard" | "recurrents" | "analyse" | "donnees";
+type EvalRow = FinancialEvaluation & {
+  id: number;
+  site_id: string;
+  site_name?: string | null;
+  zone?: string | null;
+  year: number;
+  month: number;
+  load_w?: number | null;
+  typology?: string | null;
+  configuration?: string | null;
+  redevance?: string | null;
+  montant_htva?: string | null;
+  marge?: string | null;
+  marge_statut?: "OK" | "NOK" | null;
+  hors_catalogue?: boolean;
+  periode_courte?: boolean;
+  nb_jours_factures?: number | null;
+  recurrence_mois_nok?: number | null;
+  recurrence_type?: string | null;
+};
 
-function fmt(v: string | null | undefined, suffix = " FCFA"): string {
-  if (!v || v === "0.000") return "—";
-  const n = parseFloat(v);
-  if (isNaN(n)) return "—";
-  if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(".", ",") + " M" + suffix;
-  if (Math.abs(n) >= 1_000) return Math.round(n).toLocaleString("fr-FR") + suffix;
-  return n.toFixed(0) + suffix;
+type ModalSite = {
+  siteId: string;
+  siteName: string;
+  year: number;
+  monthStart: number;
+  monthEnd: number;
+} | null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const periodKey = (y: number, m: number) => y * 100 + m;
+const keyToYM = (k: number) => ({ year: Math.floor(k / 100), month: k % 100 });
+const periodLabel = (y: number, m: number) => `${MONTHS[m - 1]} ${y}`;
+
+function toNum(v: string | number | null | undefined): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const value = typeof v === "number" ? v : Number(String(v).replace(",", "."));
+  return Number.isFinite(value) ? value : null;
 }
 
-function fmtPlain(v: string | null | undefined): string {
-  if (!v || v === "0.000") return "—";
-  const n = parseFloat(v);
-  if (isNaN(n)) return "—";
-  if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(".", ",") + " M";
-  if (Math.abs(n) >= 1_000) return Math.round(n).toLocaleString("fr-FR");
-  return n.toFixed(0);
+function n(v: string | number | null | undefined): number {
+  return toNum(v) ?? 0;
 }
 
-function margeColor(v: string | null) {
-  if (!v) return "#94a3b8";
-  return parseFloat(v) >= 0 ? "#059669" : "#dc2626";
+function fmtInt(v: string | number | null | undefined): string {
+  const value = toNum(v);
+  if (value === null) return "—";
+  return value.toLocaleString("fr-FR", { maximumFractionDigits: 0 });
 }
 
-function severityStyle(severity: string) {
-  if (severity === "CRITICAL") {
-    return {
-      background: "rgba(220,38,38,.10)",
-      color: "#dc2626",
-      border: "1px solid rgba(220,38,38,.18)",
-    };
+function fmtMoney(v: string | number | null | undefined): string {
+  const value = toNum(v);
+  if (value === null) return "—";
+  if (Math.abs(value) >= 1_000_000) {
+    return `${(value / 1_000_000).toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} M FCFA`;
   }
-  if (severity === "HIGH") {
-    return {
-      background: "rgba(245,158,11,.10)",
-      color: "#b45309",
-      border: "1px solid rgba(245,158,11,.18)",
-    };
-  }
-  if (severity === "MEDIUM") {
-    return {
-      background: "rgba(59,130,246,.10)",
-      color: "#1d4ed8",
-      border: "1px solid rgba(59,130,246,.18)",
-    };
-  }
-  return {
-    background: "rgba(100,116,139,.10)",
-    color: "#475569",
-    border: "1px solid rgba(100,116,139,.18)",
-  };
+  return `${value.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} FCFA`;
 }
 
-function statusPill(status: string | null | undefined) {
-  if (!status) {
-    return {
-      bg: "rgba(148,163,184,.10)",
-      color: "#64748b",
-      label: "—",
-    };
-  }
-  if (status === "OK" || status === "CERTIFIED_FMS" || status === "CERTIFIED_SENELEC") {
-    return {
-      bg: "rgba(5,150,105,.10)",
-      color: "#059669",
-      label: status,
-    };
-  }
-  if (status === "NOK" || status === "NEEDS_REVIEW" || status === "FMS_UNAVAILABLE") {
-    return {
-      bg: "rgba(220,38,38,.10)",
-      color: "#dc2626",
-      label: status,
-    };
-  }
-  return {
-    bg: "rgba(245,158,11,.10)",
-    color: "#b45309",
-    label: status,
-  };
+function fmtMoneyShort(v: string | number | null | undefined): string {
+  const value = toNum(v);
+  if (value === null) return "—";
+  if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} M`;
+  if (Math.abs(value) >= 1_000) return `${Math.round(value / 1000).toLocaleString("fr-FR")} k`;
+  return value.toLocaleString("fr-FR", { maximumFractionDigits: 0 });
 }
 
-// ─── Upload modal ─────────────────────────────────────────────────────────────
-interface UploadModalProps {
-  title: string;
-  description: string;
-  accept?: string;
-  onClose: () => void;
-  onUpload: (file: File) => Promise<{ created: number; updated: number; skipped: number; errors_sample?: any[] }>;
+function fmtPct(v: number | null): string {
+  if (v === null || !Number.isFinite(v)) return "—";
+  return `${v > 0 ? "+" : ""}${v.toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 }
 
-function UploadModal({ title, description, accept = ".xlsx,.xls,.csv", onClose, onUpload }: UploadModalProps) {
+function moneyColor(v: string | number | null | undefined, positiveGood = true): string {
+  const value = toNum(v);
+  if (value === null) return C.slate[400];
+  if (value === 0) return C.slate[600];
+  return positiveGood ? (value >= 0 ? C.ok.main : C.nok.main) : value <= 0 ? C.ok.main : C.nok.main;
+}
+
+function periodText(startKey: number, endKey: number) {
+  const lo = Math.min(startKey, endKey);
+  const hi = Math.max(startKey, endKey);
+  const a = keyToYM(lo);
+  const b = keyToYM(hi);
+  if (lo === hi) return periodLabel(a.year, a.month);
+  return `${periodLabel(a.year, a.month)} → ${periodLabel(b.year, b.month)}`;
+}
+
+function getKpiDelta(redevance?: string | null, facture?: string | null) {
+  const r = toNum(redevance);
+  const f = toNum(facture);
+  if (r === null || f === null || f === 0) return null;
+  return (r / f - 1) * 100;
+}
+
+function buildMonthOptions(yearStart = 2024, yearEnd = new Date().getFullYear() + 1) {
+  const out: Array<{ key: number; label: string }> = [];
+  for (let y = yearStart; y <= yearEnd; y += 1) {
+    for (let m = 1; m <= 12; m += 1) out.push({ key: periodKey(y, m), label: periodLabel(y, m) });
+  }
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UI atoms
+// ─────────────────────────────────────────────────────────────────────────────
+
+function Badge({ children, tone = "slate" }: { children: ReactNode; tone?: "slate" | "blue" | "ok" | "nok" | "warn" | "cyan" | "purple" | "orange" }) {
+  const map = {
+    slate: { bg: C.slate[100], color: C.slate[700], border: C.slate[200] },
+    blue: { bg: C.blue[100], color: C.blue[700], border: "#BFDBFE" },
+    ok: { bg: C.ok.light, color: C.ok.dark, border: C.ok.mid },
+    nok: { bg: C.nok.light, color: C.nok.dark, border: C.nok.mid },
+    warn: { bg: C.warn.light, color: C.warn.dark, border: C.warn.mid },
+    cyan: { bg: C.cyan.light, color: C.cyan.dark, border: "#A5F3FC" },
+    purple: { bg: C.purple.light, color: C.purple.dark, border: "#DDD6FE" },
+    orange: { bg: C.orange.light, color: C.orange.dark, border: "#FDBA74" },
+  }[tone];
+
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 9px", borderRadius: 999, border: `1px solid ${map.border}`, background: map.bg, color: map.color, fontSize: 10.5, fontWeight: 900, whiteSpace: "nowrap" }}>
+      {children}
+    </span>
+  );
+}
+
+function HelpTip({ text }: { text: string }) {
+  return <HelpCircle size={12} style={{ color: "rgba(255,255,255,.58)", cursor: "help" }} title={text} />;
+}
+
+function StatusBadge({ status }: { status?: string | null }) {
+  if (!status) return <Badge>—</Badge>;
+  if (status === "OK") return <Badge tone="ok"><CheckCircle2 size={12} /> Marge OK</Badge>;
+  if (status === "NOK") return <Badge tone="nok"><XCircle size={12} /> Marge NOK</Badge>;
+  return <Badge tone="warn">{status}</Badge>;
+}
+
+function RecurrenceBadge({ type, months }: { type?: string | null; months?: number | null }) {
+  if (!type) return <span style={{ color: C.slate[400] }}>—</span>;
+  const isCrit = type === "critique";
+  return <Badge tone={isCrit ? "nok" : "warn"}>{isCrit ? <AlertTriangle size={12} /> : <Activity size={12} />}{isCrit ? "Critique" : "Light"}{months ? ` · ${months}m` : ""}</Badge>;
+}
+
+function DeltaBadge({ value }: { value: number | null }) {
+  if (value === null) return <span style={{ color: C.slate[400] }}>—</span>;
+  const tone = Math.abs(value) <= 10 ? "ok" : Math.abs(value) <= 20 ? "warn" : "nok";
+  return <Badge tone={tone}>{value >= 0 ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}{fmtPct(value)}</Badge>;
+}
+
+function Card({ children, style }: { children: ReactNode; style?: CSSProperties }) {
+  return <div style={{ background: "rgba(255,255,255,.94)", border: `1px solid ${C.slate[200]}`, borderRadius: 20, boxShadow: "0 18px 45px rgba(15,23,42,.07)", overflow: "hidden", ...style }}>{children}</div>;
+}
+
+function SectionTitle({ icon, title, subtitle, right }: { icon: ReactNode; title: string; subtitle?: string; right?: ReactNode }) {
+  return (
+    <div style={{ padding: "16px 18px", borderBottom: `1px solid ${C.slate[100]}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 13, background: C.blue[50], color: C.blue[700], display: "flex", alignItems: "center", justifyContent: "center" }}>{icon}</div>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 950, color: C.blue[950], letterSpacing: "-.02em" }}>{title}</div>
+          {subtitle ? <div style={{ fontSize: 11.5, color: C.slate[500], marginTop: 2 }}>{subtitle}</div> : null}
+        </div>
+      </div>
+      {right}
+    </div>
+  );
+}
+
+function KpiCard({ label, value, sub, icon, accent, help, negative }: { label: string; value: string; sub?: string; icon: ReactNode; accent: string; help?: string; negative?: boolean }) {
+  return (
+    <div style={{ position: "relative", overflow: "hidden", borderRadius: 18, background: "rgba(255,255,255,.09)", border: "1px solid rgba(255,255,255,.14)", padding: "15px 16px", minHeight: 94, boxShadow: "inset 0 1px 0 rgba(255,255,255,.12)" }}>
+      <div style={{ position: "absolute", inset: 0, background: `radial-gradient(circle at 90% 12%,${accent}33,transparent 32%)` }} />
+      <div style={{ position: "relative", display: "flex", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ fontSize: 10, fontWeight: 950, color: "rgba(255,255,255,.52)", letterSpacing: ".08em", textTransform: "uppercase" }}>{label}</div>
+            {help ? <HelpTip text={help} /> : null}
+          </div>
+          <div style={{ fontSize: 21, fontWeight: 950, color: negative ? "#FCA5A5" : "#fff", marginTop: 8, letterSpacing: "-.03em", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</div>
+          {sub ? <div style={{ fontSize: 11, color: "rgba(255,255,255,.48)", marginTop: 4 }}>{sub}</div> : null}
+        </div>
+        <div style={{ width: 38, height: 38, borderRadius: 14, background: "rgba(255,255,255,.10)", color: accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</div>
+      </div>
+      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 3, background: `linear-gradient(90deg,${accent},transparent)` }} />
+    </div>
+  );
+}
+
+function EmptyState({ title, text, icon = <Database size={22} /> }: { title: string; text: string; icon?: ReactNode }) {
+  return (
+    <div style={{ padding: 54, textAlign: "center", color: C.slate[500] }}>
+      <div style={{ width: 54, height: 54, borderRadius: 18, background: C.slate[100], margin: "0 auto 14px", display: "flex", alignItems: "center", justifyContent: "center", color: C.slate[400] }}>{icon}</div>
+      <div style={{ color: C.slate[700], fontSize: 15, fontWeight: 950 }}>{title}</div>
+      <div style={{ fontSize: 12, marginTop: 5 }}>{text}</div>
+    </div>
+  );
+}
+
+function FilterChip({ label, value, onClear }: { label: string; value: string; onClear?: () => void }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 9px", borderRadius: 999, background: C.blue[50], color: C.blue[800], border: "1px solid #BFDBFE", fontSize: 11.5, fontWeight: 900 }}>
+      <span style={{ color: C.slate[500], fontWeight: 800 }}>{label}:</span> {value}
+      {onClear ? <button type="button" onClick={onClear} style={{ border: "none", background: "transparent", color: C.blue[700], cursor: "pointer", padding: 0, display: "inline-flex" }}><X size={12} /></button> : null}
+    </span>
+  );
+}
+
+function UploadModal({ title, description, accept = ".xlsx,.xls,.csv", onClose, onUpload }: { title: string; description: string; accept?: string; onClose: () => void; onUpload: (file: File) => Promise<any> }) {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ created: number; updated: number; skipped: number; errors_sample?: any[] } | null>(null);
+  const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragging(false);
-    const f = e.dataTransfer.files[0];
-    if (f) setFile(f);
-  };
-
-  const handleSubmit = async () => {
+  async function submit() {
     if (!file) return;
     setLoading(true);
     setError(null);
@@ -179,225 +350,56 @@ function UploadModal({ title, description, accept = ".xlsx,.xls,.csv", onClose, 
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 300,
-        background: "rgba(15,23,42,.6)",
-        backdropFilter: "blur(8px)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 20,
-      }}
-      onClick={(e) => e.target === e.currentTarget && !loading && onClose()}
-    >
-      <div
-        style={{
-          background: "white",
-          borderRadius: 24,
-          padding: 32,
-          maxWidth: 460,
-          width: "100%",
-          boxShadow: "0 32px 80px rgba(0,0,0,.22)",
-          animation: "slideUp .22s cubic-bezier(.34,1.4,.64,1)",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+    <div onClick={(e) => e.currentTarget === e.target && !loading && onClose()} style={{ position: "fixed", inset: 0, zIndex: 700, background: "rgba(2,6,23,.62)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ width: "min(480px,100%)", background: "#fff", borderRadius: 24, boxShadow: "0 30px 90px rgba(2,6,23,.28)", padding: 26 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, marginBottom: 18 }}>
           <div>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", margin: "0 0 4px" }}>{title}</h3>
-            <p style={{ fontSize: 12.5, color: "#64748b", margin: 0 }}>{description}</p>
+            <div style={{ fontSize: 16, fontWeight: 950, color: C.blue[950] }}>{title}</div>
+            <div style={{ fontSize: 12.5, color: C.slate[500], marginTop: 4 }}>{description}</div>
           </div>
-          {!loading && (
-            <button
-              onClick={onClose}
-              style={{
-                background: "rgba(0,0,0,.06)",
-                border: "none",
-                borderRadius: 9,
-                padding: 6,
-                cursor: "pointer",
-                color: "#64748b",
-                display: "grid",
-                placeItems: "center",
-              }}
-            >
-              <X size={15} />
-            </button>
-          )}
+          {!loading ? <button type="button" onClick={onClose} style={{ width: 30, height: 30, borderRadius: 10, border: "none", background: C.slate[100], color: C.slate[500], cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><X size={15} /></button> : null}
         </div>
 
         {!result ? (
           <>
             <div
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragging(true);
-              }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={handleDrop}
               onClick={() => inputRef.current?.click()}
-              style={{
-                border: `2px dashed ${dragging ? "#1e3a8a" : file ? "rgba(5,150,105,.4)" : "rgba(30,58,138,.2)"}`,
-                borderRadius: 16,
-                padding: "28px 20px",
-                textAlign: "center",
-                cursor: "pointer",
-                background: dragging ? "rgba(30,58,138,.04)" : file ? "rgba(5,150,105,.03)" : "rgba(248,250,252,1)",
-                transition: "all .18s",
-                marginBottom: 16,
-              }}
+              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => { e.preventDefault(); setDragging(false); if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); }}
+              style={{ border: `2px dashed ${dragging ? C.blue[600] : file ? C.ok.main : C.slate[300]}`, borderRadius: 18, padding: "30px 18px", textAlign: "center", cursor: "pointer", background: dragging ? C.blue[50] : file ? "#F0FDF4" : C.slate[50], transition: "all .18s", marginBottom: 14 }}
             >
-              <input
-                ref={inputRef}
-                type="file"
-                accept={accept}
-                style={{ display: "none" }}
-                onChange={(e) => e.target.files?.[0] && setFile(e.target.files[0])}
-              />
-              <FileUp size={28} color={file ? "#059669" : "#94a3b8"} style={{ marginBottom: 10 }} />
-              {file ? (
-                <div>
-                  <p style={{ fontSize: 13, fontWeight: 600, color: "#059669", margin: "0 0 2px" }}>{file.name}</p>
-                  <p style={{ fontSize: 11.5, color: "#94a3b8", margin: 0 }}>{(file.size / 1024).toFixed(1)} KB</p>
-                </div>
-              ) : (
-                <div>
-                  <p style={{ fontSize: 13, fontWeight: 600, color: "#374151", margin: "0 0 2px" }}>
-                    Glisser-déposer ou cliquer pour sélectionner
-                  </p>
-                  <p style={{ fontSize: 11.5, color: "#94a3b8", margin: 0 }}>{accept}</p>
-                </div>
-              )}
+              <input ref={inputRef} type="file" accept={accept} style={{ display: "none" }} onChange={(e) => e.target.files?.[0] && setFile(e.target.files[0])} />
+              <FileUp size={30} color={file ? C.ok.main : C.slate[400]} style={{ marginBottom: 10 }} />
+              <div style={{ fontSize: 13, fontWeight: 900, color: file ? C.ok.dark : C.slate[700] }}>{file ? file.name : "Glisser-déposer ou cliquer pour sélectionner"}</div>
+              <div style={{ fontSize: 11.5, color: C.slate[400], marginTop: 3 }}>{file ? `${(file.size / 1024).toFixed(1)} KB` : accept}</div>
             </div>
 
-            {error && (
-              <div
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: 12,
-                  background: "rgba(220,38,38,.07)",
-                  border: "1px solid rgba(220,38,38,.15)",
-                  marginBottom: 14,
-                  fontSize: 12.5,
-                  color: "#dc2626",
-                  fontWeight: 500,
-                }}
-              >
-                ⚠ {error}
-              </div>
-            )}
+            {error ? <div style={{ padding: "10px 12px", borderRadius: 13, background: C.nok.light, border: `1px solid ${C.nok.mid}`, color: C.nok.dark, fontSize: 12, fontWeight: 800, marginBottom: 12 }}>⚠ {error}</div> : null}
 
             <div style={{ display: "flex", gap: 10 }}>
-              <button
-                onClick={onClose}
-                style={{
-                  flex: 1,
-                  padding: "9px 0",
-                  borderRadius: 12,
-                  border: "1.5px solid rgba(0,0,0,.1)",
-                  background: "white",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: "#374151",
-                  cursor: "pointer",
-                }}
-              >
-                Annuler
-              </button>
-              <button
-                disabled={!file || loading}
-                onClick={handleSubmit}
-                style={{
-                  flex: 2,
-                  padding: "9px 0",
-                  borderRadius: 12,
-                  border: "none",
-                  background: file && !loading ? "linear-gradient(135deg,#1e3a8a,#2d52b8)" : "rgba(30,58,138,.25)",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: "white",
-                  cursor: file && !loading ? "pointer" : "not-allowed",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 7,
-                }}
-              >
-                {loading && <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />}
+              <button type="button" onClick={onClose} disabled={loading} style={{ flex: 1, padding: "10px 0", borderRadius: 13, border: `1px solid ${C.slate[200]}`, background: "#fff", color: C.slate[700], fontWeight: 900, cursor: "pointer" }}>Annuler</button>
+              <button type="button" onClick={submit} disabled={!file || loading} style={{ flex: 2, padding: "10px 0", borderRadius: 13, border: "none", background: file && !loading ? C.blue[800] : C.blue[200], color: "#fff", fontWeight: 950, cursor: file && !loading ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+                {loading ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Upload size={15} />}
                 {loading ? "Import en cours…" : "Importer"}
               </button>
             </div>
           </>
         ) : (
-          <div>
-            <div style={{ textAlign: "center", padding: "8px 0 20px" }}>
-              <CheckCircle2 size={40} color="#059669" style={{ marginBottom: 10 }} />
-              <h4 style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", margin: "0 0 14px" }}>Import terminé</h4>
-              <div style={{ display: "flex", justifyContent: "center", gap: 12 }}>
-                {[
-                  { label: "Créés", value: result.created, color: "#059669" },
-                  { label: "Maj", value: result.updated, color: "#0891b2" },
-                  { label: "Ignorés", value: result.skipped, color: "#f59e0b" },
-                ].map((s) => (
-                  <div
-                    key={s.label}
-                    style={{
-                      padding: "10px 16px",
-                      borderRadius: 12,
-                      background: "rgba(0,0,0,.03)",
-                      border: "1px solid rgba(0,0,0,.06)",
-                    }}
-                  >
-                    <div style={{ fontSize: 20, fontWeight: 800, color: s.color, fontFamily: "'Outfit',sans-serif" }}>
-                      {s.value}
-                    </div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8" }}>{s.label}</div>
-                  </div>
-                ))}
-              </div>
-              {result.errors_sample && result.errors_sample.length > 0 && (
-                <div
-                  style={{
-                    marginTop: 14,
-                    padding: "10px 14px",
-                    borderRadius: 12,
-                    background: "rgba(245,158,11,.07)",
-                    border: "1px solid rgba(245,158,11,.15)",
-                    textAlign: "left",
-                  }}
-                >
-                  <p style={{ fontSize: 11.5, fontWeight: 600, color: "#92400e", margin: "0 0 4px" }}>
-                    {result.errors_sample.length} erreur(s) :
-                  </p>
-                  {result.errors_sample.slice(0, 3).map((e: any, i: number) => (
-                    <p key={i} style={{ fontSize: 11, color: "#b45309", margin: "2px 0 0" }}>
-                      Ligne {e.row || i + 1} : {e.error}
-                    </p>
-                  ))}
-                </div>
-              )}
+          <div style={{ textAlign: "center" }}>
+            <CheckCircle2 size={42} color={C.ok.main} style={{ marginBottom: 10 }} />
+            <div style={{ fontSize: 16, fontWeight: 950, color: C.slate[800], marginBottom: 14 }}>Import terminé</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 9, marginBottom: 16 }}>
+              {[
+                { label: "Créés", value: result.created ?? 0, color: C.ok.main },
+                { label: "Maj", value: result.updated ?? 0, color: C.cyan.main },
+                { label: "Ignorés", value: result.skipped ?? result.skipped_sites_inconnus ?? 0, color: C.warn.main },
+              ].map((x) => <div key={x.label} style={{ padding: 12, borderRadius: 14, background: C.slate[50], border: `1px solid ${C.slate[200]}` }}><div style={{ color: x.color, fontSize: 21, fontWeight: 950 }}>{x.value}</div><div style={{ fontSize: 11, color: C.slate[500], fontWeight: 800 }}>{x.label}</div></div>)}
             </div>
-            <button
-              onClick={onClose}
-              style={{
-                width: "100%",
-                padding: "10px 0",
-                borderRadius: 12,
-                border: "none",
-                background: "linear-gradient(135deg,#1e3a8a,#2d52b8)",
-                fontSize: 13,
-                fontWeight: 600,
-                color: "white",
-                cursor: "pointer",
-              }}
-            >
-              Fermer
-            </button>
+            <button type="button" onClick={onClose} style={{ width: "100%", padding: "10px 0", border: "none", borderRadius: 13, background: C.blue[800], color: "#fff", fontWeight: 950, cursor: "pointer" }}>Fermer</button>
           </div>
         )}
       </div>
@@ -405,1251 +407,62 @@ function UploadModal({ title, description, accept = ".xlsx,.xls,.csv", onClose, 
   );
 }
 
-// ─── Table évaluations ────────────────────────────────────────────────────────
-function EvaluationTable({
-  items,
-  onOpenDetail,
-}: {
-  items: FinancialEvaluation[];
-  onOpenDetail: (siteId: string, siteName?: string) => void;  // ✅ + siteName
-}) {
-  if (!items.length) return null;
+function PeriodPicker({ startKey, endKey, onChange }: { startKey: number; endKey: number; onChange: (s: number, e: number) => void }) {
+  const options = useMemo(() => buildMonthOptions(2024, new Date().getFullYear() + 1), []);
+  const commonSelect: CSSProperties = { height: 38, borderRadius: 12, border: "1px solid rgba(255,255,255,.20)", background: "rgba(255,255,255,.10)", color: "#fff", padding: "0 10px", fontSize: 12, fontWeight: 900, outline: "none" };
 
   return (
-    <div style={{ overflowX: "auto", borderRadius: 18, border: "1.5px solid rgba(0,0,0,.06)", background: "white" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
-        <thead>
-          <tr style={{ background: "linear-gradient(180deg,rgba(30,58,138,.05),rgba(30,58,138,.02))", borderBottom: "1.5px solid rgba(0,0,0,.06)" }}>
-            {["Site", "Période", "Typologie", "Config", "Load (W)", "Redevance", "Montant HT", "Marge", "Statut", "Récurrence", "Analyse"].map((h) => (
-              <th key={h} style={{ padding: "10px 12px", textAlign: "left", fontWeight: 700, color: "#374151", whiteSpace: "nowrap", fontSize: 11 }}>
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((ev, i) => {
-            const marge = ev.marge ? parseFloat(ev.marge) : null;
-            return (
-              <tr key={ev.id} style={{ borderBottom: "1px solid rgba(0,0,0,.05)", background: i % 2 === 0 ? "white" : "rgba(248,250,252,.65)" }}>
-                
-                <td style={{ padding: "10px 12px" }}>
-                  <button
-                    onClick={() => onOpenDetail(ev.site_id, ev.site_name)}
-                    title={`Ouvrir l'analyse de ${ev.site_id}`}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      padding: 0,
-                      cursor: "pointer",
-                      textAlign: "left",
-                    }}
-                    onMouseEnter={e => {
-                      (e.currentTarget.querySelector(".site-id") as HTMLElement).style.color = "#1e3a8a";
-                      (e.currentTarget.querySelector(".site-id") as HTMLElement).style.textDecoration = "underline";
-                    }}
-                    onMouseLeave={e => {
-                      (e.currentTarget.querySelector(".site-id") as HTMLElement).style.color = "#0f172a";
-                      (e.currentTarget.querySelector(".site-id") as HTMLElement).style.textDecoration = "none";
-                    }}
-                  >
-                    <div
-                      className="site-id"
-                      style={{
-                        fontWeight: 700,
-                        color: "#0f172a",
-                        transition: "color 0.15s ease",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                      }}
-                    >
-                      {ev.site_id}
-                      <Eye size={11} style={{ opacity: 0.35, flexShrink: 0 }} />
-                    </div>
-                    <div style={{
-                      fontSize: 11,
-                      color: "#94a3b8",
-                      maxWidth: 140,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}>
-                      {ev.site_name}
-                    </div>
-                  </button>
-                </td>
-
-                <td style={{ padding: "10px 12px", whiteSpace: "nowrap", color: "#475569", fontWeight: 600 }}>
-                  {MONTHS[(ev.month || 1) - 1]} {ev.year}
-                </td>
-
-                <td style={{ padding: "10px 12px", maxWidth: 170 }}>
-                  {ev.typology ? (
-                    <span
-                      title={ev.typology}
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 600,
-                        color: "#374151",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        display: "block",
-                        maxWidth: 160,
-                      }}
-                    >
-                      {ev.typology}
-                    </span>
-                  ) : (
-                    <span style={{ color: "#d1d5db" }}>—</span>
-                  )}
-                </td>
-
-                <td style={{ padding: "10px 12px", color: "#374151" }}>{ev.configuration || "—"}</td>
-
-                <td style={{ padding: "10px 12px", color: "#374151", whiteSpace: "nowrap" }}>
-                  {ev.load_w ? ev.load_w.toLocaleString("fr-FR") : "—"}
-                  {ev.hors_catalogue && (
-                    <span
-                      title="Hors catalogue — fallback load supérieur"
-                      style={{
-                        marginLeft: 6,
-                        fontSize: 9,
-                        padding: "2px 6px",
-                        borderRadius: 100,
-                        background: "rgba(245,158,11,.10)",
-                        color: "#b45309",
-                        fontWeight: 700,
-                      }}
-                    >
-                      HC
-                    </span>
-                  )}
-                </td>
-
-                <td style={{ padding: "10px 12px", color: "#374151", whiteSpace: "nowrap" }}>{fmt(ev.redevance)}</td>
-                <td style={{ padding: "10px 12px", color: "#374151", whiteSpace: "nowrap" }}>{fmt(ev.montant_htva)}</td>
-
-                <td style={{ padding: "10px 12px", fontWeight: 700, whiteSpace: "nowrap", color: marge !== null ? margeColor(ev.marge) : "#94a3b8" }}>
-                  {marge !== null ? (
-                    <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                      {marge > 0 ? <ArrowUp size={11} /> : marge < 0 ? <ArrowDown size={11} /> : <Minus size={11} />}
-                      {fmt(ev.marge)}
-                    </span>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-
-                <td style={{ padding: "10px 12px" }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    {ev.marge_statut ? (
-                      <span
-                        style={{
-                          padding: "3px 10px",
-                          borderRadius: 100,
-                          fontSize: 10.5,
-                          fontWeight: 700,
-                          background: ev.marge_statut === "OK" ? "rgba(5,150,105,.10)" : "rgba(220,38,38,.10)",
-                          color: ev.marge_statut === "OK" ? "#059669" : "#dc2626",
-                          display: "inline-block",
-                          width: "fit-content",
-                        }}
-                      >
-                        {ev.marge_statut}
-                      </span>
-                    ) : (
-                      "—"
-                    )}
-
-                    {ev.periode_courte && (
-                      <span
-                        title={`Période courte : ${ev.nb_jours_factures} jours`}
-                        style={{
-                          padding: "2px 7px",
-                          borderRadius: 100,
-                          fontSize: 9.5,
-                          fontWeight: 700,
-                          background: "rgba(99,102,241,.10)",
-                          color: "#4f46e5",
-                          width: "fit-content",
-                        }}
-                      >
-                        ⏱ {ev.nb_jours_factures}j
-                      </span>
-                    )}
-                  </div>
-                </td>
-
-                <td style={{ padding: "10px 12px" }}>
-                  {ev.recurrence_type ? (
-                    <span
-                      style={{
-                        padding: "3px 8px",
-                        borderRadius: 100,
-                        fontSize: 10,
-                        fontWeight: 700,
-                        background: ev.recurrence_type === "critique" ? "rgba(220,38,38,.10)" : "rgba(245,158,11,.10)",
-                        color: ev.recurrence_type === "critique" ? "#dc2626" : "#b45309",
-                      }}
-                    >
-                      {ev.recurrence_type === "critique" ? "⚠ Critique" : "Light"}
-                      {ev.recurrence_mois_nok > 0 && ` (${ev.recurrence_mois_nok}m)`}
-                    </span>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-
-                <td style={{ padding: "10px 12px" }}>
-                  <button
-                    onClick={() => onOpenDetail(ev.site_id)}
-                    title="Voir l'analyse détaillée"
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      width: 32,
-                      height: 32,
-                      borderRadius: 10,
-                      border: "1.5px solid rgba(30,58,138,.12)",
-                      background: "rgba(30,58,138,.05)",
-                      color: "#1e3a8a",
-                      cursor: "pointer",
-                      boxShadow: "0 1px 4px rgba(0,0,0,.04)",
-                    }}
-                  >
-                    <Eye size={15} />
-                  </button>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <Calendar size={15} color="rgba(255,255,255,.65)" />
+      <select value={Math.min(startKey, endKey)} onChange={(e) => onChange(Number(e.target.value), endKey)} style={commonSelect}>
+        {options.map((o) => <option key={o.key} value={o.key} style={{ color: C.slate[800] }}>{o.label}</option>)}
+      </select>
+      <span style={{ color: "rgba(255,255,255,.45)", fontWeight: 900 }}>→</span>
+      <select value={Math.max(startKey, endKey)} onChange={(e) => onChange(startKey, Number(e.target.value))} style={commonSelect}>
+        {options.map((o) => <option key={o.key} value={o.key} style={{ color: C.slate[800] }}>{o.label}</option>)}
+      </select>
     </div>
   );
 }
 
-// ─── Dashboard chart ──────────────────────────────────────────────────────────
-function MiniBarChart({ data }: { data: FacturesRedevancesPeriod[] }) {
-  if (!data.length) return null;
-  const maxVal = Math.max(...data.flatMap((d) => [parseFloat(d.total_redevance || "0"), parseFloat(d.total_facture || "0")]));
-
+function ChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
   return (
-    <div style={{ display: "flex", gap: 8, alignItems: "flex-end", height: 80 }}>
-      {data.slice(-8).map((d, i) => {
-        const rev = parseFloat(d.total_redevance || "0");
-        const fac = parseFloat(d.total_facture || "0");
-        const hRev = maxVal ? (rev / maxVal) * 80 : 0;
-        const hFac = maxVal ? (fac / maxVal) * 80 : 0;
-
-        return (
-          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-            <div style={{ display: "flex", gap: 2, alignItems: "flex-end", height: 70 }}>
-              <div
-                title={`Redevance: ${fmt(d.total_redevance)}`}
-                style={{
-                  width: 10,
-                  height: Math.max(hRev, 2),
-                  borderRadius: "3px 3px 0 0",
-                  background: "linear-gradient(180deg,#1e3a8a,#2d52b8)",
-                  transition: "height .3s",
-                }}
-              />
-              <div
-                title={`Facture: ${fmt(d.total_facture)}`}
-                style={{
-                  width: 10,
-                  height: Math.max(hFac, 2),
-                  borderRadius: "3px 3px 0 0",
-                  background: "linear-gradient(180deg,#E8401C,#ff6340)",
-                  transition: "height .3s",
-                }}
-              />
-            </div>
-            <span
-              style={{
-                fontSize: 9,
-                color: "#94a3b8",
-                textAlign: "center",
-                transform: "rotate(-45deg)",
-                transformOrigin: "center",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {d.period.slice(2)}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function GraphCard({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      style={{
-        background: "white",
-        borderRadius: 18,
-        border: "1px solid rgba(0,0,0,.06)",
-        padding: 18,
-      }}
-    >
-      <h4 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
-        {title}
-      </h4>
-      {children}
-    </div>
-  );
-}
-
-function DetailMargeBarsChart({ detail }: { detail: EvaluationDetail }) {
-  const rows = detail.history || [];
-  if (!rows.length) {
-    return <div style={{ fontSize: 12.5, color: "#94a3b8" }}>Aucune donnée</div>;
-  }
-
-  const values = rows.map((r) => Math.abs(parseFloat(r.marge || "0")));
-  const maxVal = Math.max(...values, 1);
-
-  return (
-    <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 220 }}>
-      {rows.map((row) => {
-        const marge = parseFloat(row.marge || "0");
-        const barH = Math.max((Math.abs(marge) / maxVal) * 160, 6);
-
-        return (
-          <div
-            key={row.period}
-            style={{
-              flex: 1,
-              minWidth: 0,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "flex-end",
-              gap: 8,
-            }}
-          >
-            <div
-              title={`${row.period} : ${fmt(row.marge)}`}
-              style={{
-                width: "100%",
-                maxWidth: 42,
-                height: barH,
-                borderRadius: "10px 10px 0 0",
-                background:
-                  marge >= 0
-                    ? "linear-gradient(180deg,#10b981,#059669)"
-                    : "linear-gradient(180deg,#f87171,#dc2626)",
-                boxShadow: "0 6px 18px rgba(0,0,0,.08)",
-              }}
-            />
-            <div style={{ fontSize: 10.5, color: "#64748b", fontWeight: 700, textAlign: "center" }}>
-              {row.period.slice(5)}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function DetailRedevanceFactureChart({ detail }: { detail: EvaluationDetail }) {
-  const rows = detail.history || [];
-  if (!rows.length) {
-    return <div style={{ fontSize: 12.5, color: "#94a3b8" }}>Aucune donnée</div>;
-  }
-
-  const values = rows.flatMap((r) => [
-    parseFloat(r.redevance || "0"),
-    parseFloat(r.montant_htva || "0"),
-  ]);
-  const maxVal = Math.max(...values, 1);
-
-  return (
-    <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 220 }}>
-      {rows.map((row) => {
-        const rev = parseFloat(row.redevance || "0");
-        const fac = parseFloat(row.montant_htva || "0");
-        const hRev = Math.max((rev / maxVal) * 150, 4);
-        const hFac = Math.max((fac / maxVal) * 150, 4);
-
-        return (
-          <div
-            key={row.period}
-            style={{
-              flex: 1,
-              minWidth: 0,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 170 }}>
-              <div
-                title={`Redevance ${row.period}: ${fmt(row.redevance)}`}
-                style={{
-                  width: 14,
-                  height: hRev,
-                  borderRadius: "8px 8px 0 0",
-                  background: "linear-gradient(180deg,#3b82f6,#1e3a8a)",
-                }}
-              />
-              <div
-                title={`Facture ${row.period}: ${fmt(row.montant_htva)}`}
-                style={{
-                  width: 14,
-                  height: hFac,
-                  borderRadius: "8px 8px 0 0",
-                  background: "linear-gradient(180deg,#fb923c,#E8401C)",
-                }}
-              />
-            </div>
-            <div style={{ fontSize: 10.5, color: "#64748b", fontWeight: 700 }}>{row.period.slice(5)}</div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function DetailBillingPenaltyChart({ detail }: { detail: EvaluationDetail }) {
-  const rows = detail.billing?.rows || [];
-  if (!rows.length) {
-    return <div style={{ fontSize: 12.5, color: "#94a3b8" }}>Aucune donnée billing</div>;
-  }
-
-  const values = rows.flatMap((r) => [
-    parseFloat(r.montant_cosinus_phi || "0"),
-    parseFloat(r.penalite_abonnement || "0"),
-  ]);
-  const maxVal = Math.max(...values, 1);
-
-  return (
-    <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 220 }}>
-      {rows.map((row) => {
-        const cosphi = parseFloat(row.montant_cosinus_phi || "0");
-        const pen = parseFloat(row.penalite_abonnement || "0");
-        const h1 = Math.max((cosphi / maxVal) * 150, cosphi > 0 ? 4 : 0);
-        const h2 = Math.max((pen / maxVal) * 150, pen > 0 ? 4 : 0);
-
-        return (
-          <div
-            key={row.period}
-            style={{
-              flex: 1,
-              minWidth: 0,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 170 }}>
-              <div
-                title={`Cos φ ${row.period}: ${fmt(row.montant_cosinus_phi)}`}
-                style={{
-                  width: 14,
-                  height: h1,
-                  borderRadius: "8px 8px 0 0",
-                  background: "linear-gradient(180deg,#f59e0b,#b45309)",
-                }}
-              />
-              <div
-                title={`Pénalité PS ${row.period}: ${fmt(row.penalite_abonnement)}`}
-                style={{
-                  width: 14,
-                  height: h2,
-                  borderRadius: "8px 8px 0 0",
-                  background: "linear-gradient(180deg,#ef4444,#b91c1c)",
-                }}
-              />
-            </div>
-            <div style={{ fontSize: 10.5, color: "#64748b", fontWeight: 700 }}>{row.period.slice(5)}</div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-
-// ─── Drawer analyse détaillée ─────────────────────────────────────────────────
-function AnalysisDrawer({
-  open,
-  loading,
-  detail,
-  onClose,
-}: {
-  open: boolean;
-  loading: boolean;
-  detail: EvaluationDetail | null;
-  onClose: () => void;
-}) {
-  const [viewMode, setViewMode] = useState<"resume" | "graph">("resume");
-
-  useEffect(() => {
-    if (open) setViewMode("resume");
-  }, [open, detail?.site?.site_id, detail?.period?.year, detail?.period?.month_start, detail?.period?.month_end]);
-
-  if (!open) return null;
-
-  const currentStatus = detail?.current?.marge_statut ? statusPill(detail.current.marge_statut) : null;
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 400,
-        background: "rgba(15,23,42,.52)",
-        backdropFilter: "blur(5px)",
-        display: "flex",
-        justifyContent: "flex-end",
-      }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div
-        style={{
-          width: "min(860px, 100vw)",
-          height: "100vh",
-          background: "linear-gradient(180deg,#ffffff,#f8fafc)",
-          boxShadow: "-18px 0 60px rgba(15,23,42,.22)",
-          overflowY: "auto",
-          padding: "22px 22px 30px",
-          animation: "slideUp .2s ease",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-              <div
-                style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: 12,
-                  display: "grid",
-                  placeItems: "center",
-                  background: "linear-gradient(135deg,#1e3a8a,#2d52b8)",
-                  color: "white",
-                }}
-              >
-                <Sparkles size={18} />
-              </div>
-              <div>
-                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "#0f172a", fontFamily: "'Outfit',sans-serif" }}>
-                  Analyse détaillée
-                </h3>
-                <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "#64748b" }}>
-                  {detail ? `${detail.site.site_id} · ${detail.site.name || "Site"}` : "Chargement…"}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <button
-            onClick={onClose}
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: 10,
-              border: "1px solid rgba(0,0,0,.08)",
-              background: "white",
-              color: "#64748b",
-              cursor: "pointer",
-            }}
-          >
-            <PanelRightClose size={16} />
-          </button>
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            gap: 4,
-            marginBottom: 18,
-            background: "rgba(0,0,0,.04)",
-            padding: 4,
-            borderRadius: 14,
-            width: "fit-content",
-          }}
-        >
-          {[
-            { key: "resume", label: "Synthèse" },
-            { key: "graph", label: "Graphique" },
-          ].map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setViewMode(tab.key as "resume" | "graph")}
-              style={{
-                padding: "7px 16px",
-                borderRadius: 10,
-                border: "none",
-                cursor: "pointer",
-                fontSize: 12.5,
-                fontWeight: 700,
-                background: viewMode === tab.key ? "white" : "transparent",
-                color: viewMode === tab.key ? "#1e3a8a" : "#64748b",
-                boxShadow: viewMode === tab.key ? "0 1px 6px rgba(0,0,0,.08)" : "none",
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {loading || !detail ? (
-          <div style={{ padding: "70px 0", textAlign: "center", color: "#94a3b8" }}>
-            <Loader2 size={28} style={{ animation: "spin 1s linear infinite", marginBottom: 8 }} />
-            <div style={{ fontSize: 13 }}>Chargement de l'analyse…</div>
-          </div>
-        ) : (
-          <>
-            <div
-              style={{
-                background: "white",
-                borderRadius: 18,
-                border: "1px solid rgba(0,0,0,.06)",
-                padding: "16px 18px",
-                marginBottom: 16,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                <div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: "#0f172a", fontFamily: "'Outfit',sans-serif" }}>
-                    {detail.site.site_id}
-                  </div>
-                  <div style={{ fontSize: 12.5, color: "#64748b" }}>
-                    {detail.site.name || "—"} · {detail.site.zone || "Zone N/A"} · {detail.period.year}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {currentStatus && (
-                    <span
-                      style={{
-                        padding: "4px 10px",
-                        borderRadius: 100,
-                        fontSize: 10.5,
-                        fontWeight: 800,
-                        background: currentStatus.bg,
-                        color: currentStatus.color,
-                      }}
-                    >
-                      {currentStatus.label}
-                    </span>
-                  )}
-                  <span
-                    style={{
-                      padding: "4px 10px",
-                      borderRadius: 100,
-                      fontSize: 10.5,
-                      fontWeight: 800,
-                      background: "rgba(30,58,138,.08)",
-                      color: "#1e3a8a",
-                    }}
-                  >
-                    {MONTHS[detail.period.month_start - 1]} → {MONTHS[detail.period.month_end - 1]}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {viewMode === "resume" ? (
-              <>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 12, marginBottom: 18 }}>
-                  {[
-                    {
-                      label: "Marge cumulée",
-                      value: fmt(detail.summary.total_marge),
-                      color: parseFloat(detail.summary.total_marge || "0") >= 0 ? "#059669" : "#dc2626",
-                      bg: parseFloat(detail.summary.total_marge || "0") >= 0 ? "rgba(5,150,105,.08)" : "rgba(220,38,38,.08)",
-                    },
-                    {
-                      label: "Mois OK",
-                      value: String(detail.summary.count_ok),
-                      color: "#059669",
-                      bg: "rgba(5,150,105,.08)",
-                    },
-                    {
-                      label: "Mois NOK",
-                      value: String(detail.summary.count_nok),
-                      color: "#dc2626",
-                      bg: "rgba(220,38,38,.08)",
-                    },
-                    {
-                      label: "HT facturé",
-                      value: fmt(detail.summary.billing_total_ht),
-                      color: "#1e3a8a",
-                      bg: "rgba(30,58,138,.08)",
-                    },
-                  ].map((card) => (
-                    <div key={card.label} style={{ background: "white", borderRadius: 16, border: "1px solid rgba(0,0,0,.06)", padding: "14px 15px" }}>
-                      <div
-                        style={{
-                          width: 34,
-                          height: 34,
-                          borderRadius: 10,
-                          background: card.bg,
-                          color: card.color,
-                          display: "grid",
-                          placeItems: "center",
-                          marginBottom: 10,
-                        }}
-                      >
-                        <BarChart3 size={16} />
-                      </div>
-                      <div style={{ fontSize: 18, fontWeight: 800, color: card.color, fontFamily: "'Outfit',sans-serif" }}>{card.value}</div>
-                      <div style={{ fontSize: 11.5, color: "#94a3b8", fontWeight: 600 }}>{card.label}</div>
-                    </div>
-                  ))}
-                </div>
-
-                <div style={{ background: "white", borderRadius: 18, border: "1px solid rgba(0,0,0,.06)", padding: "18px", marginBottom: 16 }}>
-                  <h4 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: "#0f172a" }}>Diagnostic automatique</h4>
-                  {detail.diagnostics.length ? (
-                    <div style={{ display: "grid", gap: 10 }}>
-                      {detail.diagnostics.map((d, idx) => (
-                        <div key={idx} style={{ ...severityStyle(d.severity), borderRadius: 14, padding: "12px 14px" }}>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                            <strong style={{ fontSize: 12.5 }}>{d.message}</strong>
-                            <span style={{ fontSize: 10.5, fontWeight: 800 }}>{d.severity}</span>
-                          </div>
-                          <div style={{ fontSize: 12, marginTop: 4, lineHeight: 1.5 }}>{d.detail}</div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: 12.5, color: "#64748b" }}>Aucun diagnostic critique sur la période.</div>
-                  )}
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-                  <div style={{ background: "white", borderRadius: 18, border: "1px solid rgba(0,0,0,.06)", padding: "18px" }}>
-                    <h4 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: "#0f172a" }}>Historique des marges</h4>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {detail.history.length ? (
-                        detail.history.map((row) => (
-                          <div
-                            key={row.period}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              gap: 10,
-                              padding: "8px 10px",
-                              borderRadius: 12,
-                              background: "rgba(248,250,252,1)",
-                            }}
-                          >
-                            <div>
-                              <div style={{ fontSize: 12.5, fontWeight: 700, color: "#0f172a" }}>{row.period}</div>
-                              <div style={{ fontSize: 11, color: "#94a3b8" }}>
-                                {row.load_w ? `${row.load_w.toLocaleString("fr-FR")} W` : "Load N/A"}
-                                {row.hors_catalogue ? " · HC" : ""}
-                              </div>
-                            </div>
-                            <div style={{ fontSize: 12.5, fontWeight: 800, color: parseFloat(row.marge || "0") >= 0 ? "#059669" : "#dc2626" }}>
-                              {fmt(row.marge)}
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div style={{ fontSize: 12.5, color: "#94a3b8" }}>Aucune donnée</div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div style={{ background: "white", borderRadius: 18, border: "1px solid rgba(0,0,0,.06)", padding: "18px" }}>
-                    <h4 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: "#0f172a" }}>Certification</h4>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-                      {Object.entries(detail.certification.summary).map(([k, v]) => (
-                        <span
-                          key={k}
-                          style={{
-                            padding: "4px 8px",
-                            borderRadius: 100,
-                            fontSize: 10.5,
-                            fontWeight: 700,
-                            background: "rgba(30,58,138,.06)",
-                            color: "#1e3a8a",
-                          }}
-                        >
-                          {k} · {String(v)}
-                        </span>
-                      ))}
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {detail.certification.rows.length ? (
-                        detail.certification.rows.map((row, idx) => {
-                          const pill = statusPill(row.status);
-                          return (
-                            <div key={idx} style={{ padding: "9px 10px", borderRadius: 12, background: "rgba(248,250,252,1)" }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                                <div style={{ fontSize: 12.5, fontWeight: 700, color: "#0f172a" }}>{row.period}</div>
-                                <div style={{ fontSize: 10.5, fontWeight: 800, color: pill.color }}>{pill.label}</div>
-                              </div>
-                              <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 3 }}>
-                                Ratio FMS : {row.ratio_fms || "—"} · Variation montant : {row.variation_montant || "—"}
-                              </div>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <div style={{ fontSize: 12.5, color: "#94a3b8" }}>Aucune certification sur la période</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ background: "white", borderRadius: 18, border: "1px solid rgba(0,0,0,.06)", padding: "18px" }}>
-                  <h4 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: "#0f172a" }}>Détail billing</h4>
-                  <div style={{ overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
-                      <thead>
-                        <tr style={{ borderBottom: "1px solid rgba(0,0,0,.06)" }}>
-                          {["Période", "HT", "Énergie", "Abonnement", "Cos φ", "Pénalité PS", "Nb jours"].map((h) => (
-                            <th key={h} style={{ textAlign: "left", padding: "8px 10px", fontSize: 11, color: "#64748b" }}>
-                              {h}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {detail.billing.rows.length ? (
-                          detail.billing.rows.map((row) => (
-                            <tr key={row.period} style={{ borderBottom: "1px solid rgba(0,0,0,.04)" }}>
-                              <td style={{ padding: "9px 10px", fontWeight: 700, color: "#0f172a" }}>{row.period}</td>
-                              <td style={{ padding: "9px 10px" }}>{fmt(row.montant_hors_tva)}</td>
-                              <td style={{ padding: "9px 10px" }}>{fmtPlain(row.energie)}</td>
-                              <td style={{ padding: "9px 10px" }}>{fmt(row.abonnement)}</td>
-                              <td style={{ padding: "9px 10px" }}>{fmt(row.montant_cosinus_phi)}</td>
-                              <td style={{ padding: "9px 10px" }}>{fmt(row.penalite_abonnement)}</td>
-                              <td style={{ padding: "9px 10px" }}>{row.nb_jours ?? "—"}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={7} style={{ padding: "18px 10px", color: "#94a3b8", textAlign: "center" }}>
-                              Aucun billing sur la période
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div style={{ display: "grid", gap: 16 }}>
-                <GraphCard title="Évolution des marges">
-                  <DetailMargeBarsChart detail={detail} />
-                </GraphCard>
-
-                <GraphCard title="Redevance vs Facture HT">
-                  <div style={{ display: "flex", gap: 12, marginBottom: 10 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <div style={{ width: 10, height: 10, borderRadius: 3, background: "#1e3a8a" }} />
-                      <span style={{ fontSize: 11.5, color: "#64748b" }}>Redevance</span>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <div style={{ width: 10, height: 10, borderRadius: 3, background: "#E8401C" }} />
-                      <span style={{ fontSize: 11.5, color: "#64748b" }}>Facture HT</span>
-                    </div>
-                  </div>
-                  <DetailRedevanceFactureChart detail={detail} />
-                </GraphCard>
-
-                <GraphCard title="Impact pénalités Billing">
-                  <div style={{ display: "flex", gap: 12, marginBottom: 10 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <div style={{ width: 10, height: 10, borderRadius: 3, background: "#b45309" }} />
-                      <span style={{ fontSize: 11.5, color: "#64748b" }}>Cos φ</span>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <div style={{ width: 10, height: 10, borderRadius: 3, background: "#b91c1c" }} />
-                      <span style={{ fontSize: 11.5, color: "#64748b" }}>Pénalité puissance</span>
-                    </div>
-                  </div>
-                  <DetailBillingPenaltyChart detail={detail} />
-                </GraphCard>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Onglet analyse ───────────────────────────────────────────────────────────
-function AnalysisOverview({
-  loading,
-  analytics,
-}: {
-  loading: boolean;
-  analytics: AnalyticsFullReport | null;
-}) {
-  if (loading) {
-    return (
-      <div style={{ padding: "40px 0", textAlign: "center", color: "#94a3b8" }}>
-        <Loader2 size={24} style={{ animation: "spin 1s linear infinite", marginBottom: 8 }} />
-        <div style={{ fontSize: 13 }}>Chargement de l’analyse…</div>
-      </div>
-    );
-  }
-
-  if (!analytics) {
-    return (
-      <div
-        style={{
-          background: "white",
-          borderRadius: 18,
-          border: "1.5px dashed rgba(30,58,138,.15)",
-          padding: "40px 24px",
-          textAlign: "center",
-        }}
-      >
-        <Sparkles size={28} color="#cbd5e1" style={{ marginBottom: 10 }} />
-        <h3 style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", margin: "0 0 6px", fontFamily: "'Outfit',sans-serif" }}>
-          Aucune analyse disponible
-        </h3>
-        <p style={{ fontSize: 13, color: "#64748b", margin: 0 }}>
-          Lance une évaluation et charge les données de la période sélectionnée.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 12, marginBottom: 18 }}>
-        {[
-          {
-            label: "Marge totale",
-            value: fmt(analytics.summary.total_marge),
-            color: parseFloat(analytics.summary.total_marge || "0") >= 0 ? "#059669" : "#dc2626",
-          },
-          {
-            label: "Taux NOK",
-            value: `${analytics.summary.taux_nok_pct}%`,
-            color: "#dc2626",
-          },
-          {
-            label: "Sites critique",
-            value: String(analytics.summary.count_critique),
-            color: "#dc2626",
-          },
-          {
-            label: "Hors catalogue",
-            value: String(analytics.summary.count_hc),
-            color: "#b45309",
-          },
-        ].map((card) => (
-          <div key={card.label} style={{ background: "white", borderRadius: 16, padding: "16px 18px", border: "1.5px solid rgba(0,0,0,.06)" }}>
-            <div style={{ fontSize: 20, fontWeight: 800, color: card.color, fontFamily: "'Outfit',sans-serif" }}>{card.value}</div>
-            <div style={{ fontSize: 11.5, fontWeight: 600, color: "#94a3b8" }}>{card.label}</div>
+    <div style={{ background: "#fff", border: `1px solid ${C.slate[200]}`, borderRadius: 14, padding: "10px 12px", boxShadow: "0 16px 40px rgba(15,23,42,.14)", minWidth: 210 }}>
+      <div style={{ fontSize: 12, fontWeight: 950, color: C.blue[950], marginBottom: 8 }}>{label}</div>
+      <div style={{ display: "grid", gap: 6 }}>
+        {payload.filter((p: any) => p.value !== null && p.value !== undefined).map((p: any) => (
+          <div key={p.dataKey} style={{ display: "flex", justifyContent: "space-between", gap: 14, fontSize: 11.5 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: C.slate[600] }}><span style={{ width: 8, height: 8, borderRadius: 999, background: p.color || p.fill }} />{p.name || p.dataKey}</span>
+            <strong style={{ color: C.slate[800], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{typeof p.value === "number" ? fmtMoneyShort(p.value) : p.value}</strong>
           </div>
         ))}
       </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1.1fr .9fr", gap: 18, marginBottom: 18 }}>
-        <div style={{ background: "white", borderRadius: 18, padding: 20, border: "1.5px solid rgba(0,0,0,.06)" }}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", margin: "0 0 14px" }}>Décomposition des causes</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {Object.entries(analytics.decomposition.causes).map(([key, c]) => (
-              <div
-                key={key}
-                style={{
-                  padding: "9px 12px",
-                  borderRadius: 12,
-                  background: "rgba(248,250,252,1)",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 12,
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: "#0f172a", textTransform: "capitalize" }}>
-                    {key.replaceAll("_", " ")}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#94a3b8" }}>
-                    {c.sites_count} site(s) · {c.pct_ecart}% de contribution
-                  </div>
-                </div>
-                <div style={{ fontSize: 12.5, fontWeight: 800, color: "#dc2626" }}>{fmt(c.montant_facteur)}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ background: "white", borderRadius: 18, padding: 20, border: "1.5px solid rgba(0,0,0,.06)" }}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", margin: "0 0 14px" }}>Top sites NOK</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {analytics.top_sites.slice(0, 8).map((s) => (
-              <div key={s.site_id} style={{ padding: "9px 12px", borderRadius: 12, background: "rgba(248,250,252,1)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                  <div>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: "#0f172a" }}>{s.site_id}</div>
-                    <div style={{ fontSize: 11, color: "#94a3b8" }}>
-                      {s.nb_mois_nok} mois NOK · {s.zone || "—"}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 12.5, fontWeight: 800, color: "#dc2626" }}>{fmt(s.marge_totale)}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ background: "white", borderRadius: 18, padding: 20, border: "1.5px solid rgba(0,0,0,.06)" }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", margin: "0 0 14px" }}>Recommandations</h3>
-        <div style={{ display: "grid", gap: 10 }}>
-          {analytics.recommandations.map((r, i) => (
-            <div
-              key={i}
-              style={{
-                borderRadius: 14,
-                padding: "12px 14px",
-                ...severityStyle(
-                  r.priorite === "CRITIQUE"
-                    ? "CRITICAL"
-                    : r.priorite === "HAUTE"
-                      ? "HIGH"
-                      : r.priorite === "MOYENNE"
-                        ? "MEDIUM"
-                        : "LOW"
-                ),
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                <strong style={{ fontSize: 12.5 }}>{r.titre}</strong>
-                <span style={{ fontSize: 10.5, fontWeight: 800 }}>{r.priorite}</span>
-              </div>
-              <div style={{ fontSize: 12, marginTop: 5, lineHeight: 1.5 }}>{r.description}</div>
-              <div style={{ fontSize: 12, marginTop: 5, fontWeight: 700 }}>Action : {r.action}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </>
-  );
-}
-
-
-const MONTHS_COURT = ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"];
-const periodKey = (y: number, m: number) => y * 100 + m;
-const keyToYM   = (k: number) => ({ year: Math.floor(k / 100), month: k % 100 });
-const fmtPer    = (y: number, m: number) => `${MONTHS_COURT[m - 1]} ${y}`;
- 
-const PRESETS_FIN = [
-  { label:"Année 2026",       range:[periodKey(2026,1),  periodKey(2026,12)] },
-  { label:"Année 2025",       range:[periodKey(2025,1),  periodKey(2025,12)] },
-  { label:"Année 2024",       range:[periodKey(2024,1),  periodKey(2024,12)] },
-  { label:"Juil 24 → Jun 25", range:[periodKey(2024,7),  periodKey(2025,6)]  },
-  { label:"Oct 24 → Mar 25",  range:[periodKey(2024,10), periodKey(2025,3)]  },
-  { label:"Jan 25 → Jun 25",  range:[periodKey(2025,1),  periodKey(2025,6)]  },
-];
- 
-function PeriodRangePicker({
-  startKey, endKey, onChange,
-}: {
-  startKey: number; endKey: number;
-  onChange: (s: number, e: number) => void;
-}) {
-  const [open, setOpen]       = useState(false);
-  const [sel,  setSel]        = useState<number | null>(null);
-  const [hov,  setHov]        = useState<number | null>(null);
-  const [ly,   setLy]         = useState(() => keyToYM(startKey).year);
-  const [ry,   setRy]         = useState(() => {
-    const ey = keyToYM(endKey).year;
-    return ey > keyToYM(startKey).year ? ey : keyToYM(startKey).year + 1;
-  });
-  const ref = useRef<HTMLDivElement>(null);
- 
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false); setSel(null);
-      }
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
- 
-  function getCls(k: number) {
-    const lo = Math.min(startKey, endKey), hi = Math.max(startKey, endKey);
-    if (sel !== null) {
-      const hk = hov ?? k;
-      const sl = Math.min(sel, hk), sh = Math.max(sel, hk);
-      if (k === sel) return "start";
-      if (k === hk)  return "end";
-      if (k > sl && k < sh) return "inrange";
-      return "";
-    }
-    if (k === lo) return "start";
-    if (k === hi) return "end";
-    if (k > lo && k < hi) return "inrange";
-    return "";
-  }
- 
-  function pick(y: number, mi: number) {
-    const k = periodKey(y, mi + 1);
-    if (!sel) { setSel(k); onChange(k, k); }
-    else {
-      onChange(Math.min(sel, k), Math.max(sel, k));
-      setSel(null); setOpen(false);
-    }
-  }
- 
-  const navBtn: React.CSSProperties = {
-    width: 22, height: 22, borderRadius: 4,
-    border: "1.5px solid rgba(0,0,0,.1)", background: "white",
-    cursor: "pointer", fontSize: 12, color: "#374151",
-    display: "flex", alignItems: "center", justifyContent: "center",
-  };
- 
-  function renderCal(year: number, setYear: (fn: (y: number) => number) => void) {
-    return (
-      <div style={{ flex: 1 }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-          <button style={navBtn} onClick={() => setYear(y => y - 1)} disabled={year <= 2023}>‹</button>
-          <span style={{ fontSize:12, fontWeight:700, color:"#0f172a" }}>{year}</span>
-          <button style={navBtn} onClick={() => setYear(y => y + 1)} disabled={year >= 2030}>›</button>
-        </div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:3 }}>
-          {MONTHS_COURT.map((mn, mi) => {
-            const k   = periodKey(year, mi + 1);
-            const cls = getCls(k);
-            return (
-              <div key={mi}
-                onClick={() => pick(year, mi)}
-                onMouseEnter={() => setHov(k)}
-                onMouseLeave={() => setHov(null)}
-                style={{
-                  padding:"5px 3px", borderRadius:6, fontSize:11.5,
-                  textAlign:"center", cursor:"pointer", transition:"background .1s",
-                  background: cls === "start" || cls === "end" ? "#1e3a8a"
-                            : cls === "inrange" ? "rgba(30,58,138,.1)" : "#fff",
-                  color: cls === "start" || cls === "end" ? "#fff"
-                       : cls === "inrange" ? "#1e3a8a" : "#374151",
-                  fontWeight: cls === "start" || cls === "end" ? 700 : 400,
-                  border: `1px solid ${cls ? "transparent" : "rgba(0,0,0,.08)"}`,
-                }}>
-                {mn}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
- 
-  const lo = Math.min(startKey, endKey), hi = Math.max(startKey, endKey);
-  const { year: sy, month: sm } = keyToYM(lo);
-  const { year: ey, month: em } = keyToYM(hi);
-  const label = lo === hi ? fmtPer(sy, sm) : `${fmtPer(sy, sm)} → ${fmtPer(ey, em)}`;
- 
-  return (
-    <div ref={ref} style={{ position:"relative" }}>
-      {/* Trigger */}
-      <div
-        onClick={() => { setOpen(v => !v); setSel(null); }}
-        style={{
-          display:"flex", alignItems:"center", gap:7, padding:"7px 12px",
-          borderRadius:12, background:"white",
-          border: `1.5px solid ${open ? "#1e3a8a" : "rgba(0,0,0,.1)"}`,
-          boxShadow:"0 1px 4px rgba(0,0,0,.04)",
-          cursor:"pointer", whiteSpace:"nowrap", fontSize:12.5,
-        }}
-      >
-        <CalendarRange size={13} color={open ? "#1e3a8a" : "#94a3b8"} />
-        <span style={{ fontWeight:700, color:"#0f172a" }}>{label}</span>
-        <span style={{ fontSize:9, color:"#94a3b8" }}>{open ? "▲" : "▼"}</span>
-      </div>
- 
-      {/* Popup */}
-      {open && (
-        <div style={{
-          position:"absolute", top:"calc(100% + 6px)", left:0, zIndex:500,
-          background:"#fff", border:"1.5px solid rgba(0,0,0,.1)",
-          borderRadius:16, boxShadow:"0 16px 48px rgba(0,0,0,.14)",
-          padding:"16px 16px 60px", width:480, display:"flex", gap:14,
-        }}>
-          {renderCal(ly, setLy)}
-          <div style={{ width:1, background:"rgba(0,0,0,.08)" }} />
-          {renderCal(ry, setRy)}
- 
-          {/* Footer presets */}
-          <div style={{
-            position:"absolute", bottom:0, left:0, right:0,
-            borderTop:"1px solid rgba(0,0,0,.07)", padding:"8px 14px",
-            background:"#fff", borderRadius:"0 0 16px 16px",
-            display:"flex", flexWrap:"wrap", gap:4, alignItems:"center",
-          }}>
-            {PRESETS_FIN.map((p, i) => (
-              <button key={i}
-                onClick={() => {
-                  onChange(p.range[0] as number, p.range[1] as number);
-                  setSel(null); setOpen(false);
-                }}
-                style={{
-                  padding:"3px 9px", borderRadius:5,
-                  border:"1.5px solid rgba(0,0,0,.08)",
-                  background:"white", fontSize:10.5, color:"#374151",
-                  cursor:"pointer", fontWeight:500,
-                }}>
-                {p.label}
-              </button>
-            ))}
-            {sel !== null && (
-              <span style={{ fontSize:11, color:"#1e3a8a", marginLeft:"auto", fontWeight:600 }}>
-                Cliquer la date de fin…
-              </span>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-// ─── Main module content ──────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Main module
+// ─────────────────────────────────────────────────────────────────────────────
+
 function FinancialModuleContent({ onLock }: { onLock: () => void }) {
   const now = new Date();
-  const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
 
-  const [startKey, setStartKey] = useState(
-    periodKey(currentYear, Math.max(1, currentMonth - 2))
-  );
-  const [endKey, setEndKey] = useState(
-    periodKey(currentYear, currentMonth)
-  );
+  const [startKey, setStartKey] = useState(periodKey(currentYear, Math.max(1, currentMonth - 2)));
+  const [endKey, setEndKey] = useState(periodKey(currentYear, currentMonth));
+  const [runYear, setRunYear] = useState(currentYear);
   const [runMonth, setRunMonth] = useState(currentMonth);
-  const [runYear,  setRunYear]  = useState(currentYear);   // ← NOUVEAU
- 
-  // Bornes dérivées (utilisées dans tous les appels API)
+
   const lo = Math.min(startKey, endKey);
   const hi = Math.max(startKey, endKey);
-  const { year: yearStart, month: selectedMonthStart } = keyToYM(lo);
-  const { year: yearEnd,   month: selectedMonthEnd   } = keyToYM(hi);
-  // Rétrocompat : certains appels legacy utilisent encore `year`
-  const year = yearStart;
+  const { year: yearStart, month: monthStart } = keyToYM(lo);
+  const { year: yearEnd, month: monthEnd } = keyToYM(hi);
 
-  const [evaluations, setEvaluations] = useState<FinancialEvaluation[]>([]);
+  const [activeTab, setActiveTab] = useState<TabKey>("evaluations");
+  const [evaluations, setEvaluations] = useState<EvalRow[]>([]);
   const [evalStats, setEvalStats] = useState<EvaluationStats | null>(null);
   const [chartData, setChartData] = useState<FacturesRedevancesPeriod[]>([]);
   const [margeData, setMargeData] = useState<SiteMargeRow[]>([]);
@@ -1660,1018 +473,458 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
   const [loadingChart, setLoadingChart] = useState(false);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
   const [runningCalc, setRunningCalc] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [evalResult, setEvalResult] = useState<EvaluateResult | null>(null);
   const [evalError, setEvalError] = useState<string | null>(null);
 
   const [filterStatut, setFilterStatut] = useState<"" | "OK" | "NOK">("");
   const [filterSearch, setFilterSearch] = useState("");
   const [filterTypo, setFilterTypo] = useState("");
+  const [filterZone, setFilterZone] = useState("");
+  const [filterRecurrence, setFilterRecurrence] = useState("");
+  const [filterHC, setFilterHC] = useState(false);
   const [evalPage, setEvalPage] = useState(1);
   const [evalTotal, setEvalTotal] = useState(0);
   const [evalPages, setEvalPages] = useState(1);
-  const [exporting, setExporting] = useState(false);
-
-  const [activeTab, setActiveTab] = useState<"evaluations" | "dashboard" | "recurrents" | "analyse" | "donnees">("evaluations");
 
   const [showUploadFee, setShowUploadFee] = useState(false);
   const [showUploadLoad, setShowUploadLoad] = useState(false);
+  const [modalSite, setModalSite] = useState<ModalSite>(null);
 
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailData, setDetailData] = useState<EvaluationDetail | null>(null);
-
-
-  const [modalSite, setModalSite] = useState<{
-    siteId:     string;
-    siteName:   string;
-    year:       number;
-    monthStart: number;
-    monthEnd:   number;
-  } | null>(null);
-
-  useEffect(() => {
-    setEvalPage(1);
-  }, [year, selectedMonthStart, selectedMonthEnd, filterStatut, filterSearch, filterTypo]);
+  const baseParams = useMemo(() => ({ year_start: yearStart, month_start: monthStart, year_end: yearEnd, month_end: monthEnd }), [yearStart, monthStart, yearEnd, monthEnd]);
 
   const loadStats = useCallback(async () => {
     try {
-      const s = await fetchEvaluationStats({
-        year_start:   yearStart,
-        month_start:  selectedMonthStart,
-        year_end:     yearEnd,
-        month_end:    selectedMonthEnd,
-      } as any);
+      const s = await fetchEvaluationStats(baseParams as any);
       setEvalStats(s);
     } catch {
-      // silent
+      setEvalStats(null);
     }
-  }, [year, selectedMonthStart, selectedMonthEnd]);
+  }, [baseParams]);
 
   const loadEvaluations = useCallback(async () => {
     setLoadingEval(true);
     try {
-      const params: any = {
-        year_start:   yearStart,
-        month_start:  selectedMonthStart,
-        year_end:     yearEnd,
-        month_end:    selectedMonthEnd,
-        page:       evalPage,
-        page_size:  100,
-      };
+      const params: any = { ...baseParams, page: evalPage, page_size: 100 };
       if (filterStatut) params.statut = filterStatut;
-      if (filterSearch) params.search = filterSearch;
-      if (filterTypo) params.typology = filterTypo;
-
-      const res = await fetchEvaluations(params as any);
-      setEvaluations(res.results);
-      setEvalTotal(res.count);
-      setEvalPages(res.pages);
-    } catch {
-      // silent
+      if (filterSearch.trim()) params.search = filterSearch.trim();
+      if (filterTypo.trim()) params.typology = filterTypo.trim();
+      if (filterZone) params.zone = filterZone;
+      if (filterRecurrence) params.recurrence_type = filterRecurrence;
+      if (filterHC) params.hors_catalogue = "true";
+      const res = await fetchEvaluations(params);
+      setEvaluations((res.results || []) as EvalRow[]);
+      setEvalTotal(res.count || 0);
+      setEvalPages(res.pages || Math.max(1, Math.ceil((res.count || 0) / 100)));
     } finally {
       setLoadingEval(false);
     }
-  }, [year, selectedMonthStart, selectedMonthEnd, filterStatut, filterSearch, filterTypo, evalPage]);
+  }, [baseParams, evalPage, filterStatut, filterSearch, filterTypo, filterZone, filterRecurrence, filterHC]);
 
-  const loadChart = useCallback(async () => {
+  const loadDashboard = useCallback(async () => {
     setLoadingChart(true);
     try {
       const [chart, marge, rec] = await Promise.all([
-        fetchFacturesVsRedevances({ year_start:yearStart, month_start:selectedMonthStart, year_end:yearEnd, month_end:selectedMonthEnd } as any),
-        fetchMargeParSite({         year_start:yearStart, month_start:selectedMonthStart, year_end:yearEnd, month_end:selectedMonthEnd } as any),
-        fetchSitesRecurrents({      year_start:yearStart, month_start:selectedMonthStart, year_end:yearEnd, month_end:selectedMonthEnd } as any),
+        fetchFacturesVsRedevances(baseParams as any),
+        fetchMargeParSite({ ...baseParams, limit: 50 } as any),
+        fetchSitesRecurrents(baseParams as any),
       ]);
-      setChartData(chart);
-      setMargeData(marge);
-      setRecData(rec);
+      setChartData(chart || []);
+      setMargeData(marge || []);
+      setRecData(rec || []);
     } catch {
-      // silent
+      setChartData([]);
+      setMargeData([]);
+      setRecData([]);
     } finally {
       setLoadingChart(false);
     }
-  }, [year, selectedMonthStart, selectedMonthEnd]);
+  }, [baseParams]);
 
   const loadAnalytics = useCallback(async () => {
     if (activeTab !== "analyse") return;
     setLoadingAnalytics(true);
     try {
-       const data = await fetchAnalyticsFullReport({
-        year_start:   yearStart,
-        month_start:  selectedMonthStart,
-        year_end:     yearEnd,
-        month_end:    selectedMonthEnd,
-      });
-      
+      const data = await fetchAnalyticsFullReport(baseParams as any);
       setAnalytics(data);
     } catch {
       setAnalytics(null);
     } finally {
       setLoadingAnalytics(false);
     }
-  }, [activeTab, year, selectedMonthStart, selectedMonthEnd]);
+  }, [activeTab, baseParams]);
 
-  useEffect(() => {
-    loadStats();
-  }, [loadStats]);
+  useEffect(() => setEvalPage(1), [startKey, endKey, filterStatut, filterSearch, filterTypo, filterZone, filterRecurrence, filterHC]);
+  useEffect(() => { loadStats(); }, [loadStats]);
+  useEffect(() => { loadEvaluations(); }, [loadEvaluations]);
+  useEffect(() => { if (activeTab === "dashboard" || activeTab === "recurrents") loadDashboard(); }, [activeTab, loadDashboard]);
+  useEffect(() => { loadAnalytics(); }, [loadAnalytics]);
 
-  useEffect(() => {
-    loadEvaluations();
-  }, [loadEvaluations]);
+  async function refreshAll() {
+    await Promise.all([loadStats(), loadEvaluations()]);
+    if (activeTab === "dashboard" || activeTab === "recurrents") await loadDashboard();
+    if (activeTab === "analyse") await loadAnalytics();
+  }
 
-  useEffect(() => {
-    if (activeTab === "dashboard" || activeTab === "recurrents") {
-      loadChart();
-    }
-  }, [activeTab, loadChart]);
-
-  useEffect(() => {
-    loadAnalytics();
-  }, [loadAnalytics]);
-
-  const openDetail = (siteId: string, siteName?: string) => {
-    setModalSite({
-        siteId,
-        siteName:   siteName || siteId,
-        year:       yearStart,   // année de début pour la modal site (mono-année)
-        monthStart: selectedMonthStart,
-        monthEnd:   selectedMonthEnd,
-    });
-  };
-
-  const handleEvaluate = async () => {
+  async function handleEvaluate() {
     setRunningCalc(true);
     setEvalResult(null);
     setEvalError(null);
     try {
       const res = await runEvaluation({ year: runYear, month: runMonth });
       setEvalResult(res);
-      await Promise.all([loadStats(), loadEvaluations()]);
-      if (activeTab === "dashboard" || activeTab === "recurrents") await loadChart();
-      if (activeTab === "analyse") await loadAnalytics();
+      await refreshAll();
     } catch (e: any) {
-      setEvalError(e?.response?.data?.detail || "Erreur lors du calcul.");
+      setEvalError(e?.response?.data?.detail || e?.message || "Erreur lors du calcul financier.");
     } finally {
       setRunningCalc(false);
     }
-  };
+  }
 
-  const margeVal = evalStats ? parseFloat(evalStats.total_marge) : 0;
-  const STAT_CARDS = [
-    {
-      label: "Redevance totale",
-      value: evalStats ? fmt(evalStats.total_redevance) : "—",
-      icon: <TrendingUp size={17} />,
-      color: "#1e3a8a",
-      bg: "rgba(30,58,138,.07)",
-    },
-    {
-      label: "Montant facturé HT",
-      value: evalStats ? fmt(evalStats.total_facture) : "—",
-      icon: <BarChart3 size={17} />,
-      color: "#0891b2",
-      bg: "rgba(8,145,178,.07)",
-    },
-    {
-      label: "Marge globale",
-      value: evalStats ? fmt(evalStats.total_marge) : "—",
-      icon: <TrendingDown size={17} />,
-      color: !evalStats ? "#94a3b8" : margeVal >= 0 ? "#059669" : "#dc2626",
-      bg: !evalStats ? "rgba(0,0,0,.04)" : margeVal >= 0 ? "rgba(5,150,105,.07)" : "rgba(220,38,38,.07)",
-    },
-    {
-      label: "Sites NOK",
-      value: evalStats ? String(evalStats.count_nok) : "—",
-      icon: <AlertCircle size={17} />,
-      color: "#dc2626",
-      bg: "rgba(220,38,38,.07)",
-    },
-  ];
+  async function handleExport() {
+    setExporting(true);
+    try {
+      await exportEvaluationsCSV({
+        ...baseParams,
+        statut: filterStatut || undefined,
+        search: filterSearch.trim() || undefined,
+        typology: filterTypo.trim() || undefined,
+        zone: filterZone || undefined,
+        recurrence_type: filterRecurrence || undefined,
+        hors_catalogue: filterHC ? "true" : undefined,
+      } as any);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function openDetail(ev: EvalRow) {
+    const sameYear = yearStart === yearEnd;
+    setModalSite({
+      siteId: ev.site_id,
+      siteName: ev.site_name || ev.site_id,
+      year: sameYear ? yearStart : ev.year,
+      monthStart: sameYear ? monthStart : ev.month,
+      monthEnd: sameYear ? monthEnd : ev.month,
+    });
+  }
+
+  const stats = useMemo(() => {
+    const totalRedevance = n((evalStats as any)?.total_redevance);
+    const totalFacture = n((evalStats as any)?.total_facture);
+    const totalMarge = n((evalStats as any)?.total_marge);
+    const countOk = Number((evalStats as any)?.count_ok || 0);
+    const countNok = Number((evalStats as any)?.count_nok || 0);
+    const countHc = Number((evalStats as any)?.count_hc || 0);
+    const countPc = Number((evalStats as any)?.count_pc || 0);
+    const countTotal = Number((evalStats as any)?.count_total || 0);
+    const ratio = totalFacture ? (totalRedevance / totalFacture - 1) * 100 : null;
+    return { totalRedevance, totalFacture, totalMarge, countOk, countNok, countHc, countPc, countTotal, ratio };
+  }, [evalStats]);
+
+  const activeFilters = [
+    { label: "Période", value: periodText(startKey, endKey) },
+    filterZone ? { label: "Zone", value: filterZone, clear: () => setFilterZone("") } : null,
+    filterStatut ? { label: "Statut", value: `Marge ${filterStatut}`, clear: () => setFilterStatut("") } : null,
+    filterRecurrence ? { label: "Récurrence", value: filterRecurrence, clear: () => setFilterRecurrence("") } : null,
+    filterHC ? { label: "Hors catalogue", value: "Oui", clear: () => setFilterHC(false) } : null,
+    filterSearch ? { label: "Recherche", value: filterSearch, clear: () => setFilterSearch("") } : null,
+    filterTypo ? { label: "Typologie", value: filterTypo, clear: () => setFilterTypo("") } : null,
+  ].filter(Boolean) as Array<{ label: string; value: string; clear?: () => void }>;
+
+  const chartRows = useMemo(() => (chartData || []).map((r: any) => ({
+    period: r.period,
+    label: r.period?.slice(5) || r.period,
+    redevance: n(r.total_redevance),
+    facture: n(r.total_facture),
+    marge: n(r.total_marge),
+    ok: Number(r.sites_ok || 0),
+    nok: Number(r.sites_nok || 0),
+  })), [chartData]);
+
+  const inputStyle: CSSProperties = { height: 38, borderRadius: 12, border: `1px solid ${C.slate[200]}`, background: "#fff", padding: "0 12px", fontSize: 12, color: C.slate[700], outline: "none", boxShadow: "0 1px 2px rgba(0,0,0,.04)" };
+  const iconButtonStyle: CSSProperties = { height: 38, borderRadius: 12, border: "none", display: "inline-flex", alignItems: "center", gap: 7, padding: "0 12px", fontSize: 12, fontWeight: 950, cursor: "pointer" };
 
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+    <div style={{ minHeight: "100vh", background: PAGE_BG, color: C.slate[800] }}>
       <style>{`
-        @keyframes fadeIn { from {opacity:0;transform:translateY(8px)} to {opacity:1;transform:translateY(0)} }
-        @keyframes spin    { to { transform:rotate(360deg) } }
-        @keyframes slideUp { from {opacity:0;transform:translateY(18px)} to {opacity:1;transform:translateY(0)} }
-        @keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:.5} }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .fin-row:hover { background: #EFF6FF !important; }
+        .fin-table th { position: sticky; top: 0; z-index: 20; }
+        .fin-sticky { position: sticky; left: 0; z-index: 12; box-shadow: 12px 0 18px rgba(15,23,42,.04); }
+        .fin-sticky-head { position: sticky !important; left: 0; z-index: 30 !important; }
       `}</style>
 
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 16,
-          marginBottom: 24,
-          animation: "fadeIn .3s ease",
-        }}
-      >
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 5 }}>
-            <div
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 10,
-                background: "linear-gradient(135deg,#1e3a8a,#2d52b8)",
-                display: "grid",
-                placeItems: "center",
-                boxShadow: "0 4px 14px rgba(30,58,138,.25)",
-              }}
-            >
-              <TrendingUp size={18} color="white" />
+      <div style={{ background: HDR, color: "#fff", padding: "22px 24px 18px", boxShadow: "0 18px 45px rgba(1,14,42,.24)" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 9px", background: "rgba(255,255,255,.10)", border: "1px solid rgba(255,255,255,.14)", borderRadius: 999, fontSize: 11, fontWeight: 950, color: "rgba(255,255,255,.72)" }}>
+              <Wallet size={13} /> Module financier · Marges & redevances
             </div>
-            <h1
-              style={{
-                fontSize: 21,
-                fontWeight: 800,
-                color: "#0f172a",
-                letterSpacing: "-.03em",
-                margin: 0,
-                fontFamily: "'Outfit',sans-serif",
-              }}
-            >
-              Évaluation Financière
-            </h1>
-            <span
-              style={{
-                padding: "3px 9px",
-                borderRadius: 100,
-                fontSize: 10,
-                fontWeight: 700,
-                background: "rgba(5,150,105,.1)",
-                border: "1px solid rgba(5,150,105,.15)",
-                color: "#059669",
-                letterSpacing: ".06em",
-              }}
-            >
-              ACTIF
-            </span>
+            <h1 style={{ margin: "12px 0 4px", fontSize: 27, lineHeight: 1.1, letterSpacing: "-.04em", fontWeight: 950 }}>Analyse financière des marges Aktivco</h1>
+            <div style={{ fontSize: 13, color: "rgba(255,255,255,.62)", maxWidth: 900 }}>Suivi des redevances, factures HTVA, marges, récurrences NOK et analyse détaillée par site.</div>
           </div>
-          <p style={{ fontSize: 13, color: "#64748b", margin: 0 }}>
-            Marge Redevance Aktivco vs Factures Sénélec — {MONTHS[selectedMonthStart - 1]} à {MONTHS[selectedMonthEnd - 1]} {year}
-          </p>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+            <PeriodPicker startKey={startKey} endKey={endKey} onChange={(s, e) => { setStartKey(s); setEndKey(e); }} />
+            <button type="button" onClick={refreshAll} style={{ ...iconButtonStyle, background: "rgba(255,255,255,.12)", color: "#fff", border: "1px solid rgba(255,255,255,.18)" }}><RefreshCw size={14} className={loadingEval || loadingChart ? "spin" : ""} /> Actualiser</button>
+            <button type="button" onClick={onLock} style={{ ...iconButtonStyle, background: "rgba(255,255,255,.08)", color: "rgba(255,255,255,.82)", border: "1px solid rgba(255,255,255,.12)" }}><Lock size={14} /> Verrouiller</button>
+          </div>
         </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(150px,1fr))", gap: 12, marginTop: 18 }}>
+          <KpiCard label="Marge cumulée" value={fmtMoney(stats.totalMarge)} sub={`${stats.countOk} OK · ${stats.countNok} NOK`} accent={moneyColor(stats.totalMarge)} icon={stats.totalMarge < 0 ? <TrendingDown size={22} /> : <TrendingUp size={22} />} negative={stats.totalMarge < 0} help="Somme des marges : redevance - montant HTVA réel." />
+          <KpiCard label="Redevance" value={fmtMoney(stats.totalRedevance)} sub="Total attendu" accent={C.blue[300]} icon={<Wallet size={22} />} help="Somme des redevances calculées depuis le catalogue." />
+          <KpiCard label="Facture HTVA" value={fmtMoney(stats.totalFacture)} sub="Total réel Sénélec" accent={C.orange.main} icon={<Database size={22} />} help="Montant hors TVA réel facturé." />
+          <KpiCard label="Marge NOK" value={String(stats.countNok)} sub={`${stats.countTotal} lignes analysées`} accent={stats.countNok ? C.nok.main : C.ok.main} icon={stats.countNok ? <XCircle size={22} /> : <CheckCircle2 size={22} />} help="Nombre de lignes dont la marge est négative." />
+          <KpiCard label="Hors catalogue" value={String(stats.countHc)} sub={`${stats.countPc} périodes courtes`} accent={stats.countHc ? C.warn.main : C.cyan.main} icon={<AlertTriangle size={22} />} help="Sites dont le load a nécessité un fallback catalogue." />
+          <KpiCard label="Redev./Fact." value={fmtPct(stats.ratio)} sub="Écart global" accent={stats.ratio === null ? C.slate[300] : stats.ratio >= 0 ? C.ok.main : C.nok.main} icon={<Target size={22} />} help="Écart entre la redevance attendue et le montant HTVA réel." />
+        </div>
+      </div>
+
+      <div style={{ padding: 22, display: "grid", gap: 16 }}>
+        <Card>
+          <div style={{ padding: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ position: "relative", minWidth: 260 }}>
+              <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: C.slate[400] }} />
+              <input value={filterSearch} onChange={(e) => setFilterSearch(e.target.value)} placeholder="Rechercher site, nom…" style={{ ...inputStyle, paddingLeft: 34, width: "100%" }} />
+            </div>
+            <select value={filterZone} onChange={(e) => setFilterZone(e.target.value)} style={inputStyle}><option value="">Toutes zones</option>{ZONES.map((z) => <option key={z} value={z}>{z}</option>)}</select>
+            <input value={filterTypo} onChange={(e) => setFilterTypo(e.target.value)} placeholder="Typologie…" style={{ ...inputStyle, width: 170 }} />
+            <select value={filterStatut} onChange={(e) => setFilterStatut(e.target.value as "" | "OK" | "NOK")} style={inputStyle}><option value="">Tous statuts marge</option><option value="OK">Marge OK</option><option value="NOK">Marge NOK</option></select>
+            <select value={filterRecurrence} onChange={(e) => setFilterRecurrence(e.target.value)} style={inputStyle}><option value="">Toutes récurrences</option><option value="light">Light</option><option value="critique">Critique</option></select>
+            <button type="button" onClick={() => setFilterHC((v) => !v)} style={{ ...iconButtonStyle, background: filterHC ? C.warn.light : "#fff", color: filterHC ? C.warn.dark : C.slate[600], border: `1px solid ${filterHC ? C.warn.mid : C.slate[200]}` }}>HC</button>
+
+            {(filterSearch || filterZone || filterTypo || filterStatut || filterRecurrence || filterHC) ? <button type="button" onClick={() => { setFilterSearch(""); setFilterZone(""); setFilterTypo(""); setFilterStatut(""); setFilterRecurrence(""); setFilterHC(false); }} style={{ ...iconButtonStyle, background: C.warn.light, color: C.warn.dark, border: `1px solid ${C.warn.mid}` }}><Filter size={14} /> Effacer</button> : null}
+
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+              <button type="button" onClick={() => setShowUploadFee(true)} style={{ ...iconButtonStyle, background: C.blue[50], color: C.blue[700], border: `1px solid ${C.blue[100]}` }}><Upload size={14} /> Catalogue</button>
+              <button type="button" onClick={() => setShowUploadLoad(true)} style={{ ...iconButtonStyle, background: C.cyan.light, color: C.cyan.dark, border: "1px solid #A5F3FC" }}><Layers size={14} /> Loads</button>
+              <button type="button" onClick={handleExport} disabled={exporting} style={{ ...iconButtonStyle, background: "#fff", color: exporting ? C.slate[400] : C.slate[700], border: `1px solid ${C.slate[200]}` }}>{exporting ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Download size={14} />} Export</button>
+            </div>
+          </div>
+
+          <div style={{ padding: "0 14px 14px", display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {activeFilters.map((f) => <FilterChip key={`${f.label}-${f.value}`} label={f.label} value={f.value} onClear={f.clear} />)}
+          </div>
+        </Card>
+
+        <Card>
+          <div style={{ padding: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <Badge tone="blue"><Sparkles size={12} /> Calcul financier</Badge>
+              <select value={runMonth} onChange={(e) => setRunMonth(Number(e.target.value))} style={inputStyle}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select>
+              <input type="number" value={runYear} onChange={(e) => setRunYear(Number(e.target.value))} style={{ ...inputStyle, width: 100 }} />
+              <button type="button" onClick={handleEvaluate} disabled={runningCalc} style={{ ...iconButtonStyle, background: C.blue[800], color: "#fff" }}>{runningCalc ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <RefreshCw size={14} />} Lancer l’évaluation</button>
+            </div>
+            <div style={{ fontSize: 12, color: C.slate[500] }}>{evalResult ? <Badge tone="ok"><CheckCircle2 size={12} /> {String((evalResult as any).message || "Évaluation terminée")}</Badge> : evalError ? <Badge tone="nok"><XCircle size={12} /> {evalError}</Badge> : "L’évaluation recalcule les marges du mois sélectionné."}</div>
+          </div>
+        </Card>
 
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <PeriodRangePicker
-            startKey={startKey}
-            endKey={endKey}
-            onChange={(s, e) => {
-              setStartKey(s);
-              setEndKey(e);
-              setEvalPage(1);
-            }}
-          />
-
-          <div style={{
-            display:"flex", alignItems:"center", gap:6, padding:"7px 12px",
-            borderRadius:12, background:"white",
-            border:"1.5px solid rgba(0,0,0,.08)",
-            boxShadow:"0 1px 4px rgba(0,0,0,.04)",
-          }}>
-            <Clock size={13} color="#94a3b8" />
-            <span style={{ fontSize:11.5, color:"#64748b", fontWeight:600 }}>Calculer</span>
-            <select
-              value={runMonth}
-              onChange={e => setRunMonth(Number(e.target.value))}
-              style={{ border:"none", background:"none", outline:"none",
-                fontSize:12.5, fontWeight:700, color:"#0f172a", cursor:"pointer" }}
-            >
-              {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-            </select>
-            <select
-              value={runYear}
-              onChange={e => setRunYear(Number(e.target.value))}
-              style={{ border:"none", background:"none", outline:"none",
-                fontSize:12.5, fontWeight:700, color:"#1e3a8a", cursor:"pointer" }}
-            >
-              {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
-            </select>
-          </div>
-
-          <button
-            onClick={handleEvaluate}
-            disabled={runningCalc}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "8px 14px",
-              borderRadius: 12,
-              border: "none",
-              background: runningCalc ? "rgba(30,58,138,.3)" : "linear-gradient(135deg,#1e3a8a,#2d52b8)",
-              color: "white",
-              cursor: runningCalc ? "not-allowed" : "pointer",
-              fontSize: 12.5,
-              fontWeight: 600,
-              boxShadow: "0 3px 12px rgba(30,58,138,.22)",
-            }}
-          >
-            {runningCalc ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <RefreshCw size={14} />}
-            {runningCalc ? "Calcul…" : "Calculer"}
-          </button>
-
-          <button
-            onClick={() => setShowUploadFee(true)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "8px 12px",
-              borderRadius: 12,
-              background: "white",
-              border: "1.5px solid rgba(0,0,0,.08)",
-              color: "#374151",
-              cursor: "pointer",
-              fontSize: 12.5,
-              fontWeight: 600,
-              boxShadow: "0 1px 4px rgba(0,0,0,.04)",
-            }}
-          >
-            <Upload size={13} /> Redevances
-          </button>
-
-          <button
-            onClick={() => setShowUploadLoad(true)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "8px 12px",
-              borderRadius: 12,
-              background: "white",
-              border: "1.5px solid rgba(0,0,0,.08)",
-              color: "#374151",
-              cursor: "pointer",
-              fontSize: 12.5,
-              fontWeight: 600,
-              boxShadow: "0 1px 4px rgba(0,0,0,.04)",
-            }}
-          >
-            <Layers size={13} /> Loads
-          </button>
-
-          <button
-            onClick={onLock}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "8px 12px",
-              borderRadius: 12,
-              background: "white",
-              border: "1.5px solid rgba(0,0,0,.08)",
-              color: "#64748b",
-              cursor: "pointer",
-              fontSize: 12.5,
-              fontWeight: 600,
-              boxShadow: "0 1px 4px rgba(0,0,0,.04)",
-              transition: "all .18s",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = "rgba(220,38,38,.3)";
-              e.currentTarget.style.color = "#dc2626";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = "rgba(0,0,0,.08)";
-              e.currentTarget.style.color = "#64748b";
-            }}
-          >
-            <Lock size={13} /> Verrouiller
-          </button>
+          {([
+            ["evaluations", "Évaluations", <ShieldCheck size={14} />],
+            ["dashboard", "Dashboard", <BarChart3 size={14} />],
+            ["recurrents", "Récurrents", <AlertTriangle size={14} />],
+            ["donnees", "Données & imports", <Database size={14} />],
+          ] as const).map(([key, label, icon]) => <button key={key} type="button" onClick={() => setActiveTab(key)} style={{ border: `1px solid ${activeTab === key ? C.blue[600] : C.slate[200]}`, background: activeTab === key ? C.blue[700] : "#fff", color: activeTab === key ? "#fff" : C.slate[600], borderRadius: 999, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 950, cursor: "pointer", boxShadow: activeTab === key ? "0 10px 24px rgba(10,61,150,.22)" : "0 1px 2px rgba(0,0,0,.04)" }}>{icon}{label}</button>)}
         </div>
+
+        {activeTab === "evaluations" ? (
+          <EvaluationsView rows={evaluations} loading={loadingEval} total={evalTotal} page={evalPage} pages={evalPages} setPage={setEvalPage} onOpenDetail={openDetail} />
+        ) : null}
+
+        {activeTab === "dashboard" ? (
+          <DashboardView loading={loadingChart} chartRows={chartRows} margeData={margeData} />
+        ) : null}
+
+        {activeTab === "recurrents" ? (
+          <RecurrentsView loading={loadingChart} rows={recData} onOpenDetail={(siteId, siteName) => setModalSite({ siteId, siteName: siteName || siteId, year: yearStart === yearEnd ? yearStart : yearEnd, monthStart: yearStart === yearEnd ? monthStart : 1, monthEnd: yearStart === yearEnd ? monthEnd : 12 })} />
+        ) : null}
+
+        {activeTab === "analyse" ? (
+          <AnalyticsView loading={loadingAnalytics} analytics={analytics} />
+        ) : null}
+
+        {activeTab === "donnees" ? (
+          <Card style={{ padding: 18 }}><FinancialDataPage /></Card>
+        ) : null}
       </div>
 
-      {(evalResult || evalError) && (
-        <div
-          style={{
-            marginBottom: 16,
-            padding: "12px 16px",
-            borderRadius: 14,
-            animation: "fadeIn .25s ease",
-            background: evalError ? "rgba(220,38,38,.07)" : "rgba(5,150,105,.07)",
-            border: `1px solid ${evalError ? "rgba(220,38,38,.15)" : "rgba(5,150,105,.15)"}`,
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-          }}
-        >
-          {evalError ? <XCircle size={16} color="#dc2626" /> : <CheckCircle2 size={16} color="#059669" />}
-          <span style={{ fontSize: 12.5, fontWeight: 600, color: evalError ? "#dc2626" : "#059669", flex: 1 }}>
-            {evalError ||
-              (evalResult &&
-                `Calcul terminé — ${evalResult.processed} sites traités · ${evalResult.ok} OK · ${evalResult.nok} NOK · ${evalResult.hors_catalogue} hors catalogue${(evalResult as any).periode_courte ? ` · ${(evalResult as any).periode_courte} période<15j` : ""}`)}
-          </span>
-          <button
-            onClick={() => {
-              setEvalResult(null);
-              setEvalError(null);
-            }}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", display: "grid", placeItems: "center" }}
-          >
-            <X size={14} />
-          </button>
-        </div>
-      )}
+      {modalSite ? <FinancialSiteDetailModal siteId={modalSite.siteId} siteName={modalSite.siteName} year={modalSite.year} monthStart={modalSite.monthStart} monthEnd={modalSite.monthEnd} onClose={() => setModalSite(null)} /> : null}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 12, marginBottom: 22 }}>
-        {STAT_CARDS.map((s, i) => (
-          <div
-            key={i}
-            style={{
-              background: "white",
-              borderRadius: 16,
-              padding: "16px 18px",
-              border: "1.5px solid rgba(0,0,0,.06)",
-              boxShadow: "0 1px 4px rgba(0,0,0,.04)",
-              animation: `fadeIn .3s ease ${i * 0.06}s both`,
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <div style={{ width: 34, height: 34, borderRadius: 10, background: s.bg, display: "grid", placeItems: "center", color: s.color }}>
-                {s.icon}
-              </div>
-              <ArrowUpRight size={13} color="#e2e8f0" />
-            </div>
-            <div
-              style={{
-                fontSize: 20,
-                fontWeight: 800,
-                color: s.color,
-                letterSpacing: "-.02em",
-                margin: "10px 0 2px",
-                fontFamily: "'Outfit',sans-serif",
-              }}
-            >
-              {loadingEval ? <span style={{ animation: "pulse 1s infinite", color: "#d1d5db" }}>—</span> : s.value}
-            </div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8" }}>{s.label}</div>
-          </div>
-        ))}
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          gap: 4,
-          marginBottom: 18,
-          background: "rgba(0,0,0,.04)",
-          padding: 4,
-          borderRadius: 14,
-          width: "fit-content",
-        }}
-      >
-        {(["evaluations", "dashboard", "recurrents", "analyse", "donnees"] as const).map((tab) => {
-          const labels = {
-            evaluations: "Résultats",
-            dashboard: "Dashboard",
-            recurrents: "Sites récurrents",
-            analyse: "Analyse",
-            donnees: "Données & Imports",
-          };
-          return (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              style={{
-                padding: "7px 16px",
-                borderRadius: 10,
-                border: "none",
-                cursor: "pointer",
-                fontSize: 12.5,
-                fontWeight: 600,
-                transition: "all .18s",
-                background: activeTab === tab ? "white" : "transparent",
-                color: activeTab === tab ? "#1e3a8a" : "#64748b",
-                boxShadow: activeTab === tab ? "0 1px 6px rgba(0,0,0,.08)" : "none",
-              }}
-            >
-              {labels[tab]}
-              {tab === "recurrents" && recData.length > 0 && (
-                <span
-                  style={{
-                    marginLeft: 5,
-                    padding: "1px 6px",
-                    borderRadius: 100,
-                    background: "rgba(220,38,38,.1)",
-                    color: "#dc2626",
-                    fontSize: 10,
-                    fontWeight: 700,
-                  }}
-                >
-                  {recData.length}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {activeTab === "evaluations" && (
-        <div style={{ animation: "fadeIn .25s ease" }}>
-          <div style={{ display: "flex", gap: 8, marginBottom: 14, alignItems: "center", flexWrap: "wrap" }}>
-            <div style={{ position: "relative", minWidth: 180 }}>
-              <Search size={13} color="#94a3b8" style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)" }} />
-              <input
-                value={filterSearch}
-                onChange={(e) => setFilterSearch(e.target.value)}
-                placeholder="Site ID ou nom…"
-                style={{
-                  padding: "6px 10px 6px 28px",
-                  borderRadius: 9,
-                  border: "1.5px solid rgba(0,0,0,.09)",
-                  outline: "none",
-                  fontSize: 12.5,
-                  color: "#0f172a",
-                  background: "white",
-                  width: 180,
-                }}
-              />
-            </div>
-
-            <div style={{ position: "relative" }}>
-              <Search size={13} color="#94a3b8" style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)" }} />
-              <input
-                value={filterTypo}
-                onChange={(e) => setFilterTypo(e.target.value)}
-                placeholder="Typologie…"
-                style={{
-                  padding: "6px 10px 6px 28px",
-                  borderRadius: 9,
-                  border: "1.5px solid rgba(0,0,0,.09)",
-                  outline: "none",
-                  fontSize: 12.5,
-                  color: "#0f172a",
-                  background: "white",
-                  width: 140,
-                }}
-              />
-            </div>
-
-            <div style={{ display: "flex", gap: 4 }}>
-              {(["", "OK", "NOK"] as const).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setFilterStatut(s)}
-                  style={{
-                    padding: "5px 12px",
-                    borderRadius: 100,
-                    border: "none",
-                    cursor: "pointer",
-                    fontSize: 11.5,
-                    fontWeight: 600,
-                    transition: "all .15s",
-                    background:
-                      filterStatut === s
-                        ? s === "NOK"
-                          ? "#dc2626"
-                          : s === "OK"
-                            ? "#059669"
-                            : "#1e3a8a"
-                        : "rgba(0,0,0,.06)",
-                    color: filterStatut === s ? "white" : "#64748b",
-                  }}
-                >
-                  {s || "Tous"}
-                </button>
-              ))}
-            </div>
-
-            {loadingEval && <Loader2 size={14} color="#94a3b8" style={{ animation: "spin 1s linear infinite" }} />}
-
-            <span style={{ fontSize: 11.5, color: "#94a3b8", marginLeft: "auto" }}>
-              {evalTotal.toLocaleString("fr-FR")} résultat{evalTotal > 1 ? "s" : ""}
-            </span>
-
-            <button
-              disabled={exporting}
-              onClick={async () => {
-                setExporting(true);
-                try {
-                  await exportEvaluationsCSV({
-                    year,
-                    month_start: selectedMonthStart,
-                    month_end: selectedMonthEnd,
-                    statut: filterStatut || undefined,
-                    search: filterSearch || undefined,
-                    typology: filterTypo || undefined,
-                  } as any);
-                } finally {
-                  setExporting(false);
-                }
-              }}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                padding: "5px 12px",
-                borderRadius: 9,
-                border: "1.5px solid rgba(0,0,0,.09)",
-                background: "white",
-                cursor: exporting ? "not-allowed" : "pointer",
-                fontSize: 12,
-                fontWeight: 600,
-                color: exporting ? "#94a3b8" : "#374151",
-              }}
-            >
-              {exporting ? <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> : <Download size={13} />}
-              Export CSV
-            </button>
-          </div>
-
-          {loadingEval && !evaluations.length ? (
-            <div style={{ padding: "40px 0", textAlign: "center", color: "#94a3b8", fontSize: 13 }}>
-              <Loader2 size={24} style={{ animation: "spin 1s linear infinite", marginBottom: 8 }} />
-              <div>Chargement…</div>
-            </div>
-          ) : evaluations.length ? (
-            <>
-              <EvaluationTable items={evaluations} onOpenDetail={openDetail} />
-
-              {evalPages > 1 && (
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14, flexWrap: "wrap", gap: 10 }}>
-                  <span style={{ fontSize: 12, color: "#64748b" }}>
-                    Page {evalPage}/{evalPages} — {evalTotal.toLocaleString("fr-FR")} résultats
-                  </span>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button
-                      disabled={evalPage <= 1}
-                      onClick={() => setEvalPage((p) => p - 1)}
-                      style={{
-                        padding: "5px 10px",
-                        borderRadius: 8,
-                        border: "1.5px solid rgba(0,0,0,.1)",
-                        background: "white",
-                        cursor: evalPage <= 1 ? "not-allowed" : "pointer",
-                        color: evalPage <= 1 ? "#d1d5db" : "#374151",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 3,
-                        fontSize: 12,
-                      }}
-                    >
-                      <ChevronLeft size={13} /> Préc.
-                    </button>
-
-                    {Array.from({ length: Math.min(7, evalPages) }, (_, i) => {
-                      const p = evalPage <= 4 ? i + 1 : evalPage - 3 + i;
-                      if (p < 1 || p > evalPages) return null;
-                      return (
-                        <button
-                          key={p}
-                          onClick={() => setEvalPage(p)}
-                          style={{
-                            width: 28,
-                            height: 28,
-                            borderRadius: 7,
-                            border: "1.5px solid",
-                            borderColor: p === evalPage ? "#1e3a8a" : "rgba(0,0,0,.1)",
-                            background: p === evalPage ? "#1e3a8a" : "white",
-                            cursor: "pointer",
-                            color: p === evalPage ? "white" : "#374151",
-                            fontSize: 11.5,
-                            fontWeight: p === evalPage ? 700 : 500,
-                          }}
-                        >
-                          {p}
-                        </button>
-                      );
-                    })}
-
-                    <button
-                      disabled={evalPage >= evalPages}
-                      onClick={() => setEvalPage((p) => p + 1)}
-                      style={{
-                        padding: "5px 10px",
-                        borderRadius: 8,
-                        border: "1.5px solid rgba(0,0,0,.1)",
-                        background: "white",
-                        cursor: evalPage >= evalPages ? "not-allowed" : "pointer",
-                        color: evalPage >= evalPages ? "#d1d5db" : "#374151",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 3,
-                        fontSize: 12,
-                      }}
-                    >
-                      Suiv. <ChevronRight size={13} />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <div
-              style={{
-                background: "white",
-                borderRadius: 18,
-                border: "1.5px dashed rgba(30,58,138,.15)",
-                padding: "40px 24px",
-                textAlign: "center",
-              }}
-            >
-              <BarChart3 size={28} color="#cbd5e1" style={{ marginBottom: 10 }} />
-              <h3
-                style={{
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: "#0f172a",
-                  margin: "0 0 6px",
-                  fontFamily: "'Outfit',sans-serif",
-                }}
-              >
-                Aucune évaluation pour la période sélectionnée
-              </h3>
-              <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 16px" }}>
-                Clique sur <strong>Calculer</strong> pour lancer l'évaluation financière.
-              </p>
-              <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-                <button
-                  onClick={() => setShowUploadFee(true)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    padding: "8px 14px",
-                    borderRadius: 11,
-                    background: "rgba(30,58,138,.07)",
-                    border: "none",
-                    color: "#1e3a8a",
-                    cursor: "pointer",
-                    fontSize: 12.5,
-                    fontWeight: 600,
-                  }}
-                >
-                  <Upload size={13} /> Importer redevances
-                </button>
-                <button
-                  onClick={handleEvaluate}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    padding: "8px 14px",
-                    borderRadius: 11,
-                    background: "linear-gradient(135deg,#1e3a8a,#2d52b8)",
-                    border: "none",
-                    color: "white",
-                    cursor: "pointer",
-                    fontSize: 12.5,
-                    fontWeight: 600,
-                  }}
-                >
-                  <RefreshCw size={13} /> Calculer
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeTab === "dashboard" && (
-        <div style={{ animation: "fadeIn .25s ease" }}>
-          {loadingChart ? (
-            <div style={{ padding: "40px 0", textAlign: "center", color: "#94a3b8" }}>
-              <Loader2 size={24} style={{ animation: "spin 1s linear infinite", marginBottom: 8 }} />
-              <div style={{ fontSize: 13 }}>Chargement du dashboard…</div>
-            </div>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
-              <div style={{ background: "white", borderRadius: 18, padding: 22, border: "1.5px solid rgba(0,0,0,.06)", gridColumn: "1 / -1" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", margin: 0 }}>
-                    Factures vs Redevances — {MONTHS[selectedMonthStart - 1]} à {MONTHS[selectedMonthEnd - 1]} {year}
-                  </h3>
-                  <div style={{ display: "flex", gap: 12 }}>
-                    {[{ color: "#1e3a8a", label: "Redevance" }, { color: "#E8401C", label: "Facture" }].map((l) => (
-                      <div key={l.label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                        <div style={{ width: 8, height: 8, borderRadius: 2, background: l.color }} />
-                        <span style={{ fontSize: 11, color: "#64748b", fontWeight: 500 }}>{l.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                {chartData.length ? (
-                  <MiniBarChart data={chartData} />
-                ) : (
-                  <div style={{ textAlign: "center", padding: "20px 0", color: "#94a3b8", fontSize: 12.5 }}>
-                    Aucune donnée — lance une évaluation d'abord
-                  </div>
-                )}
-              </div>
-
-              <div style={{ background: "white", borderRadius: 18, padding: 22, border: "1.5px solid rgba(0,0,0,.06)" }}>
-                <h3 style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", margin: "0 0 14px" }}>Top sites — marge la plus faible</h3>
-                {margeData.length ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {margeData.slice(0, 6).map((row, i) => {
-                      const m = parseFloat(row.marge_moyenne);
-                      return (
-                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 12, background: i === 0 ? "rgba(220,38,38,.04)" : "rgba(248,250,252,1)" }}>
-                          <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", width: 16 }}>{i + 1}</div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div
-                              style={{
-                                fontSize: 12.5,
-                                fontWeight: 600,
-                                color: "#0f172a",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {row.site_id}
-                            </div>
-                            <div style={{ fontSize: 11, color: "#94a3b8" }}>
-                              {row.nb_nok}/{row.nb_mois} mois NOK
-                            </div>
-                          </div>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: m < 0 ? "#dc2626" : "#059669", whiteSpace: "nowrap" }}>
-                            {fmt(row.marge_moyenne)}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p style={{ fontSize: 12.5, color: "#94a3b8", textAlign: "center", padding: "12px 0" }}>Aucune donnée</p>
-                )}
-              </div>
-
-              <div style={{ background: "white", borderRadius: 18, padding: 22, border: "1.5px solid rgba(0,0,0,.06)" }}>
-                <h3 style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", margin: "0 0 14px" }}>Résumé mensuel</h3>
-                {chartData.length ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {chartData.slice(-6).reverse().map((d, i) => {
-                      const marge = parseFloat(d.total_marge);
-                      return (
-                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", borderRadius: 10, background: "rgba(248,250,252,1)" }}>
-                          <span style={{ fontSize: 11.5, fontWeight: 600, color: "#374151", flex: 1 }}>{d.period}</span>
-                          <span style={{ fontSize: 10.5, color: "#64748b" }}>
-                            {d.sites_ok} OK · {d.sites_nok} NOK
-                          </span>
-                          <span style={{ fontSize: 11.5, fontWeight: 700, color: marge >= 0 ? "#059669" : "#dc2626", whiteSpace: "nowrap" }}>
-                            {fmt(d.total_marge)}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p style={{ fontSize: 12.5, color: "#94a3b8", textAlign: "center", padding: "12px 0" }}>Aucune donnée</p>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeTab === "recurrents" && (
-        <div style={{ animation: "fadeIn .25s ease" }}>
-          {loadingChart ? (
-            <div style={{ padding: "40px 0", textAlign: "center", color: "#94a3b8" }}>
-              <Loader2 size={24} style={{ animation: "spin 1s linear infinite" }} />
-            </div>
-          ) : recData.length ? (
-            <div>
-              <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
-                {[
-                  { type: "critique", count: recData.filter((r) => r.recurrence_type === "critique").length, color: "#dc2626", bg: "rgba(220,38,38,.08)" },
-                  { type: "light", count: recData.filter((r) => r.recurrence_type === "light").length, color: "#b45309", bg: "rgba(245,158,11,.08)" },
-                ].map((s) => (
-                  <div key={s.type} style={{ padding: "8px 16px", borderRadius: 12, background: s.bg, border: `1px solid ${s.color}22` }}>
-                    <span style={{ fontSize: 18, fontWeight: 800, color: s.color, fontFamily: "'Outfit',sans-serif" }}>{s.count}</span>
-                    <span style={{ fontSize: 11.5, fontWeight: 600, color: s.color, marginLeft: 6 }}>{s.type}</span>
-                  </div>
-                ))}
-              </div>
-              <div style={{ overflowX: "auto", borderRadius: 16, border: "1.5px solid rgba(0,0,0,.06)" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
-                  <thead>
-                    <tr style={{ background: "rgba(30,58,138,.04)", borderBottom: "1.5px solid rgba(0,0,0,.06)" }}>
-                      {["Site", "Type récurrence", "Mois NOK", "Marge moyenne"].map((h) => (
-                        <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#374151", fontSize: 11 }}>
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recData.map((r, i) => (
-                      <tr key={i} style={{ borderBottom: "1px solid rgba(0,0,0,.05)", background: i % 2 === 0 ? "white" : "rgba(248,250,252,.6)" }}>
-                        <td style={{ padding: "10px 14px" }}>
-                          <div style={{ fontWeight: 600, color: "#0f172a" }}>{r.site_id}</div>
-                          <div style={{ fontSize: 11, color: "#94a3b8" }}>{r.site_name}</div>
-                        </td>
-                        <td style={{ padding: "10px 14px" }}>
-                          <span
-                            style={{
-                              padding: "3px 9px",
-                              borderRadius: 100,
-                              fontSize: 10.5,
-                              fontWeight: 700,
-                              background: r.recurrence_type === "critique" ? "rgba(220,38,38,.1)" : "rgba(245,158,11,.1)",
-                              color: r.recurrence_type === "critique" ? "#dc2626" : "#b45309",
-                            }}
-                          >
-                            {r.recurrence_type === "critique" ? "⚠ Critique" : "Light"}
-                          </span>
-                        </td>
-                        <td style={{ padding: "10px 14px", fontWeight: 600, color: "#374151" }}>{r.mois_nok}</td>
-                        <td style={{ padding: "10px 14px", fontWeight: 700, color: parseFloat(r.marge_moyenne) < 0 ? "#dc2626" : "#059669" }}>
-                          {fmt(r.marge_moyenne)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : (
-            <div
-              style={{
-                background: "white",
-                borderRadius: 18,
-                border: "1.5px dashed rgba(5,150,105,.2)",
-                padding: "40px 24px",
-                textAlign: "center",
-              }}
-            >
-              <CheckCircle2 size={28} color="#059669" style={{ marginBottom: 10 }} />
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", margin: "0 0 6px", fontFamily: "'Outfit',sans-serif" }}>
-                Aucun site récurrent NOK
-              </h3>
-              <p style={{ fontSize: 13, color: "#64748b", margin: 0 }}>
-                Excellent — aucun site ne présente de marge négative récurrente.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeTab === "analyse" && (
-        <div style={{ animation: "fadeIn .25s ease" }}>
-          <AnalysisOverview loading={loadingAnalytics} analytics={analytics} />
-        </div>
-      )}
-
-      {activeTab === "donnees" && (
-        <div style={{ animation: "fadeIn .25s ease" }}>
-          <FinancialDataPage />
-        </div>
-      )}
-
-      <AnalysisDrawer
-          open={detailOpen}
-          loading={detailLoading}
-          detail={detailData}
-          onClose={() => setDetailOpen(false)}
-        />
-        
-        {/* ✅ NOUVEAU — Modal détail site avec comparaison conso multi-sources */}
-        {modalSite && (
-          <FinancialSiteDetailModal
-            siteId={modalSite.siteId}
-            siteName={modalSite.siteName}
-            year={modalSite.year}
-            monthStart={modalSite.monthStart}
-            monthEnd={modalSite.monthEnd}
-            onClose={() => setModalSite(null)}
-          />
-        )}
-
-      {showUploadFee && (
-        <UploadModal
-          title="Catalogue Redevances"
-          description="Fichier Redevance_et_Cible_Akt.xlsx — Typologie | Load | Config | Redevance | Cible"
-          accept=".xlsx,.xls"
-          onClose={() => setShowUploadFee(false)}
-          onUpload={async (file) => {
-            const res = await importFeeRules(file);
-            return { created: res.created, updated: res.updated, skipped: res.skipped, errors_sample: res.errors_sample };
-          }}
-        />
-      )}
-
-      {showUploadLoad && (
-        <UploadModal
-          title="Loads Mensuels"
-          description="CSV : Site_ID | Site_Name | Année | Mois | Load"
-          accept=".csv,.xlsx,.xls"
-          onClose={() => setShowUploadLoad(false)}
-          onUpload={async (file) => {
-            const res = await importMonthlyLoads(file);
-            return { created: res.created, updated: res.updated, skipped: (res as any).skipped || (res as any).skipped_sites_inconnus || 0, errors_sample: res.errors_sample };
-          }}
-        />
-      )}
+      {showUploadFee ? <UploadModal title="Catalogue redevances" description="Fichier Redevance_et_Cible_Akt.xlsx — Typologie | Load | Config | Redevance | Cible" accept=".xlsx,.xls" onClose={() => setShowUploadFee(false)} onUpload={async (file) => importFeeRules(file)} /> : null}
+      {showUploadLoad ? <UploadModal title="Loads mensuels" description="CSV/XLSX : Site_ID | Site_Name | Année | Mois | Load | Source" accept=".csv,.xlsx,.xls" onClose={() => setShowUploadLoad(false)} onUpload={async (file) => importMonthlyLoads(file)} /> : null}
     </div>
   );
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+function EvaluationsView({ rows, loading, total, page, pages, setPage, onOpenDetail }: { rows: EvalRow[]; loading: boolean; total: number; page: number; pages: number; setPage: React.Dispatch<React.SetStateAction<number>>; onOpenDetail: (ev: EvalRow) => void }) {
+  return (
+    <Card>
+      <SectionTitle icon={<ShieldCheck size={18} />} title="Évaluations financières" subtitle="Redevance, montant HTVA, marge et statut par site × mois" right={<Badge tone="blue">{total.toLocaleString("fr-FR")} lignes</Badge>} />
+      {loading && !rows.length ? <EmptyState title="Chargement…" text="Récupération des évaluations financières." icon={<Loader2 size={22} style={{ animation: "spin 1s linear infinite" }} />} /> : null}
+      {!loading && !rows.length ? <EmptyState title="Aucune évaluation" text="Aucune donnée ne correspond aux filtres sélectionnés." /> : null}
+      {rows.length ? <EvaluationTable rows={rows} onOpenDetail={onOpenDetail} /> : null}
+      {pages > 1 ? <Pagination page={page} pages={pages} total={total} setPage={setPage} /> : null}
+    </Card>
+  );
+}
+
+function EvaluationTable({ rows, onOpenDetail }: { rows: EvalRow[]; onOpenDetail: (ev: EvalRow) => void }) {
+  return (
+    <div style={{ overflow: "auto", maxHeight: "calc(100vh - 320px)" }}>
+      <table className="fin-table" style={{ width: "100%", minWidth: 1360, borderCollapse: "separate", borderSpacing: 0, fontSize: 11.5 }}>
+        <thead>
+          <tr>
+            <Th sticky>Site</Th><Th>Zone</Th><Th>Période</Th><Th>Typologie</Th><Th center>Config</Th><Th right>Load</Th><Th right>Redevance</Th><Th right>Montant HT</Th><Th right>Marge</Th><Th center>Statut</Th><Th center>Récurrence</Th><Th center>Flags</Th><Th center>Analyse</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((ev, i) => {
+            const isNok = ev.marge_statut === "NOK";
+            const bg = isNok ? "#FFF7F7" : i % 2 ? C.slate[50] : "#fff";
+            return (
+              <tr key={ev.id} className="fin-row" style={{ background: bg }}>
+                <Td sticky><button type="button" onClick={() => onOpenDetail(ev)} style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", textAlign: "left" }}><div style={{ display: "flex", alignItems: "center", gap: 5, color: C.blue[700], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontWeight: 950 }}>{ev.site_id}<Eye size={12} /></div><div style={{ maxWidth: 170, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: 10.5, color: C.slate[500], marginTop: 2 }}>{ev.site_name || "—"}</div></button></Td>
+                <Td><Badge tone="blue">{ev.zone || "—"}</Badge></Td>
+                <Td><strong style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", color: C.blue[800] }}>{ev.year}-{String(ev.month).padStart(2, "0")}</strong><div style={{ fontSize: 10, color: C.slate[400] }}>{periodLabel(ev.year, ev.month)}</div></Td>
+                <Td><span title={ev.typology || ""} style={{ display: "inline-block", maxWidth: 170, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: 800, color: C.slate[700] }}>{ev.typology || "—"}</span></Td>
+                <Td center>{ev.configuration ? <Badge tone={ev.configuration === "OUTDOOR" ? "ok" : "cyan"}>{ev.configuration}</Badge> : "—"}</Td>
+                <Td right>{ev.load_w ? `${ev.load_w.toLocaleString("fr-FR")} W` : "—"}</Td>
+                <Td right><strong style={{ color: C.blue[700], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{fmtMoney(ev.redevance)}</strong></Td>
+                <Td right><strong style={{ color: C.orange.dark, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{fmtMoney(ev.montant_htva)}</strong></Td>
+                <Td right><strong style={{ color: moneyColor(ev.marge), fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{fmtMoney(ev.marge)}</strong></Td>
+                <Td center><StatusBadge status={ev.marge_statut} /></Td>
+                <Td center><RecurrenceBadge type={ev.recurrence_type} months={ev.recurrence_mois_nok} /></Td>
+                <Td center><div style={{ display: "inline-flex", gap: 5 }}>{ev.hors_catalogue ? <Badge tone="warn">HC</Badge> : null}{ev.periode_courte ? <Badge tone="cyan">PC</Badge> : null}{!ev.hors_catalogue && !ev.periode_courte ? <span style={{ color: C.slate[400] }}>—</span> : null}</div></Td>
+                <Td center><button type="button" onClick={() => onOpenDetail(ev)} style={{ height: 30, padding: "0 10px", borderRadius: 10, border: "none", background: C.blue[700], color: "#fff", fontSize: 11.5, fontWeight: 950, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }}><Eye size={13} /> Analyse</button></Td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function DashboardView({ loading, chartRows, margeData }: { loading: boolean; chartRows: any[]; margeData: SiteMargeRow[] }) {
+  if (loading) return <Card><EmptyState title="Chargement du dashboard…" text="Préparation des graphiques financiers." icon={<Loader2 size={22} style={{ animation: "spin 1s linear infinite" }} />} /></Card>;
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1.35fr .65fr", gap: 16 }}>
+      <Card>
+        <SectionTitle icon={<TrendingUp size={18} />} title="Évolution financière mensuelle" subtitle="Redevance, montant HTVA réel et marge" />
+        <div style={{ height: 380, padding: 18 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={chartRows} margin={{ top: 8, right: 18, bottom: 8, left: 4 }}>
+              <defs><linearGradient id="margeFill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.ok.main} stopOpacity={0.18} /><stop offset="95%" stopColor={C.ok.main} stopOpacity={0} /></linearGradient></defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={C.slate[100]} vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.slate[500] }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: C.slate[500] }} axisLine={false} tickLine={false} tickFormatter={(v) => `${Math.round(Number(v) / 1_000_000)}M`} width={58} />
+              <Tooltip content={<ChartTooltip />} /><Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+              <Area type="monotone" dataKey="marge" name="Marge" stroke={C.ok.main} fill="url(#margeFill)" strokeWidth={2.3} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="redevance" name="Redevance" stroke={C.blue[600]} strokeWidth={2.2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="facture" name="Facture HT" stroke={C.orange.main} strokeWidth={2.2} dot={{ r: 3 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
+
+      <Card>
+        <SectionTitle icon={<ShieldCheck size={18} />} title="Statuts par mois" subtitle="Sites OK / NOK" />
+        <div style={{ height: 380, padding: 18 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartRows}>
+              <CartesianGrid strokeDasharray="3 3" stroke={C.slate[100]} vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.slate[500] }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: C.slate[500] }} axisLine={false} tickLine={false} />
+              <Tooltip /><Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+              <Bar dataKey="ok" name="OK" stackId="s" fill={C.ok.main} radius={[0, 0, 0, 0]} />
+              <Bar dataKey="nok" name="NOK" stackId="s" fill={C.nok.main} radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
+
+      <Card style={{ gridColumn: "1 / -1" }}>
+        <SectionTitle icon={<TrendingDown size={18} />} title="Top marges faibles" subtitle="Sites les plus défavorables sur la période" />
+        <div style={{ padding: 16 }}>
+          {margeData.length ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 10 }}>{margeData.slice(0, 12).map((r: any) => <div key={r.site_id} style={{ padding: 13, borderRadius: 16, border: `1px solid ${C.slate[200]}`, background: n(r.marge_moyenne) < 0 ? C.nok.light : "#fff" }}><div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><div><div style={{ color: C.blue[800], fontWeight: 950, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{r.site_id}</div><div style={{ fontSize: 11, color: C.slate[500], marginTop: 2 }}>{r.site_name || "—"}</div></div><div style={{ textAlign: "right" }}><div style={{ color: moneyColor(r.marge_moyenne), fontWeight: 950 }}>{fmtMoney(r.marge_moyenne)}</div><div style={{ fontSize: 11, color: C.slate[500] }}>{r.nb_nok || 0} NOK / {r.nb_mois || 0} mois</div></div></div></div>)}</div> : <EmptyState title="Aucune donnée" text="Aucune marge par site disponible." />}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function RecurrentsView({ loading, rows, onOpenDetail }: { loading: boolean; rows: SiteRecurrentRow[]; onOpenDetail: (siteId: string, siteName?: string) => void }) {
+  if (loading) return <Card><EmptyState title="Chargement des récurrences…" text="Recherche des sites NOK récurrents." icon={<Loader2 size={22} style={{ animation: "spin 1s linear infinite" }} />} /></Card>;
+
+  return (
+    <Card>
+      <SectionTitle icon={<AlertTriangle size={18} />} title="Sites récurrents NOK" subtitle="Suivi des anomalies financières répétées" right={<Badge tone={rows.length ? "nok" : "ok"}>{rows.length} sites</Badge>} />
+      <div style={{ padding: 16 }}>
+        {rows.length ? <div style={{ overflow: "auto", border: `1px solid ${C.slate[200]}`, borderRadius: 16 }}><table style={{ width: "100%", minWidth: 820, borderCollapse: "separate", borderSpacing: 0, fontSize: 12 }}><thead><tr><Th>Site</Th><Th center>Type</Th><Th right>Mois NOK</Th><Th right>Marge moyenne</Th><Th center>Analyse</Th></tr></thead><tbody>{rows.map((r: any, i) => <tr key={`${r.site_id}-${r.recurrence_type}`} className="fin-row" style={{ background: i % 2 ? C.slate[50] : "#fff" }}><Td><strong style={{ color: C.blue[800], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{r.site_id}</strong><div style={{ fontSize: 11, color: C.slate[500] }}>{r.site_name || "—"}</div></Td><Td center><RecurrenceBadge type={r.recurrence_type} months={r.mois_nok} /></Td><Td right>{r.mois_nok}</Td><Td right><strong style={{ color: moneyColor(r.marge_moyenne) }}>{fmtMoney(r.marge_moyenne)}</strong></Td><Td center><button type="button" onClick={() => onOpenDetail(r.site_id, r.site_name)} style={{ height: 30, padding: "0 10px", border: "none", borderRadius: 10, background: C.blue[700], color: "#fff", cursor: "pointer", fontSize: 11.5, fontWeight: 950 }}><Eye size={13} /> Analyse</button></Td></tr>)}</tbody></table></div> : <EmptyState title="Aucun site récurrent NOK" text="Aucune anomalie de marge répétée sur la période sélectionnée." icon={<CheckCircle2 size={22} />} />}
+      </div>
+    </Card>
+  );
+}
+
+function AnalyticsView({ loading, analytics }: { loading: boolean; analytics: AnalyticsFullReport | null }) {
+  if (loading) return <Card><EmptyState title="Chargement de l’analyse globale…" text="Consolidation des indicateurs avancés." icon={<Loader2 size={22} style={{ animation: "spin 1s linear infinite" }} />} /></Card>;
+  if (!analytics) return <Card><EmptyState title="Aucune analyse disponible" text="L’endpoint d’analyse globale n’a retourné aucune donnée." icon={<LineIcon size={22} />} /></Card>;
+
+  const data: any = analytics as any;
+  const summary = data.summary || data.resume || data.totaux || {};
+  const entries = Object.entries(summary).slice(0, 8);
+
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <Card>
+        <SectionTitle icon={<Sparkles size={18} />} title="Analyse globale" subtitle="Vue consolidée retournée par le backend" />
+        <div style={{ padding: 16 }}>
+          {entries.length ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 10 }}>{entries.map(([k, v]) => <div key={k} style={{ padding: 14, borderRadius: 16, background: C.slate[50], border: `1px solid ${C.slate[200]}` }}><div style={{ fontSize: 10, color: C.slate[500], fontWeight: 950, textTransform: "uppercase", letterSpacing: ".08em" }}>{k.replaceAll("_", " ")}</div><div style={{ marginTop: 7, fontSize: 17, fontWeight: 950, color: C.blue[800], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{typeof v === "number" ? fmtInt(v) : String(v ?? "—")}</div></div>)}</div> : <EmptyState title="Résumé vide" text="Le rapport existe mais ne contient pas de bloc summary exploitable." />}
+        </div>
+      </Card>
+      <Card>
+        <SectionTitle icon={<Database size={18} />} title="Données brutes" subtitle="Aide au diagnostic technique" />
+        <pre style={{ margin: 0, padding: 16, maxHeight: 420, overflow: "auto", fontSize: 11.5, color: C.slate[700], background: C.slate[50] }}>{JSON.stringify(analytics, null, 2)}</pre>
+      </Card>
+    </div>
+  );
+}
+
+function Pagination({ page, pages, total, setPage }: { page: number; pages: number; total: number; setPage: React.Dispatch<React.SetStateAction<number>> }) {
+  const pageNumbers = Array.from({ length: Math.min(7, pages) }, (_, i) => {
+    const p = page <= 4 ? i + 1 : page - 3 + i;
+    return p >= 1 && p <= pages ? p : null;
+  }).filter(Boolean) as number[];
+
+  return (
+    <div style={{ padding: "12px 16px", borderTop: `1px solid ${C.slate[200]}`, background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+      <div style={{ color: C.slate[500], fontSize: 12 }}>Page {page}/{pages} — {total.toLocaleString("fr-FR")} résultats</div>
+      <div style={{ display: "flex", gap: 6 }}>
+        <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} style={pageBtn(page <= 1)}><ChevronLeft size={13} /> Préc.</button>
+        {pageNumbers.map((p) => <button key={p} onClick={() => setPage(p)} style={{ width: 31, height: 31, borderRadius: 9, border: `1px solid ${p === page ? C.blue[700] : C.slate[200]}`, background: p === page ? C.blue[700] : "#fff", color: p === page ? "#fff" : C.slate[700], fontWeight: 900, cursor: "pointer" }}>{p}</button>)}
+        <button disabled={page >= pages} onClick={() => setPage((p) => Math.min(pages, p + 1))} style={pageBtn(page >= pages)}>Suiv. <ChevronRight size={13} /></button>
+      </div>
+    </div>
+  );
+}
+
+function pageBtn(disabled: boolean): CSSProperties {
+  return { height: 31, padding: "0 10px", borderRadius: 9, border: `1px solid ${C.slate[200]}`, background: "#fff", color: disabled ? C.slate[300] : C.slate[700], cursor: disabled ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 900, display: "inline-flex", alignItems: "center", gap: 4 };
+}
+
+function Th({ children, right, center, sticky }: { children: ReactNode; right?: boolean; center?: boolean; sticky?: boolean }) {
+  return <th className={sticky ? "fin-sticky-head" : undefined} style={{ padding: "10px 12px", background: C.blue[900], color: "rgba(255,255,255,.88)", fontSize: 10, fontWeight: 950, textTransform: "uppercase", letterSpacing: ".08em", textAlign: right ? "right" : center ? "center" : "left", borderBottom: `1px solid ${C.blue[700]}`, whiteSpace: "nowrap", left: sticky ? 0 : undefined, minWidth: sticky ? 210 : undefined }}>{children}</th>;
+}
+
+function Td({ children, right, center, sticky }: { children: ReactNode; right?: boolean; center?: boolean; sticky?: boolean }) {
+  return <td className={sticky ? "fin-sticky" : undefined} style={{ padding: "11px 12px", textAlign: right ? "right" : center ? "center" : "left", borderBottom: `1px solid ${C.slate[200]}`, borderRight: `1px solid ${C.slate[100]}`, verticalAlign: "middle", background: sticky ? "inherit" : undefined, left: sticky ? 0 : undefined, minWidth: sticky ? 210 : undefined }}>{children}</td>;
+}
+
 export default function FinancialPage() {
   const [unlocked, setUnlocked] = useState(isFinancialUnlocked);
 
