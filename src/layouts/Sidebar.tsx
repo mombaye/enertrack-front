@@ -38,9 +38,7 @@ const LINKS: LinkItem[] = [
   { to: "/modules/prediction", icon: <BrainCircuit />, label: "Prédiction IA", section: "CONSO & ESTIMATION", end: true },
   // ── MODULES ──────────────────────────────────────────────────────────────────
   { to: "/modules/optimisation",           icon: <Zap />,          label: "Optim. Puissance & Tarif",   section: "MODULES",        comingSoon: true },
-  { to: "/modules/suivi-conso",            icon: <BarChart2 />,    label: "Suivi Conso",                section: "MODULES",        comingSoon: true },
-  { to: "/modules/suivi-penalites",        icon: <AlertTriangle />,label: "Suivi Pénalités",            section: "MODULES",        comingSoon: true },
-  { to: "/modules/suivi-fms",             icon: <Server />,       label: "Suivi FMS",                  section: "MODULES",        comingSoon: true },
+
 
   // ── ADMINISTRATION ───────────────────────────────────────────────────────────
   { to: "/users",                  icon: <User />,         label: "Utilisateurs",               section: "ADMINISTRATION", adminOnly: true },

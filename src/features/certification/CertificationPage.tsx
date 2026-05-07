@@ -189,15 +189,28 @@ function EfmsDot({ reachable, loading }: { reachable: boolean | undefined; loadi
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, hasAlert }: { status: string; hasAlert?: boolean }) {
   const cfg = STATUS_CFG[status] ?? STATUS_CFG.PENDING_CERTIFICATION;
+  // ✅ v5 — Une facture certifiée peut aussi être en alerte mesure
+  // (signal orthogonal : la facture passe le seuil 95% mais la mesure est suspecte)
+  const isCertifiedWithAlert =
+    !!hasAlert &&
+    (status === "CERTIFIED_FMS" || status === "CERTIFIED_SENELEC");
+
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] font-semibold whitespace-nowrap ${cfg.pill}`}>
+    <span
+      title={isCertifiedWithAlert ? "Certifiée — mesure suspecte à investiguer" : undefined}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] font-semibold whitespace-nowrap ${cfg.pill}`}
+    >
       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dot}`} />
       {cfg.label}
+      {isCertifiedWithAlert && (
+        <AlertTriangle className="w-2.5 h-2.5 text-orange-500 ml-0.5 -mr-0.5" />
+      )}
     </span>
   );
 }
+
 
 function RatioPill({ value, threshold = 0.95 }: { value: string | null; threshold?: number }) {
   if (!value) return <span className="text-slate-300 text-xs">—</span>;
@@ -395,7 +408,7 @@ function ResultRow({ result }: { result: CertificationResult }) {
           {result.montant_ttc ? `${fmt(result.montant_ttc)} F` : "—"}
         </td>
 
-        <td className="px-3 py-2.5"><StatusBadge status={result.status} /></td>
+        <td className="px-3 py-2.5"><StatusBadge status={result.status} hasAlert={isAlert} /></td>
 
         <td className="px-3 py-2.5 text-center">
           {result.montant_coherent === null ? (
@@ -426,17 +439,44 @@ function ResultRow({ result }: { result: CertificationResult }) {
           <td colSpan={8} className="px-5 py-4">
 
             {/* Alerte mesure v4 */}
-            {isAlert && (
-              <div className="mb-3 flex items-start gap-2.5 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2.5">
-                <AlertTriangle className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
-                <div>
-                  <div className="text-[12px] font-bold text-orange-800">Alerte mesure (v4.1)</div>
-                  <div className="text-[11px] text-orange-600 mt-0.5">
-                    Consommation facturée anormale (&lt; 50% ou &gt; 150% de la mesure FMS / historique). Vérifier la facture ET la source de mesure.
+            {/* ✅ v5 — Bandeau adaptatif : message différent selon certification */}
+            {isAlert && (() => {
+              const isCertified =
+                result.status === "CERTIFIED_FMS" ||
+                result.status === "CERTIFIED_SENELEC";
+              return (
+                <div className="mb-3 flex items-start gap-2.5 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2.5">
+                  <AlertTriangle className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="text-[12px] font-bold text-orange-800">
+                      {isCertified ? "Certifiée avec alerte mesure" : "Alerte mesure"}
+                    </div>
+                    <div className="text-[11px] text-orange-600 mt-0.5">
+                      {isCertified ? (
+                        <>
+                          La facture <strong>passe</strong> le seuil de certification (≥ 95%),
+                          mais la mesure FMS présente une anomalie : ratio &lt; 50% / &gt; 150%,
+                          ou écart &gt; 50pts entre période et 30j.
+                          <br />
+                          <span className="text-orange-700 font-medium">
+                            À investiguer côté capteur — pas côté facture.
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          Consommation facturée anormale (&lt; 50% ou &gt; 150% de la mesure FMS / historique),
+                          ou incohérence interne entre période et 30 derniers jours.
+                          <br />
+                          <span className="text-orange-700 font-medium">
+                            Vérifier la facture ET la source de mesure.
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5">
 
