@@ -46,6 +46,32 @@ export interface FinancialEvaluation {
   nb_jours_factures:   number | null;
   recurrence_mois_nok: number;
   recurrence_type:     "light" | "critique" | null;
+
+  calculation_source:
+    | "PAID_INVOICE"
+    | "RAW_UNPAID_INVOICE"
+    | "ESTIMATION_ONLY"
+    | "NO_DATA";
+
+  is_provisional: boolean;
+  calculation_warning: string | null;
+
+  montant_base_calcul: string | null;
+  montant_factures_payees: string | null;
+  montant_factures_brutes: string | null;
+  montant_factures_non_payees: string | null;
+  montant_estime: string | null;
+
+  marge_facture_brute: string | null;
+  marge_estimee: string | null;
+
+  paid_invoice_count: number;
+  unpaid_invoice_count: number;
+  raw_invoice_count: number;
+
+  has_invoice_for_month: boolean;
+  has_unpaid_invoice: boolean;
+  estimation_source: string | null;
 }
 
 export interface EvaluationsPage {

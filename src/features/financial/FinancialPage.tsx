@@ -139,8 +139,28 @@ type EvalRow = FinancialEvaluation & {
   nb_jours_factures?: number | null;
   recurrence_mois_nok?: number | null;
   recurrence_type?: string | null;
-};
 
+  calculation_source?: "PAID_INVOICE" | "RAW_UNPAID_INVOICE" | "ESTIMATION_ONLY" | "NO_DATA";
+  is_provisional?: boolean;
+  calculation_warning?: string | null;
+
+  montant_base_calcul?: string | null;
+  montant_factures_payees?: string | null;
+  montant_factures_brutes?: string | null;
+  montant_factures_non_payees?: string | null;
+  montant_estime?: string | null;
+
+  marge_facture_brute?: string | null;
+  marge_estimee?: string | null;
+
+  paid_invoice_count?: number;
+  unpaid_invoice_count?: number;
+  raw_invoice_count?: number;
+
+  has_invoice_for_month?: boolean;
+  has_unpaid_invoice?: boolean;
+  estimation_source?: string | null;
+};
 type ModalSite = {
   siteId: string;
   siteName: string;
@@ -249,6 +269,38 @@ function Badge({ children, tone = "slate" }: { children: ReactNode; tone?: "slat
   );
 }
 
+  function calcSourceBadge(row: FinancialEvaluation) {
+    if (row.calculation_source === "PAID_INVOICE") {
+      return (
+        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+          Officiel · Facture payée
+        </span>
+      );
+    }
+
+    if (row.calculation_source === "RAW_UNPAID_INVOICE") {
+      return (
+        <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
+          Provisoire · Facture non payée
+        </span>
+      );
+    }
+
+    if (row.calculation_source === "ESTIMATION_ONLY") {
+      return (
+        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 ring-1 ring-blue-200">
+          Provisoire · Estimation
+        </span>
+      );
+    }
+
+    return (
+      <span className="rounded-full bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+        Non calculable
+      </span>
+    );
+  }
+
 function HelpTip({ text }: { text: string }) {
   return <HelpCircle size={12} style={{ color: "rgba(255,255,255,.58)", cursor: "help" }} title={text} />;
 }
@@ -258,6 +310,44 @@ function StatusBadge({ status }: { status?: string | null }) {
   if (status === "OK") return <Badge tone="ok"><CheckCircle2 size={12} /> Marge OK</Badge>;
   if (status === "NOK") return <Badge tone="nok"><XCircle size={12} /> Marge NOK</Badge>;
   return <Badge tone="warn">{status}</Badge>;
+}
+
+function CalculationSourceBadge({ ev }: { ev: EvalRow }) {
+  const src = ev.calculation_source;
+
+  if (src === "PAID_INVOICE") {
+    return (
+      <Badge tone="ok">
+        <CheckCircle2 size={12} />
+        Officiel · Payée
+      </Badge>
+    );
+  }
+
+  if (src === "RAW_UNPAID_INVOICE") {
+    return (
+      <Badge tone="warn">
+        <AlertTriangle size={12} />
+        Provisoire · Brute
+      </Badge>
+    );
+  }
+
+  if (src === "ESTIMATION_ONLY") {
+    return (
+      <Badge tone="blue">
+        <Sparkles size={12} />
+        Provisoire · Estimation
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge tone="slate">
+      <AlertCircle size={12} />
+      Non calculable
+    </Badge>
+  );
 }
 
 function RecurrenceBadge({ type, months }: { type?: string | null; months?: number | null }) {
@@ -778,7 +868,20 @@ function EvaluationTable({ rows, onOpenDetail }: { rows: EvalRow[]; onOpenDetail
       <table className="fin-table" style={{ width: "100%", minWidth: 1360, borderCollapse: "separate", borderSpacing: 0, fontSize: 11.5 }}>
         <thead>
           <tr>
-            <Th sticky>Site</Th><Th>Zone</Th><Th>Période</Th><Th>Typologie</Th><Th center>Config</Th><Th right>Load</Th><Th right>Redevance</Th><Th right>Montant HT</Th><Th right>Marge</Th><Th center>Statut</Th><Th center>Récurrence</Th><Th center>Flags</Th><Th center>Analyse</Th>
+            <Th sticky>Site</Th>
+            <Th>Zone</Th>
+            <Th>Période</Th>
+            <Th center>Source calcul</Th>
+            <Th>Typologie</Th>
+            <Th center>Config</Th>
+            <Th right>Load</Th>
+            <Th right>Redevance</Th>
+            <Th right>Base calcul</Th>
+            <Th right>Marge</Th>
+            <Th center>Statut</Th>
+            <Th center>Récurrence</Th>
+            <Th center>Flags</Th>
+            <Th center>Analyse</Th>
           </tr>
         </thead>
         <tbody>
@@ -790,11 +893,55 @@ function EvaluationTable({ rows, onOpenDetail }: { rows: EvalRow[]; onOpenDetail
                 <Td sticky><button type="button" onClick={() => onOpenDetail(ev)} style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", textAlign: "left" }}><div style={{ display: "flex", alignItems: "center", gap: 5, color: C.blue[700], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontWeight: 950 }}>{ev.site_id}<Eye size={12} /></div><div style={{ maxWidth: 170, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: 10.5, color: C.slate[500], marginTop: 2 }}>{ev.site_name || "—"}</div></button></Td>
                 <Td><Badge tone="blue">{ev.zone || "—"}</Badge></Td>
                 <Td><strong style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", color: C.blue[800] }}>{ev.year}-{String(ev.month).padStart(2, "0")}</strong><div style={{ fontSize: 10, color: C.slate[400] }}>{periodLabel(ev.year, ev.month)}</div></Td>
+                <Td center>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+                    <CalculationSourceBadge ev={ev} />
+
+                    {ev.calculation_warning ? (
+                      <span
+                        title={ev.calculation_warning}
+                        style={{
+                          maxWidth: 190,
+                          color: C.slate[500],
+                          fontSize: 10,
+                          lineHeight: 1.25,
+                          whiteSpace: "normal",
+                        }}
+                      >
+                        {ev.calculation_warning}
+                      </span>
+                    ) : null}
+
+                    {ev.unpaid_invoice_count ? (
+                      <span style={{ color: C.warn.dark, fontSize: 10, fontWeight: 900 }}>
+                        {ev.unpaid_invoice_count} facture(s) non payée(s)
+                      </span>
+                    ) : null}
+                  </div>
+                </Td>
                 <Td><span title={ev.typology || ""} style={{ display: "inline-block", maxWidth: 170, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: 800, color: C.slate[700] }}>{ev.typology || "—"}</span></Td>
                 <Td center>{ev.configuration ? <Badge tone={ev.configuration === "OUTDOOR" ? "ok" : "cyan"}>{ev.configuration}</Badge> : "—"}</Td>
                 <Td right>{ev.load_w ? `${ev.load_w.toLocaleString("fr-FR")} W` : "—"}</Td>
                 <Td right><strong style={{ color: C.blue[700], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{fmtMoney(ev.redevance)}</strong></Td>
-                <Td right><strong style={{ color: C.orange.dark, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{fmtMoney(ev.montant_htva)}</strong></Td>
+                <Td right>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
+                    <strong style={{ color: C.orange.dark, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
+                      {fmtMoney(ev.montant_base_calcul || ev.montant_htva)}
+                    </strong>
+
+                    {ev.calculation_source === "RAW_UNPAID_INVOICE" && ev.montant_estime ? (
+                      <span style={{ fontSize: 10, color: C.slate[500] }}>
+                        Estimé : {fmtMoney(ev.montant_estime)}
+                      </span>
+                    ) : null}
+
+                    {ev.calculation_source === "ESTIMATION_ONLY" && ev.estimation_source ? (
+                      <span style={{ fontSize: 10, color: C.blue[700], fontWeight: 800 }}>
+                        Source : {ev.estimation_source}
+                      </span>
+                    ) : null}
+                  </div>
+                </Td>
                 <Td right><strong style={{ color: moneyColor(ev.marge), fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{fmtMoney(ev.marge)}</strong></Td>
                 <Td center><StatusBadge status={ev.marge_statut} /></Td>
                 <Td center><RecurrenceBadge type={ev.recurrence_type} months={ev.recurrence_mois_nok} /></Td>

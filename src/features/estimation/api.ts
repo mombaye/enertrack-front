@@ -15,6 +15,10 @@ export interface EstimationBatch {
   count_histo: number;
   count_nc: number;
   count_hors_scope: number;
+
+  count_senelec: number;
+  count_target: number;
+  count_theorique: number;
 }
 
 export interface EstimationResult {
@@ -23,7 +27,15 @@ export interface EstimationResult {
   site_id: string;
   site_name: string;
   numero_compte_contrat: string;
-  source_utilisee: "ACM" | "GRID" | "HISTO" | "THEORIQUE" | "TARGET" | "NC" | "HORS_SCOPE";
+  source_utilisee:
+  | "ACM"
+  | "GRID"
+  | "SENELEC"
+  | "HISTO"
+  | "THEORIQUE"
+  | "TARGET"
+  | "NC"
+  | "HORS_SCOPE";
   acm_disponible: boolean;
   acm_conso_kwh: string | null;
   grid_disponible: boolean;
