@@ -303,29 +303,40 @@ export default function OptimizationPage() {
           </div>
         </div>
 
+       
         {/* Launch */}
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-            <SectionTitle
-              title="Lancement global"
-              subtitle="Le calcul parcourt les contrats éligibles et sauvegarde les résultats dans un batch."
-            />
+          <div className="grid gap-5 xl:grid-cols-[1fr_auto] xl:items-start">
+            <div className="pt-5 xl:pt-6">
+              <SectionTitle
+                title="Lancement global"
+                subtitle="Le calcul parcourt les contrats éligibles et sauvegarde les résultats dans un batch."
+              />
 
-            <div className="grid gap-3 md:grid-cols-[220px_180px_260px]">
+              <p className="mt-3 max-w-4xl text-[12px] leading-5 text-slate-500">
+                Aktivco uniquement = sites dont le mode de facturation contient
+                “Aktivco” et dont le grid fee est activé. Si la date est vide, chaque
+                contrat utilise sa dernière date de fin de facture.
+              </p>
+            </div>
+
+            <div className="grid w-full gap-3 md:grid-cols-[220px_180px_260px] xl:w-auto xl:items-end">
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-slate-600">
                   Date de référence
                 </label>
+
                 <div className="relative">
                   <CalendarDays
                     size={15}
                     className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                   />
+
                   <input
                     type="date"
                     value={referenceDate}
                     onChange={(e) => setReferenceDate(e.target.value)}
-                    className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm font-medium text-slate-800 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100"
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
               </div>
@@ -334,6 +345,7 @@ export default function OptimizationPage() {
                 <label className="mb-1.5 block text-xs font-bold text-slate-600">
                   Périmètre
                 </label>
+
                 <button
                   onClick={() => setEligibleOnly((v) => !v)}
                   className={`h-11 w-full rounded-xl border px-3 text-sm font-bold transition ${
@@ -346,28 +358,28 @@ export default function OptimizationPage() {
                 </button>
               </div>
 
-              <button
-                onClick={() => runMutation.mutate()}
-                disabled={runMutation.isPending}
-                className="h-11 rounded-xl bg-blue-900 px-5 text-sm font-extrabold text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <span className="flex items-center justify-center gap-2">
-                  {runMutation.isPending ? (
-                    <Loader2 size={17} className="animate-spin" />
-                  ) : (
-                    <Play size={17} />
-                  )}
-                  Lancer optimisation puissance
-                </span>
-              </button>
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-transparent">
+                  Action
+                </label>
+
+                <button
+                  onClick={() => runMutation.mutate()}
+                  disabled={runMutation.isPending}
+                  className="h-11 w-full rounded-xl bg-blue-900 px-5 text-sm font-extrabold text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <span className="flex items-center justify-center gap-2">
+                    {runMutation.isPending ? (
+                      <Loader2 size={17} className="animate-spin" />
+                    ) : (
+                      <Play size={17} />
+                    )}
+                    Lancer optimisation puissance
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
-
-          <p className="mt-3 text-[12px] leading-5 text-slate-500">
-            Aktivco uniquement = sites dont le mode de facturation contient
-            “Aktivco” et dont le grid fee est activé. Si la date est vide, chaque
-            contrat utilise sa dernière date de fin de facture.
-          </p>
         </div>
 
         {/* KPI */}
