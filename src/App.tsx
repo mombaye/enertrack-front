@@ -34,6 +34,8 @@ import AdminSitesPage from "./features/sites/admin/AdminSitesPage";
 import FinancialPage from "./features/financial/FinancialPage";
 import SuiviConsoPage from "./features/suivi-conso/SuiviConsoPage";
 import PredictionPage from "./features/prediction/PredictionPage";
+import OptimizationPage from "./features/optimization/OptimizationPage";
+import PenaltyTrackingPage from "./features/penalties/PenaltyTrackingPage";
 
 const queryClient = new QueryClient();
 
@@ -101,16 +103,9 @@ export default function App() {
                   <Route index element={<FinancialPage />} />
                 </Route>
 
-                <Route
-                  path="/modules/optimisation"
-                  element={
-                    <ComingSoonPage
-                      moduleName="Optimisation de Puissance & Tarif"
-                      description="Identifiez les leviers tarifaires et optimisez la puissance souscrite pour réduire vos coûts énergétiques."
-                      icon={<Zap size={38} color="rgba(255,255,255,0.85)" />}
-                    />
-                  }
-                />
+                <Route path="/modules/optimisation" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
+                  <Route index element={<OptimizationPage />} />
+                </Route>
 
                 <Route
                   path="/modules/suivi-conso"
@@ -123,16 +118,9 @@ export default function App() {
                   }
                 />
 
-                <Route
-                  path="/modules/suivi-penalites"
-                  element={
-                    <ComingSoonPage
-                      moduleName="Suivi Pénalités"
-                      description="Centralisez et analysez toutes les pénalités facturées par Sénélec sur l'ensemble de votre parc."
-                      icon={<AlertTriangle size={38} color="rgba(255,255,255,0.85)" />}
-                    />
-                  }
-                />
+                <Route path="/modules/suivi-penalites" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
+                  <Route index element={<PenaltyTrackingPage />} />
+                </Route>
 
                 <Route
                   path="/modules/suivi-fms"

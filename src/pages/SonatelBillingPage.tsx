@@ -48,7 +48,7 @@ const COLORS = {
   white: "#ffffff",
 };
 
-type Tab = "INVOICES" | "MONTHLY" | "CONTRACT" | "PENALITES";
+type Tab = "INVOICES" | "MONTHLY" | "CONTRACT";
 
 function fmtDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -349,7 +349,7 @@ export default function SonatelBillingPage() {
     { key: "INVOICES" as Tab, label: "Factures", icon: <FileSpreadsheet size={15} /> },
     { key: "MONTHLY" as Tab, label: "Synthèse mensuelle", icon: <BarChart3 size={15} /> },
     { key: "CONTRACT" as Tab, label: "Contrat × Mois", icon: <TrendingUp size={15} /> },
-    { key: "PENALITES" as Tab, label: "Pénalités", icon: <ShieldAlert size={15} /> },
+    
   ];
 
   const invoicesQ = useQuery({
@@ -806,24 +806,7 @@ const outScopeCountQ = useQuery({
             {active?.isFetching && <RefreshCw size={16} style={{ color: COLORS.blue }} />}
           </div>
           
-          {tab !== "PENALITES" ? (
-            <>
-              
-              <div style={{ overflowX: "auto" }}>
-                
-                <DataTable
-                  cols={tab === "INVOICES" ? invoiceCols : tab === "MONTHLY" ? monthlyCols : contractCols}
-                  rows={rows}
-                  loading={active?.isLoading}
-                />
-              </div>
-              <Pagination page={page} total={total} pageSize={pageSize} onPage={setPage} />
-            </>
-          ) : (
-            <div style={{ padding: 24, color: COLORS.slate500 }}>
-              Garde ici ton composant pénalités actuel.
-            </div>
-          )}
+          
         </div>
       </div>
     </div>
