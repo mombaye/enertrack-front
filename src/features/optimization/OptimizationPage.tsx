@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Download,
   Gauge,
   Loader2,
   Play,
@@ -21,14 +22,15 @@ import {
 } from "lucide-react";
 
 import {
+  listAllOptimizationResultsApi,
   listOptimizationBatchesApi,
   listOptimizationResultsApi,
-  runPowerOptimizationApi,
+  runOptimizationApi,
   type OptimizationBatch,
   type OptimizationResult,
 } from "./api";
 
-type ViewMode = "opportunities" | "all" | "errors";
+type ViewMode = "opportunities" | "no_opportunity" | "all" | "errors";
 
 function asNumber(value: unknown): number {
   if (value === null || value === undefined || value === "") return 0;
@@ -162,6 +164,8 @@ export default function OptimizationPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("opportunities");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [exporting, setExporting] = useState(false);
+
 
   const batchesQuery = useQuery({
     queryKey: ["optimization-batches"],
@@ -189,6 +193,7 @@ export default function OptimizationPage() {
         batch: latestBatch?.id,
         search: search || undefined,
         gain_only: viewMode === "opportunities",
+        no_gain_only: viewMode === "no_opportunity",
         status: viewMode === "errors" ? "ERROR" : undefined,
         page,
         page_size: pageSize,
@@ -212,10 +217,10 @@ export default function OptimizationPage() {
 
   const runMutation = useMutation({
     mutationFn: () =>
-      runPowerOptimizationApi({
-        eligible: eligibleOnly,
-        ref_date: referenceDate || undefined,
-      }),
+      runOptimizationApi({
+      eligible: eligibleOnly,
+      ref_date: referenceDate || undefined,
+    }),
     onSuccess: async () => {
       toast.success("Optimisation puissance lancée avec succès.");
       await queryClient.invalidateQueries({ queryKey: ["optimization-batches"] });
@@ -251,6 +256,118 @@ export default function OptimizationPage() {
     if (!count) return 0;
     return total / count;
   }, [latestBatch]);
+
+  async function handleExportExcel() {
+  if (!latestBatch?.id) {
+    toast.warning("Aucun batch à exporter.");
+    return;
+  }
+
+  try {
+    setExporting(true);
+
+    const XLSX = await import("xlsx");
+
+    const exportRows = await listAllOptimizationResultsApi({
+      batch: latestBatch.id,
+      search: search || undefined,
+      gain_only: viewMode === "opportunities",
+      no_gain_only: viewMode === "no_opportunity",
+      status: viewMode === "errors" ? "ERROR" : undefined,
+    });
+
+    if (!exportRows.length) {
+      toast.info("Aucune donnée à exporter.");
+      return;
+    }
+
+    const data = exportRows.map((row) => ({
+      "N° contrat": row.numero_compte_contrat,
+      "Site ID": getSiteCode(row),
+      "Site name": row.site_name || "",
+      "Statut": row.status,
+
+      "Date référence": row.date_ref || "",
+      "Période début": row.period_start || "",
+      "Période fin": row.period_end || "",
+
+      "Conso annuelle": asNumber(row.conso_annuelle),
+      "Montant HT annuel": asNumber(row.montant_ht_annuel),
+
+      "Tarif actuel": row.tariff_current || "",
+      "Famille tarif": row.tariff_family || "",
+      "Tarif optimisé": row.tariff_optimized || "",
+
+      "PS actuelle": asNumber(row.ps_current),
+      "Pmax moyenne": asNumber(row.pmax_avg),
+      "Pmax max": asNumber(row.pmax_max),
+      "PS optimisée": asNumber(row.ps_optimized),
+
+      "Facture référence": asNumber(row.facture_reference),
+      "Facture optimisée puissance": asNumber(row.facture_power_optimized),
+      "Gain puissance": asNumber(row.gain_power),
+
+      "Facture optimisée tarif": asNumber(row.facture_tariff_optimized),
+      "Gain tarif": asNumber(row.gain_tariff),
+
+      "Type meilleure optimisation": row.best_optimization_type || "",
+      "Meilleure facture optimisée": asNumber(row.best_facture_optimized),
+      "Meilleur gain": asNumber(row.best_gain),
+
+      "Factures analysées": row.invoices_count || 0,
+      "Factures proratisées": row.prorated_invoice_count || 0,
+
+      "Message": row.warning_message || row.error_message || "",
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+
+    worksheet["!cols"] = [
+      { wch: 18 },
+      { wch: 16 },
+      { wch: 28 },
+      { wch: 12 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 16 },
+      { wch: 18 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 16 },
+      { wch: 12 },
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 14 },
+      { wch: 18 },
+      { wch: 24 },
+      { wch: 16 },
+      { wch: 22 },
+      { wch: 14 },
+      { wch: 24 },
+      { wch: 24 },
+      { wch: 16 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 40 },
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Optimisation");
+
+    const fileName = `optimisation_batch_${latestBatch.id}_${viewMode}.xlsx`;
+
+    XLSX.writeFile(workbook, fileName);
+
+    toast.success("Export Excel généré.");
+  } catch (error) {
+    console.error(error);
+    toast.error("Erreur pendant l’export Excel.");
+  } finally {
+    setExporting(false);
+  }
+}
+
 
   return (
     <div className="min-h-screen bg-[#F5F7FB] px-4 py-4 lg:px-6">
@@ -498,7 +615,7 @@ export default function OptimizationPage() {
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 xl:flex-row xl:items-center xl:justify-between">
             <SectionTitle
-              title="Résultats de l’optimisation puissance"
+              title="Résultats de l’optimisation puissance & tarif"
               subtitle="Affichage paginé du dernier batch."
             />
 
@@ -506,6 +623,7 @@ export default function OptimizationPage() {
               <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
                 {[
                   ["opportunities", "Opportunités"],
+                  ["no_opportunity", "Sans opportunité"],
                   ["all", "Tous"],
                   ["errors", "Erreurs"],
                 ].map(([key, label]) => (
@@ -549,6 +667,19 @@ export default function OptimizationPage() {
               >
                 <RefreshCcw size={15} />
                 Actualiser
+              </button>
+
+              <button
+                onClick={handleExportExcel}
+                disabled={exporting || !latestBatch?.id}
+                className="flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {exporting ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <Download size={15} />
+                )}
+                Export Excel
               </button>
             </div>
           </div>

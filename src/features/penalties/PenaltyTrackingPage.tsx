@@ -22,7 +22,12 @@ import {
 
 type Row = ImpactedSiteRow & {
   period: string;
+  cosphi_penalty: number;
+  cosphi_bonus: number;
+  prime_penalty: number;
   total_penalty: number;
+  net_impact: number;
+  cosphi_kind: "PENALTY" | "BONUS" | "NEUTRAL";
 };
 
 function fmtDate(d: Date) {
@@ -55,6 +60,34 @@ function percent(value: unknown) {
   return new Intl.NumberFormat("fr-FR", {
     maximumFractionDigits: 2,
   }).format(asNumber(value));
+}
+
+
+function getCosphiKind(value: unknown): "PENALTY" | "BONUS" | "NEUTRAL" {
+  const n = asNumber(value);
+
+  if (n > 0) return "PENALTY";
+  if (n < 0) return "BONUS";
+
+  return "NEUTRAL";
+}
+
+function getCosphiLabel(value: unknown) {
+  const kind = getCosphiKind(value);
+
+  if (kind === "PENALTY") return "Pénalité";
+  if (kind === "BONUS") return "Bonus";
+
+  return "Neutre";
+}
+
+function getCosphiTone(value: unknown): "default" | "red" | "green" {
+  const kind = getCosphiKind(value);
+
+  if (kind === "PENALTY") return "red";
+  if (kind === "BONUS") return "green";
+
+  return "default";
 }
 
 function Badge({
@@ -170,12 +203,26 @@ export default function PenaltyTrackingPage() {
       q.data?.by_month.flatMap((month) =>
         month.sites.map((site) => {
           const cosphi = asNumber(site.montant_cosphi);
-          const penalty = asNumber(site.penalite_prime);
+            const penalty = asNumber(site.penalite_prime);
 
-          return {
-            ...site,
-            period: month.period,
-            total_penalty: Math.abs(cosphi) + Math.abs(penalty),
+            const cosphiPenalty = cosphi > 0 ? cosphi : 0;
+            const cosphiBonus = cosphi < 0 ? Math.abs(cosphi) : 0;
+            const primePenalty = penalty > 0 ? penalty : 0;
+
+            return {
+              ...site,
+              period: month.period,
+
+              cosphi_kind: getCosphiKind(cosphi),
+              cosphi_penalty: cosphiPenalty,
+              cosphi_bonus: cosphiBonus,
+              prime_penalty: primePenalty,
+
+              // Total des vraies pénalités uniquement
+              total_penalty: cosphiPenalty + primePenalty,
+
+              // Impact net après prise en compte du bonus
+              net_impact: cosphiPenalty + primePenalty - cosphiBonus,
           };
         })
       ) || [];
@@ -207,9 +254,19 @@ export default function PenaltyTrackingPage() {
 
   const topRows = rows.slice(0, 5);
 
-  const totalCosphi = asNumber(q.data?.summary.total_cosphi);
   const totalPenalty = asNumber(q.data?.summary.total_penalty);
-  const totalImpact = Math.abs(totalCosphi) + Math.abs(totalPenalty);
+
+  const totalCosphiPenalty = rows.reduce(
+    (sum, row) => sum + row.cosphi_penalty,
+    0
+  );
+
+  const totalCosphiBonus = rows.reduce(
+    (sum, row) => sum + row.cosphi_bonus,
+    0
+  );
+
+  const totalImpact = totalCosphiPenalty + totalPenalty - totalCosphiBonus;
 
   return (
     <div className="min-h-screen bg-[#F5F7FB] px-4 py-4 lg:px-6">
@@ -347,11 +404,19 @@ export default function PenaltyTrackingPage() {
         {/* KPI */}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <KpiCard
-            label="Total Cos Phi"
-            value={`${money(totalCosphi)} FCFA`}
-            helper={`${q.data?.summary.sites_cosphi_count || 0} site(s) concerné(s)`}
+            label="Pénalité Cos Phi"
+            value={`${money(totalCosphiPenalty)} FCFA`}
+            helper="montants Cos Phi positifs"
             icon={<Gauge size={18} />}
-            tone="amber"
+            tone="red"
+          />
+
+          <KpiCard
+            label="Bonus Cos Phi"
+            value={`${money(totalCosphiBonus)} FCFA`}
+            helper="montants Cos Phi négatifs"
+            icon={<TrendingUp size={18} />}
+            tone="green"
           />
 
           <KpiCard
@@ -359,23 +424,15 @@ export default function PenaltyTrackingPage() {
             value={`${money(totalPenalty)} FCFA`}
             helper={`${q.data?.summary.sites_penalty_count || 0} site(s) concerné(s)`}
             icon={<AlertTriangle size={18} />}
-            tone="red"
+            tone="amber"
           />
 
           <KpiCard
-            label="Impact global"
+            label="Impact net"
             value={`${money(totalImpact)} FCFA`}
-            helper="Cos Phi + Prime Fixe"
+            helper="pénalités - bonus"
             icon={<Wallet size={18} />}
-            tone="blue"
-          />
-
-          <KpiCard
-            label="Lignes impactées"
-            value={`${rows.length}`}
-            helper="après filtre et recherche"
-            icon={<TrendingUp size={18} />}
-            tone="green"
+            tone={totalImpact >= 0 ? "blue" : "green"}
           />
         </div>
 
@@ -545,13 +602,23 @@ export default function PenaltyTrackingPage() {
                         </td>
 
                         <td className="border-b border-slate-200 px-4 py-3 text-right">
-                          <span
-                            className={`font-extrabold ${
-                              cosphi !== 0 ? "text-amber-700" : "text-slate-400"
-                            }`}
-                          >
-                            {money(cosphi)}
-                          </span>
+                          <div className="flex items-center justify-end gap-2">
+                            <Badge tone={getCosphiTone(row.montant_cosphi)}>
+                              {getCosphiLabel(row.montant_cosphi)}
+                            </Badge>
+
+                            <span
+                              className={`font-extrabold ${
+                                asNumber(row.montant_cosphi) > 0
+                                  ? "text-red-700"
+                                  : asNumber(row.montant_cosphi) < 0
+                                  ? "text-emerald-700"
+                                  : "text-slate-400"
+                              }`}
+                            >
+                              {money(row.montant_cosphi)}
+                            </span>
+                          </div>
                         </td>
 
                         <td className="border-b border-slate-200 px-4 py-3 text-right">

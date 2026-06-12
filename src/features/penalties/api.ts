@@ -12,6 +12,9 @@ export type ImpactedSiteRow = {
   montant_hors_tva: string;
   pct_cosphi_sur_ht: number;
   pct_penalty_sur_ht: number;
+
+  cosphi_kind?: "PENALTY" | "BONUS" | "NEUTRAL";
+  cosphi_label?: string;
 };
 
 export type ImpactedSitesMonth = {
