@@ -38,7 +38,14 @@ const LINKS: LinkItem[] = [
 
   { to: "/modules/prediction", icon: <BrainCircuit />, label: "Prédiction IA", section: "CONSO & ESTIMATION", end: true },
   // ── MODULES ──────────────────────────────────────────────────────────────────
-  { to: "/modules/optimisation",           icon: <Zap />,          label: "Optim. Puissance & Tarif",   section: "MODULES",        comingSoon: false },
+  {
+    to: "/modules/optimisation",
+    icon: <Zap />,
+    label: "Optim. Puissance & Tarif",
+    section: "MODULES",
+    comingSoon: false,
+    end: true,
+  },
   { 
     to: "/modules/suivi-penalites",
     icon: <AlertTriangle />,

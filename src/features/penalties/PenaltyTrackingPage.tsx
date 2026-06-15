@@ -20,14 +20,14 @@ import {
   type PenaltyFilter,
 } from "./api";
 
-type Row = ImpactedSiteRow & {
+type Row = Omit<ImpactedSiteRow, "cosphi_kind"> & {
   period: string;
   cosphi_penalty: number;
   cosphi_bonus: number;
   prime_penalty: number;
   total_penalty: number;
   net_impact: number;
-  cosphi_kind: "PENALTY" | "BONUS" | "NEUTRAL";
+  cosphi_kind: "MALUS" | "BONUS" | "NEUTRAL";
 };
 
 function fmtDate(d: Date) {
@@ -63,10 +63,10 @@ function percent(value: unknown) {
 }
 
 
-function getCosphiKind(value: unknown): "PENALTY" | "BONUS" | "NEUTRAL" {
+function getCosphiKind(value: unknown): "MALUS" | "BONUS" | "NEUTRAL" {
   const n = asNumber(value);
 
-  if (n > 0) return "PENALTY";
+  if (n > 0) return "MALUS";
   if (n < 0) return "BONUS";
 
   return "NEUTRAL";
@@ -75,16 +75,18 @@ function getCosphiKind(value: unknown): "PENALTY" | "BONUS" | "NEUTRAL" {
 function getCosphiLabel(value: unknown) {
   const kind = getCosphiKind(value);
 
-  if (kind === "PENALTY") return "Pénalité";
+  if (kind === "MALUS") return "Malus";
   if (kind === "BONUS") return "Bonus";
 
   return "Neutre";
 }
 
+
+
 function getCosphiTone(value: unknown): "default" | "red" | "green" {
   const kind = getCosphiKind(value);
 
-  if (kind === "PENALTY") return "red";
+  if (kind === "MALUS") return "red";
   if (kind === "BONUS") return "green";
 
   return "default";
@@ -218,10 +220,12 @@ export default function PenaltyTrackingPage() {
               cosphi_bonus: cosphiBonus,
               prime_penalty: primePenalty,
 
-              // Total des vraies pénalités uniquement
+          
+              // Total des malus Cos Phi + pénalités Prime Fixe
               total_penalty: cosphiPenalty + primePenalty,
 
-              // Impact net après prise en compte du bonus
+              
+              // Impact net après prise en compte du bonus Cos Phi
               net_impact: cosphiPenalty + primePenalty - cosphiBonus,
           };
         })
@@ -285,7 +289,7 @@ export default function PenaltyTrackingPage() {
               </h1>
 
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                Analyse des pénalités Cos Phi et Prime Fixe par site, contrat et mois.
+                Analyse des bonus/malus Cos Phi et des pénalités Prime Fixe par site, contrat et mois.
                 Les montants sont issus des synthèses mensuelles de facturation.
               </p>
             </div>
@@ -368,8 +372,8 @@ export default function PenaltyTrackingPage() {
                   onChange={(e) => setFilter(e.target.value as PenaltyFilter)}
                   className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100"
                 >
-                  <option value="both">Cos Phi + Prime</option>
-                  <option value="cosphi">Cos Phi uniquement</option>
+                  <option value="both">Cos Phi + Prime Fixe</option>
+                  <option value="cosphi">Cos Phi Bonus / Malus</option>
                   <option value="penalty">Prime Fixe uniquement</option>
                 </select>
               </div>
@@ -404,7 +408,7 @@ export default function PenaltyTrackingPage() {
         {/* KPI */}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <KpiCard
-            label="Pénalité Cos Phi"
+            label="Malus Cos Phi"
             value={`${money(totalCosphiPenalty)} FCFA`}
             helper="montants Cos Phi positifs"
             icon={<Gauge size={18} />}
@@ -430,7 +434,7 @@ export default function PenaltyTrackingPage() {
           <KpiCard
             label="Impact net"
             value={`${money(totalImpact)} FCFA`}
-            helper="pénalités - bonus"
+            helper="malus + pénalités prime - bonus"
             icon={<Wallet size={18} />}
             tone={totalImpact >= 0 ? "blue" : "green"}
           />
@@ -442,7 +446,7 @@ export default function PenaltyTrackingPage() {
             <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 md:flex-row md:items-center md:justify-between">
               <SectionTitle
                 title="Top impacts"
-                subtitle="Les sites avec les montants de pénalité les plus élevés."
+                subtitle="Les sites avec les impacts Cos Phi et Prime Fixe les plus élevés."
               />
 
               <Badge tone="blue">
@@ -475,7 +479,7 @@ export default function PenaltyTrackingPage() {
 
                   <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
                     <div className="rounded-xl bg-white p-2">
-                      <p className="text-slate-400">Cos Phi</p>
+                      <p className="text-slate-400">Bonus / Malus Cos Phi</p>
                       <p className="font-extrabold text-amber-700">
                         {money(row.montant_cosphi)}
                       </p>

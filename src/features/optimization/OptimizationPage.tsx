@@ -30,7 +30,7 @@ import {
   type OptimizationResult,
 } from "./api";
 
-type ViewMode = "opportunities" | "no_opportunity" | "all" | "errors";
+type ViewMode = "power" | "tariff" | "no_opportunity" | "all" | "errors";
 
 function asNumber(value: unknown): number {
   if (value === null || value === undefined || value === "") return 0;
@@ -161,7 +161,7 @@ export default function OptimizationPage() {
   const [referenceDate, setReferenceDate] = useState("");
   const [eligibleOnly, setEligibleOnly] = useState(true);
   const [search, setSearch] = useState("");
-  const [viewMode, setViewMode] = useState<ViewMode>("opportunities");
+  const [viewMode, setViewMode] = useState<ViewMode>("power");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
@@ -192,9 +192,17 @@ export default function OptimizationPage() {
       listOptimizationResultsApi({
         batch: latestBatch?.id,
         search: search || undefined,
-        gain_only: viewMode === "opportunities",
+
+        best_type:
+          viewMode === "power"
+            ? "POWER"
+            : viewMode === "tariff"
+            ? "TARIFF"
+            : undefined,
+
         no_gain_only: viewMode === "no_opportunity",
         status: viewMode === "errors" ? "ERROR" : undefined,
+
         page,
         page_size: pageSize,
       }),
@@ -271,7 +279,14 @@ export default function OptimizationPage() {
     const exportRows = await listAllOptimizationResultsApi({
       batch: latestBatch.id,
       search: search || undefined,
-      gain_only: viewMode === "opportunities",
+
+      best_type:
+        viewMode === "power"
+          ? "POWER"
+          : viewMode === "tariff"
+          ? "TARIFF"
+          : undefined,
+
       no_gain_only: viewMode === "no_opportunity",
       status: viewMode === "errors" ? "ERROR" : undefined,
     });
@@ -622,18 +637,22 @@ export default function OptimizationPage() {
             <div className="flex flex-col gap-2 md:flex-row md:items-center">
               <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
                 {[
-                  ["opportunities", "Opportunités"],
+                  ["power", "Optimisés par PS"],
+                  ["tariff", "Optimisés par tarif"],
                   ["no_opportunity", "Sans opportunité"],
                   ["all", "Tous"],
                   ["errors", "Erreurs"],
                 ].map(([key, label]) => (
                   <button
                     key={key}
-                    onClick={() => setViewMode(key as ViewMode)}
-                    className={`h-8 rounded-lg px-3 text-xs font-extrabold transition ${
+                    onClick={() => {
+                      setViewMode(key as ViewMode);
+                      setPage(1);
+                    }}
+                    className={`rounded-xl px-3 py-2 text-xs font-extrabold transition ${
                       viewMode === key
                         ? "bg-blue-900 text-white shadow-sm"
-                        : "text-slate-600 hover:bg-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                     }`}
                   >
                     {label}

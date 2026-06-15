@@ -158,8 +158,8 @@ export async function listOptimizationBatchesApi() {
 export async function listOptimizationResultsApi(params?: {
   batch?: number | string;
   search?: string;
-  best_type?: string;
-  status?: string;
+  best_type?: BestOptimizationType | string;
+  status?: OptimizationResultStatus | string;
   gain_only?: boolean;
   no_gain_only?: boolean;
   tariff_current?: string;
@@ -193,8 +193,8 @@ export async function listOptimizationResultsApi(params?: {
 export async function listAllOptimizationResultsApi(params?: {
   batch?: number | string;
   search?: string;
-  best_type?: string;
-  status?: string;
+  best_type?: BestOptimizationType | string;
+  status?: OptimizationResultStatus | string;
   gain_only?: boolean;
   no_gain_only?: boolean;
   tariff_current?: string;
