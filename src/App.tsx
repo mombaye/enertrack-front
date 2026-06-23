@@ -36,6 +36,7 @@ import SuiviConsoPage from "./features/suivi-conso/SuiviConsoPage";
 import PredictionPage from "./features/prediction/PredictionPage";
 import OptimizationPage from "./features/optimization/OptimizationPage";
 import PenaltyTrackingPage from "./features/penalties/PenaltyTrackingPage";
+import FuelTrackingPage from "./features/fuel-tracking/FuelTrackingPage";
 
 const queryClient = new QueryClient();
 
@@ -120,6 +121,10 @@ export default function App() {
 
                 <Route path="/modules/suivi-penalites" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
                   <Route index element={<PenaltyTrackingPage />} />
+                </Route>
+
+                <Route path="/modules/suivi-carburant" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
+                  <Route index element={<FuelTrackingPage />} />
                 </Route>
 
                 <Route

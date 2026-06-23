@@ -7,6 +7,7 @@ import {
   Calculator, Zap, BarChart2, AlertTriangle, Server,
   Building2,TrendingUp, DollarSign,
   BrainCircuit,
+  Fuel,
   
 } from "lucide-react";
 import camusatLogo from "@/assets/images/camusat-logo.png";
@@ -50,6 +51,15 @@ const LINKS: LinkItem[] = [
     to: "/modules/suivi-penalites",
     icon: <AlertTriangle />,
     label: "Suivi Pénalités",
+    section: "MODULES",
+    end: true,
+    comingSoon: false,
+  },
+
+  {
+  to: "/modules/suivi-carburant",
+    icon: <Fuel />,
+    label: "Suivi Carburant",
     section: "MODULES",
     end: true,
     comingSoon: false,
