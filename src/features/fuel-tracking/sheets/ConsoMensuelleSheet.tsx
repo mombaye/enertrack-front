@@ -37,10 +37,8 @@ const RH_SOURCE_LABEL: Record<string, string> = {
   NO_DATA: "—",
 };
 
-function RhCell({ row }: { row: FuelMonthlyRow }) {
-  const value = row.efms.rh_hours ?? (n(row.efms.ge_working_hours) || null);
-  if (value === null) return <ComingCell />;
-  const source = row.efms.rh_source;
+function HoursCell({ value, source }: { value: number | null | undefined; source?: string | null }) {
+  if (value === null || value === undefined) return <ComingCell />;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
       <span style={{ fontWeight: 800 }}>{fmt2.format(n(value))} h</span>
@@ -49,6 +47,11 @@ function RhCell({ row }: { row: FuelMonthlyRow }) {
       )}
     </div>
   );
+}
+
+function RhCell({ row }: { row: FuelMonthlyRow }) {
+  const value = row.efms.rh_hours ?? (n(row.efms.ge_working_hours) || null);
+  return <HoursCell value={value} source={row.efms.rh_source} />;
 }
 
 export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[]; loading: boolean }) {
@@ -120,19 +123,37 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
       label: "Données mois précédent",
       color: "violet",
       columns: [
-        { id: "rh_initial", header: "RH Initial", width: 100, render: () => <ComingCell /> },
-        { id: "stock_ouv_rms", header: "Stock Ouv. RMS", width: 130, render: () => <ComingCell /> },
-        { id: "stock_ouv_reel", header: "Stock Ouv. Réel", width: 130, render: () => <ComingCell /> },
+        {
+          id: "rh_initial",
+          header: "RH Initial",
+          width: 150,
+          align: "right",
+          render: (r) => <HoursCell value={r.efms.rh_initial_hours} source={r.efms.rh_initial_source} />,
+        },
+        { id: "stock_ouv_rms", header: "Stock Ouv. RMS", width: 130, align: "right", render: (r) => fmtMaybeL(r.stock.ouv_rms) },
+        { id: "stock_ouv_reel", header: "Stock Ouv. Réel", width: 130, align: "right", render: (r) => fmtMaybeL(r.stock.ouv_reel) },
         {
           id: "refueling",
           header: "Refueling",
           width: 120,
           align: "right",
           emphasis: true,
-          render: (r) => <span style={{ color: "#0F9D67", fontWeight: 800 }}>{fmtL(r.enoc.quantity_added_liters)}</span>,
+          render: (r) => (r.enoc.refueling_liters > 0 ? <span style={{ color: "#0F9D67", fontWeight: 800 }}>{fmtL(r.enoc.refueling_liters)}</span> : <ComingCell />),
         },
-        { id: "prelevement_out", header: "Prélèvement Out", width: 130, render: () => <ComingCell /> },
-        { id: "ajout_in", header: "Ajout In", width: 100, render: () => <ComingCell /> },
+        {
+          id: "prelevement_out",
+          header: "Prélèvement Out",
+          width: 130,
+          align: "right",
+          render: (r) => (r.enoc.prelevement_out_liters > 0 ? <span style={{ color: "#DC2626", fontWeight: 800 }}>{fmtL(r.enoc.prelevement_out_liters)}</span> : <ComingCell />),
+        },
+        {
+          id: "ajout_in",
+          header: "Ajout In",
+          width: 110,
+          align: "right",
+          render: (r) => (r.enoc.ajout_in_liters > 0 ? fmtL(r.enoc.ajout_in_liters) : <ComingCell />),
+        },
       ],
     },
     {
@@ -141,8 +162,8 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
       color: "green",
       columns: [
         { id: "rh_final", header: "RH Final", width: 150, align: "right", render: (r) => <RhCell row={r} /> },
-        { id: "stock_clot_rms", header: "Stock Clôt. RMS", width: 130, render: () => <ComingCell /> },
-        { id: "stock_clot_reel", header: "Stock Clôt. Réel", width: 130, render: () => <ComingCell /> },
+        { id: "stock_clot_rms", header: "Stock Clôt. RMS", width: 130, align: "right", render: (r) => fmtMaybeL(r.stock.clot_rms) },
+        { id: "stock_clot_reel", header: "Stock Clôt. Réel", width: 130, align: "right", render: (r) => fmtMaybeL(r.stock.clot_reel) },
         {
           id: "rh_controleur",
           header: "RH Contrôleur Final",
@@ -155,15 +176,28 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
               <ComingCell />
             ),
         },
-        { id: "stock_reel", header: "Stock Réel", width: 110, render: () => <ComingCell /> },
+        { id: "stock_reel", header: "Stock Réel", width: 110, align: "right", render: (r) => fmtMaybeL(r.stock.reel) },
         {
           id: "rh_delta",
           header: "RH Delta",
           width: 150,
           align: "right",
-          render: (r) => <RhCell row={r} />,
+          render: (r) => <HoursCell value={r.efms.rh_delta_hours} />,
         },
-        { id: "stock_delta_rms", header: "Stock Delta RMS", width: 140, render: () => <ComingCell /> },
+        {
+          id: "stock_delta_rms",
+          header: "Stock Delta RMS",
+          width: 140,
+          align: "right",
+          render: (r) => {
+            const d = r.stock.delta_rms;
+            return d === null || d === undefined ? (
+              <ComingCell />
+            ) : (
+              <span style={{ fontWeight: 800, color: d < 0 ? "#D97706" : "#0F9D67" }}>{fmtL(d)}</span>
+            );
+          },
+        },
       ],
     },
     {

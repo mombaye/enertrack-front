@@ -215,11 +215,17 @@ export type FuelMonthlyRow = {
     rh_hours: number | null;
     rh_source: string | null;
     avec_dse: boolean | null;
+    rh_initial_hours: number | null;
+    rh_initial_source: string | null;
+    rh_delta_hours: number | null;
     synced_at: string | null;
   };
   enoc: {
     movements_count: number;
     quantity_added_liters: number;
+    refueling_liters: number;
+    ajout_in_liters: number;
+    prelevement_out_liters: number;
     operation_types: string[];
     last_operation_date: string | null;
     last_request_code: string | null;
@@ -229,6 +235,14 @@ export type FuelMonthlyRow = {
     site_context: FuelEnocSiteContext | null;
     ge_context: FuelGeContext | null;
     ge_snapshot: Record<string, any> | null;
+  };
+  stock: {
+    ouv_rms: number | null;
+    clot_rms: number | null;
+    delta_rms: number | null;
+    ouv_reel: number | null;
+    clot_reel: number | null;
+    reel: number | null;
   };
   gaps: {
     deli_vs_enoc_l: number | null;
