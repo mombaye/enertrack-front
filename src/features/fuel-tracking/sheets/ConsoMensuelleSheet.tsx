@@ -6,6 +6,7 @@ import type { FuelMonthlyRow } from "@/services/fuelTracking";
 import { ExcelGrid, type ExcelGroup } from "../ExcelGrid";
 import { Card, ComingCell, Pill, SheetTitle } from "../ui";
 import {
+  facteurCharge,
   fmt2,
   fmtL,
   fmtMaybeKva,
@@ -90,10 +91,28 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
         {
           id: "target_aktivco",
           header: "Target Aktivco",
-          width: 130,
-          render: (r) => (r.enoc.target_status ? <Pill label={r.enoc.target_status} tone={r.enoc.target_status === "exceeded" ? "red" : "green"} /> : <ComingCell />),
+          width: 160,
+          align: "right",
+          render: (r) =>
+            r.enoc.monthly_target_liters ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
+                <span style={{ fontWeight: 800 }}>{fmtL(r.enoc.monthly_target_liters)}</span>
+                {r.enoc.target_status && <Pill label={r.enoc.target_status} tone={r.enoc.target_status === "exceeded" ? "red" : "green"} />}
+              </div>
+            ) : (
+              <ComingCell />
+            ),
         },
-        { id: "facteur_charge", header: "Facteur Charge", width: 120, render: () => <ComingCell /> },
+        {
+          id: "facteur_charge",
+          header: "Facteur Charge",
+          width: 120,
+          align: "right",
+          render: (r) => {
+            const pct = facteurCharge(r);
+            return pct === null ? <ComingCell /> : `${fmt2.format(pct)}%`;
+          },
+        },
       ],
     },
     {

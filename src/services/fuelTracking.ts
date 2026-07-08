@@ -224,7 +224,8 @@ export type FuelMonthlyRow = {
     last_operation_date: string | null;
     last_request_code: string | null;
     target_status: string | null;
-    
+    monthly_target_liters: number | null;
+
     site_context: FuelEnocSiteContext | null;
     ge_context: FuelGeContext | null;
     ge_snapshot: Record<string, any> | null;

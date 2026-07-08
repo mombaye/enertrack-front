@@ -116,6 +116,15 @@ export function geBrand2(row: FuelMonthlyRow) {
   return secondGe(row)?.brand || "—";
 }
 
+/** Facteur de charge = Load site (W) / Puissance nominale GE (KVA × 1000). */
+export function facteurCharge(row: FuelMonthlyRow): number | null {
+  const load = siteLoad(row);
+  const kva = gePower1(row);
+  if (load === null || load === undefined || !kva) return null;
+  const pct = (n(load) / (n(kva) * 1000)) * 100;
+  return Number.isFinite(pct) ? pct : null;
+}
+
 export function gePower1(row: FuelMonthlyRow) {
   return primaryGe(row)?.power_kva ?? row.ge_snapshot?.ge_power_kva ?? row.enoc_site_ref?.ge1_power_kva ?? null;
 }
