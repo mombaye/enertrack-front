@@ -212,6 +212,9 @@ export type FuelMonthlyRow = {
     monitoring_unavailability_percent: number;
     cph_l_per_hour: number;
     anomaly_flags: string[];
+    rh_hours: number | null;
+    rh_source: string | null;
+    avec_dse: boolean | null;
     synced_at: string | null;
   };
   enoc: {

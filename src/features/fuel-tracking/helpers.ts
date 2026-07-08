@@ -1,0 +1,177 @@
+// src/features/fuel-tracking/helpers.ts
+// Fonctions pures de formatage et de dérivation des champs — extraites pour
+// être partagées entre toutes les feuilles du classeur.
+
+import type { FuelEnocMovement, FuelMonthlyRow } from "@/services/fuelTracking";
+
+export const fmt = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
+export const fmt1 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 });
+export const fmt2 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
+
+export function currentMonth() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export function n(value: unknown) {
+  const v = Number(value || 0);
+  return Number.isFinite(v) ? v : 0;
+}
+
+export function fmtL(value: unknown) {
+  const v = n(value);
+  const abs = Math.abs(v);
+  const sign = v < 0 ? "-" : "";
+  if (abs >= 1_000_000) return `${sign}${fmt1.format(abs / 1_000_000)} ML`;
+  if (abs >= 1_000) return `${sign}${fmt1.format(abs / 1_000)} kL`;
+  return `${fmt.format(v)} L`;
+}
+
+export function fmtDateTime(value?: string | null) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+export function dash(value: unknown) {
+  if (value === null || value === undefined || value === "") return "—";
+  return String(value);
+}
+
+export function maybeNumber(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function fmtMaybeL(value: unknown) {
+  const parsed = maybeNumber(value);
+  return parsed === null ? "—" : fmtL(parsed);
+}
+
+export function fmtMaybeKva(value: unknown) {
+  const parsed = maybeNumber(value);
+  return parsed === null ? "—" : `${fmt1.format(parsed)} KVA`;
+}
+
+export function statusTone(code?: string) {
+  if (code === "OK") return "green" as const;
+  if (code === "WARNING") return "orange" as const;
+  if (code === "NOK") return "red" as const;
+  if (code === "EFMS_ONLY") return "blue" as const;
+  if (code === "ENOC_ONLY") return "violet" as const;
+  return "slate" as const;
+}
+
+export function operationTypeTone(type?: string | null) {
+  if (type === "PONCTION") return "violet" as const;
+  if (type === "TRUCK") return "blue" as const;
+  if (type === "TOTAL_CARD") return "orange" as const;
+  return "slate" as const;
+}
+
+export function modernizedLabel(row: FuelMonthlyRow) {
+  if (row.site_ref?.modernized === true) return "Modernisé";
+  if (row.site_ref?.modernized === false) return "Existant";
+  if (row.enoc_site_ref?.modernised_date) return "Modernisé";
+  return "—";
+}
+
+export function siteTypology(row: FuelMonthlyRow) {
+  return (
+    row.site_ref?.billing_typology ||
+    row.enoc_site_ref?.typology_contractual ||
+    row.enoc_site_ref?.new_typo ||
+    row.enoc_site_ref?.typo_simple ||
+    "—"
+  );
+}
+
+export function realTypology(row: FuelMonthlyRow) {
+  return row.site_ref?.installed_typology || row.enoc_site_ref?.new_typo || row.enoc_site_ref?.typo_simple || "—";
+}
+
+export function siteConfig(row: FuelMonthlyRow) {
+  return row.site_ref?.configuration || row.enoc_site_ref?.ongrid_offgrid || row.enoc_site_ref?.indoor_outdoor_after_passive || "—";
+}
+
+export function siteLoad(row: FuelMonthlyRow) {
+  return row.site_ref?.analysis_load ?? row.enoc_site_ref?.new_load_contract_v2 ?? row.enoc_site_ref?.new_load ?? row.enoc_site_ref?.load ?? null;
+}
+
+export function primaryGe(row: FuelMonthlyRow) {
+  return row.ge_ref?.primary_asset || row.ge_ref?.assets?.[0] || null;
+}
+
+export function secondGe(row: FuelMonthlyRow) {
+  return row.ge_ref?.assets?.[1] || null;
+}
+
+export function geBrand1(row: FuelMonthlyRow) {
+  return primaryGe(row)?.brand || row.ge_snapshot?.ge_brand || "—";
+}
+
+export function geBrand2(row: FuelMonthlyRow) {
+  return secondGe(row)?.brand || "—";
+}
+
+export function gePower1(row: FuelMonthlyRow) {
+  return primaryGe(row)?.power_kva ?? row.ge_snapshot?.ge_power_kva ?? row.enoc_site_ref?.ge1_power_kva ?? null;
+}
+
+export function gePower2(row: FuelMonthlyRow) {
+  return secondGe(row)?.power_kva ?? row.enoc_site_ref?.ge2_power_kva ?? null;
+}
+
+export function tankCapacity1(row: FuelMonthlyRow) {
+  return primaryGe(row)?.tank_capacity_liters ?? row.ge_snapshot?.tank_capacity_liters ?? row.enoc_site_ref?.fuel_tank_capacity_liters ?? null;
+}
+
+export function tankCapacity2(row: FuelMonthlyRow) {
+  return secondGe(row)?.tank_capacity_liters ?? null;
+}
+
+export function tankType(value: unknown) {
+  if (value === true) return "Connectée";
+  if (value === false) return "Non connectée";
+  const raw = String(value ?? "").toLowerCase().trim();
+  if (["true", "oui", "yes", "1", "connected"].includes(raw)) return "Connectée";
+  if (["false", "non", "no", "0", "not_connected"].includes(raw)) return "Non connectée";
+  return "—";
+}
+
+export function journalSource(r: FuelEnocMovement) {
+  return (
+    r.ponction?.source_site_name ||
+    r.raw_payload?.ponction?.source_site_name ||
+    r.raw_payload?.site_context?.site_name ||
+    r.site_name ||
+    "—"
+  );
+}
+
+export function journalRmsHourMeter(r: FuelEnocMovement) {
+  return r.raw_payload?.rms_hour_meter || r.raw_payload?.rms_ge_hour_meter || r.raw_payload?.site_context?.rms_hour_meter || null;
+}
+
+export function blGapLiters(r: FuelEnocMovement) {
+  const bl = maybeNumber(r.delivery_note_quantity_liters);
+  const measured = maybeNumber(r.quantity_added_liters);
+  if (bl === null || measured === null) return null;
+  return bl - measured;
+}
+
+export function blGapPercent(r: FuelEnocMovement) {
+  const bl = maybeNumber(r.delivery_note_quantity_liters);
+  const gap = blGapLiters(r);
+  if (bl === null || bl === 0 || gap === null) return null;
+  return (gap / bl) * 100;
+}
+
+export function balanceCheck(r: FuelEnocMovement) {
+  const gap = blGapLiters(r);
+  if (gap === null) return "—";
+  if (Math.abs(gap) <= 1) return "OK";
+  return "Écart";
+}
