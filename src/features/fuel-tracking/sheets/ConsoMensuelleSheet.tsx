@@ -6,6 +6,7 @@ import type { FuelMonthlyRow } from "@/services/fuelTracking";
 import { ExcelGrid, type ExcelGroup } from "../ExcelGrid";
 import { Card, ComingCell, Pill, SheetTitle } from "../ui";
 import {
+  consoRms,
   facteurCharge,
   fmt2,
   fmtL,
@@ -213,7 +214,16 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
           emphasis: true,
           render: (r) => <span style={{ color: "#D97706", fontWeight: 800 }}>{fmtL(r.efms.fuel_conso_l)}</span>,
         },
-        { id: "conso_rms", header: "Conso RMS", width: 110, render: () => <ComingCell /> },
+        {
+          id: "conso_rms",
+          header: "Conso RMS",
+          width: 120,
+          align: "right",
+          render: (r) => {
+            const v = consoRms(r);
+            return v === null ? <ComingCell /> : <span style={{ fontWeight: 800, color: v < 0 ? "#D97706" : undefined }}>{fmtL(v)}</span>;
+          },
+        },
         {
           id: "conso_theorique",
           header: "Conso Théorique",

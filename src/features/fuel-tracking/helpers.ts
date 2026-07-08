@@ -125,6 +125,17 @@ export function facteurCharge(row: FuelMonthlyRow): number | null {
   return Number.isFinite(pct) ? pct : null;
 }
 
+/**
+ * Conso RMS = bilan matière sur la télémétrie Snowflake (niveau de cuve) :
+ * Stock Ouv. RMS + Refueling + Ajout In − Prélèvement Out − Stock Clôt. RMS.
+ * Même formule que "Conso Réelle" du template, appliquée aux valeurs RMS.
+ */
+export function consoRms(row: FuelMonthlyRow): number | null {
+  const { ouv_rms, clot_rms } = row.stock;
+  if (ouv_rms === null || ouv_rms === undefined || clot_rms === null || clot_rms === undefined) return null;
+  return n(ouv_rms) + n(row.enoc.refueling_liters) + n(row.enoc.ajout_in_liters) - n(row.enoc.prelevement_out_liters) - n(clot_rms);
+}
+
 export function gePower1(row: FuelMonthlyRow) {
   return primaryGe(row)?.power_kva ?? row.ge_snapshot?.ge_power_kva ?? row.enoc_site_ref?.ge1_power_kva ?? null;
 }
