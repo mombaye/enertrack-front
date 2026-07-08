@@ -132,12 +132,18 @@ export function tankCapacity2(row: FuelMonthlyRow) {
   return secondGe(row)?.tank_capacity_liters ?? null;
 }
 
-export function tankType(value: unknown) {
+export function tankType(value: unknown, shape?: string | null) {
   if (value === true) return "Connectée";
   if (value === false) return "Non connectée";
   const raw = String(value ?? "").toLowerCase().trim();
   if (["true", "oui", "yes", "1", "connected"].includes(raw)) return "Connectée";
   if (["false", "non", "no", "0", "not_connected"].includes(raw)) return "Non connectée";
+
+  const shapeRaw = String(shape ?? "").toLowerCase();
+  if (shapeRaw.includes("interne")) return "Interne";
+  if (shapeRaw.includes("externe")) return "Externe";
+  if (shape) return shape;
+
   return "—";
 }
 

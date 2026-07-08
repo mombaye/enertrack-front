@@ -443,6 +443,8 @@ export type FuelGeAsset = {
   power_kva?: number | null;
   tank_capacity_liters?: number | null;
   tank_connected?: boolean | string | null;
+  tank_shape?: string | null;
+  controller?: string | null;
   updated_at?: string | null;
 };
 
