@@ -126,6 +126,23 @@ export function facteurCharge(row: FuelMonthlyRow): number | null {
 }
 
 /**
+ * Conso [L/h] théorique = courbe calibrée par modèle de GE (catalogue GENSET DB),
+ * conso(x) = a·x² + b·x + c avec x = facteur de charge (fraction, 1.0 = 100%).
+ * Remplace un simple ratio load/puissance par la courbe réelle du constructeur.
+ * Retourne null si aucun modèle GE n'a pu être identifié dans le catalogue
+ * (voir primaryGe(row)?.fuel_curve?.confidence pour la fiabilité du match).
+ */
+export function consoTheoriqueLH(row: FuelMonthlyRow): number | null {
+  const curve = primaryGe(row)?.fuel_curve;
+  if (!curve?.matched || curve.coef_a == null || curve.coef_b == null || curve.coef_c == null) return null;
+  const pct = facteurCharge(row);
+  if (pct === null) return null;
+  const x = pct / 100;
+  const conso = curve.coef_a * x * x + curve.coef_b * x + curve.coef_c;
+  return Number.isFinite(conso) ? Math.max(conso, 0) : null;
+}
+
+/**
  * Conso RMS = bilan matière sur la télémétrie Snowflake (niveau de cuve) :
  * Stock Ouv. RMS + Refueling + Ajout In − Prélèvement Out − Stock Clôt. RMS.
  * Même formule que "Conso Réelle" du template, appliquée aux valeurs RMS.

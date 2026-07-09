@@ -2,7 +2,7 @@
 // Primitives visuelles partagées du module Suivi Carburant.
 
 import type { CSSProperties, ReactNode } from "react";
-import { FT, toneColors, type Tone } from "./theme";
+import { FT, GROUP_PALETTE, toneColors, type Tone } from "./theme";
 
 export function Card({
   children,
@@ -214,6 +214,75 @@ export function SegmentedTabs<T extends string>({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * Barre de pastilles pour afficher/masquer des groupes de colonnes d'un
+ * ExcelGrid — permet de réduire un tableau très large (beaucoup de groupes)
+ * à seulement ceux qui intéressent l'utilisateur, sans perdre l'accès au reste.
+ */
+export function GroupToggleBar({
+  groups,
+  hidden,
+  onToggle,
+  onShowAll,
+}: {
+  groups: Array<{ id: string; label: string; color: keyof typeof GROUP_PALETTE }>;
+  hidden: Set<string>;
+  onToggle: (id: string) => void;
+  onShowAll: () => void;
+}) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 7 }}>
+      <span style={{ fontSize: 11, fontWeight: 850, color: FT.textSub, textTransform: "uppercase", letterSpacing: ".07em", marginRight: 2 }}>
+        Groupes de colonnes
+      </span>
+      {groups.map((g) => {
+        const isHidden = hidden.has(g.id);
+        const c = GROUP_PALETTE[g.color];
+        return (
+          <button
+            key={g.id}
+            onClick={() => onToggle(g.id)}
+            title={isHidden ? `Afficher "${g.label}"` : `Masquer "${g.label}"`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              border: `1px solid ${isHidden ? FT.border : c.fg}`,
+              background: isHidden ? FT.slateL : c.bg,
+              color: isHidden ? FT.textSub : c.fg,
+              borderRadius: 999,
+              padding: "5px 11px",
+              fontSize: 11,
+              fontWeight: 850,
+              cursor: "pointer",
+              opacity: isHidden ? 0.7 : 1,
+              textDecoration: isHidden ? "line-through" : "none",
+            }}
+          >
+            {g.label}
+          </button>
+        );
+      })}
+      {hidden.size > 0 && (
+        <button
+          onClick={onShowAll}
+          style={{
+            border: "none",
+            background: "transparent",
+            color: FT.blue,
+            fontSize: 11,
+            fontWeight: 850,
+            cursor: "pointer",
+            padding: "5px 6px",
+          }}
+        >
+          Tout afficher
+        </button>
+      )}
     </div>
   );
 }

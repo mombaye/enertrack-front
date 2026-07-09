@@ -12,6 +12,7 @@ import {
   Gauge,
   Layers3,
   ListChecks,
+  MapPin,
   RefreshCw,
   Search,
   Settings2,
@@ -57,6 +58,7 @@ export default function FuelTrackingPage() {
   const [activeSheet, setActiveSheet] = useState<SheetKey>("CONSO_MENSUELLE");
   const [month, setMonth] = useState(currentMonth());
   const [site, setSite] = useState("");
+  const [zone, setZone] = useState("");
   const [status, setStatus] = useState<FuelStatusCode>("ALL");
   const [operationType, setOperationType] = useState("ALL");
   const [monthlyPage, setMonthlyPage] = useState(1);
@@ -69,14 +71,14 @@ export default function FuelTrackingPage() {
   });
 
   const monthlyQ = useQuery({
-    queryKey: ["fuel-monthly-template", month, site, status, monthlyPage],
-    queryFn: () => getFuelMonthlyTracking({ month, site, status, page: monthlyPage, limit: 50 }),
+    queryKey: ["fuel-monthly-template", month, site, zone, status, monthlyPage],
+    queryFn: () => getFuelMonthlyTracking({ month, site, zone, status, page: monthlyPage, limit: 50 }),
     staleTime: 60_000,
   });
 
   const journalQ = useQuery({
-    queryKey: ["fuel-journal-template", month, site, operationType, journalPage],
-    queryFn: () => getFuelEnocJournal({ month, site, operation_type: operationType, page: journalPage, limit: 50 }),
+    queryKey: ["fuel-journal-template", month, site, zone, operationType, journalPage],
+    queryFn: () => getFuelEnocJournal({ month, site, zone, operation_type: operationType, page: journalPage, limit: 50 }),
     staleTime: 60_000,
   });
 
@@ -184,6 +186,20 @@ export default function FuelTrackingPage() {
                       setJournalPage(1);
                     }}
                     placeholder="Site ID, nom ou ticket..."
+                    style={{ border: "none", outline: "none", background: "transparent", fontSize: 13, color: "#fff", flex: 1 }}
+                  />
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 8, border: "1px solid rgba(255,255,255,.16)", background: "rgba(255,255,255,.06)", borderRadius: 11, padding: "8px 12px", minWidth: 160 }}>
+                  <MapPin size={14} color="rgba(255,255,255,.6)" />
+                  <input
+                    value={zone}
+                    onChange={(e) => {
+                      setZone(e.target.value);
+                      setMonthlyPage(1);
+                      setJournalPage(1);
+                    }}
+                    placeholder="Zone / région..."
                     style={{ border: "none", outline: "none", background: "transparent", fontSize: 13, color: "#fff", flex: 1 }}
                   />
                 </div>

@@ -442,6 +442,21 @@ export type FuelSiteRef = {
 
 
 
+export type FuelGeCurveMatch = {
+  matched: boolean;
+  confidence?: string | null;
+  reason?: string | null;
+  brand_matched?: string | null;
+  prp_kva_matched?: number | null;
+  candidate_models?: string[];
+  coef_a?: number | null;
+  coef_b?: number | null;
+  coef_c?: number | null;
+  conso_100_l_h?: number | null;
+  conso_75_l_h?: number | null;
+  conso_50_l_h?: number | null;
+};
+
 export type FuelGeAsset = {
   source?: "ENOC_GE_ASSET";
   ge_id?: string | null;
@@ -461,6 +476,7 @@ export type FuelGeAsset = {
   tank_shape?: string | null;
   controller?: string | null;
   updated_at?: string | null;
+  fuel_curve?: FuelGeCurveMatch | null;
 };
 
 export type FuelGeContext = {
