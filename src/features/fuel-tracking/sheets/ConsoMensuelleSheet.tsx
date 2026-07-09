@@ -10,6 +10,7 @@ import { FT } from "../theme";
 import {
   consoRms,
   consoTheoriqueLH,
+  cphTargetLH,
   facteurCharge,
   fmt2,
   fmtL,
@@ -118,14 +119,25 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
     }
   }
 
+  // Groupe toujours visible et épinglé — jamais masquable via GroupToggleBar,
+  // pour garder un repère (quel site je regarde ?) quel que soit le scroll
+  // horizontal ou les groupes de colonnes affichés.
+  const identityGroup: ExcelGroup<FuelMonthlyRow> = {
+    id: "identite",
+    label: "Site",
+    color: "navy",
+    columns: [
+      { id: "site_id", header: "Site ID", width: 110, emphasis: true, render: (r) => r.site_id || "—" },
+      { id: "site_name", header: "Site Name", width: 190, render: (r) => r.site_name || "—" },
+    ],
+  };
+
   const groups: ExcelGroup<FuelMonthlyRow>[] = [
     {
       id: "referentiel",
       label: "Référentiel site",
       color: "navy",
       columns: [
-        { id: "site_id", header: "Site ID", width: 110, emphasis: true, render: (r) => r.site_id || "—" },
-        { id: "site_name", header: "Site Name", width: 190, render: (r) => r.site_name || "—" },
         { id: "region", header: "Région", width: 110, render: (r) => r.zone_label || r.zone || r.enoc_site_ref?.region || "—" },
         { id: "neuf", header: "Neuf/Existant", width: 110, render: modernizedLabel },
         { id: "batch", header: "Batch", width: 130, render: (r) => r.site_ref?.batch_operational || r.enoc_site_ref?.batch_operational || r.enoc_site_ref?.batch || "—" },
@@ -320,7 +332,23 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
       color: "navy",
       columns: [
         { id: "cph_reel", header: "CPH Réel", width: 100, align: "right", emphasis: true, render: (r) => fmt2.format(n(r.efms.cph_l_per_hour)) },
-        { id: "cph_target", header: "CPH Target Aktivco", width: 150, render: () => <ComingCell /> },
+        {
+          id: "cph_target",
+          header: "CPH Target Aktivco",
+          width: 170,
+          align: "right",
+          render: (r) => {
+            const target = cphTargetLH(r);
+            if (target === null) return <ComingCell />;
+            const engine = primaryGe(r)?.cph_target?.engine_family;
+            return (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
+                <span style={{ fontWeight: 800 }}>{fmt2.format(target)} L/h</span>
+                {engine && <Pill label={engine.replace(/^Moteur\s+/i, "")} tone="cyan" />}
+              </div>
+            );
+          },
+        },
       ],
     },
     {
@@ -368,7 +396,10 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
     },
   ];
 
-  const visibleGroups = useMemo(() => groups.filter((g) => !hiddenGroups.has(g.id)), [groups, hiddenGroups]);
+  const visibleGroups = useMemo(
+    () => [identityGroup, ...groups.filter((g) => !hiddenGroups.has(g.id))],
+    [groups, hiddenGroups]
+  );
 
   const filteredRows = useMemo(
     () => (anomaliesOnly ? rows.filter((r) => (r.efms.anomaly_flags?.length ?? 0) > 0) : rows),
@@ -376,7 +407,7 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
   );
 
   const visibleColCount = visibleGroups.reduce((s, g) => s + g.columns.length, 0);
-  const totalColCount = groups.reduce((s, g) => s + g.columns.length, 0);
+  const totalColCount = identityGroup.columns.length + groups.reduce((s, g) => s + g.columns.length, 0);
 
   return (
     <Card padded={false} style={{ padding: 20 }}>
@@ -435,7 +466,7 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
           rows={filteredRows}
           rowKey={(r) => r.key}
           loading={loading}
-          pinnedCount={1}
+          pinnedCount={identityGroup.columns.length}
           maxHeight={620}
           emptyIcon={<Fuel size={20} />}
           emptyTitle={anomaliesOnly ? "Aucune anomalie sur la période" : "Aucune donnée sur la période"}

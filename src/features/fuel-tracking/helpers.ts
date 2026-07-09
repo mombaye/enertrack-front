@@ -143,6 +143,36 @@ export function consoTheoriqueLH(row: FuelMonthlyRow): number | null {
 }
 
 /**
+ * CPH cible [L/h] = matrice CPH (feuille "CPH", mesures réelles par famille
+ * moteur), interpolée linéairement entre les deux points encadrant le
+ * facteur de charge réel du site. Seule la famille Perkins est actuellement
+ * renseignée dans la source — retourne null pour les autres marques (pas de
+ * cible plutôt qu'une comparaison trompeuse).
+ */
+export function cphTargetLH(row: FuelMonthlyRow): number | null {
+  const target = primaryGe(row)?.cph_target;
+  if (!target?.matched || !target.points?.length) return null;
+  const pct = facteurCharge(row);
+  if (pct === null) return null;
+  const x = pct / 100;
+  const points = target.points;
+
+  if (x <= points[0][0]) return points[0][1];
+  if (x >= points[points.length - 1][0]) return points[points.length - 1][1];
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const [x0, y0] = points[i];
+    const [x1, y1] = points[i + 1];
+    if (x >= x0 && x <= x1) {
+      if (x1 === x0) return y0;
+      const t = (x - x0) / (x1 - x0);
+      return y0 + t * (y1 - y0);
+    }
+  }
+  return null;
+}
+
+/**
  * Conso RMS = bilan matière sur la télémétrie Snowflake (niveau de cuve) :
  * Stock Ouv. RMS + Refueling + Ajout In − Prélèvement Out − Stock Clôt. RMS.
  * Même formule que "Conso Réelle" du template, appliquée aux valeurs RMS.

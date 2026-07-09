@@ -457,6 +457,15 @@ export type FuelGeCurveMatch = {
   conso_50_l_h?: number | null;
 };
 
+export type FuelCphTargetMatch = {
+  matched: boolean;
+  reason?: string | null;
+  engine_family?: string | null;
+  dg_capacity_kva_matched?: number | null;
+  /** Points [%charge (fraction), L/h] triés par %charge croissant, pour interpolation linéaire. */
+  points?: [number, number][];
+};
+
 export type FuelGeAsset = {
   source?: "ENOC_GE_ASSET";
   ge_id?: string | null;
@@ -477,6 +486,7 @@ export type FuelGeAsset = {
   controller?: string | null;
   updated_at?: string | null;
   fuel_curve?: FuelGeCurveMatch | null;
+  cph_target?: FuelCphTargetMatch | null;
 };
 
 export type FuelGeContext = {
@@ -550,5 +560,19 @@ export async function getFuelSourceStatus(params?: {
 
 export async function getFuelSyncRuns() {
   const { data } = await api.get<FuelSyncRunsResponse>(`${BASE}/sync-runs/`);
+  return data;
+}
+
+export type CphMatrixEngine = {
+  engine_family: string;
+  rows: Array<{
+    dg_capacity_kva: number;
+    /** clé = %charge en texte ("0", "0.1", "0.15", ..., "1"), valeur = conso L/h. */
+    values: Record<string, number>;
+  }>;
+};
+
+export async function getCphMatrix() {
+  const { data } = await api.get<{ data: CphMatrixEngine[] }>(`${BASE}/cph-matrix/`);
   return data;
 }

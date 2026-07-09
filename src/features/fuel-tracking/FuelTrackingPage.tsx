@@ -19,7 +19,7 @@ import {
   Warehouse,
 } from "lucide-react";
 
-import { getFuelEnocJournal, getFuelMonthlyTracking, getFuelSourceStatus, getFuelSyncRuns, type FuelStatusCode } from "@/services/fuelTracking";
+import { getCphMatrix, getFuelEnocJournal, getFuelMonthlyTracking, getFuelSourceStatus, getFuelSyncRuns, type FuelStatusCode } from "@/services/fuelTracking";
 
 import { FT, toneColors } from "./theme";
 import { Card, GLOBAL_STYLES, Pager, Pill, SegmentedTabs } from "./ui";
@@ -86,6 +86,13 @@ export default function FuelTrackingPage() {
     queryKey: ["fuel-sync-runs-template"],
     queryFn: getFuelSyncRuns,
     staleTime: 60_000,
+  });
+
+  const cphMatrixQ = useQuery({
+    queryKey: ["fuel-cph-matrix"],
+    queryFn: getCphMatrix,
+    enabled: activeSheet === "CPH",
+    staleTime: 5 * 60_000,
   });
 
   const rows = monthlyQ.data?.data ?? [];
@@ -371,7 +378,7 @@ export default function FuelTrackingPage() {
           )}
 
           {activeSheet === "STOCK_DEPOT" && <StockDepotSheet />}
-          {activeSheet === "CPH" && <CphSheet />}
+          {activeSheet === "CPH" && <CphSheet data={cphMatrixQ.data?.data ?? []} loading={cphMatrixQ.isLoading} />}
           {activeSheet === "REF_SITES" && <RefSitesSheet rows={rows} loading={monthlyQ.isLoading} />}
           {activeSheet === "LISTES" && <ListesSheet />}
         </div>
