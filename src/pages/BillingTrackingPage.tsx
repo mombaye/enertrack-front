@@ -37,9 +37,6 @@ import {
   PackageX,
   Clock,
   TrendingDown,
-  LayoutGrid,
-  CreditCard,
-  Building,
   Loader2,
 } from "lucide-react";
 import { api } from "@/services/api";
@@ -617,44 +614,6 @@ function MetricBtn({
   );
 }
 
-// ─── Tab bar ──────────────────────────────────────────────────────────────────
-type TabKey = "overview" | "payments" | "fnp" | "sites";
-
-function TabBar({ active, onChange, fnpCount }: { active: TabKey; onChange: (t: TabKey) => void; fnpCount: number }) {
-  const tabs: Array<{ key: TabKey; label: string; icon: ReactNode }> = [
-    { key: "overview", label: "Vue d'ensemble", icon: <LayoutGrid size={14} /> },
-    { key: "payments", label: "Paiements & Certification", icon: <CreditCard size={14} /> },
-    { key: "fnp", label: "Factures Non Parvenues", icon: <PackageX size={14} /> },
-    { key: "sites", label: "Sites", icon: <Building size={14} /> },
-  ];
-  return (
-    <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
-      {tabs.map((t) => (
-        <button
-          key={t.key}
-          type="button"
-          onClick={() => onChange(t.key)}
-          style={{
-            border: `1px solid ${active === t.key ? C.blue[600] : C.slate[200]}`,
-            background: active === t.key ? `linear-gradient(135deg, ${C.blue[800]}, ${C.blue[600]})` : "#fff",
-            color: active === t.key ? "#fff" : C.slate[600],
-            borderRadius: 999, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 7,
-            fontSize: 12, fontWeight: 900, cursor: "pointer",
-            boxShadow: active === t.key ? "0 10px 24px rgba(10,61,150,.22)" : "0 1px 2px rgba(0,0,0,.04)",
-          }}
-        >
-          {t.icon} {t.label}
-          {t.key === "fnp" && fnpCount > 0 ? (
-            <span style={{ background: active === t.key ? "rgba(255,255,255,.24)" : C.nok.light, color: active === t.key ? "#fff" : C.nok.dark, borderRadius: 999, padding: "1px 7px", fontSize: 10.5, fontWeight: 900 }}>
-              {fnpCount}
-            </span>
-          ) : null}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function BillingTrackingPage() {
   const defRange = useMemo(() => defaultRange(), []);
@@ -663,7 +622,6 @@ export default function BillingTrackingPage() {
   const [activeMetric, setActiveMetric] = useState<"ht" | "nrj" | "abonnement" | "penalite" | "cosphi">("ht");
   const [selectedSite, setSelectedSite] = useState<SiteOption | null>(null);
   const [globalScope, setGlobalScope] = useState<GlobalScope>("ALL");
-  const [activeTab, setActiveTab] = useState<TabKey>("overview");
 
   const siteCode = selectedSite?.site_id ?? undefined;
   const [showFNPModal, setShowFNPModal] = useState(false);
@@ -908,14 +866,9 @@ export default function BillingTrackingPage() {
         </div>
       </div>
 
-      {/* ─── Corps : onglets ────────────────────────────────────────────────── */}
+      {/* ─── Corps ──────────────────────────────────────────────────────────── */}
       <div style={{ padding: 22, display: "grid", gap: 16 }}>
-        <Card style={{ padding: 14 }}>
-          <TabBar active={activeTab} onChange={setActiveTab} fnpCount={fnpStats?.fnp_count ?? 0} />
-        </Card>
-
-        {activeTab === "overview" ? (
-          <div style={{ display: "grid", gap: 16 }}>
+        <div style={{ display: "grid", gap: 16 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 16 }}>
               <Card>
                 <SectionTitle
@@ -1018,10 +971,8 @@ export default function BillingTrackingPage() {
               </Card>
             </div>
           </div>
-        ) : null}
 
-        {activeTab === "payments" ? (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <Card>
               <SectionTitle
                 icon={<CheckCircle2 size={15} />}
@@ -1128,11 +1079,9 @@ export default function BillingTrackingPage() {
                 <div style={{ color: C.slate[400], fontSize: 12.5, textAlign: "center", padding: "24px 0" }}>Aucune donnée de certification billing disponible</div>
               )}
             </Card>
-          </div>
-        ) : null}
+        </div>
 
-        {activeTab === "fnp" ? (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 16 }}>
             <Card>
               <SectionTitle
                 icon={<PackageX size={15} />}
@@ -1262,35 +1211,32 @@ export default function BillingTrackingPage() {
                 </div>
               )}
             </Card>
-          </div>
-        ) : null}
+        </div>
 
-        {activeTab === "sites" ? (
-          selectedSite ? (
-            <Card>
-              <div style={{ textAlign: "center", padding: "24px 0", color: C.slate[500] }}>
-                <Building2 size={26} color={C.slate[300]} style={{ marginBottom: 10 }} />
-                <div style={{ fontWeight: 800 }}>Vue site unique active</div>
-                <div style={{ fontSize: 12.5, marginTop: 4 }}>Repassez en "Vue globale" pour voir les classements top sites.</div>
-              </div>
-            </Card>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
-              <Card>
-                <SectionTitle>Top sites — Montant HT</SectionTitle>
-                {isLoading ? <Skeleton h={180} /> : <TopTable rows={data?.top.conso_vs_montant ?? []} valueKey="montant_ht" color={C.blue[700]} />}
-              </Card>
-              <Card>
-                <SectionTitle>Top sites — Pénalité</SectionTitle>
-                {isLoading ? <Skeleton h={180} /> : <TopTable rows={data?.top.pen_prime ?? []} valueKey="penalite_prime" color={C.nok.main} />}
-              </Card>
-              <Card>
-                <SectionTitle right={<Badge tone="purple">Positifs uniquement</Badge>}>Top sites — Cos φ</SectionTitle>
-                {isLoading ? <Skeleton h={180} /> : <TopTable rows={data?.top.cosphi ?? []} valueKey="montant_cosphi" color={C.purple.main} filterPositive={true} />}
-              </Card>
+        {selectedSite ? (
+          <Card>
+            <div style={{ textAlign: "center", padding: "24px 0", color: C.slate[500] }}>
+              <Building2 size={26} color={C.slate[300]} style={{ marginBottom: 10 }} />
+              <div style={{ fontWeight: 800 }}>Vue site unique active</div>
+              <div style={{ fontSize: 12.5, marginTop: 4 }}>Repassez en "Vue globale" pour voir les classements top sites.</div>
             </div>
-          )
-        ) : null}
+          </Card>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+            <Card>
+              <SectionTitle>Top sites — Montant HT</SectionTitle>
+              {isLoading ? <Skeleton h={180} /> : <TopTable rows={data?.top.conso_vs_montant ?? []} valueKey="montant_ht" color={C.blue[700]} />}
+            </Card>
+            <Card>
+              <SectionTitle>Top sites — Pénalité</SectionTitle>
+              {isLoading ? <Skeleton h={180} /> : <TopTable rows={data?.top.pen_prime ?? []} valueKey="penalite_prime" color={C.nok.main} />}
+            </Card>
+            <Card>
+              <SectionTitle right={<Badge tone="purple">Positifs uniquement</Badge>}>Top sites — Cos φ</SectionTitle>
+              {isLoading ? <Skeleton h={180} /> : <TopTable rows={data?.top.cosphi ?? []} valueKey="montant_cosphi" color={C.purple.main} filterPositive={true} />}
+            </Card>
+          </div>
+        )}
       </div>
 
       {showFNPModal && fnpData ? (
