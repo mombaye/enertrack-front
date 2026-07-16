@@ -19,12 +19,11 @@ import {
   Warehouse,
 } from "lucide-react";
 
-import { getCphMatrix, getFuelEnocJournal, getFuelMonthlyTracking, getFuelSourceStatus, getFuelSyncRuns, type FuelStatusCode } from "@/services/fuelTracking";
+import { exportFuelTrackingWorkbook, getCphMatrix, getFuelEnocJournal, getFuelMonthlyTracking, getFuelSourceStatus, getFuelSyncRuns, type FuelStatusCode } from "@/services/fuelTracking";
 
 import { FT, toneColors } from "./theme";
 import { Card, GLOBAL_STYLES, Pager, Pill, SegmentedTabs } from "./ui";
 import { currentMonth, fmtDateTime, fmtL } from "./helpers";
-import { exportWorkbook } from "./exportWorkbook";
 import { DashboardSheet } from "./sheets/DashboardSheet";
 import { JournalSheet } from "./sheets/JournalSheet";
 import { ConsoMensuelleSheet } from "./sheets/ConsoMensuelleSheet";
@@ -63,6 +62,16 @@ export default function FuelTrackingPage() {
   const [operationType, setOperationType] = useState("ALL");
   const [monthlyPage, setMonthlyPage] = useState(1);
   const [journalPage, setJournalPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      await exportFuelTrackingWorkbook({ month });
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const sourceStatusQ = useQuery({
     queryKey: ["fuel-source-status", month],
@@ -131,7 +140,7 @@ export default function FuelTrackingPage() {
             style={{
               position: "absolute",
               inset: 0,
-              backgroundImage: "radial-gradient(600px 200px at 85% -10%, rgba(224,138,44,.22), transparent)",
+              backgroundImage: "radial-gradient(600px 200px at 85% -10%, rgba(255,255,255,.16), transparent)",
               pointerEvents: "none",
             }}
           />
@@ -146,9 +155,9 @@ export default function FuelTrackingPage() {
                     gap: 7,
                     padding: "4px 11px",
                     borderRadius: 999,
-                    background: "rgba(224,138,44,.16)",
-                    color: "#FBC583",
-                    border: "1px solid rgba(224,138,44,.35)",
+                    background: "rgba(255,255,255,.14)",
+                    color: "#fff",
+                    border: "1px solid rgba(255,255,255,.28)",
                     fontSize: 10.5,
                     fontWeight: 900,
                     textTransform: "uppercase",
@@ -234,7 +243,8 @@ export default function FuelTrackingPage() {
                 </button>
 
                 <button
-                  onClick={() => exportWorkbook({ month, monthlyRows: rows, journalRows, kpis })}
+                  onClick={handleExport}
+                  disabled={exporting}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -242,16 +252,17 @@ export default function FuelTrackingPage() {
                     padding: "9px 15px",
                     borderRadius: 11,
                     border: "none",
-                    background: FT.gold,
-                    color: "#1A1000",
+                    background: "#fff",
+                    color: FT.navy,
                     fontSize: 13,
                     fontWeight: 850,
-                    cursor: "pointer",
-                    boxShadow: "0 6px 18px rgba(224,138,44,.35)",
+                    cursor: exporting ? "not-allowed" : "pointer",
+                    opacity: exporting ? 0.7 : 1,
+                    boxShadow: "0 6px 18px rgba(11,31,77,.28)",
                   }}
                 >
-                  <Download size={14} />
-                  Export classeur
+                  <Download size={14} className={exporting ? "ft-spin" : ""} />
+                  {exporting ? "Export en cours…" : "Export classeur"}
                 </button>
               </div>
             </div>
@@ -347,7 +358,7 @@ export default function FuelTrackingPage() {
 
           {activeSheet === "JOURNAL_RAVITAILLEMENT" && (
             <>
-              <JournalSheet rows={journalRows} loading={journalQ.isLoading} />
+              <JournalSheet rows={journalRows} loading={journalQ.isLoading} monthlyRows={rows} />
               {journalQ.data && journalQ.data.pagination.totalPages > 1 && (
                 <Pager
                   page={journalQ.data.pagination.page}

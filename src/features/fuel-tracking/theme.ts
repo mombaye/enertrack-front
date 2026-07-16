@@ -1,13 +1,13 @@
 // src/features/fuel-tracking/theme.ts
-// Palette et tokens visuels du module Suivi Carburant — cohérent avec l'identité
-// Camusat (navy #0c295a) utilisée ailleurs dans l'app (SuiviConsoPage, thème global).
+// Palette et tokens visuels du module Suivi Carburant — harmonisé avec l'identité
+// bleu-900/blanc Camusat utilisée sur les modules Financial/BO/Facturation.
 
 export const FT = {
   // Fond de page
-  pageBg: "linear-gradient(180deg,#F7F9FC 0%,#EEF3FB 100%)",
+  pageBg: "linear-gradient(180deg,#F8FAFC 0%,#EEF4FF 100%)",
 
   // Bannière d'en-tête
-  headerGrad: "linear-gradient(120deg,#08183A 0%,#0F2C63 45%,#153E8A 100%)",
+  headerGrad: "linear-gradient(135deg, #0B1F4D 0%, #123C8C 45%, #1A56C4 75%, #3272E0 100%)",
 
   // Surfaces
   card: "#FFFFFF",
@@ -23,10 +23,10 @@ export const FT = {
   textOnDarkSub: "rgba(234,240,254,.68)",
 
   // Marque
-  navy: "#0F2C63",
-  navyDeep: "#08183A",
-  gold: "#E08A2C",
-  goldL: "#FFF4E6",
+  navy: "#0B1F4D",
+  navyDeep: "#081A3D",
+  gold: "#1A56C4",
+  goldL: "#E4EFFE",
 
   // Sémantique
   green: "#0F9D67",
@@ -47,7 +47,7 @@ export const FT = {
   radius: 16,
   radiusSm: 10,
   shadow: "0 1px 2px rgba(15,23,42,.04), 0 8px 24px -12px rgba(15,23,42,.10)",
-  shadowLg: "0 8px 30px -8px rgba(8,24,58,.22)",
+  shadowLg: "0 8px 30px -8px rgba(11,31,77,.22)",
 } as const;
 
 export type Tone = "green" | "orange" | "red" | "blue" | "violet" | "cyan" | "slate" | "gold";
@@ -61,18 +61,20 @@ export function toneColors(tone: Tone = "slate") {
     violet: { fg: FT.violet, bg: FT.violetL, bd: "rgba(124,58,237,.22)" },
     cyan: { fg: FT.cyan, bg: FT.cyanL, bd: "rgba(8,145,178,.22)" },
     slate: { fg: FT.slate, bg: FT.slateL, bd: FT.border },
-    gold: { fg: FT.gold, bg: FT.goldL, bd: "rgba(224,138,44,.25)" },
+    gold: { fg: FT.gold, bg: FT.goldL, bd: "rgba(26,86,196,.22)" },
   };
   return map[tone];
 }
 
-// Palette des groupes de colonnes (en-têtes fusionnés façon Excel)
+// Palette des groupes de colonnes (en-têtes fusionnés façon Excel) — dégradé de
+// bleus/neutres cohérent avec l'identité Camusat ; le rouge reste réservé aux
+// groupes de contrôle/alerte pour garder un vrai signal visuel.
 export const GROUP_PALETTE: Record<string, { fg: string; bg: string }> = {
-  navy: { fg: FT.navy, bg: FT.blueL },
-  gold: { fg: "#9A5B10", bg: FT.goldL },
-  green: { fg: "#0B7A50", bg: FT.greenL },
-  violet: { fg: "#5B21B6", bg: FT.violetL },
-  cyan: { fg: "#0E6B80", bg: FT.cyanL },
+  navy: { fg: "#0B1F4D", bg: "#E4EFFE" },
+  gold: { fg: "#123C8C", bg: "#EAF1FE" },
+  green: { fg: "#1A56C4", bg: "#F0F5FC" },
+  violet: { fg: "#2464D6", bg: "#EEF4FE" },
+  cyan: { fg: "#475569", bg: "#F1F5F9" },
   red: { fg: "#B91C1C", bg: FT.redL },
   slate: { fg: FT.textMid, bg: FT.slateL },
 };

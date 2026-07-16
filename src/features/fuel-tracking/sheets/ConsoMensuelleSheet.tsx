@@ -2,20 +2,21 @@
 // Feuille CONSO_MENSUELLE — suivi consommation mensuelle par site.
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, Fuel } from "lucide-react";
+import { AlertTriangle, Eye, Fuel } from "lucide-react";
 import type { FuelMonthlyRow } from "@/services/fuelTracking";
 import { ExcelGrid, type ExcelGroup } from "../ExcelGrid";
 import { Card, ComingCell, GroupToggleBar, Pill, SheetTitle } from "../ui";
 import { FT } from "../theme";
+import SiteDetailModal from "./SiteDetailModal";
 import {
   consoRms,
   consoTheoriqueLH,
   cphTargetLH,
   facteurCharge,
   fmt2,
-  fmtL,
-  fmtMaybeKva,
-  fmtMaybeL,
+  fmtMaybeKvaNum,
+  fmtMaybeNum,
+  fmtNum,
   geBrand1,
   geBrand2,
   gePower1,
@@ -57,7 +58,7 @@ function HoursCell({ value, source }: { value: number | null | undefined; source
   if (value === null || value === undefined) return <ComingCell />;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
-      <span style={{ fontWeight: 800 }}>{fmt2.format(n(value))} h</span>
+      <span style={{ fontWeight: 800 }}>{fmt2.format(n(value))}</span>
       {source && source !== "NO_DATA" && (
         <Pill label={RH_SOURCE_LABEL[source] || source} tone={source === "SNOWFLAKE_DSE_COUNTER" ? "green" : "cyan"} />
       )}
@@ -90,6 +91,7 @@ function loadHiddenGroups(): Set<string> {
 export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[]; loading: boolean }) {
   const [hiddenGroups, setHiddenGroups] = useState<Set<string>>(loadHiddenGroups);
   const [anomaliesOnly, setAnomaliesOnly] = useState(false);
+  const [detailRow, setDetailRow] = useState<FuelMonthlyRow | null>(null);
 
   function toggleGroup(id: string) {
     setHiddenGroups((prev) => {
@@ -128,7 +130,22 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
     color: "navy",
     columns: [
       { id: "site_id", header: "Site ID", width: 110, emphasis: true, render: (r) => r.site_id || "—" },
-      { id: "site_name", header: "Site Name", width: 190, render: (r) => r.site_name || "—" },
+      { id: "site_name", header: "Site Name", width: 180, render: (r) => r.site_name || "—" },
+      {
+        id: "detail",
+        header: "",
+        width: 60,
+        align: "center",
+        render: (r) => (
+          <button
+            onClick={() => setDetailRow(r)}
+            title="Voir la fiche site"
+            style={{ display: "inline-flex", alignItems: "center", gap: 5, border: `1px solid ${FT.border}`, background: FT.blueL, color: FT.navy, borderRadius: 8, padding: "4px 8px", fontSize: 11, fontWeight: 800, cursor: "pointer" }}
+          >
+            <Eye size={12} />
+          </button>
+        ),
+      },
     ],
   };
 
@@ -148,15 +165,15 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
         { id: "puissance", header: "Puissance (W)", width: 110, align: "right", render: (r) => (siteLoad(r) !== null ? fmt2.format(n(siteLoad(r))) : "—") },
         { id: "ge_facture", header: "GE Facturé", width: 100, align: "right", render: (r) => r.enoc_site_ref?.nb_ge || "—" },
         { id: "ge_exist", header: "GE Exist", width: 90, align: "right", render: (r) => r.ge_ref?.assets_count || r.enoc_site_ref?.nb_ge || "—" },
-        { id: "cap_cuve", header: "Cap. Cuve (L)", width: 120, align: "right", render: (r) => fmtMaybeL(tankCapacity1(r)) },
+        { id: "cap_cuve", header: "Cap. Cuve (L)", width: 120, align: "right", render: (r) => fmtMaybeNum(tankCapacity1(r)) },
         { id: "marque_ge1", header: "Marque GE 1", width: 110, render: geBrand1 },
-        { id: "kva1", header: "Capacité (KVA)", width: 110, align: "right", render: (r) => fmtMaybeKva(gePower1(r)) },
-        { id: "cuve1", header: "Capacité Cuve (L)", width: 130, align: "right", render: (r) => fmtMaybeL(tankCapacity1(r)) },
-        { id: "type_cuve1", header: "Type Cuve", width: 110, render: (r) => tankType(primaryGe(r)?.tank_connected, primaryGe(r)?.tank_shape) },
+        { id: "kva1", header: "Capacité GE1 (KVA)", width: 130, align: "right", render: (r) => fmtMaybeKvaNum(gePower1(r)) },
+        { id: "cuve1", header: "Capacité Cuve GE1 (L)", width: 150, align: "right", render: (r) => fmtMaybeNum(tankCapacity1(r)) },
+        { id: "type_cuve1", header: "Type Cuve GE1", width: 120, render: (r) => tankType(primaryGe(r)?.tank_connected, primaryGe(r)?.tank_shape) },
         { id: "marque_ge2", header: "Marque GE 2", width: 110, render: geBrand2 },
-        { id: "kva2", header: "Capacité (KVA)", width: 110, align: "right", render: (r) => fmtMaybeKva(gePower2(r)) },
-        { id: "cuve2", header: "Capacité Cuve (L)", width: 130, align: "right", render: (r) => fmtMaybeL(tankCapacity2(r)) },
-        { id: "type_cuve2", header: "Type Cuve", width: 110, render: (r) => tankType(secondGe(r)?.tank_connected, secondGe(r)?.tank_shape) },
+        { id: "kva2", header: "Capacité GE2 (KVA)", width: 130, align: "right", render: (r) => fmtMaybeKvaNum(gePower2(r)) },
+        { id: "cuve2", header: "Capacité Cuve GE2 (L)", width: 150, align: "right", render: (r) => fmtMaybeNum(tankCapacity2(r)) },
+        { id: "type_cuve2", header: "Type Cuve GE2", width: 120, render: (r) => tankType(secondGe(r)?.tank_connected, secondGe(r)?.tank_shape) },
         { id: "fuel_sensor", header: "Fuel sensor existing", width: 140, render: (r) => r.enoc_site_ref?.rms_installed || "—" },
       ],
     },
@@ -165,16 +182,16 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
       label: "Cibles",
       color: "gold",
       columns: [
-        { id: "target_boq", header: "Target BOQ", width: 110, align: "right", render: () => <ComingCell /> },
+        { id: "target_boq", header: "Target BOQ (L/mois)", width: 140, align: "right", render: () => <ComingCell /> },
         {
           id: "target_aktivco",
-          header: "Target Aktivco",
-          width: 160,
+          header: "Target Aktivco (L/mois)",
+          width: 170,
           align: "right",
           render: (r) =>
             r.enoc.monthly_target_liters ? (
               <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
-                <span style={{ fontWeight: 800 }}>{fmtL(r.enoc.monthly_target_liters)}</span>
+                <span style={{ fontWeight: 800 }}>{fmtNum(r.enoc.monthly_target_liters)}</span>
                 {r.enoc.target_status && <Pill label={r.enoc.target_status} tone={r.enoc.target_status === "exceeded" ? "red" : "green"} />}
               </div>
             ) : (
@@ -183,18 +200,18 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
         },
         {
           id: "facteur_charge",
-          header: "Facteur Charge",
-          width: 120,
+          header: "Facteur Charge (%)",
+          width: 130,
           align: "right",
           render: (r) => {
             const pct = facteurCharge(r);
-            return pct === null ? <ComingCell /> : `${fmt2.format(pct)}%`;
+            return pct === null ? <ComingCell /> : fmt2.format(pct);
           },
         },
         {
           id: "conso_theorique_lh",
-          header: "Conso L/h Théorique",
-          width: 170,
+          header: "Conso Théorique (L/h)",
+          width: 180,
           align: "right",
           render: (r) => {
             const lh = consoTheoriqueLH(r);
@@ -203,7 +220,7 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
             const badge = confidence ? CURVE_CONFIDENCE_LABEL[confidence] : null;
             return (
               <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
-                <span style={{ fontWeight: 800 }}>{fmt2.format(lh)} L/h</span>
+                <span style={{ fontWeight: 800 }}>{fmt2.format(lh)}</span>
                 {badge && <Pill label={badge.label} tone={badge.tone} />}
               </div>
             );
@@ -218,34 +235,30 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
       columns: [
         {
           id: "rh_initial",
-          header: "RH Initial",
-          width: 150,
+          header: "RH Mois Précédent (h)",
+          width: 180,
           align: "right",
           render: (r) => <HoursCell value={r.efms.rh_initial_hours} source={r.efms.rh_initial_source} />,
         },
-        { id: "stock_ouv_rms", header: "Stock Ouv. RMS", width: 130, align: "right", render: (r) => fmtMaybeL(r.stock.ouv_rms) },
-        { id: "stock_ouv_reel", header: "Stock Ouv. Réel", width: 130, align: "right", render: (r) => fmtMaybeL(r.stock.ouv_reel) },
+        { id: "stock_ouv_rms", header: "Stock Ouv. RMS (L)", width: 150, align: "right", render: (r) => fmtMaybeNum(r.stock.ouv_rms) },
+        { id: "stock_ouv_reel", header: "Stock Ouv. Réel (L)", width: 150, align: "right", render: (r) => fmtMaybeNum(r.stock.ouv_reel) },
         {
-          id: "refueling",
-          header: "Refueling",
-          width: 120,
+          id: "ravitaillement",
+          header: "Ravitaillement (L)",
+          width: 150,
           align: "right",
           emphasis: true,
-          render: (r) => (r.enoc.refueling_liters > 0 ? <span style={{ color: "#0F9D67", fontWeight: 800 }}>{fmtL(r.enoc.refueling_liters)}</span> : <ComingCell />),
+          render: (r) => {
+            const total = n(r.enoc.refueling_liters) + n(r.enoc.ajout_in_liters);
+            return total > 0 ? <span style={{ color: FT.green, fontWeight: 800 }}>{fmtNum(total)}</span> : <ComingCell />;
+          },
         },
         {
-          id: "prelevement_out",
-          header: "Prélèvement Out",
+          id: "ponction",
+          header: "Ponction (L)",
           width: 130,
           align: "right",
-          render: (r) => (r.enoc.prelevement_out_liters > 0 ? <span style={{ color: "#DC2626", fontWeight: 800 }}>{fmtL(r.enoc.prelevement_out_liters)}</span> : <ComingCell />),
-        },
-        {
-          id: "ajout_in",
-          header: "Ajout In",
-          width: 110,
-          align: "right",
-          render: (r) => (r.enoc.ajout_in_liters > 0 ? fmtL(r.enoc.ajout_in_liters) : <ComingCell />),
+          render: (r) => (r.enoc.prelevement_out_liters > 0 ? <span style={{ color: FT.red, fontWeight: 800 }}>{fmtNum(r.enoc.prelevement_out_liters)}</span> : <ComingCell />),
         },
       ],
     },
@@ -254,40 +267,40 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
       label: "Données mois en cours",
       color: "green",
       columns: [
-        { id: "rh_final", header: "RH Final", width: 150, align: "right", render: (r) => <RhCell row={r} /> },
-        { id: "stock_clot_rms", header: "Stock Clôt. RMS", width: 130, align: "right", render: (r) => fmtMaybeL(r.stock.clot_rms) },
-        { id: "stock_clot_reel", header: "Stock Clôt. Réel", width: 130, align: "right", render: (r) => fmtMaybeL(r.stock.clot_reel) },
+        { id: "rh_final", header: "RH Final (h)", width: 150, align: "right", render: (r) => <RhCell row={r} /> },
+        { id: "stock_clot_rms", header: "Stock Clôt. RMS (L)", width: 150, align: "right", render: (r) => fmtMaybeNum(r.stock.clot_rms) },
+        { id: "stock_clot_reel", header: "Stock Clôt. Réel (L)", width: 150, align: "right", render: (r) => fmtMaybeNum(r.stock.clot_reel) },
         {
           id: "rh_controleur",
-          header: "RH Contrôleur Final",
-          width: 160,
+          header: "RH Contrôleur Final (h)",
+          width: 180,
           align: "right",
           render: (r) =>
             r.efms.rh_source === "SNOWFLAKE_DSE_COUNTER" && r.efms.rh_hours !== null ? (
-              <span style={{ fontWeight: 800 }}>{fmt2.format(n(r.efms.rh_hours))} h</span>
+              <span style={{ fontWeight: 800 }}>{fmt2.format(n(r.efms.rh_hours))}</span>
             ) : (
               <ComingCell />
             ),
         },
-        { id: "stock_reel", header: "Stock Réel", width: 110, align: "right", render: (r) => fmtMaybeL(r.stock.reel) },
+        { id: "stock_reel", header: "Stock Réel (L)", width: 130, align: "right", render: (r) => fmtMaybeNum(r.stock.reel) },
         {
           id: "rh_delta",
-          header: "RH Delta",
+          header: "RH Delta (h)",
           width: 150,
           align: "right",
           render: (r) => <HoursCell value={r.efms.rh_delta_hours} />,
         },
         {
           id: "stock_delta_rms",
-          header: "Stock Delta RMS",
-          width: 140,
+          header: "Stock Delta RMS (L)",
+          width: 160,
           align: "right",
           render: (r) => {
             const d = r.stock.delta_rms;
             return d === null || d === undefined ? (
               <ComingCell />
             ) : (
-              <span style={{ fontWeight: 800, color: d < 0 ? "#D97706" : "#0F9D67" }}>{fmtL(d)}</span>
+              <span style={{ fontWeight: 800, color: d < 0 ? FT.orange : FT.green }}>{fmtNum(d)}</span>
             );
           },
         },
@@ -300,29 +313,29 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
       columns: [
         {
           id: "conso_reelle",
-          header: "Conso Réelle",
-          width: 130,
+          header: "Conso Réelle (L)",
+          width: 150,
           align: "right",
           emphasis: true,
-          render: (r) => <span style={{ color: "#D97706", fontWeight: 800 }}>{fmtL(r.efms.fuel_conso_l)}</span>,
+          render: (r) => <span style={{ color: FT.orange, fontWeight: 800 }}>{fmtNum(r.efms.fuel_conso_l)}</span>,
         },
         {
           id: "conso_rms",
-          header: "Conso RMS",
-          width: 120,
+          header: "Conso RMS (L)",
+          width: 140,
           align: "right",
           render: (r) => {
             const v = consoRms(r);
-            return v === null ? <ComingCell /> : <span style={{ fontWeight: 800, color: v < 0 ? "#D97706" : undefined }}>{fmtL(v)}</span>;
+            return v === null ? <ComingCell /> : <span style={{ fontWeight: 800, color: v < 0 ? FT.orange : undefined }}>{fmtNum(v)}</span>;
           },
         },
         {
           id: "conso_theorique",
-          header: "Conso Théorique",
-          width: 140,
+          header: "Conso Théorique (L)",
+          width: 160,
           align: "right",
           emphasis: true,
-          render: (r) => <span style={{ color: "#2563EB", fontWeight: 800 }}>{fmtL(r.efms.fuel_deli_l)}</span>,
+          render: (r) => <span style={{ color: FT.blue, fontWeight: 800 }}>{fmtNum(r.efms.fuel_deli_l)}</span>,
         },
       ],
     },
@@ -331,11 +344,11 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
       label: "CPH réel",
       color: "navy",
       columns: [
-        { id: "cph_reel", header: "CPH Réel", width: 100, align: "right", emphasis: true, render: (r) => fmt2.format(n(r.efms.cph_l_per_hour)) },
+        { id: "cph_reel", header: "CPH Réel (L/h)", width: 130, align: "right", emphasis: true, render: (r) => fmt2.format(n(r.efms.cph_l_per_hour)) },
         {
           id: "cph_target",
-          header: "CPH Target Aktivco",
-          width: 170,
+          header: "CPH Target Aktivco (L/h)",
+          width: 190,
           align: "right",
           render: (r) => {
             const target = cphTargetLH(r);
@@ -343,7 +356,7 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
             const engine = primaryGe(r)?.cph_target?.engine_family;
             return (
               <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
-                <span style={{ fontWeight: 800 }}>{fmt2.format(target)} L/h</span>
+                <span style={{ fontWeight: 800 }}>{fmt2.format(target)}</span>
                 {engine && <Pill label={engine.replace(/^Moteur\s+/i, "")} tone="cyan" />}
               </div>
             );
@@ -358,21 +371,21 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
       columns: [
         {
           id: "ecart_target",
-          header: "Écart vs Target",
-          width: 130,
+          header: "Écart vs Target (L)",
+          width: 150,
           align: "right",
           render: (r) => (
-            <span style={{ fontWeight: 800, color: Math.abs(n(r.gaps.deli_vs_enoc_l)) > 0 ? "#D97706" : "#0F9D67" }}>
-              {r.gaps.deli_vs_enoc_l === null ? "—" : fmtL(r.gaps.deli_vs_enoc_l)}
+            <span style={{ fontWeight: 800, color: Math.abs(n(r.gaps.deli_vs_enoc_l)) > 0 ? FT.orange : FT.green }}>
+              {r.gaps.deli_vs_enoc_l === null ? "—" : fmtNum(r.gaps.deli_vs_enoc_l)}
             </span>
           ),
         },
         {
           id: "ecart_target_pct",
-          header: "Écart vs Target %",
-          width: 130,
+          header: "Écart vs Target (%)",
+          width: 150,
           align: "right",
-          render: (r) => (r.gaps.deli_vs_enoc_pct === null ? "—" : `${fmt2.format(n(r.gaps.deli_vs_enoc_pct))}%`),
+          render: (r) => (r.gaps.deli_vs_enoc_pct === null ? "—" : fmt2.format(n(r.gaps.deli_vs_enoc_pct))),
         },
         {
           id: "statut_nok",
@@ -387,10 +400,10 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
       label: "Stock",
       color: "slate",
       columns: [
-        { id: "taux_remplissage", header: "Taux Remplissage", width: 140, render: () => <ComingCell /> },
+        { id: "taux_remplissage", header: "Taux Remplissage (%)", width: 160, render: () => <ComingCell /> },
         { id: "alerte_stock", header: "Alerte Stock", width: 120, render: () => <ComingCell /> },
-        { id: "ecart_rms_reel", header: "Écart RMS/Réel", width: 130, render: () => <ComingCell /> },
-        { id: "ecart_rms_reel_pct", header: "Écart RMS/Réel %", width: 140, render: () => <ComingCell /> },
+        { id: "ecart_rms_reel", header: "Écart RMS/Réel (L)", width: 150, render: () => <ComingCell /> },
+        { id: "ecart_rms_reel_pct", header: "Écart RMS/Réel (%)", width: 160, render: () => <ComingCell /> },
         { id: "alerte_rms", header: "Alerte RMS", width: 110, render: () => <ComingCell /> },
       ],
     },
@@ -472,6 +485,8 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
           emptyTitle={anomaliesOnly ? "Aucune anomalie sur la période" : "Aucune donnée sur la période"}
         />
       </div>
+
+      {detailRow ? <SiteDetailModal row={detailRow} onClose={() => setDetailRow(null)} /> : null}
     </Card>
   );
 }

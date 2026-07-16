@@ -90,7 +90,7 @@ export function SheetTitle({
   tone?: "navy" | "gold";
 }) {
   const bg = tone === "gold" ? FT.goldL : FT.blueL;
-  const fg = tone === "gold" ? "#9A5B10" : FT.navy;
+  const fg = tone === "gold" ? FT.gold : FT.navy;
   return (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
       <div

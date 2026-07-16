@@ -55,6 +55,22 @@ export function fmtMaybeKva(value: unknown) {
   return parsed === null ? "—" : `${fmt1.format(parsed)} KVA`;
 }
 
+// Variantes sans suffixe d'unité — l'unité est portée par l'en-tête de colonne,
+// pas répétée dans chaque cellule (Journal + Conso Mensuelle).
+export function fmtNum(value: unknown) {
+  return fmt.format(n(value));
+}
+
+export function fmtMaybeNum(value: unknown) {
+  const parsed = maybeNumber(value);
+  return parsed === null ? "—" : fmt.format(parsed);
+}
+
+export function fmtMaybeKvaNum(value: unknown) {
+  const parsed = maybeNumber(value);
+  return parsed === null ? "—" : fmt1.format(parsed);
+}
+
 export function statusTone(code?: string) {
   if (code === "OK") return "green" as const;
   if (code === "WARNING") return "orange" as const;

@@ -576,3 +576,30 @@ export async function getCphMatrix() {
   const { data } = await api.get<{ data: CphMatrixEngine[] }>(`${BASE}/cph-matrix/`);
   return data;
 }
+
+/**
+ * Télécharge le classeur Excel "Suivi Carburant" généré côté serveur
+ * (openpyxl, même structure que le modèle client) et déclenche le
+ * téléchargement dans le navigateur.
+ */
+export async function exportFuelTrackingWorkbook(params: { month?: string; country?: string }) {
+  const response = await api.get(`${BASE}/export/`, {
+    params: cleanParams(params),
+    responseType: "blob",
+  });
+  const blob = new Blob([response.data], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const disposition = response.headers?.["content-disposition"] as string | undefined;
+  const match = disposition?.match(/filename="?([^"]+)"?/);
+  const filename = match?.[1] || `suivi_carburant_${params.month || "export"}.xlsx`;
+
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
