@@ -8,7 +8,8 @@ import {
   Building2,TrendingUp, DollarSign,
   BrainCircuit,
   Fuel,
-  
+  ClipboardList,
+
 } from "lucide-react";
 import camusatLogo from "@/assets/images/camusat-logo.png";
 import { useAuth } from "@/auth/AuthContext";
@@ -69,6 +70,11 @@ const LINKS: LinkItem[] = [
   { to: "/users",                  icon: <User />,         label: "Utilisateurs",               section: "ADMINISTRATION", adminOnly: true },
   { to: "/billing/sonatel/config", icon: <Settings2 />,    label: "Config Sonatel",             section: "ADMINISTRATION", adminOnly: true },
   { to: "/admin/sites", icon: <Building2 />, label: "Gestion des sites", section: "ADMINISTRATION", adminOnly: true },
+];
+
+// Menu minimal pour le rôle Back Office — pas d'accès aux modules financiers/certification/etc.
+const BO_LINKS: LinkItem[] = [
+  { to: "/bo/workspace", icon: <ClipboardList />, label: "Analyses BO", section: "MODULES", end: true },
 ];
 
 const W  = 272;
@@ -235,7 +241,7 @@ function Inner({
   const isCol = mode === "desktop" ? collapsed : false;
 
   const visible = useMemo(
-    () => LINKS.filter(l => !l.adminOnly || role === "admin"),
+    () => role === "bo" ? BO_LINKS : LINKS.filter(l => !l.adminOnly || role === "admin"),
     [role]
   );
 
@@ -404,7 +410,7 @@ function Inner({
                 {user?.username || "Utilisateur"}
               </div>
               <div style={{ fontSize: 10, color: "rgba(255,255,255,.35)", marginTop: 1 }}>
-                {role === "admin" ? "Administrateur" : "Analyste"}
+                {role === "admin" ? "Administrateur" : role === "bo" ? "Back Office" : role === "manager" ? "Manager" : "Analyste"}
               </div>
             </div>
           )}

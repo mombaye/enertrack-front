@@ -15,6 +15,8 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
+  Clock,
   Database,
   Download,
   Eye,
@@ -76,6 +78,11 @@ import {
   type SiteMargeRow,
   type SiteRecurrentRow,
 } from "./api";
+import {
+  fetchBORequests,
+  fetchBOSnapshots,
+  type BOAnalysisRequest,
+} from "@/features/bo-analysis/api";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Design tokens
@@ -699,6 +706,10 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
     });
   }
 
+  function openDetailFor(siteId: string, siteName: string | null | undefined, year: number, month: number) {
+    setModalSite({ siteId, siteName: siteName || siteId, year, monthStart: month, monthEnd: month });
+  }
+
   const stats = useMemo(() => {
     const totalRedevance = n((evalStats as any)?.total_redevance);
     const totalFacture = n((evalStats as any)?.total_facture);
@@ -834,7 +845,7 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
         ) : null}
 
         {activeTab === "analyse" ? (
-          <AnalyticsView loading={loadingAnalytics} analytics={analytics} />
+          <AnalyticsView loading={loadingAnalytics} analytics={analytics} onOpenDetail={openDetailFor} />
         ) : null}
 
         {activeTab === "donnees" ? (
@@ -1018,7 +1029,7 @@ function RecurrentsView({ loading, rows, onOpenDetail }: { loading: boolean; row
   );
 }
 
-function AnalyticsView({ loading, analytics }: { loading: boolean; analytics: AnalyticsFullReport | null }) {
+function AnalyticsView({ loading, analytics, onOpenDetail }: { loading: boolean; analytics: AnalyticsFullReport | null; onOpenDetail: (siteId: string, siteName: string | null | undefined, year: number, month: number) => void }) {
   if (loading) return <Card><EmptyState title="Chargement de l’analyse globale…" text="Consolidation des indicateurs avancés." icon={<Loader2 size={22} style={{ animation: "spin 1s linear infinite" }} />} /></Card>;
   if (!analytics) return <Card><EmptyState title="Aucune analyse disponible" text="L’endpoint d’analyse globale n’a retourné aucune donnée." icon={<LineIcon size={22} />} /></Card>;
 
@@ -1034,11 +1045,87 @@ function AnalyticsView({ loading, analytics }: { loading: boolean; analytics: An
           {entries.length ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 10 }}>{entries.map(([k, v]) => <div key={k} style={{ padding: 14, borderRadius: 16, background: C.slate[50], border: `1px solid ${C.slate[200]}` }}><div style={{ fontSize: 10, color: C.slate[500], fontWeight: 950, textTransform: "uppercase", letterSpacing: ".08em" }}>{k.replaceAll("_", " ")}</div><div style={{ marginTop: 7, fontSize: 17, fontWeight: 950, color: C.blue[800], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{typeof v === "number" ? fmtInt(v) : String(v ?? "—")}</div></div>)}</div> : <EmptyState title="Résumé vide" text="Le rapport existe mais ne contient pas de bloc summary exploitable." />}
         </div>
       </Card>
+
+      <BOHistorySection onOpenDetail={onOpenDetail} />
+
       <Card>
         <SectionTitle icon={<Database size={18} />} title="Données brutes" subtitle="Aide au diagnostic technique" />
         <pre style={{ margin: 0, padding: 16, maxHeight: 420, overflow: "auto", fontSize: 11.5, color: C.slate[700], background: C.slate[50] }}>{JSON.stringify(analytics, null, 2)}</pre>
       </Card>
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Suivi BO — historique de référence (import Analyse Marge.xlsx) + demandes récentes
+// ─────────────────────────────────────────────────────────────────────────────
+
+function BOHistorySection({ onOpenDetail }: { onOpenDetail: (siteId: string, siteName: string | null | undefined, year: number, month: number) => void }) {
+  const [snapshotCount, setSnapshotCount] = useState<number | null>(null);
+  const [recentRequests, setRecentRequests] = useState<BOAnalysisRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([
+      fetchBOSnapshots({ page_size: 1 }),
+      fetchBORequests({ page_size: 8 }),
+    ])
+      .then(([snapshots, requests]) => {
+        if (cancelled) return;
+        setSnapshotCount(snapshots.count);
+        setRecentRequests(requests.results);
+      })
+      .catch(() => { if (!cancelled) { setSnapshotCount(null); setRecentRequests([]); } })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  return (
+    <Card>
+      <SectionTitle
+        icon={<ClipboardList size={18} />}
+        title="Suivi BO — Analyses & historique"
+        subtitle="Historique de référence (Analyse Marge.xlsx) et demandes d'analyse Back Office récentes"
+        right={snapshotCount !== null ? <Badge tone="purple">{snapshotCount.toLocaleString("fr-FR")} lignes historiques</Badge> : undefined}
+      />
+
+      <div style={{ padding: 16 }}>
+        {loading ? (
+          <div style={{ padding: 24, textAlign: "center", color: C.slate[500] }}><Loader2 size={20} style={{ animation: "spin 1s linear infinite" }} /></div>
+        ) : recentRequests.length === 0 ? (
+          <EmptyState title="Aucune demande d'analyse BO" text="Activez une analyse BO depuis la fiche d'un site (onglet « Analyse BO »)." icon={<ClipboardList size={22} />} />
+        ) : (
+          <div style={{ overflow: "auto", border: `1px solid ${C.slate[200]}`, borderRadius: 16 }}>
+            <table style={{ width: "100%", minWidth: 720, borderCollapse: "separate", borderSpacing: 0, fontSize: 12 }}>
+              <thead><tr><Th>Site</Th><Th>Période</Th><Th center>Statut</Th><Th>BO assigné</Th><Th>Catégorie</Th><Th center>Analyse</Th></tr></thead>
+              <tbody>
+                {recentRequests.map((r, i) => (
+                  <tr key={r.id} style={{ background: i % 2 ? C.slate[50] : "#fff" }}>
+                    <Td><strong style={{ color: C.blue[800], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{r.site_id}</strong><div style={{ fontSize: 11, color: C.slate[500] }}>{r.site_name || "—"}</div></Td>
+                    <Td>{MONTHS[r.month - 1]} {r.year}</Td>
+                    <Td center>
+                      <Badge tone={r.status === "done" ? "ok" : r.status === "in_progress" ? "warn" : "blue"}>
+                        {r.status === "done" ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                        {r.status === "done" ? "Terminée" : r.status === "in_progress" ? "En cours" : "En attente"}
+                      </Badge>
+                    </Td>
+                    <Td>{r.assigned_bo_username || "—"}</Td>
+                    <Td>{r.analysis?.categorie_bo_display || "—"}</Td>
+                    <Td center>
+                      <button type="button" onClick={() => onOpenDetail(r.site_id, r.site_name, r.year, r.month)} style={{ height: 30, padding: "0 10px", borderRadius: 10, border: "none", background: C.blue[700], color: "#fff", fontSize: 11.5, fontWeight: 950, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }}>
+                        <Eye size={13} /> Voir
+                      </button>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }
 

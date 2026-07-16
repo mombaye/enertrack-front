@@ -1,8 +1,9 @@
 // src/layouts/Header.tsx
 import { useState } from "react";
 import { useLocation } from "react-router-dom";
-import { LogOut, Bell, ChevronDown } from "lucide-react";
+import { LogOut, Bell, CheckCheck, ChevronDown, ClipboardList } from "lucide-react";
 import { useAuth } from "@/auth/AuthContext";
+import { useNotifications } from "@/hooks/useNotifications";
 
 // ─── Page title resolver ──────────────────────────────────────────────────────
 const PAGE_META: Record<string, { title: string; sub: string }> = {
@@ -26,8 +27,20 @@ export default function Header() {
   const { user, logout } = useAuth();
   const meta = usePageMeta();
   const [menuOpen, setMenuOpen] = useState(false);
-  const roleLabel = user?.role === "admin" ? "Administrateur" : "Analyste";
+  const [notifOpen, setNotifOpen] = useState(false);
+  const roleLabel = user?.role === "admin" ? "Administrateur" : user?.role === "bo" ? "Back Office" : user?.role === "manager" ? "Manager" : "Analyste";
   const initial = (user?.username || "U").slice(0, 1).toUpperCase();
+  const { notifications, unreadCount, markRead, markAllRead } = useNotifications();
+
+  function timeAgo(iso: string) {
+    const diffMs = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return "à l'instant";
+    if (mins < 60) return `il y a ${mins} min`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `il y a ${hours} h`;
+    return `il y a ${Math.floor(hours / 24)} j`;
+  }
 
   return (
     <>
@@ -152,6 +165,37 @@ export default function Header() {
         }
         .notif-btn:hover { border-color: rgba(30,58,138,.2); color: #1e3a8a; background: #f8faff; }
 
+        .notif-badge {
+          position: absolute; top: -3px; right: -3px;
+          min-width: 16px; height: 16px; padding: 0 3px;
+          border-radius: 999px;
+          background: #E8401C;
+          color: white; font-size: 9.5px; font-weight: 800;
+          display: grid; place-items: center;
+          box-shadow: 0 0 0 2px white;
+        }
+
+        .notif-dropdown {
+          position: absolute;
+          top: calc(100% + 8px); right: 0;
+          width: 340px; max-height: 420px; overflow-y: auto;
+          background: white;
+          border: 1px solid rgba(30,58,138,.1);
+          border-radius: 14px;
+          box-shadow: 0 8px 32px rgba(30,58,138,.14), 0 2px 8px rgba(0,0,0,.06);
+          z-index: 100;
+        }
+
+        .notif-item {
+          display: flex; align-items: flex-start; gap: 10px;
+          padding: 11px 14px;
+          border-bottom: 1px solid #f1f5ff;
+          cursor: pointer;
+          transition: background .14s;
+        }
+        .notif-item:hover { background: #f8faff; }
+        .notif-item:last-child { border-bottom: none; }
+
         @keyframes hdr-in {
           from { opacity:0; transform:translateY(4px); }
           to   { opacity:1; transform:translateY(0); }
@@ -194,10 +238,60 @@ export default function Header() {
         {/* ── Right: actions */}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
 
-          {/* Notification bell (decorative) */}
-          <button className="notif-btn hidden sm:grid" aria-label="Notifications">
-            <Bell size={16} />
-          </button>
+          {/* Notification bell */}
+          <div style={{ position: "relative" }}>
+            <button
+              className="notif-btn hidden sm:grid"
+              aria-label="Notifications"
+              onClick={() => setNotifOpen(v => !v)}
+            >
+              <Bell size={16} />
+              {unreadCount > 0 && <span className="notif-badge">{unreadCount > 9 ? "9+" : unreadCount}</span>}
+            </button>
+
+            {notifOpen && (
+              <>
+                <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setNotifOpen(false)} />
+                <div className="notif-dropdown">
+                  <div style={{ padding: "12px 14px 10px", borderBottom: "1px solid #f1f5ff", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#1e3a8a" }}>Notifications</span>
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={() => markAllRead()}
+                        style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "#3272E0", fontSize: 11, fontWeight: 700, cursor: "pointer", padding: 0 }}
+                      >
+                        <CheckCheck size={12} /> Tout marquer lu
+                      </button>
+                    )}
+                  </div>
+
+                  {notifications.length === 0 ? (
+                    <div style={{ padding: "24px 14px", textAlign: "center", color: "#94a3b8", fontSize: 12.5 }}>
+                      Aucune notification pour l'instant.
+                    </div>
+                  ) : (
+                    notifications.map(n => (
+                      <div
+                        key={n.id}
+                        className="notif-item"
+                        onClick={() => !n.is_read && markRead(n.id)}
+                        style={{ background: n.is_read ? "transparent" : "#f5f8ff" }}
+                      >
+                        <div style={{ width: 26, height: 26, borderRadius: 9, background: n.is_read ? "#f1f5f9" : "#E4EFFE", color: n.is_read ? "#94a3b8" : "#1A56C4", display: "grid", placeItems: "center", flexShrink: 0, marginTop: 1 }}>
+                          <ClipboardList size={13} />
+                        </div>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontSize: 12.5, fontWeight: n.is_read ? 500 : 700, color: "#1e293b", lineHeight: 1.35 }}>{n.message}</div>
+                          <div style={{ fontSize: 10.5, color: "#94a3b8", marginTop: 3 }}>{timeAgo(n.created_at)}</div>
+                        </div>
+                        {!n.is_read && <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#E8401C", flexShrink: 0, marginTop: 5 }} />}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+          </div>
 
           {/* User card + dropdown */}
           <div style={{ position: "relative" }}>

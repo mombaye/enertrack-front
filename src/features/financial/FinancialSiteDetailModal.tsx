@@ -4,6 +4,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   AlertCircle,
@@ -14,6 +15,8 @@ import {
   BarChart3,
   CheckCircle2,
   ChevronRight,
+  ClipboardList,
+  Clock,
   Database,
   Eye,
   Gauge,
@@ -23,6 +26,7 @@ import {
   Loader2,
   PanelRightClose,
   ReceiptText,
+  Send,
   ShieldCheck,
   Sparkles,
   Sun,
@@ -30,11 +34,19 @@ import {
   Target,
   TrendingDown,
   TrendingUp,
+  UserPlus,
   Wallet,
   X,
   XCircle,
   Zap,
 } from "lucide-react";
+import { useAuth } from "@/auth/AuthContext";
+import {
+  createBORequest,
+  fetchBORequests,
+  fetchBOUsers,
+  type BOAnalysisRequest,
+} from "@/features/bo-analysis/api";
 import {
   Area,
   Bar,
@@ -195,7 +207,7 @@ export type FinancialSiteDetailModalProps = {
   onClose: () => void;
 };
 
-type TabKey = "overview" | "marge" | "conso" | "billing" | "diagnostics";
+type TabKey = "overview" | "marge" | "conso" | "billing" | "diagnostics" | "bo";
 type DisplayMode = "chart" | "table";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -703,6 +715,31 @@ export default function FinancialSiteDetailModal({ siteId, siteName, year, month
   const [tab, setTab] = useState<TabKey>("overview");
   const [displayMode, setDisplayMode] = useState<DisplayMode>("chart");
 
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const [showBOForm, setShowBOForm] = useState(false);
+
+  const { data: boRequestsPage, isLoading: boLoading } = useQuery({
+    queryKey: ["bo-requests-site", siteId],
+    queryFn: () => fetchBORequests({ site: siteId, page_size: 50 }),
+  });
+  const boRequests = boRequestsPage?.results ?? [];
+
+  const { data: boUsers } = useQuery({
+    queryKey: ["bo-users"],
+    queryFn: fetchBOUsers,
+    enabled: showBOForm,
+  });
+
+  const createBOMut = useMutation({
+    mutationFn: (payload: { year: number; month: number; assigned_bo: number | null; notes: string }) =>
+      createBORequest({ site_id: siteId, ...payload }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bo-requests-site", siteId] });
+      setShowBOForm(false);
+    },
+  });
+
   useEffect(() => {
     setLoading(true);
     setError(null);
@@ -771,6 +808,7 @@ export default function FinancialSiteDetailModal({ siteId, siteName, year, month
     { key: "conso", label: "Consommation", icon: <Activity size={14} />, count: consoRows.length },
     { key: "billing", label: "Billing", icon: <ReceiptText size={14} />, count: billingRows.length },
     { key: "diagnostics", label: "Diagnostics", icon: <AlertTriangle size={14} />, count: data?.diagnostics?.length || 0 },
+    { key: "bo", label: "Analyse BO", icon: <ClipboardList size={14} />, count: boRequests.length },
   ];
 
   return (
@@ -974,6 +1012,69 @@ export default function FinancialSiteDetailModal({ siteId, siteName, year, month
                   ) : null}
                 </div>
               ) : null}
+
+              {tab === "bo" ? (
+                <div style={{ display: "grid", gap: 16 }}>
+                  <Panel>
+                    <PanelTitle
+                      icon={<ClipboardList size={18} />}
+                      title="Analyses BO"
+                      subtitle="Demandes d'analyse Back Office pour ce site"
+                      right={
+                        user?.role !== "bo" ? (
+                          <button
+                            type="button"
+                            onClick={() => setShowBOForm(true)}
+                            style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 13px", borderRadius: 12, border: "none", background: C.blue[800], color: "#fff", fontSize: 12, fontWeight: 950, cursor: "pointer" }}
+                          >
+                            <UserPlus size={14} /> Demander une analyse BO
+                          </button>
+                        ) : undefined
+                      }
+                    />
+
+                    <div style={{ padding: 16 }}>
+                      {boLoading ? (
+                        <div style={{ padding: 24, textAlign: "center", color: C.slate[500] }}>
+                          <Loader2 size={20} style={{ animation: "spin .8s linear infinite" }} />
+                        </div>
+                      ) : boRequests.length === 0 ? (
+                        <div style={{ padding: 24, textAlign: "center", color: C.slate[500], fontSize: 13 }}>
+                          Aucune demande d'analyse BO pour ce site pour l'instant.
+                        </div>
+                      ) : (
+                        <TableShell minWidth={760}>
+                          <thead>
+                            <tr>
+                              <Th>Période</Th>
+                              <Th center>Statut</Th>
+                              <Th>BO assigné</Th>
+                              <Th>Catégorie</Th>
+                              <Th>Commentaire</Th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {boRequests.map((r: BOAnalysisRequest, i: number) => (
+                              <tr key={r.id} style={{ background: i % 2 ? C.slate[50] : "#fff" }}>
+                                <Td><strong>{MONTHS_FR[r.month - 1]} {r.year}</strong></Td>
+                                <Td center>
+                                  <Badge tone={r.status === "done" ? "ok" : r.status === "in_progress" ? "warn" : "blue"}>
+                                    {r.status === "done" ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                                    {r.status === "done" ? "Terminée" : r.status === "in_progress" ? "En cours" : "En attente"}
+                                  </Badge>
+                                </Td>
+                                <Td>{r.assigned_bo_username || "—"}</Td>
+                                <Td>{r.analysis?.categorie_bo_display || "—"}</Td>
+                                <Td>{r.analysis?.commentaire_bo || r.analysis?.commentaire || "—"}</Td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </TableShell>
+                      )}
+                    </div>
+                  </Panel>
+                </div>
+              ) : null}
             </div>
 
             {/* Footer */}
@@ -987,6 +1088,105 @@ export default function FinancialSiteDetailModal({ siteId, siteName, year, month
             </div>
           </>
         ) : null}
+      </div>
+
+      {showBOForm ? (
+        <BOActivationForm
+          siteId={siteId}
+          siteName={siteName || data?.site.name || siteId}
+          defaultYear={year}
+          defaultMonth={monthEnd}
+          boUsers={boUsers || []}
+          submitting={createBOMut.isPending}
+          error={createBOMut.isError ? ((createBOMut.error as any)?.response?.data?.detail || "Erreur lors de la création de la demande.") : null}
+          onCancel={() => setShowBOForm(false)}
+          onSubmit={(payload) => createBOMut.mutate(payload)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Formulaire d'activation d'une demande d'analyse BO
+// ─────────────────────────────────────────────────────────────────────────────
+
+function BOActivationForm({
+  siteId, siteName, defaultYear, defaultMonth, boUsers, submitting, error, onCancel, onSubmit,
+}: {
+  siteId: string;
+  siteName: string;
+  defaultYear: number;
+  defaultMonth: number;
+  boUsers: Array<{ id: number; username: string }>;
+  submitting: boolean;
+  error: string | null;
+  onCancel: () => void;
+  onSubmit: (payload: { year: number; month: number; assigned_bo: number | null; notes: string }) => void;
+}) {
+  const [year, setYear] = useState(defaultYear);
+  const [month, setMonth] = useState(defaultMonth);
+  const [assignedBo, setAssignedBo] = useState<string>("");
+  const [notes, setNotes] = useState("");
+
+  const inputStyle: CSSProperties = { width: "100%", borderRadius: 12, border: `1px solid ${C.slate[200]}`, background: "#fff", padding: "9px 12px", fontSize: 13, color: C.slate[700], outline: "none" };
+  const labelStyle: CSSProperties = { fontSize: 11.5, fontWeight: 900, color: C.slate[600], textTransform: "uppercase", letterSpacing: ".03em", marginBottom: 6, display: "block" };
+
+  return (
+    <div onClick={(e) => e.currentTarget === e.target && !submitting && onCancel()} style={{ position: "fixed", inset: 0, zIndex: 1100, background: "rgba(2,6,23,.62)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ width: "min(480px,100%)", background: "#fff", borderRadius: 24, boxShadow: "0 30px 90px rgba(2,6,23,.28)", padding: 26 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, marginBottom: 18 }}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 950, color: C.blue[950] }}>Demander une analyse BO</div>
+            <div style={{ fontSize: 12.5, color: C.slate[500], marginTop: 4 }}>{siteId} — {siteName}</div>
+          </div>
+          {!submitting ? (
+            <button type="button" onClick={onCancel} style={{ width: 30, height: 30, borderRadius: 10, border: "none", background: C.slate[100], color: C.slate[500], cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><X size={15} /></button>
+          ) : null}
+        </div>
+
+        <div style={{ display: "grid", gap: 14 }}>
+          <div style={{ display: "flex", gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>Année</label>
+              <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} style={inputStyle} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>Mois</label>
+              <select value={month} onChange={(e) => setMonth(Number(e.target.value))} style={inputStyle}>
+                {MONTHS_FR.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label style={labelStyle}>Assigner à un BO (optionnel)</label>
+            <select value={assignedBo} onChange={(e) => setAssignedBo(e.target.value)} style={inputStyle}>
+              <option value="">— Pool non assigné —</option>
+              {boUsers.map((u) => <option key={u.id} value={u.id}>{u.username}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label style={labelStyle}>Notes / contexte</label>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Contexte pour le BO…" style={{ ...inputStyle, resize: "vertical" }} />
+          </div>
+        </div>
+
+        {error ? <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: 13, background: C.nok.light, border: `1px solid ${C.nok.mid}`, color: C.nok.dark, fontSize: 12, fontWeight: 800 }}>⚠ {error}</div> : null}
+
+        <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+          <button type="button" onClick={onCancel} disabled={submitting} style={{ flex: 1, padding: "10px 0", borderRadius: 13, border: `1px solid ${C.slate[200]}`, background: "#fff", color: C.slate[700], fontWeight: 900, cursor: "pointer" }}>Annuler</button>
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={() => onSubmit({ year, month, assigned_bo: assignedBo ? Number(assignedBo) : null, notes })}
+            style={{ flex: 2, padding: "10px 0", borderRadius: 13, border: "none", background: C.blue[800], color: "#fff", fontWeight: 950, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}
+          >
+            {submitting ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Send size={15} />}
+            {submitting ? "Envoi…" : "Envoyer la demande"}
+          </button>
+        </div>
       </div>
     </div>
   );

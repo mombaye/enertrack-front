@@ -18,7 +18,7 @@ interface AppUser {
   email: string;
   first_name: string;
   last_name: string;
-  role: "admin" | "manager" | "analyst";
+  role: "admin" | "manager" | "analyst" | "bo";
   pays: string;
   is_active: boolean;
   date_joined: string;
@@ -52,6 +52,7 @@ const ROLES: { val: AppUser["role"]; label: string; color: string; bg: string; b
   { val:"admin",   label:"Admin",    color:"#dc2626", bg:"#fef2f2", border:"#fecaca"  },
   { val:"manager", label:"Manager",  color:"#d97706", bg:"#fffbeb", border:"#fde68a"  },
   { val:"analyst", label:"Analyste", color:T.blue,    bg:T.off,     border:"#bfdbfe"  },
+  { val:"bo",      label:"Back Office", color:"#7c3aed", bg:"#f5f3ff", border:"#ddd6fe" },
 ];
 const PAYS_OPTIONS = [
   { val:"sen", label:"Sénégal"      },

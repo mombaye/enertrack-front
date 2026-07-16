@@ -37,6 +37,7 @@ import PredictionPage from "./features/prediction/PredictionPage";
 import OptimizationPage from "./features/optimization/OptimizationPage";
 import PenaltyTrackingPage from "./features/penalties/PenaltyTrackingPage";
 import FuelTrackingPage from "./features/fuel-tracking/FuelTrackingPage";
+import BOWorkspacePage from "./features/bo-analysis/BOWorkspacePage";
 
 const queryClient = new QueryClient();
 
@@ -144,6 +145,11 @@ export default function App() {
 
                 <Route path="/users" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
                   <Route index element={<UsersPage />} />
+                </Route>
+
+                {/* ✅ Espace Back Office */}
+                <Route path="/bo/workspace" element={<RouteGuard allowedRoles={["bo"]} />}>
+                  <Route index element={<BOWorkspacePage />} />
                 </Route>
 
               </Route>
