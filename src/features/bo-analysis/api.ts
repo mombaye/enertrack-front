@@ -71,6 +71,8 @@ export interface BOAnalysisRequest {
   requested_by_username: string;
   assigned_bo: number | null;
   assigned_bo_username: string | null;
+  targeted_bos: number[];
+  targeted_bos_usernames: string[];
   requested_at: string;
   updated_at: string;
   analysis: BOAnalysisDetail | null;
@@ -130,9 +132,25 @@ export async function fetchBORequests(params: {
 }
 
 export async function createBORequest(payload: {
-  site_id: string; year: number; month: number; assigned_bo?: number | null; notes?: string;
+  site_id: string; year: number; month: number; targeted_bos?: number[]; notes?: string;
 }): Promise<BOAnalysisRequest> {
   const { data } = await api.post("/bo-analysis/requests/", payload);
+  return data;
+}
+
+export interface BOBulkCreateResult {
+  message: string;
+  created: number;
+  request_ids: number[];
+  errors: Array<{ site_id: string; error: string }>;
+}
+
+export async function createBORequestsBulk(payload: {
+  items: Array<{ site_id: string; year: number; month: number }>;
+  targeted_bos?: number[];
+  notes?: string;
+}): Promise<BOBulkCreateResult> {
+  const { data } = await api.post("/bo-analysis/requests/bulk/", payload);
   return data;
 }
 

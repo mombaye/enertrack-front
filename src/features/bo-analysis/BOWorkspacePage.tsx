@@ -37,7 +37,7 @@ const C = {
 };
 
 const PAGE_BG = "linear-gradient(180deg,#F8FAFC 0%,#EEF4FF 100%)";
-const HDR = "linear-gradient(135deg,#010E2A 0%,#032566 55%,#0A3D96 100%)";
+const HDR = "linear-gradient(135deg, #0B1F4D 0%, #123C8C 45%, #1A56C4 75%, #3272E0 100%)";
 const MONTHS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
 
 function Badge({ children, tone = "slate" }: { children: ReactNode; tone?: "slate" | "blue" | "ok" | "nok" | "warn" | "purple" }) {
@@ -165,7 +165,7 @@ function SubmitForm({ req, onClose, onSubmitted }: { req: BOAnalysisRequest; onC
 
         <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
           <button type="button" onClick={onClose} disabled={mut.isPending} style={{ flex: 1, padding: "10px 0", borderRadius: 13, border: `1px solid ${C.slate[200]}`, background: "#fff", color: C.slate[700], fontWeight: 900, cursor: "pointer" }}>Annuler</button>
-          <button type="button" onClick={submit} disabled={mut.isPending} style={{ flex: 2, padding: "10px 0", borderRadius: 13, border: "none", background: C.blue[800], color: "#fff", fontWeight: 950, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+          <button type="button" onClick={submit} disabled={mut.isPending} style={{ flex: 2, padding: "10px 0", borderRadius: 13, border: "none", background: `linear-gradient(135deg, ${C.blue[800]}, ${C.blue[600]})`, color: "#fff", fontWeight: 950, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
             {mut.isPending ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Send size={15} />}
             {mut.isPending ? "Envoi…" : "Enregistrer l'analyse"}
           </button>
@@ -207,7 +207,11 @@ export default function BOWorkspacePage() {
 
   return (
     <div style={{ minHeight: "100vh", background: PAGE_BG, color: C.slate[800] }}>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .bo-row { transition: background .15s ease; }
+        .bo-row:hover { background: ${C.blue[50]} !important; }
+      `}</style>
 
       <div style={{ background: HDR, color: "#fff", padding: "22px 24px 18px", boxShadow: "0 18px 45px rgba(1,14,42,.24)" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
@@ -284,7 +288,7 @@ export default function BOWorkspacePage() {
                 </thead>
                 <tbody>
                   {requests.map((r) => (
-                    <tr key={r.id} style={{ borderBottom: `1px solid ${C.slate[100]}` }}>
+                    <tr key={r.id} className="bo-row" style={{ borderBottom: `1px solid ${C.slate[100]}` }}>
                       <td style={{ padding: "12px 14px" }}>
                         <div style={{ fontSize: 13, fontWeight: 900, color: C.blue[950] }}>{r.site_id}</div>
                         <div style={{ fontSize: 11, color: C.slate[400] }}>{r.site_name}</div>

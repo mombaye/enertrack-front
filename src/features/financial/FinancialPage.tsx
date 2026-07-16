@@ -83,6 +83,7 @@ import {
   fetchBOSnapshots,
   type BOAnalysisRequest,
 } from "@/features/bo-analysis/api";
+import BOBulkActivationModal, { type BOBulkItem } from "@/features/bo-analysis/BOBulkActivationModal";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Design tokens
@@ -122,7 +123,7 @@ const C = {
 };
 
 const PAGE_BG = "linear-gradient(180deg,#F8FAFC 0%,#EEF4FF 100%)";
-const HDR = "linear-gradient(135deg,#010E2A 0%,#032566 55%,#0A3D96 100%)";
+const HDR = "linear-gradient(135deg, #0B1F4D 0%, #123C8C 45%, #1A56C4 75%, #3272E0 100%)";
 const MONTHS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
 const ZONES = ["DKR", "THIES", "DIOURBEL", "LOUGA", "KAOLACK", "ZIGUINCHOR", "SAINT-LOUIS", "TAMBACOUNDA", "KOLDA", "FATICK", "MATAM", "KAFFRINE", "SEDHIOU", "KEDOUGOU"];
 
@@ -587,6 +588,8 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
   const [showUploadFee, setShowUploadFee] = useState(false);
   const [showUploadLoad, setShowUploadLoad] = useState(false);
   const [modalSite, setModalSite] = useState<ModalSite>(null);
+  const [selectedEvalIds, setSelectedEvalIds] = useState<Set<number>>(new Set());
+  const [showBulkBO, setShowBulkBO] = useState(false);
 
   const baseParams = useMemo(() => ({ year_start: yearStart, month_start: monthStart, year_end: yearEnd, month_end: monthEnd }), [yearStart, monthStart, yearEnd, monthEnd]);
 
@@ -833,7 +836,31 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
         </div>
 
         {activeTab === "evaluations" ? (
-          <EvaluationsView rows={evaluations} loading={loadingEval} total={evalTotal} page={evalPage} pages={evalPages} setPage={setEvalPage} onOpenDetail={openDetail} />
+          <EvaluationsView
+            rows={evaluations}
+            loading={loadingEval}
+            total={evalTotal}
+            page={evalPage}
+            pages={evalPages}
+            setPage={setEvalPage}
+            onOpenDetail={openDetail}
+            selectedIds={selectedEvalIds}
+            onToggleSelect={(id) =>
+              setSelectedEvalIds((prev) => {
+                const next = new Set(prev);
+                if (next.has(id)) next.delete(id); else next.add(id);
+                return next;
+              })
+            }
+            onToggleSelectAll={(ids, checked) =>
+              setSelectedEvalIds((prev) => {
+                const next = new Set(prev);
+                ids.forEach((id) => (checked ? next.add(id) : next.delete(id)));
+                return next;
+              })
+            }
+            onBulkActivateBO={() => setShowBulkBO(true)}
+          />
         ) : null}
 
         {activeTab === "dashboard" ? (
@@ -855,30 +882,78 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
 
       {modalSite ? <FinancialSiteDetailModal siteId={modalSite.siteId} siteName={modalSite.siteName} year={modalSite.year} monthStart={modalSite.monthStart} monthEnd={modalSite.monthEnd} onClose={() => setModalSite(null)} /> : null}
 
+      {showBulkBO ? (
+        <BOBulkActivationModal
+          items={evaluations
+            .filter((ev) => selectedEvalIds.has(ev.id))
+            .map((ev): BOBulkItem => ({ site_id: ev.site_id, site_name: ev.site_name, year: ev.year, month: ev.month }))}
+          onClose={() => setShowBulkBO(false)}
+          onSuccess={() => {
+            setShowBulkBO(false);
+            setSelectedEvalIds(new Set());
+          }}
+        />
+      ) : null}
+
       {showUploadFee ? <UploadModal title="Catalogue redevances" description="Fichier Redevance_et_Cible_Akt.xlsx — Typologie | Load | Config | Redevance | Cible" accept=".xlsx,.xls" onClose={() => setShowUploadFee(false)} onUpload={async (file) => importFeeRules(file)} /> : null}
       {showUploadLoad ? <UploadModal title="Loads mensuels" description="CSV/XLSX : Site_ID | Site_Name | Année | Mois | Load | Source" accept=".csv,.xlsx,.xls" onClose={() => setShowUploadLoad(false)} onUpload={async (file) => importMonthlyLoads(file)} /> : null}
     </div>
   );
 }
 
-function EvaluationsView({ rows, loading, total, page, pages, setPage, onOpenDetail }: { rows: EvalRow[]; loading: boolean; total: number; page: number; pages: number; setPage: React.Dispatch<React.SetStateAction<number>>; onOpenDetail: (ev: EvalRow) => void }) {
+function EvaluationsView({
+  rows, loading, total, page, pages, setPage, onOpenDetail,
+  selectedIds, onToggleSelect, onToggleSelectAll, onBulkActivateBO,
+}: {
+  rows: EvalRow[]; loading: boolean; total: number; page: number; pages: number; setPage: React.Dispatch<React.SetStateAction<number>>; onOpenDetail: (ev: EvalRow) => void;
+  selectedIds: Set<number>; onToggleSelect: (id: number) => void; onToggleSelectAll: (ids: number[], checked: boolean) => void; onBulkActivateBO: () => void;
+}) {
+  const selectedOnPage = rows.filter((r) => selectedIds.has(r.id)).length;
+
   return (
     <Card>
       <SectionTitle icon={<ShieldCheck size={18} />} title="Évaluations financières" subtitle="Redevance, montant HTVA, marge et statut par site × mois" right={<Badge tone="blue">{total.toLocaleString("fr-FR")} lignes</Badge>} />
+
+      {selectedIds.size > 0 ? (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 18px", background: C.blue[50], borderBottom: `1px solid ${C.blue[100]}`, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12.5, fontWeight: 900, color: C.blue[800] }}>
+            {selectedIds.size} site{selectedIds.size > 1 ? "s" : ""} sélectionné{selectedIds.size > 1 ? "s" : ""}
+          </span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" onClick={() => onToggleSelectAll(rows.map((r) => r.id), false)} style={{ height: 32, padding: "0 12px", borderRadius: 10, border: `1px solid ${C.slate[200]}`, background: "#fff", color: C.slate[600], fontSize: 12, fontWeight: 900, cursor: "pointer" }}>
+              Désélectionner
+            </button>
+            <button type="button" onClick={onBulkActivateBO} style={{ height: 32, padding: "0 14px", borderRadius: 10, border: "none", background: `linear-gradient(135deg, ${C.blue[800]}, ${C.blue[600]})`, color: "#fff", fontSize: 12, fontWeight: 950, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <ClipboardList size={13} /> Activer analyse BO
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {loading && !rows.length ? <EmptyState title="Chargement…" text="Récupération des évaluations financières." icon={<Loader2 size={22} style={{ animation: "spin 1s linear infinite" }} />} /> : null}
       {!loading && !rows.length ? <EmptyState title="Aucune évaluation" text="Aucune donnée ne correspond aux filtres sélectionnés." /> : null}
-      {rows.length ? <EvaluationTable rows={rows} onOpenDetail={onOpenDetail} /> : null}
+      {rows.length ? (
+        <EvaluationTable
+          rows={rows}
+          onOpenDetail={onOpenDetail}
+          selectedIds={selectedIds}
+          onToggleSelect={onToggleSelect}
+          allOnPageSelected={selectedOnPage === rows.length}
+          onToggleSelectAll={onToggleSelectAll}
+        />
+      ) : null}
       {pages > 1 ? <Pagination page={page} pages={pages} total={total} setPage={setPage} /> : null}
     </Card>
   );
 }
 
-function EvaluationTable({ rows, onOpenDetail }: { rows: EvalRow[]; onOpenDetail: (ev: EvalRow) => void }) {
+function EvaluationTable({ rows, onOpenDetail, selectedIds, onToggleSelect, allOnPageSelected, onToggleSelectAll }: { rows: EvalRow[]; onOpenDetail: (ev: EvalRow) => void; selectedIds: Set<number>; onToggleSelect: (id: number) => void; allOnPageSelected: boolean; onToggleSelectAll: (ids: number[], checked: boolean) => void }) {
   return (
     <div style={{ overflow: "auto", maxHeight: "calc(100vh - 320px)" }}>
       <table className="fin-table" style={{ width: "100%", minWidth: 1360, borderCollapse: "separate", borderSpacing: 0, fontSize: 11.5 }}>
         <thead>
           <tr>
+            <Th center><input type="checkbox" checked={allOnPageSelected} onChange={(e) => onToggleSelectAll(rows.map((r) => r.id), e.target.checked)} /></Th>
             <Th sticky>Site</Th>
             <Th>Zone</Th>
             <Th>Période</Th>
@@ -901,6 +976,7 @@ function EvaluationTable({ rows, onOpenDetail }: { rows: EvalRow[]; onOpenDetail
             const bg = isNok ? "#FFF7F7" : i % 2 ? C.slate[50] : "#fff";
             return (
               <tr key={ev.id} className="fin-row" style={{ background: bg }}>
+                <Td center><input type="checkbox" checked={selectedIds.has(ev.id)} onChange={() => onToggleSelect(ev.id)} /></Td>
                 <Td sticky><button type="button" onClick={() => onOpenDetail(ev)} style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", textAlign: "left" }}><div style={{ display: "flex", alignItems: "center", gap: 5, color: C.blue[700], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontWeight: 950 }}>{ev.site_id}<Eye size={12} /></div><div style={{ maxWidth: 170, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: 10.5, color: C.slate[500], marginTop: 2 }}>{ev.site_name || "—"}</div></button></Td>
                 <Td><Badge tone="blue">{ev.zone || "—"}</Badge></Td>
                 <Td><strong style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", color: C.blue[800] }}>{ev.year}-{String(ev.month).padStart(2, "0")}</strong><div style={{ fontSize: 10, color: C.slate[400] }}>{periodLabel(ev.year, ev.month)}</div></Td>

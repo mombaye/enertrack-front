@@ -103,7 +103,7 @@ const C = {
   orange: { main: "#E8401C", light: "#FFEDD5", dark: "#C2410C" },
 };
 
-const HDR = "linear-gradient(135deg,#010E2A 0%,#032566 54%,#0A3D96 100%)";
+const HDR = "linear-gradient(135deg, #0B1F4D 0%, #123C8C 45%, #1A56C4 75%, #3272E0 100%)";
 const MONTHS_FR = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -732,7 +732,7 @@ export default function FinancialSiteDetailModal({ siteId, siteName, year, month
   });
 
   const createBOMut = useMutation({
-    mutationFn: (payload: { year: number; month: number; assigned_bo: number | null; notes: string }) =>
+    mutationFn: (payload: { year: number; month: number; targeted_bos: number[]; notes: string }) =>
       createBORequest({ site_id: siteId, ...payload }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["bo-requests-site", siteId] });
@@ -1063,7 +1063,13 @@ export default function FinancialSiteDetailModal({ siteId, siteName, year, month
                                     {r.status === "done" ? "Terminée" : r.status === "in_progress" ? "En cours" : "En attente"}
                                   </Badge>
                                 </Td>
-                                <Td>{r.assigned_bo_username || "—"}</Td>
+                                <Td>
+                                  {r.assigned_bo_username
+                                    ? r.assigned_bo_username
+                                    : r.targeted_bos_usernames?.length
+                                      ? r.targeted_bos_usernames.join(", ")
+                                      : <span style={{ color: C.slate[400] }}>Tous les BO</span>}
+                                </Td>
                                 <Td>{r.analysis?.categorie_bo_display || "—"}</Td>
                                 <Td>{r.analysis?.commentaire_bo || r.analysis?.commentaire || "—"}</Td>
                               </tr>
@@ -1122,12 +1128,16 @@ function BOActivationForm({
   submitting: boolean;
   error: string | null;
   onCancel: () => void;
-  onSubmit: (payload: { year: number; month: number; assigned_bo: number | null; notes: string }) => void;
+  onSubmit: (payload: { year: number; month: number; targeted_bos: number[]; notes: string }) => void;
 }) {
   const [year, setYear] = useState(defaultYear);
   const [month, setMonth] = useState(defaultMonth);
-  const [assignedBo, setAssignedBo] = useState<string>("");
+  const [targetedBos, setTargetedBos] = useState<number[]>([]);
   const [notes, setNotes] = useState("");
+
+  function toggleBo(id: number) {
+    setTargetedBos((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
 
   const inputStyle: CSSProperties = { width: "100%", borderRadius: 12, border: `1px solid ${C.slate[200]}`, background: "#fff", padding: "9px 12px", fontSize: 13, color: C.slate[700], outline: "none" };
   const labelStyle: CSSProperties = { fontSize: 11.5, fontWeight: 900, color: C.slate[600], textTransform: "uppercase", letterSpacing: ".03em", marginBottom: 6, display: "block" };
@@ -1160,11 +1170,23 @@ function BOActivationForm({
           </div>
 
           <div>
-            <label style={labelStyle}>Assigner à un BO (optionnel)</label>
-            <select value={assignedBo} onChange={(e) => setAssignedBo(e.target.value)} style={inputStyle}>
-              <option value="">— Pool non assigné —</option>
-              {boUsers.map((u) => <option key={u.id} value={u.id}>{u.username}</option>)}
-            </select>
+            <label style={labelStyle}>Destinataires</label>
+            <div style={{ border: `1px solid ${C.slate[200]}`, borderRadius: 12, background: "#fff", maxHeight: 160, overflowY: "auto" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", fontSize: 12.5, fontWeight: 800, color: C.slate[700], cursor: "pointer", borderBottom: `1px solid ${C.slate[100]}` }}>
+                <input type="checkbox" checked={targetedBos.length === 0} onChange={() => setTargetedBos([])} />
+                Tous les BO
+              </label>
+              {boUsers.map((u) => (
+                <label key={u.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", fontSize: 12.5, color: C.slate[700], cursor: "pointer" }}>
+                  <input type="checkbox" checked={targetedBos.includes(u.id)} onChange={() => toggleBo(u.id)} />
+                  {u.username}
+                </label>
+              ))}
+              {boUsers.length === 0 ? <div style={{ padding: "9px 12px", fontSize: 12, color: C.slate[400] }}>Aucun compte BO trouvé.</div> : null}
+            </div>
+            <div style={{ fontSize: 11, color: C.slate[400], marginTop: 5 }}>
+              {targetedBos.length === 0 ? "Diffusion à tous les BO actifs." : `Restreint à ${targetedBos.length} BO sélectionné(s).`}
+            </div>
           </div>
 
           <div>
@@ -1180,8 +1202,8 @@ function BOActivationForm({
           <button
             type="button"
             disabled={submitting}
-            onClick={() => onSubmit({ year, month, assigned_bo: assignedBo ? Number(assignedBo) : null, notes })}
-            style={{ flex: 2, padding: "10px 0", borderRadius: 13, border: "none", background: C.blue[800], color: "#fff", fontWeight: 950, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}
+            onClick={() => onSubmit({ year, month, targeted_bos: targetedBos, notes })}
+            style={{ flex: 2, padding: "10px 0", borderRadius: 13, border: "none", background: `linear-gradient(135deg, ${C.blue[800]}, ${C.blue[600]})`, color: "#fff", fontWeight: 950, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}
           >
             {submitting ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Send size={15} />}
             {submitting ? "Envoi…" : "Envoyer la demande"}
