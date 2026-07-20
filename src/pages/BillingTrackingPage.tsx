@@ -328,38 +328,37 @@ function Trend({ current, previous }: { current: number; previous: number }) {
   const pct = ((current - previous) / previous) * 100;
   const up = pct > 0;
   const same = Math.abs(pct) < 0.5;
-  const color = same ? C.slate[400] : up ? "#FCA5A5" : "#86EFAC";
+  const color = same ? C.slate[400] : up ? C.nok.dark : C.ok.dark;
+  const bg = same ? C.slate[100] : up ? C.nok.light : C.ok.light;
   const Icon = same ? Minus : up ? ChevronUp : ChevronDown;
 
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 700, color, background: "rgba(255,255,255,.10)", borderRadius: 6, padding: "2px 7px" }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 700, color, background: bg, borderRadius: 6, padding: "2px 7px" }}>
       <Icon size={10} />
       {same ? "stable" : `${Math.abs(pct).toFixed(1)}%`}
     </span>
   );
 }
 
-// ─── KPI Card (style "glass" sur fond dégradé, cf. FinancialPage) ─────────────
+// ─── KPI Card (tuile colorée sur fond blanc) ──────────────────────────────────
 function KpiCard({
   label, value, sub, icon, accent, trend, trendPrev,
 }: {
   label: string; value: string; sub?: string; icon: ReactNode; accent: string; trend?: number; trendPrev?: number;
 }) {
   return (
-    <div style={{ position: "relative", overflow: "hidden", borderRadius: 18, background: "rgba(255,255,255,.09)", border: "1px solid rgba(255,255,255,.14)", padding: "15px 16px", minHeight: 96, boxShadow: "inset 0 1px 0 rgba(255,255,255,.12)" }}>
-      <div style={{ position: "absolute", inset: 0, background: `radial-gradient(circle at 90% 12%,${accent}33,transparent 32%)` }} />
-      <div style={{ position: "relative", display: "flex", justifyContent: "space-between", gap: 12 }}>
+    <div style={{ position: "relative", overflow: "hidden", borderRadius: 16, background: `${accent}12`, border: `1px solid ${accent}2E`, padding: "14px 15px", minHeight: 92 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <div style={{ fontSize: 10, fontWeight: 950, color: "rgba(255,255,255,.55)", letterSpacing: ".08em", textTransform: "uppercase" }}>{label}</div>
+            <div style={{ fontSize: 10, fontWeight: 950, color: accent, letterSpacing: ".08em", textTransform: "uppercase" }}>{label}</div>
             {trend !== undefined && trendPrev !== undefined ? <Trend current={trend} previous={trendPrev} /> : null}
           </div>
-          <div style={{ fontSize: 21, fontWeight: 950, color: "#fff", marginTop: 8, letterSpacing: "-.03em", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</div>
-          {sub ? <div style={{ fontSize: 11, color: "rgba(255,255,255,.5)", marginTop: 4 }}>{sub}</div> : null}
+          <div style={{ fontSize: 19, fontWeight: 950, color: C.slate[900], marginTop: 7, letterSpacing: "-.03em", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</div>
+          {sub ? <div style={{ fontSize: 11, color: C.slate[500], marginTop: 4 }}>{sub}</div> : null}
         </div>
-        <div style={{ width: 38, height: 38, borderRadius: 14, background: "rgba(255,255,255,.10)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</div>
+        <div style={{ width: 34, height: 34, borderRadius: 11, background: accent, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</div>
       </div>
-      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 3, background: `linear-gradient(90deg,${accent},transparent)` }} />
     </div>
   );
 }
@@ -523,18 +522,18 @@ function SiteSearchBar({
   const showDropdown = open && (results.length > 0 || isFetching || query.length >= 1);
 
   return (
-    <div ref={wrapperRef} style={{ position: "relative", minWidth: 280, flex: 1 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, background: selectedSite ? "rgba(255,255,255,.14)" : "rgba(255,255,255,.08)", border: `1.5px solid ${focused ? "rgba(255,255,255,.5)" : "rgba(255,255,255,.16)"}`, borderRadius: 12, padding: "9px 12px", transition: "border-color .15s" }}>
-        {selectedSite ? <Building2 size={13} color="#fff" style={{ flexShrink: 0 }} /> : <Search size={13} color="rgba(255,255,255,.6)" style={{ flexShrink: 0 }} />}
+    <div ref={wrapperRef} style={{ position: "relative", minWidth: 260, flex: 1 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, background: selectedSite ? C.blue[50] : "#fff", border: `1.5px solid ${focused ? C.blue[300] : C.slate[200]}`, borderRadius: 12, padding: "8px 12px", transition: "border-color .15s" }}>
+        {selectedSite ? <Building2 size={13} color={C.blue[700]} style={{ flexShrink: 0 }} /> : <Search size={13} color={C.slate[400]} style={{ flexShrink: 0 }} />}
 
         {selectedSite ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
-            <span style={{ fontSize: 12, fontWeight: 900, color: "#fff", background: "rgba(255,255,255,.16)", borderRadius: 6, padding: "1px 8px" }}>
+            <span style={{ fontSize: 12, fontWeight: 900, color: C.blue[800], background: C.blue[100], borderRadius: 6, padding: "1px 8px" }}>
               {selectedSite.site_id}
             </span>
             <button
               onClick={handleClear}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,.7)", display: "grid", placeItems: "center", padding: 2, borderRadius: 4 }}
+              style={{ background: "none", border: "none", cursor: "pointer", color: C.slate[400], display: "grid", placeItems: "center", padding: 2, borderRadius: 4 }}
               title="Vue globale"
             >
               <X size={12} />
@@ -548,12 +547,12 @@ function SiteSearchBar({
             onFocus={() => { setFocused(true); setOpen(true); }}
             onBlur={() => setFocused(false)}
             placeholder="Rechercher un site…"
-            style={{ background: "none", border: "none", outline: "none", flex: 1, fontSize: 13, color: "#fff" }}
+            style={{ background: "none", border: "none", outline: "none", flex: 1, fontSize: 13, color: C.slate[800] }}
           />
         )}
 
         {isFetching && !selectedSite ? (
-          <Loader2 size={13} style={{ animation: "spin 1s linear infinite", color: "rgba(255,255,255,.7)", flexShrink: 0 }} />
+          <Loader2 size={13} style={{ animation: "spin 1s linear infinite", color: C.slate[400], flexShrink: 0 }} />
         ) : null}
       </div>
 
@@ -768,28 +767,30 @@ export default function BillingTrackingPage() {
         .btp-row:hover { background: ${C.blue[50]} !important; }
       `}</style>
 
-      {/* ─── En-tête dégradé ────────────────────────────────────────────────── */}
-      <div style={{ background: HDR, color: "#fff", padding: "22px 24px 18px", boxShadow: "0 18px 45px rgba(1,14,42,.24)" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
-          <div>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 9px", background: "rgba(255,255,255,.10)", border: "1px solid rgba(255,255,255,.14)", borderRadius: 999, fontSize: 11, fontWeight: 950, color: "rgba(255,255,255,.72)" }}>
-              <TrendingUp size={13} /> Suivi Facturation
+      {/* ─── En-tête (fond blanc, compact) ─────────────────────────────────── */}
+      <div style={{ background: "#fff", borderBottom: `1px solid ${C.slate[200]}`, padding: "16px 24px 14px", boxShadow: "0 1px 3px rgba(15,23,42,.04)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 11, background: C.blue[700], display: "grid", placeItems: "center", flexShrink: 0 }}>
+              <TrendingUp size={17} color="#fff" />
             </div>
-            <h1 style={{ margin: "12px 0 4px", fontSize: 27, lineHeight: 1.1, letterSpacing: "-.04em", fontWeight: 950 }}>Évolution de la facturation</h1>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,.62)", maxWidth: 620 }}>
-              Montants, NRJ, abonnement, pénalités, cos φ et certification, mois par mois.
+            <div>
+              <h1 style={{ margin: 0, fontSize: 18, lineHeight: 1.15, letterSpacing: "-.02em", fontWeight: 950, color: C.blue[950] }}>Suivi Facturation</h1>
+              <div style={{ fontSize: 11.5, color: C.slate[500] }}>
+                Montants, NRJ, abonnement, pénalités, cos φ et certification, mois par mois.
+              </div>
             </div>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.16)", borderRadius: 12, padding: "0 12px", height: 38 }}>
-              <Calendar size={13} color="rgba(255,255,255,.65)" />
-              <input type="date" value={dateStart} onChange={(e) => setDateStart(e.target.value)} style={{ background: "none", border: "none", outline: "none", fontSize: 12.5, color: "#fff", colorScheme: "dark" }} />
-              <span style={{ color: "rgba(255,255,255,.45)", fontSize: 11 }}>→</span>
-              <input type="date" value={dateEnd} onChange={(e) => setDateEnd(e.target.value)} style={{ background: "none", border: "none", outline: "none", fontSize: 12.5, color: "#fff", colorScheme: "dark" }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#fff", border: `1px solid ${C.slate[200]}`, borderRadius: 12, padding: "0 12px", height: 36 }}>
+              <Calendar size={13} color={C.slate[400]} />
+              <input type="date" value={dateStart} onChange={(e) => setDateStart(e.target.value)} style={{ background: "none", border: "none", outline: "none", fontSize: 12.5, color: C.slate[700] }} />
+              <span style={{ color: C.slate[300], fontSize: 11 }}>→</span>
+              <input type="date" value={dateEnd} onChange={(e) => setDateEnd(e.target.value)} style={{ background: "none", border: "none", outline: "none", fontSize: 12.5, color: C.slate[700] }} />
             </div>
 
-            <button type="button" onClick={() => q.refetch()} style={{ ...iconButtonStyle, background: "rgba(255,255,255,.12)", color: "#fff", border: "1px solid rgba(255,255,255,.18)" }}>
+            <button type="button" onClick={() => q.refetch()} style={{ ...iconButtonStyle, height: 36, background: C.slate[100], color: C.slate[700], border: `1px solid ${C.slate[200]}` }}>
               <RefreshCw size={14} style={{ animation: isLoading ? "spin 1s linear infinite" : "none" }} /> Actualiser
             </button>
 
@@ -797,7 +798,7 @@ export default function BillingTrackingPage() {
               type="button"
               disabled={!data}
               onClick={() => data && exportToExcel(data, siteCode, globalScope)}
-              style={{ ...iconButtonStyle, background: data ? "#fff" : "rgba(255,255,255,.16)", color: data ? C.blue[800] : "rgba(255,255,255,.5)", cursor: data ? "pointer" : "not-allowed" }}
+              style={{ ...iconButtonStyle, height: 36, background: data ? C.blue[700] : C.slate[100], color: data ? "#fff" : C.slate[400], border: "none", cursor: data ? "pointer" : "not-allowed" }}
             >
               <Download size={14} /> Exporter
             </button>
@@ -805,38 +806,38 @@ export default function BillingTrackingPage() {
         </div>
 
         {/* Vue active : recherche site */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 10, background: "rgba(255,255,255,.12)", display: "grid", placeItems: "center" }}>
-              {selectedSite ? <Building2 size={13} color="#fff" /> : <Globe size={13} color="rgba(255,255,255,.7)" />}
+            <div style={{ width: 30, height: 30, borderRadius: 9, background: C.slate[100], display: "grid", placeItems: "center" }}>
+              {selectedSite ? <Building2 size={13} color={C.blue[700]} /> : <Globe size={13} color={C.slate[500]} />}
             </div>
             <div>
-              <div style={{ fontSize: 9, fontWeight: 900, color: "rgba(255,255,255,.5)", textTransform: "uppercase", letterSpacing: ".1em" }}>Vue active</div>
-              <div style={{ fontSize: 12, fontWeight: 900, color: "#fff" }}>{selectedSite ? selectedSite.site_id : "Tous les sites"}</div>
+              <div style={{ fontSize: 9, fontWeight: 900, color: C.slate[400], textTransform: "uppercase", letterSpacing: ".1em" }}>Vue active</div>
+              <div style={{ fontSize: 12, fontWeight: 900, color: C.blue[950] }}>{selectedSite ? selectedSite.site_id : "Tous les sites"}</div>
             </div>
           </div>
 
           <SiteSearchBar selectedSite={selectedSite} onSelect={setSelectedSite} onClear={() => setSelectedSite(null)} />
 
           {selectedSite ? (
-            <button onClick={() => setSelectedSite(null)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 12px", borderRadius: 10, background: "rgba(255,255,255,.12)", border: "1px solid rgba(255,255,255,.18)", cursor: "pointer", fontSize: 11.5, fontWeight: 900, color: "#fff", flexShrink: 0 }}>
+            <button onClick={() => setSelectedSite(null)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 12px", borderRadius: 10, background: C.slate[100], border: `1px solid ${C.slate[200]}`, cursor: "pointer", fontSize: 11.5, fontWeight: 900, color: C.slate[600], flexShrink: 0 }}>
               <Globe size={11} /> Vue globale
             </button>
           ) : null}
         </div>
 
         {/* Filtre global */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 16 }}>
-          <span style={{ fontSize: 10.5, fontWeight: 900, color: "rgba(255,255,255,.55)", textTransform: "uppercase", letterSpacing: ".08em" }}>Filtre global</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 900, color: C.slate[400], textTransform: "uppercase", letterSpacing: ".08em" }}>Filtre global</span>
           {(["ALL", "PAID", "UNPAID", "OUT_OF_SCOPE", "UNDEFINED", "CERTIFIED", "CONTESTED", "CREATED"] as GlobalScope[]).map((scope) => (
             <button
               key={scope}
               onClick={() => setGlobalScope(scope)}
               style={{
                 padding: "6px 12px", borderRadius: 999, fontSize: 11.5, fontWeight: 800, cursor: "pointer",
-                border: `1px solid ${globalScope === scope ? "rgba(255,255,255,.6)" : "rgba(255,255,255,.16)"}`,
-                background: globalScope === scope ? "rgba(255,255,255,.22)" : "rgba(255,255,255,.06)",
-                color: "#fff",
+                border: `1px solid ${globalScope === scope ? scopeMeta[scope].color : C.slate[200]}`,
+                background: globalScope === scope ? scopeMeta[scope].color : "#fff",
+                color: globalScope === scope ? "#fff" : C.slate[600],
               }}
             >
               {scopeMeta[scope].label}
@@ -845,12 +846,12 @@ export default function BillingTrackingPage() {
         </div>
 
         {/* Bande KPI */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px,1fr))", gap: 12, marginTop: 18 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px,1fr))", gap: 12, marginTop: 16 }}>
           {isLoading ? (
-            Array(5).fill(0).map((_, i) => <div key={i} style={{ height: 96, borderRadius: 18, background: "rgba(255,255,255,.08)" }} />)
+            Array(5).fill(0).map((_, i) => <div key={i} className="btp-skel" style={{ height: 92, borderRadius: 16 }} />)
           ) : kpis ? (
             <>
-              <KpiCard label="Total HT" value={fmtM(kpis.totalHT)} sub={`${scopeMeta[globalScope].label} · ${kpis.moisCount} mois`} icon={<DollarSign size={17} />} accent={C.blue[300]} trend={kpis.lastHT} trendPrev={kpis.prevHT} />
+              <KpiCard label="Total HT" value={fmtM(kpis.totalHT)} sub={`${scopeMeta[globalScope].label} · ${kpis.moisCount} mois`} icon={<DollarSign size={17} />} accent={C.blue[700]} trend={kpis.lastHT} trendPrev={kpis.prevHT} />
               <KpiCard label="Total NRJ" value={fmtM(kpis.totalNrj)} sub={scopeMeta[globalScope].label} icon={<Zap size={17} />} accent={C.warn.main} />
               <KpiCard label="Total Pénalités" value={fmtM(kpis.totalPenalite)} sub={scopeMeta[globalScope].label} icon={<AlertTriangle size={17} />} accent={C.nok.main} trend={kpis.lastPenalite} trendPrev={kpis.prevPenalite} />
               <KpiCard label="Total Cos φ" value={fmtM(kpis.totalCosphi)} sub={kpis.totalCosphi >= 0 ? "Pénalité facteur puissance" : "Minoration facteur puissance"} icon={<Activity size={17} />} accent={C.purple.main} />

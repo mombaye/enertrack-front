@@ -2,11 +2,20 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
+import { jwtDecode } from "jwt-decode";
 import { Eye, EyeOff, ArrowRight, TrendingUp, ShieldCheck, Zap } from "lucide-react";
 
 import camusatLogo from "@/assets/images/camusat-logo.png";
 import { useAuth } from "@/auth/AuthContext";
 import { authApi } from "@/services/api";
+
+// Page d'accueil par rôle — un BO n'a pas accès à /dashboard (réservé
+// admin/analyst), donc rediriger tout le monde vers /dashboard après login
+// le renvoyait en boucle vers /login (RouteGuard refuse → /login → /dashboard → ...).
+function homeForRole(role?: string) {
+  if (role === "bo") return "/bo/workspace";
+  return "/dashboard";
+}
 
 type FormValues = { username: string; password: string };
 
@@ -37,7 +46,7 @@ function Counter({ to, suffix = "" }: { to: number; suffix?: string }) {
 }
 
 export default function LoginPage() {
-  const { isAuthenticated, login } = useAuth();
+  const { isAuthenticated, login, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [showPw, setShowPw]     = useState(false);
@@ -45,7 +54,7 @@ export default function LoginPage() {
   const [focusedField, setFocused] = useState<string | null>(null);
 
   const fromPath = useMemo(
-    () => (location.state as any)?.from?.pathname || "/dashboard",
+    () => (location.state as any)?.from?.pathname || null,
     [location.state]
   );
 
@@ -53,14 +62,23 @@ export default function LoginPage() {
     defaultValues: { username: "", password: "" },
   });
 
-  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+  if (isAuthenticated) return <Navigate to={fromPath || homeForRole(user?.role)} replace />;
 
   const onSubmit = async (d: FormValues) => {
     setLoading(true);
     try {
       const res = await loginUser(d.username, d.password);
       login(res.access, res.refresh);
-      navigate(fromPath, { replace: true });
+      // `user` du contexte n'est pas encore à jour ici (décodage async dans
+      // AuthContext) — on décode le rôle nous-mêmes pour rediriger tout de
+      // suite au bon endroit plutôt que d'attendre un re-render.
+      let role: string | undefined;
+      try {
+        role = jwtDecode<{ role?: string }>(res.access).role;
+      } catch {
+        // ignore — on retombe sur la page par défaut ci-dessous
+      }
+      navigate(fromPath || homeForRole(role), { replace: true });
     } catch (err: any) {
       toast.error(
         err?.response?.data?.detail || "Identifiants invalides.",
