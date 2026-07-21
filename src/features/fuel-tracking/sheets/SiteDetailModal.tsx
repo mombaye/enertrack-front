@@ -2,15 +2,23 @@
 // Fiche site — vue rapide des attributs référentiel (zone, typologie, GE,
 // cuves, RH...) partagée entre Journal et Conso Mensuelle.
 
-import { X, MapPin, Zap, Fuel as FuelIcon, ShieldCheck, FileText } from "lucide-react";
+import { X, MapPin, Zap, Fuel as FuelIcon, ShieldCheck, FileText, Gauge, Droplets } from "lucide-react";
 import type { FuelMonthlyRow } from "@/services/fuelTracking";
 import { FT } from "../theme";
 import { Pill } from "../ui";
 import {
-  fmt2, fmtMaybeKva, fmtMaybeL, n,
+  fmt2, fmtMaybeKva, fmtMaybeL, fmtMaybeNum, fmtNum, n,
   geBrand1, geBrand2, gePower1, gePower2, tankCapacity1, tankCapacity2,
-  realTypology, siteConfig, siteLoad, siteTypology,
+  realTypology, siteConfig, siteLoad, siteTypology, consoRms, cphTargetLH,
 } from "../helpers";
+
+const RH_SOURCE_LABEL: Record<string, string> = {
+  SNOWFLAKE_DSE_COUNTER: "DSE",
+  SNOWFLAKE_GE_STATUS: "GE status",
+  SNOWFLAKE_RECTIFIER_STATUS: "Redresseur",
+  ENOC_HOUR_METER: "ENOC",
+  NO_DATA: "—",
+};
 
 export type SiteDetailRow = Partial<FuelMonthlyRow> & {
   site_id: string | null;
@@ -100,13 +108,49 @@ export default function SiteDetailModal({ row, onClose }: { row: SiteDetailRow; 
           </Section>
 
           {row.efms ? (
-            <Section icon={<ShieldCheck size={13} />} title="Ce mois">
-              <InfoTile label="RH Final" value={row.efms.rh_hours !== null ? `${fmt2.format(n(row.efms.rh_hours))} h` : "—"} />
+            <Section icon={<ShieldCheck size={13} />} title="Consommation & RH — ce mois">
+              <InfoTile
+                label="RH Final"
+                value={
+                  row.efms.rh_hours !== null ? (
+                    <span>
+                      {fmt2.format(n(row.efms.rh_hours))} h
+                      {row.efms.rh_source && row.efms.rh_source !== "NO_DATA" && (
+                        <Pill label={RH_SOURCE_LABEL[row.efms.rh_source] || row.efms.rh_source} tone={row.efms.rh_source === "SNOWFLAKE_DSE_COUNTER" ? "green" : "cyan"} />
+                      )}
+                    </span>
+                  ) : "—"
+                }
+              />
               <InfoTile label="RH Mois Précédent" value={row.efms.rh_initial_hours !== null ? `${fmt2.format(n(row.efms.rh_initial_hours))} h` : "—"} />
+              <InfoTile label="RH Delta" value={row.efms.rh_delta_hours !== null && row.efms.rh_delta_hours !== undefined ? `${fmt2.format(n(row.efms.rh_delta_hours))} h` : "—"} />
+              <InfoTile label="Conso Réelle" value={`${fmtNum(row.efms.fuel_conso_l)} L`} />
+              <InfoTile label="Conso RMS" value={fmtMaybeNum(consoRms(row as FuelMonthlyRow)) !== "—" ? `${fmtMaybeNum(consoRms(row as FuelMonthlyRow))} L` : "—"} />
+              <InfoTile label="Conso Théorique" value={`${fmtNum(row.efms.fuel_deli_l)} L`} />
+              <InfoTile label="CPH Réel" value={`${fmt2.format(n(row.efms.cph_l_per_hour))} L/h`} />
+              <InfoTile label="CPH Target" value={cphTargetLH(row as FuelMonthlyRow) !== null ? `${fmt2.format(cphTargetLH(row as FuelMonthlyRow)!)} L/h` : "—"} />
               <InfoTile
                 label="Statut"
                 value={row.gaps?.status ? <Pill label={row.gaps.status.label} tone={row.gaps.status.tone === "violet" ? "violet" : (row.gaps.status.tone as any)} /> : "—"}
               />
+            </Section>
+          ) : null}
+
+          {row.stock || row.enoc ? (
+            <Section icon={<Droplets size={13} />} title="Ravitaillement & stock">
+              <InfoTile label="Ravitaillement" value={row.enoc ? `${fmtNum(n(row.enoc.refueling_liters) + n(row.enoc.ajout_in_liters))} L` : "—"} />
+              <InfoTile label="Ponction" value={row.enoc?.prelevement_out_liters ? `${fmtNum(row.enoc.prelevement_out_liters)} L` : "—"} />
+              <InfoTile label="Stock Ouv. RMS" value={fmtMaybeNum(row.stock?.ouv_rms) !== "—" ? `${fmtMaybeNum(row.stock?.ouv_rms)} L` : "—"} />
+              <InfoTile label="Stock Clôt. RMS" value={fmtMaybeNum(row.stock?.clot_rms) !== "—" ? `${fmtMaybeNum(row.stock?.clot_rms)} L` : "—"} />
+              <InfoTile label="Stock Ouv. Réel" value={fmtMaybeNum(row.stock?.ouv_reel) !== "—" ? `${fmtMaybeNum(row.stock?.ouv_reel)} L` : "—"} />
+              <InfoTile label="Stock Réel" value={fmtMaybeNum(row.stock?.reel) !== "—" ? `${fmtMaybeNum(row.stock?.reel)} L` : "—"} />
+            </Section>
+          ) : null}
+
+          {row.gaps ? (
+            <Section icon={<Gauge size={13} />} title="Écarts vs target">
+              <InfoTile label="Écart (L)" value={row.gaps.deli_vs_enoc_l !== null ? fmtNum(row.gaps.deli_vs_enoc_l) : "—"} />
+              <InfoTile label="Écart (%)" value={row.gaps.deli_vs_enoc_pct !== null ? `${fmt2.format(n(row.gaps.deli_vs_enoc_pct))}%` : "—"} />
             </Section>
           ) : null}
 

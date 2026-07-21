@@ -1,39 +1,18 @@
 // src/features/fuel-tracking/sheets/ConsoMensuelleSheet.tsx
 // Feuille CONSO_MENSUELLE — suivi consommation mensuelle par site.
+//
+// Table compacte (colonnes essentielles, scroll vertical uniquement) — le
+// détail complet (référentiel, GE, cuves, cibles, stock, CPH) est dans la
+// fiche site (SiteDetailModal), ouverte au clic sur une ligne. Ancienne
+// version : ExcelGrid à ~40 colonnes avec scroll horizontal + vertical.
 
-import { useMemo, useState } from "react";
-import { AlertTriangle, Eye, Fuel } from "lucide-react";
+import { useMemo, useState, type CSSProperties } from "react";
+import { AlertTriangle, ArrowDown, ArrowUp, ChevronRight, Fuel } from "lucide-react";
 import type { FuelMonthlyRow } from "@/services/fuelTracking";
-import { ExcelGrid, type ExcelGroup } from "../ExcelGrid";
-import { Card, ComingCell, GroupToggleBar, Pill, SheetTitle } from "../ui";
+import { Card, EmptyState, Pill, SheetTitle, Skeleton } from "../ui";
 import { FT } from "../theme";
 import SiteDetailModal from "./SiteDetailModal";
-import {
-  consoRms,
-  consoTheoriqueLH,
-  cphTargetLH,
-  facteurCharge,
-  fmt2,
-  fmtMaybeKvaNum,
-  fmtMaybeNum,
-  fmtNum,
-  geBrand1,
-  geBrand2,
-  gePower1,
-  gePower2,
-  modernizedLabel,
-  n,
-  primaryGe,
-  realTypology,
-  secondGe,
-  siteConfig,
-  siteLoad,
-  siteTypology,
-  statusTone,
-  tankCapacity1,
-  tankCapacity2,
-  tankType,
-} from "../helpers";
+import { fmt2, fmtNum, n, statusTone } from "../helpers";
 
 const RH_SOURCE_LABEL: Record<string, string> = {
   SNOWFLAKE_DSE_COUNTER: "DSE",
@@ -43,392 +22,93 @@ const RH_SOURCE_LABEL: Record<string, string> = {
   NO_DATA: "—",
 };
 
-const CURVE_CONFIDENCE_LABEL: Record<string, { label: string; tone: "green" | "cyan" | "orange" }> = {
-  MODEL_EXACT: { label: "Modèle", tone: "green" },
-  MODEL_FUZZY: { label: "Modèle ~", tone: "cyan" },
-  MODEL_EXACT_AMBIGUOUS_AVERAGED: { label: "Modèle (moy.)", tone: "orange" },
-  MODEL_FUZZY_AMBIGUOUS_AVERAGED: { label: "Modèle ~ (moy.)", tone: "orange" },
-  KVA_EXACT: { label: "kVA", tone: "cyan" },
-  KVA_NEAREST: { label: "kVA proche", tone: "orange" },
-  KVA_EXACT_AMBIGUOUS_AVERAGED: { label: "kVA (moy.)", tone: "orange" },
-  KVA_NEAREST_AMBIGUOUS_AVERAGED: { label: "kVA proche (moy.)", tone: "orange" },
+type SortKey = "site" | "region" | "statut" | "rh" | "conso" | "ecart";
+type SortDir = "asc" | "desc";
+
+function regionOf(r: FuelMonthlyRow): string {
+  return r.zone_label || r.zone || r.enoc_site_ref?.region || "Non renseigné";
+}
+function rhOf(r: FuelMonthlyRow): number {
+  return r.efms.rh_hours ?? n(r.efms.ge_working_hours) ?? 0;
+}
+
+const SORT_ACCESSORS: Record<SortKey, (r: FuelMonthlyRow) => string | number> = {
+  site: (r) => r.site_id || r.site_name || "",
+  region: (r) => regionOf(r),
+  statut: (r) => r.gaps.status.code,
+  rh: rhOf,
+  conso: (r) => n(r.efms.fuel_conso_l),
+  ecart: (r) => (r.gaps.deli_vs_enoc_l === null ? 0 : Math.abs(n(r.gaps.deli_vs_enoc_l))),
 };
 
-function HoursCell({ value, source }: { value: number | null | undefined; source?: string | null }) {
-  if (value === null || value === undefined) return <ComingCell />;
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
-      <span style={{ fontWeight: 800 }}>{fmt2.format(n(value))}</span>
-      {source && source !== "NO_DATA" && (
-        <Pill label={RH_SOURCE_LABEL[source] || source} tone={source === "SNOWFLAKE_DSE_COUNTER" ? "green" : "cyan"} />
-      )}
-    </div>
-  );
-}
+const TH_STYLE: CSSProperties = {
+  position: "sticky",
+  top: 0,
+  background: FT.slateL,
+  textAlign: "left",
+  padding: "11px 14px",
+  fontSize: 10.5,
+  textTransform: "uppercase",
+  letterSpacing: ".05em",
+  color: FT.textSub,
+  borderBottom: `1px solid ${FT.borderStrong}`,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+  fontWeight: 800,
+  userSelect: "none",
+};
 
-function RhCell({ row }: { row: FuelMonthlyRow }) {
-  const value = row.efms.rh_hours ?? (n(row.efms.ge_working_hours) || null);
-  return <HoursCell value={value} source={row.efms.rh_source} />;
-}
-
-const GROUP_IDS = ["referentiel", "cibles", "mois_precedent", "mois_courant", "conso_calculee", "cph", "ecarts", "stock"];
-
-// "Stock" masqué par défaut : 100% de colonnes "à venir", aucune info perdue,
-// et ça retire d'emblée 5 colonnes du scroll horizontal.
-const DEFAULT_HIDDEN_GROUPS = ["stock"];
-const HIDDEN_GROUPS_STORAGE_KEY = "ft-conso-mensuelle-hidden-groups";
-
-function loadHiddenGroups(): Set<string> {
-  try {
-    const raw = localStorage.getItem(HIDDEN_GROUPS_STORAGE_KEY);
-    if (raw) return new Set(JSON.parse(raw));
-  } catch {
-    // localStorage indisponible (mode privé, etc.) — on retombe sur le défaut.
-  }
-  return new Set(DEFAULT_HIDDEN_GROUPS);
+function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
+  if (!active) return null;
+  return dir === "asc" ? <ArrowUp size={11} style={{ marginLeft: 4 }} /> : <ArrowDown size={11} style={{ marginLeft: 4 }} />;
 }
 
 export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[]; loading: boolean }) {
-  const [hiddenGroups, setHiddenGroups] = useState<Set<string>>(loadHiddenGroups);
   const [anomaliesOnly, setAnomaliesOnly] = useState(false);
   const [detailRow, setDetailRow] = useState<FuelMonthlyRow | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("ecart");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  function toggleGroup(id: string) {
-    setHiddenGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        // Ne jamais masquer le dernier groupe visible — la grille aurait 0 colonne.
-        if (next.size >= GROUP_IDS.length - 1) return prev;
-        next.add(id);
-      }
-      try {
-        localStorage.setItem(HIDDEN_GROUPS_STORAGE_KEY, JSON.stringify([...next]));
-      } catch {
-        // ignore
-      }
-      return next;
-    });
-  }
-
-  function showAllGroups() {
-    setHiddenGroups(new Set());
-    try {
-      localStorage.setItem(HIDDEN_GROUPS_STORAGE_KEY, JSON.stringify([]));
-    } catch {
-      // ignore
+  function sortBy(key: SortKey) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir("desc");
     }
   }
-
-  // Groupe toujours visible et épinglé — jamais masquable via GroupToggleBar,
-  // pour garder un repère (quel site je regarde ?) quel que soit le scroll
-  // horizontal ou les groupes de colonnes affichés.
-  const identityGroup: ExcelGroup<FuelMonthlyRow> = {
-    id: "identite",
-    label: "Site",
-    color: "navy",
-    columns: [
-      { id: "site_id", header: "Site ID", width: 110, emphasis: true, render: (r) => r.site_id || "—" },
-      { id: "site_name", header: "Site Name", width: 180, render: (r) => r.site_name || "—" },
-      {
-        id: "detail",
-        header: "",
-        width: 60,
-        align: "center",
-        render: (r) => (
-          <button
-            onClick={() => setDetailRow(r)}
-            title="Voir la fiche site"
-            style={{ display: "inline-flex", alignItems: "center", gap: 5, border: `1px solid ${FT.border}`, background: FT.blueL, color: FT.navy, borderRadius: 8, padding: "4px 8px", fontSize: 11, fontWeight: 800, cursor: "pointer" }}
-          >
-            <Eye size={12} />
-          </button>
-        ),
-      },
-    ],
-  };
-
-  const groups: ExcelGroup<FuelMonthlyRow>[] = [
-    {
-      id: "referentiel",
-      label: "Référentiel site",
-      color: "navy",
-      columns: [
-        { id: "region", header: "Région", width: 110, render: (r) => r.zone_label || r.zone || r.enoc_site_ref?.region || "—" },
-        { id: "neuf", header: "Neuf/Existant", width: 110, render: modernizedLabel },
-        { id: "batch", header: "Batch", width: 130, render: (r) => r.site_ref?.batch_operational || r.enoc_site_ref?.batch_operational || r.enoc_site_ref?.batch || "—" },
-        { id: "typo_facturee", header: "Typo Facturée", width: 130, render: siteTypology },
-        { id: "typo_reelle", header: "Typo Réelle", width: 130, render: realTypology },
-        { id: "conf", header: "Conf", width: 70, render: siteConfig },
-        { id: "priorite", header: "Priorité", width: 85, render: (r) => r.enoc_site_ref?.priority || "—" },
-        { id: "puissance", header: "Puissance (W)", width: 110, align: "right", render: (r) => (siteLoad(r) !== null ? fmt2.format(n(siteLoad(r))) : "—") },
-        { id: "ge_facture", header: "GE Facturé", width: 100, align: "right", render: (r) => r.enoc_site_ref?.nb_ge || "—" },
-        { id: "ge_exist", header: "GE Exist", width: 90, align: "right", render: (r) => r.ge_ref?.assets_count || r.enoc_site_ref?.nb_ge || "—" },
-        { id: "cap_cuve", header: "Cap. Cuve (L)", width: 120, align: "right", render: (r) => fmtMaybeNum(tankCapacity1(r)) },
-        { id: "marque_ge1", header: "Marque GE 1", width: 110, render: geBrand1 },
-        { id: "kva1", header: "Capacité GE1 (KVA)", width: 130, align: "right", render: (r) => fmtMaybeKvaNum(gePower1(r)) },
-        { id: "cuve1", header: "Capacité Cuve GE1 (L)", width: 150, align: "right", render: (r) => fmtMaybeNum(tankCapacity1(r)) },
-        { id: "type_cuve1", header: "Type Cuve GE1", width: 120, render: (r) => tankType(primaryGe(r)?.tank_connected, primaryGe(r)?.tank_shape) },
-        { id: "marque_ge2", header: "Marque GE 2", width: 110, render: geBrand2 },
-        { id: "kva2", header: "Capacité GE2 (KVA)", width: 130, align: "right", render: (r) => fmtMaybeKvaNum(gePower2(r)) },
-        { id: "cuve2", header: "Capacité Cuve GE2 (L)", width: 150, align: "right", render: (r) => fmtMaybeNum(tankCapacity2(r)) },
-        { id: "type_cuve2", header: "Type Cuve GE2", width: 120, render: (r) => tankType(secondGe(r)?.tank_connected, secondGe(r)?.tank_shape) },
-        { id: "fuel_sensor", header: "Fuel sensor existing", width: 140, render: (r) => r.enoc_site_ref?.rms_installed || "—" },
-      ],
-    },
-    {
-      id: "cibles",
-      label: "Cibles",
-      color: "gold",
-      columns: [
-        { id: "target_boq", header: "Target BOQ (L/mois)", width: 140, align: "right", render: () => <ComingCell /> },
-        {
-          id: "target_aktivco",
-          header: "Target Aktivco (L/mois)",
-          width: 170,
-          align: "right",
-          render: (r) =>
-            r.enoc.monthly_target_liters ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
-                <span style={{ fontWeight: 800 }}>{fmtNum(r.enoc.monthly_target_liters)}</span>
-                {r.enoc.target_status && <Pill label={r.enoc.target_status} tone={r.enoc.target_status === "exceeded" ? "red" : "green"} />}
-              </div>
-            ) : (
-              <ComingCell />
-            ),
-        },
-        {
-          id: "facteur_charge",
-          header: "Facteur Charge (%)",
-          width: 130,
-          align: "right",
-          render: (r) => {
-            const pct = facteurCharge(r);
-            return pct === null ? <ComingCell /> : fmt2.format(pct);
-          },
-        },
-        {
-          id: "conso_theorique_lh",
-          header: "Conso Théorique (L/h)",
-          width: 180,
-          align: "right",
-          render: (r) => {
-            const lh = consoTheoriqueLH(r);
-            if (lh === null) return <ComingCell />;
-            const confidence = primaryGe(r)?.fuel_curve?.confidence;
-            const badge = confidence ? CURVE_CONFIDENCE_LABEL[confidence] : null;
-            return (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
-                <span style={{ fontWeight: 800 }}>{fmt2.format(lh)}</span>
-                {badge && <Pill label={badge.label} tone={badge.tone} />}
-              </div>
-            );
-          },
-        },
-      ],
-    },
-    {
-      id: "mois_precedent",
-      label: "Données mois précédent",
-      color: "violet",
-      columns: [
-        {
-          id: "rh_initial",
-          header: "RH Mois Précédent (h)",
-          width: 180,
-          align: "right",
-          render: (r) => <HoursCell value={r.efms.rh_initial_hours} source={r.efms.rh_initial_source} />,
-        },
-        { id: "stock_ouv_rms", header: "Stock Ouv. RMS (L)", width: 150, align: "right", render: (r) => fmtMaybeNum(r.stock.ouv_rms) },
-        { id: "stock_ouv_reel", header: "Stock Ouv. Réel (L)", width: 150, align: "right", render: (r) => fmtMaybeNum(r.stock.ouv_reel) },
-        {
-          id: "ravitaillement",
-          header: "Ravitaillement (L)",
-          width: 150,
-          align: "right",
-          emphasis: true,
-          render: (r) => {
-            const total = n(r.enoc.refueling_liters) + n(r.enoc.ajout_in_liters);
-            return total > 0 ? <span style={{ color: FT.green, fontWeight: 800 }}>{fmtNum(total)}</span> : <ComingCell />;
-          },
-        },
-        {
-          id: "ponction",
-          header: "Ponction (L)",
-          width: 130,
-          align: "right",
-          render: (r) => (r.enoc.prelevement_out_liters > 0 ? <span style={{ color: FT.red, fontWeight: 800 }}>{fmtNum(r.enoc.prelevement_out_liters)}</span> : <ComingCell />),
-        },
-      ],
-    },
-    {
-      id: "mois_courant",
-      label: "Données mois en cours",
-      color: "green",
-      columns: [
-        { id: "rh_final", header: "RH Final (h)", width: 150, align: "right", render: (r) => <RhCell row={r} /> },
-        { id: "stock_clot_rms", header: "Stock Clôt. RMS (L)", width: 150, align: "right", render: (r) => fmtMaybeNum(r.stock.clot_rms) },
-        { id: "stock_clot_reel", header: "Stock Clôt. Réel (L)", width: 150, align: "right", render: (r) => fmtMaybeNum(r.stock.clot_reel) },
-        {
-          id: "rh_controleur",
-          header: "RH Contrôleur Final (h)",
-          width: 180,
-          align: "right",
-          render: (r) =>
-            r.efms.rh_source === "SNOWFLAKE_DSE_COUNTER" && r.efms.rh_hours !== null ? (
-              <span style={{ fontWeight: 800 }}>{fmt2.format(n(r.efms.rh_hours))}</span>
-            ) : (
-              <ComingCell />
-            ),
-        },
-        { id: "stock_reel", header: "Stock Réel (L)", width: 130, align: "right", render: (r) => fmtMaybeNum(r.stock.reel) },
-        {
-          id: "rh_delta",
-          header: "RH Delta (h)",
-          width: 150,
-          align: "right",
-          render: (r) => <HoursCell value={r.efms.rh_delta_hours} />,
-        },
-        {
-          id: "stock_delta_rms",
-          header: "Stock Delta RMS (L)",
-          width: 160,
-          align: "right",
-          render: (r) => {
-            const d = r.stock.delta_rms;
-            return d === null || d === undefined ? (
-              <ComingCell />
-            ) : (
-              <span style={{ fontWeight: 800, color: d < 0 ? FT.orange : FT.green }}>{fmtNum(d)}</span>
-            );
-          },
-        },
-      ],
-    },
-    {
-      id: "conso_calculee",
-      label: "Consommation calculée",
-      color: "cyan",
-      columns: [
-        {
-          id: "conso_reelle",
-          header: "Conso Réelle (L)",
-          width: 150,
-          align: "right",
-          emphasis: true,
-          render: (r) => <span style={{ color: FT.orange, fontWeight: 800 }}>{fmtNum(r.efms.fuel_conso_l)}</span>,
-        },
-        {
-          id: "conso_rms",
-          header: "Conso RMS (L)",
-          width: 140,
-          align: "right",
-          render: (r) => {
-            const v = consoRms(r);
-            return v === null ? <ComingCell /> : <span style={{ fontWeight: 800, color: v < 0 ? FT.orange : undefined }}>{fmtNum(v)}</span>;
-          },
-        },
-        {
-          id: "conso_theorique",
-          header: "Conso Théorique (L)",
-          width: 160,
-          align: "right",
-          emphasis: true,
-          render: (r) => <span style={{ color: FT.blue, fontWeight: 800 }}>{fmtNum(r.efms.fuel_deli_l)}</span>,
-        },
-      ],
-    },
-    {
-      id: "cph",
-      label: "CPH réel",
-      color: "navy",
-      columns: [
-        { id: "cph_reel", header: "CPH Réel (L/h)", width: 130, align: "right", emphasis: true, render: (r) => fmt2.format(n(r.efms.cph_l_per_hour)) },
-        {
-          id: "cph_target",
-          header: "CPH Target Aktivco (L/h)",
-          width: 190,
-          align: "right",
-          render: (r) => {
-            const target = cphTargetLH(r);
-            if (target === null) return <ComingCell />;
-            const engine = primaryGe(r)?.cph_target?.engine_family;
-            return (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
-                <span style={{ fontWeight: 800 }}>{fmt2.format(target)}</span>
-                {engine && <Pill label={engine.replace(/^Moteur\s+/i, "")} tone="cyan" />}
-              </div>
-            );
-          },
-        },
-      ],
-    },
-    {
-      id: "ecarts",
-      label: "Écarts & alertes",
-      color: "red",
-      columns: [
-        {
-          id: "ecart_target",
-          header: "Écart vs Target (L)",
-          width: 150,
-          align: "right",
-          render: (r) => (
-            <span style={{ fontWeight: 800, color: Math.abs(n(r.gaps.deli_vs_enoc_l)) > 0 ? FT.orange : FT.green }}>
-              {r.gaps.deli_vs_enoc_l === null ? "—" : fmtNum(r.gaps.deli_vs_enoc_l)}
-            </span>
-          ),
-        },
-        {
-          id: "ecart_target_pct",
-          header: "Écart vs Target (%)",
-          width: 150,
-          align: "right",
-          render: (r) => (r.gaps.deli_vs_enoc_pct === null ? "—" : fmt2.format(n(r.gaps.deli_vs_enoc_pct))),
-        },
-        {
-          id: "statut_nok",
-          header: "Statut NOK/OK",
-          width: 130,
-          render: (r) => <Pill label={r.gaps.status.label} tone={statusTone(r.gaps.status.code)} />,
-        },
-      ],
-    },
-    {
-      id: "stock",
-      label: "Stock",
-      color: "slate",
-      columns: [
-        { id: "taux_remplissage", header: "Taux Remplissage (%)", width: 160, render: () => <ComingCell /> },
-        { id: "alerte_stock", header: "Alerte Stock", width: 120, render: () => <ComingCell /> },
-        { id: "ecart_rms_reel", header: "Écart RMS/Réel (L)", width: 150, render: () => <ComingCell /> },
-        { id: "ecart_rms_reel_pct", header: "Écart RMS/Réel (%)", width: 160, render: () => <ComingCell /> },
-        { id: "alerte_rms", header: "Alerte RMS", width: 110, render: () => <ComingCell /> },
-      ],
-    },
-  ];
-
-  const visibleGroups = useMemo(
-    () => [identityGroup, ...groups.filter((g) => !hiddenGroups.has(g.id))],
-    [groups, hiddenGroups]
-  );
 
   const filteredRows = useMemo(
     () => (anomaliesOnly ? rows.filter((r) => (r.efms.anomaly_flags?.length ?? 0) > 0) : rows),
     [rows, anomaliesOnly]
   );
 
-  const visibleColCount = visibleGroups.reduce((s, g) => s + g.columns.length, 0);
-  const totalColCount = identityGroup.columns.length + groups.reduce((s, g) => s + g.columns.length, 0);
+  const sortedRows = useMemo(() => {
+    const acc = SORT_ACCESSORS[sortKey];
+    return [...filteredRows].sort((a, b) => {
+      const av = acc(a);
+      const bv = acc(b);
+      const cmp = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv));
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [filteredRows, sortKey, sortDir]);
+
+  const columns: Array<{ key: SortKey | null; label: string; align?: "left" | "right" | "center" }> = [
+    { key: "site", label: "Site" },
+    { key: "region", label: "Région" },
+    { key: "statut", label: "Statut", align: "center" },
+    { key: "rh", label: "RH Final (h)", align: "right" },
+    { key: "conso", label: "Conso Réelle (L)", align: "right" },
+    { key: "ecart", label: "Écart vs Target", align: "right" },
+    { key: null, label: "", align: "center" },
+  ];
 
   return (
     <Card padded={false} style={{ padding: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
         <SheetTitle
           icon={<Fuel size={17} />}
-          title="CONSO_MENSUELLE — Suivi consommation mensuelle par site"
-          subtitle="Reproduction du template Excel. RH calculé via la cascade Snowflake (DSE / redresseur / GE status), secours ENOC."
+          title="Conso mensuelle — suivi carburant par site"
+          subtitle="Colonnes essentielles ci-dessous — clique une ligne pour la fiche site complète (référentiel, GE, cuves, cibles, stock, CPH)."
         />
         <button
           onClick={() => setAnomaliesOnly((v) => !v)}
@@ -443,7 +123,7 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
             borderRadius: 999,
             padding: "7px 13px",
             fontSize: 12,
-            fontWeight: 850,
+            fontWeight: 800,
             cursor: "pointer",
             whiteSpace: "nowrap",
           }}
@@ -453,37 +133,87 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
         </button>
       </div>
 
-      <div
-        style={{
-          marginTop: 14,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: 10,
-          padding: "10px 12px",
-          background: FT.slateL,
-          border: `1px solid ${FT.border}`,
-          borderRadius: 12,
-        }}
-      >
-        <GroupToggleBar groups={groups} hidden={hiddenGroups} onToggle={toggleGroup} onShowAll={showAllGroups} />
-        <span style={{ fontSize: 11, color: FT.textSub, fontWeight: 700, whiteSpace: "nowrap" }}>
-          {visibleColCount} / {totalColCount} colonnes affichées
-        </span>
+      <div style={{ marginTop: 16, border: `1px solid ${FT.border}`, borderRadius: FT.radius, overflow: "hidden" }}>
+        {loading ? (
+          <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 6 }}>
+            {[...Array(6)].map((_, i) => <Skeleton key={i} h={44} />)}
+          </div>
+        ) : sortedRows.length === 0 ? (
+          <EmptyState icon={<Fuel size={20} />} title={anomaliesOnly ? "Aucune anomalie sur la période" : "Aucune donnée sur la période"} />
+        ) : (
+          <div className="ft-scroll" style={{ maxHeight: 620, overflowY: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr>
+                  {columns.map((col) => (
+                    <th
+                      key={col.label || "action"}
+                      onClick={() => col.key && sortBy(col.key)}
+                      style={{ ...TH_STYLE, textAlign: col.align === "right" ? "right" : col.align === "center" ? "center" : "left", cursor: col.key ? "pointer" : "default" }}
+                    >
+                      {col.label}
+                      {col.key && <SortIcon active={sortKey === col.key} dir={sortDir} />}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sortedRows.map((r) => {
+                  const rh = r.efms.rh_hours ?? (n(r.efms.ge_working_hours) || null);
+                  return (
+                    <tr
+                      key={r.key}
+                      onClick={() => setDetailRow(r)}
+                      className="ft-row"
+                      style={{ cursor: "pointer", borderBottom: `1px solid ${FT.border}` }}
+                    >
+                      <td style={{ padding: "11px 14px" }}>
+                        <div style={{ fontWeight: 800, color: FT.text, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12.5 }}>{r.site_id || "—"}</div>
+                        <div style={{ fontSize: 11.5, color: FT.textSub, marginTop: 1, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.site_name || "—"}</div>
+                      </td>
+                      <td style={{ padding: "11px 14px", color: FT.textMid }}>{regionOf(r)}</td>
+                      <td style={{ padding: "11px 14px", textAlign: "center" }}>
+                        <Pill label={r.gaps.status.label} tone={statusTone(r.gaps.status.code)} />
+                      </td>
+                      <td style={{ padding: "11px 14px", textAlign: "right" }}>
+                        {rh === null ? (
+                          <span style={{ color: FT.textSub }}>—</span>
+                        ) : (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
+                            <span style={{ fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace" }}>{fmt2.format(n(rh))}</span>
+                            {r.efms.rh_source && r.efms.rh_source !== "NO_DATA" && (
+                              <Pill label={RH_SOURCE_LABEL[r.efms.rh_source] || r.efms.rh_source} tone={r.efms.rh_source === "SNOWFLAKE_DSE_COUNTER" ? "green" : "cyan"} />
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: "11px 14px", textAlign: "right", fontWeight: 800, color: FT.orange, fontFamily: "ui-monospace, Menlo, monospace" }}>
+                        {fmtNum(r.efms.fuel_conso_l)}
+                      </td>
+                      <td style={{ padding: "11px 14px", textAlign: "right" }}>
+                        {r.gaps.deli_vs_enoc_l === null ? (
+                          <span style={{ color: FT.textSub }}>—</span>
+                        ) : (
+                          <span style={{ fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace", color: Math.abs(n(r.gaps.deli_vs_enoc_l)) > 0 ? FT.orange : FT.green }}>
+                            {fmtNum(r.gaps.deli_vs_enoc_l)} L
+                            {r.gaps.deli_vs_enoc_pct !== null && <span style={{ color: FT.textSub, fontWeight: 600, marginLeft: 5 }}>({fmt2.format(n(r.gaps.deli_vs_enoc_pct))}%)</span>}
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: "11px 14px", textAlign: "center", color: FT.textSub }}>
+                        <ChevronRight size={15} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      <div style={{ marginTop: 12 }}>
-        <ExcelGrid
-          groups={visibleGroups}
-          rows={filteredRows}
-          rowKey={(r) => r.key}
-          loading={loading}
-          pinnedCount={identityGroup.columns.length}
-          maxHeight={620}
-          emptyIcon={<Fuel size={20} />}
-          emptyTitle={anomaliesOnly ? "Aucune anomalie sur la période" : "Aucune donnée sur la période"}
-        />
+      <div style={{ marginTop: 10, fontSize: 11.5, color: FT.textSub, fontWeight: 700 }}>
+        {sortedRows.length} site(s) affiché(s)
       </div>
 
       {detailRow ? <SiteDetailModal row={detailRow} onClose={() => setDetailRow(null)} /> : null}

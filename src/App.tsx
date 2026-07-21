@@ -32,6 +32,7 @@ import ComingSoonPage from "./components/Comingsoonpage";
 import { AlertTriangle, BarChart2, Server, Zap } from "lucide-react";
 import AdminSitesPage from "./features/sites/admin/AdminSitesPage";
 import FinancialPage from "./features/financial/FinancialPage";
+import MargeDashboardPage from "./features/marge-dashboard/MargeDashboardPage";
 import SuiviConsoPage from "./features/suivi-conso/SuiviConsoPage";
 import PredictionPage from "./features/prediction/PredictionPage";
 import OptimizationPage from "./features/optimization/OptimizationPage";
@@ -103,6 +104,10 @@ export default function App() {
                 </Route>
                 <Route path="/modules/evaluation-financiere" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
                   <Route index element={<FinancialPage />} />
+                </Route>
+
+                <Route path="/modules/dashboard-marge" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
+                  <Route index element={<MargeDashboardPage />} />
                 </Route>
 
                 <Route path="/modules/optimisation" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>

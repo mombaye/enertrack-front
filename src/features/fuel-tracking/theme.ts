@@ -44,10 +44,11 @@ export const FT = {
   slate: "#64748B",
   slateL: "#F5F7FA",
 
-  radius: 16,
-  radiusSm: 10,
-  shadow: "0 1px 2px rgba(15,23,42,.04), 0 8px 24px -12px rgba(15,23,42,.10)",
-  shadowLg: "0 8px 30px -8px rgba(11,31,77,.22)",
+  radius: 10,
+  radiusSm: 7,
+  shadow: "0 1px 2px rgba(15,23,42,.04), 0 1px 1px rgba(15,23,42,.03)",
+  shadowLg: "0 4px 20px -8px rgba(11,31,77,.35)",
+  borderCrisp: "1px solid #E4E9F0",
 } as const;
 
 export type Tone = "green" | "orange" | "red" | "blue" | "violet" | "cyan" | "slate" | "gold";

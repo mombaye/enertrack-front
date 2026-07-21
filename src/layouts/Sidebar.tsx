@@ -9,6 +9,7 @@ import {
   BrainCircuit,
   Fuel,
   ClipboardList,
+  TrendingDown,
 
 } from "lucide-react";
 import camusatLogo from "@/assets/images/camusat-logo.png";
@@ -31,6 +32,7 @@ const LINKS: LinkItem[] = [
   { to: "/certification",          icon: <ShieldCheck />,  label: "Certification",              section: "FACTURATION",    end: true },
   // Sidebar.tsx — dans LINKS
   { to: "/modules/evaluation-financiere", icon: <DollarSign />, label: "Évaluation Financière", section: "FACTURATION" },
+  { to: "/modules/dashboard-marge", icon: <TrendingDown />, label: "Dashboard Marge", section: "FACTURATION" },
   { to: "/billing/sonatel",        icon: <Receipt />,      label: "Base Factures",            section: "FACTURATION",    end: true },
 
 

@@ -133,35 +133,35 @@ export function KpiCard({
     <div
       style={{
         position: "relative",
-        overflow: "hidden",
-        border: `1px solid ${FT.border}`,
+        border: FT.borderCrisp,
+        borderLeft: `3px solid ${c.fg}`,
         background: FT.card,
-        borderRadius: 14,
-        padding: "14px 16px",
+        borderRadius: FT.radius,
+        padding: "13px 15px 14px",
         boxShadow: FT.shadow,
       }}
     >
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: c.fg, opacity: 0.85 }} />
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
         <div
           style={{
             color: FT.textSub,
             fontSize: 10,
-            fontWeight: 800,
-            letterSpacing: ".07em",
+            fontWeight: 700,
+            letterSpacing: ".06em",
             textTransform: "uppercase",
+            lineHeight: 1.3,
           }}
         >
           {label}
         </div>
         {icon && (
-          <div style={{ width: 26, height: 26, borderRadius: 8, background: c.bg, color: c.fg, display: "grid", placeItems: "center" }}>
+          <div style={{ width: 24, height: 24, borderRadius: 7, border: `1px solid ${c.fg}35`, color: c.fg, display: "grid", placeItems: "center", flexShrink: 0 }}>
             {icon}
           </div>
         )}
       </div>
-      <div style={{ color: FT.text, fontSize: 23, fontWeight: 900, lineHeight: 1, letterSpacing: "-.01em" }}>{value}</div>
-      {sub && <div style={{ color: FT.textMid, fontSize: 11.5, marginTop: 6 }}>{sub}</div>}
+      <div style={{ color: FT.text, fontSize: 21, fontWeight: 700, lineHeight: 1, letterSpacing: "-.01em", fontFamily: "ui-monospace, Menlo, monospace" }}>{value}</div>
+      {sub && <div style={{ color: FT.textMid, fontSize: 11.5, marginTop: 7 }}>{sub}</div>}
     </div>
   );
 }

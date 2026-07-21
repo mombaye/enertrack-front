@@ -125,175 +125,131 @@ export default function FuelTrackingPage() {
       <style>{GLOBAL_STYLES}</style>
 
       <div className="fuelbook" style={{ display: "flex", flexDirection: "column", gap: 14, background: FT.pageBg, margin: -20, padding: 20 }}>
-        {/* ── Bannière d'en-tête ─────────────────────────────────────────── */}
-        <div
-          className="ft-fade"
-          style={{
-            position: "relative",
-            borderRadius: 20,
-            overflow: "hidden",
-            background: FT.headerGrad,
-            boxShadow: FT.shadowLg,
-          }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              backgroundImage: "radial-gradient(600px 200px at 85% -10%, rgba(255,255,255,.16), transparent)",
-              pointerEvents: "none",
-            }}
-          />
-
-          <div style={{ position: "relative", padding: "22px 24px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap", alignItems: "flex-start" }}>
-              <div>
-                <div
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 7,
-                    padding: "4px 11px",
-                    borderRadius: 999,
-                    background: "rgba(255,255,255,.14)",
-                    color: "#fff",
-                    border: "1px solid rgba(255,255,255,.28)",
-                    fontSize: 10.5,
-                    fontWeight: 900,
-                    textTransform: "uppercase",
-                    letterSpacing: ".08em",
-                    marginBottom: 10,
-                  }}
-                >
-                  <FileSpreadsheet size={12} />
-                  Classeur suivi carburant
-                </div>
-
-                <h1 style={{ margin: 0, color: "#FFFFFF", fontSize: 24, lineHeight: 1.2, fontWeight: 850, letterSpacing: "-.01em" }}>
-                  Suivi Carburant
-                </h1>
-                <p style={{ margin: "6px 0 0", color: FT.textOnDarkSub, fontSize: 13 }}>
-                  <strong style={{ color: FT.textOnDark }}>{SHEETS.find((s) => s.key === activeSheet)?.label}</strong> · {sheetSubtitle}
-                </p>
+        {/* ── En-tête ──────────────────────────────────────────────────────── */}
+        <div className="ft-fade" style={{ background: FT.headerGrad, borderRadius: FT.radius, boxShadow: FT.shadowLg, padding: "20px 24px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap", alignItems: "flex-start" }}>
+            <div>
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 7,
+                  padding: "3px 10px",
+                  borderRadius: 6,
+                  background: "rgba(255,255,255,.12)",
+                  color: "#fff",
+                  border: "1px solid rgba(255,255,255,.22)",
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: ".08em",
+                  marginBottom: 9,
+                }}
+              >
+                <FileSpreadsheet size={11} />
+                Suivi Carburant
               </div>
-
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, border: "1px solid rgba(255,255,255,.16)", background: "rgba(255,255,255,.06)", borderRadius: 11, padding: "8px 12px" }}>
-                  <Calendar size={14} color="rgba(255,255,255,.6)" />
-                  <input
-                    type="month"
-                    value={month}
-                    onChange={(e) => {
-                      setMonth(e.target.value);
-                      setMonthlyPage(1);
-                      setJournalPage(1);
-                    }}
-                    style={{ border: "none", outline: "none", background: "transparent", fontSize: 13, color: "#fff", fontWeight: 800, colorScheme: "dark" }}
-                  />
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: 8, border: "1px solid rgba(255,255,255,.16)", background: "rgba(255,255,255,.06)", borderRadius: 11, padding: "8px 12px", minWidth: 230 }}>
-                  <Search size={14} color="rgba(255,255,255,.6)" />
-                  <input
-                    value={site}
-                    onChange={(e) => {
-                      setSite(e.target.value);
-                      setMonthlyPage(1);
-                      setJournalPage(1);
-                    }}
-                    placeholder="Site ID, nom ou ticket..."
-                    style={{ border: "none", outline: "none", background: "transparent", fontSize: 13, color: "#fff", flex: 1 }}
-                  />
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: 8, border: "1px solid rgba(255,255,255,.16)", background: "rgba(255,255,255,.06)", borderRadius: 11, padding: "8px 12px", minWidth: 160 }}>
-                  <MapPin size={14} color="rgba(255,255,255,.6)" />
-                  <input
-                    value={zone}
-                    onChange={(e) => {
-                      setZone(e.target.value);
-                      setMonthlyPage(1);
-                      setJournalPage(1);
-                    }}
-                    placeholder="Zone / région..."
-                    style={{ border: "none", outline: "none", background: "transparent", fontSize: 13, color: "#fff", flex: 1 }}
-                  />
-                </div>
-
-                <button
-                  onClick={() => {
-                    monthlyQ.refetch();
-                    journalQ.refetch();
-                    syncQ.refetch();
-                  }}
-                  title="Rafraîchir"
-                  style={{
-                    width: 38,
-                    height: 38,
-                    borderRadius: 11,
-                    border: "1px solid rgba(255,255,255,.16)",
-                    background: "rgba(255,255,255,.06)",
-                    display: "grid",
-                    placeItems: "center",
-                    cursor: "pointer",
-                    color: "#fff",
-                  }}
-                >
-                  <RefreshCw size={15} className={monthlyQ.isFetching || journalQ.isFetching ? "ft-spin" : ""} />
-                </button>
-
-                <button
-                  onClick={handleExport}
-                  disabled={exporting}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 7,
-                    padding: "9px 15px",
-                    borderRadius: 11,
-                    border: "none",
-                    background: "#fff",
-                    color: FT.navy,
-                    fontSize: 13,
-                    fontWeight: 850,
-                    cursor: exporting ? "not-allowed" : "pointer",
-                    opacity: exporting ? 0.7 : 1,
-                    boxShadow: "0 6px 18px rgba(11,31,77,.28)",
-                  }}
-                >
-                  <Download size={14} className={exporting ? "ft-spin" : ""} />
-                  {exporting ? "Export en cours…" : "Export classeur"}
-                </button>
-              </div>
+              <h1 style={{ margin: 0, color: "#FFFFFF", fontSize: 21, lineHeight: 1.25, fontWeight: 700, letterSpacing: "-.01em" }}>
+                {SHEETS.find((s) => s.key === activeSheet)?.label}
+              </h1>
+              <p style={{ margin: "5px 0 0", color: FT.textOnDarkSub, fontSize: 12.5 }}>{sheetSubtitle}</p>
             </div>
 
-            <div style={{ marginTop: 18, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-              <SegmentedTabs options={SHEETS} value={activeSheet} onChange={setActiveSheet} />
-
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                <Pill label={`eFMS : ${efms?.status || "—"}`} tone={efms?.status === "SUCCESS" ? "green" : efms?.status === "FAILED" ? "red" : "slate"} />
-                <Pill label={`ENOC : ${enoc?.status || "—"}`} tone={enoc?.status === "SUCCESS" ? "green" : enoc?.status === "FAILED" ? "red" : "slate"} />
-                <span style={{ color: FT.textOnDarkSub, fontSize: 11.5 }}>Sync ENOC : {fmtDateTime(enoc?.started_at)}</span>
-              </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <Pill label={`eFMS : ${efms?.status || "—"}`} tone={efms?.status === "SUCCESS" ? "green" : efms?.status === "FAILED" ? "red" : "slate"} />
+              <Pill label={`ENOC : ${enoc?.status || "—"}`} tone={enoc?.status === "SUCCESS" ? "green" : enoc?.status === "FAILED" ? "red" : "slate"} />
+              <span style={{ color: FT.textOnDarkSub, fontSize: 11 }}>Sync ENOC : {fmtDateTime(enoc?.started_at)}</span>
             </div>
+          </div>
+
+          <div style={{ marginTop: 16 }}>
+            <SegmentedTabs options={SHEETS} value={activeSheet} onChange={setActiveSheet} />
           </div>
         </div>
 
-        {/* ── Disponibilité des sources ──────────────────────────────────── */}
+        {/* ── Barre de filtres ─────────────────────────────────────────────── */}
         <Card style={{ padding: 14 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-            <div>
-              <div style={{ fontWeight: 850, color: FT.text, fontSize: 13.5 }}>Disponibilité des sources</div>
-              <div style={{ color: FT.textSub, fontSize: 12, marginTop: 2 }}>EnerTrack consolide les données mensuelles eFMS et les mouvements terrain ENOC.</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px" }}>
+                <Calendar size={14} color={FT.textSub} />
+                <input
+                  type="month"
+                  value={month}
+                  onChange={(e) => {
+                    setMonth(e.target.value);
+                    setMonthlyPage(1);
+                    setJournalPage(1);
+                  }}
+                  style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, color: FT.text, fontWeight: 700 }}
+                />
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px", minWidth: 210 }}>
+                <Search size={14} color={FT.textSub} />
+                <input
+                  value={site}
+                  onChange={(e) => {
+                    setSite(e.target.value);
+                    setMonthlyPage(1);
+                    setJournalPage(1);
+                  }}
+                  placeholder="Site ID, nom ou ticket..."
+                  style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, color: FT.text, flex: 1 }}
+                />
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px", minWidth: 150 }}>
+                <MapPin size={14} color={FT.textSub} />
+                <input
+                  value={zone}
+                  onChange={(e) => {
+                    setZone(e.target.value);
+                    setMonthlyPage(1);
+                    setJournalPage(1);
+                  }}
+                  placeholder="Zone / région..."
+                  style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, color: FT.text, flex: 1 }}
+                />
+              </div>
+
+              <button
+                onClick={() => {
+                  monthlyQ.refetch();
+                  journalQ.refetch();
+                  syncQ.refetch();
+                }}
+                title="Rafraîchir"
+                style={{ width: 33, height: 33, borderRadius: 9, border: `1px solid ${FT.border}`, background: FT.slateL, display: "grid", placeItems: "center", cursor: "pointer", color: FT.textMid }}
+              >
+                <RefreshCw size={14} className={monthlyQ.isFetching || journalQ.isFetching ? "ft-spin" : ""} />
+              </button>
             </div>
 
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <Pill label={sourceStatusQ.data?.efms.latest_month ? `eFMS jusqu'à ${sourceStatusQ.data.efms.latest_month}` : "eFMS indisponible"} tone={sourceStatusQ.data?.efms.available ? "green" : "red"} />
               <Pill label={sourceStatusQ.data?.enoc.latest_operation_date ? `ENOC ${sourceStatusQ.data.enoc.total_movements} mouvement(s)` : "ENOC indisponible"} tone={sourceStatusQ.data?.enoc.available ? "green" : "red"} />
-              {sourceStatusQ.data?.requested_month?.status === "EFMS_ENOC" && <Pill label={`${month} : eFMS + ENOC`} tone="green" />}
-              {sourceStatusQ.data?.requested_month?.status === "EFMS_ONLY" && <Pill label={`${month} : eFMS seul`} tone="blue" />}
-              {sourceStatusQ.data?.requested_month?.status === "ENOC_ONLY" && <Pill label={`${month} : ENOC seul`} tone="orange" />}
-              {sourceStatusQ.data?.requested_month?.status === "NO_DATA" && <Pill label={`${month} : aucune donnée`} tone="slate" />}
+              <button
+                onClick={handleExport}
+                disabled={exporting}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 7,
+                  padding: "8px 14px",
+                  borderRadius: 9,
+                  border: "none",
+                  background: FT.navy,
+                  color: "#fff",
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  cursor: exporting ? "not-allowed" : "pointer",
+                  opacity: exporting ? 0.7 : 1,
+                }}
+              >
+                <Download size={13} className={exporting ? "ft-spin" : ""} />
+                {exporting ? "Export…" : "Export classeur"}
+              </button>
             </div>
           </div>
         </Card>
