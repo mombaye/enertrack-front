@@ -10,6 +10,7 @@ import {
   fmt2, fmtMaybeKva, fmtMaybeL, fmtMaybeNum, fmtNum, n,
   geBrand1, geBrand2, gePower1, gePower2, tankCapacity1, tankCapacity2,
   realTypology, siteConfig, siteLoad, siteTypology, consoRms, cphTargetLH,
+  modernizedLabel, facteurCharge, consoTheoriqueLH, primaryGe,
 } from "../helpers";
 
 const RH_SOURCE_LABEL: Record<string, string> = {
@@ -20,6 +21,17 @@ const RH_SOURCE_LABEL: Record<string, string> = {
   NO_DATA: "—",
 };
 
+const CURVE_CONFIDENCE_LABEL: Record<string, { label: string; tone: "green" | "cyan" | "orange" }> = {
+  MODEL_EXACT: { label: "Modèle", tone: "green" },
+  MODEL_FUZZY: { label: "Modèle ~", tone: "cyan" },
+  MODEL_EXACT_AMBIGUOUS_AVERAGED: { label: "Modèle (moy.)", tone: "orange" },
+  MODEL_FUZZY_AMBIGUOUS_AVERAGED: { label: "Modèle ~ (moy.)", tone: "orange" },
+  KVA_EXACT: { label: "kVA", tone: "cyan" },
+  KVA_NEAREST: { label: "kVA proche", tone: "orange" },
+  KVA_EXACT_AMBIGUOUS_AVERAGED: { label: "kVA (moy.)", tone: "orange" },
+  KVA_NEAREST_AMBIGUOUS_AVERAGED: { label: "kVA proche (moy.)", tone: "orange" },
+};
+
 export type SiteDetailRow = Partial<FuelMonthlyRow> & {
   site_id: string | null;
   site_name: string | null;
@@ -27,7 +39,7 @@ export type SiteDetailRow = Partial<FuelMonthlyRow> & {
   ville?: string | null;
 };
 
-function InfoTile({ label, value }: { label: string; value: React.ReactNode }) {
+export function InfoTile({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div style={{ padding: "10px 12px", borderRadius: 12, background: FT.slateL, border: `1px solid ${FT.border}` }}>
       <div style={{ fontSize: 9.5, fontWeight: 850, color: FT.textSub, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 4 }}>
@@ -38,7 +50,7 @@ function InfoTile({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+export function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
@@ -51,6 +63,19 @@ function Section({ icon, title, children }: { icon: React.ReactNode; title: stri
         {children}
       </div>
     </div>
+  );
+}
+
+function ConsoTheoriqueLhValue({ row }: { row: FuelMonthlyRow }) {
+  const lh = consoTheoriqueLH(row);
+  if (lh === null) return <>—</>;
+  const confidence = primaryGe(row)?.fuel_curve?.confidence;
+  const badge = confidence ? CURVE_CONFIDENCE_LABEL[confidence] : null;
+  return (
+    <span>
+      {fmt2.format(lh)} L/h
+      {badge && <Pill label={badge.label} tone={badge.tone} />}
+    </span>
   );
 }
 
@@ -85,6 +110,8 @@ export default function SiteDetailModal({ row, onClose }: { row: SiteDetailRow; 
         <div className="ft-scroll" style={{ flex: 1, overflowY: "auto", padding: 20, display: "grid", gap: 20 }}>
           <Section icon={<MapPin size={13} />} title="Identification">
             <InfoTile label="Zone / Région" value={zone} />
+            <InfoTile label="Batch" value={row.site_ref?.batch_operational || row.enoc_site_ref?.batch_operational || row.enoc_site_ref?.batch || "—"} />
+            <InfoTile label="Neuf / Existant" value={row.site_ref || row.enoc_site_ref ? modernizedLabel(row as FuelMonthlyRow) : "—"} />
             <InfoTile label="Typo facturée" value={row.site_ref || row.enoc_site_ref ? siteTypology(row as FuelMonthlyRow) : "—"} />
             <InfoTile label="Typo réelle" value={row.site_ref || row.enoc_site_ref ? realTypology(row as FuelMonthlyRow) : "—"} />
             <InfoTile label="Configuration" value={row.site_ref || row.enoc_site_ref ? siteConfig(row as FuelMonthlyRow) : "—"} />
@@ -106,6 +133,24 @@ export default function SiteDetailModal({ row, onClose }: { row: SiteDetailRow; 
             <InfoTile label="Cuve GE2" value={fmtMaybeL(tankCapacity2(row as FuelMonthlyRow)) !== "—" ? `${fmtMaybeL(tankCapacity2(row as FuelMonthlyRow))} L` : "—"} />
             <InfoTile label="RMS / Fuel sensor" value={row.enoc_site_ref?.rms_installed || "—"} />
           </Section>
+
+          {row.enoc ? (
+            <Section icon={<Gauge size={13} />} title="Cibles">
+              <InfoTile
+                label="Target Aktivco"
+                value={
+                  row.enoc.monthly_target_liters ? (
+                    <span>
+                      {fmtNum(row.enoc.monthly_target_liters)} L/mois
+                      {row.enoc.target_status && <Pill label={row.enoc.target_status} tone={row.enoc.target_status === "exceeded" ? "red" : "green"} />}
+                    </span>
+                  ) : "—"
+                }
+              />
+              <InfoTile label="Facteur Charge" value={facteurCharge(row as FuelMonthlyRow) !== null ? `${fmt2.format(facteurCharge(row as FuelMonthlyRow)!)}%` : "—"} />
+              <InfoTile label="Conso Théorique" value={<ConsoTheoriqueLhValue row={row as FuelMonthlyRow} />} />
+            </Section>
+          ) : null}
 
           {row.efms ? (
             <Section icon={<ShieldCheck size={13} />} title="Consommation & RH — ce mois">
@@ -143,7 +188,16 @@ export default function SiteDetailModal({ row, onClose }: { row: SiteDetailRow; 
               <InfoTile label="Stock Ouv. RMS" value={fmtMaybeNum(row.stock?.ouv_rms) !== "—" ? `${fmtMaybeNum(row.stock?.ouv_rms)} L` : "—"} />
               <InfoTile label="Stock Clôt. RMS" value={fmtMaybeNum(row.stock?.clot_rms) !== "—" ? `${fmtMaybeNum(row.stock?.clot_rms)} L` : "—"} />
               <InfoTile label="Stock Ouv. Réel" value={fmtMaybeNum(row.stock?.ouv_reel) !== "—" ? `${fmtMaybeNum(row.stock?.ouv_reel)} L` : "—"} />
+              <InfoTile label="Stock Clôt. Réel" value={fmtMaybeNum(row.stock?.clot_reel) !== "—" ? `${fmtMaybeNum(row.stock?.clot_reel)} L` : "—"} />
               <InfoTile label="Stock Réel" value={fmtMaybeNum(row.stock?.reel) !== "—" ? `${fmtMaybeNum(row.stock?.reel)} L` : "—"} />
+              <InfoTile
+                label="Stock Delta RMS"
+                value={
+                  row.stock?.delta_rms !== null && row.stock?.delta_rms !== undefined ? (
+                    <span style={{ color: row.stock.delta_rms < 0 ? FT.orange : FT.green }}>{fmtNum(row.stock.delta_rms)} L</span>
+                  ) : "—"
+                }
+              />
             </Section>
           ) : null}
 

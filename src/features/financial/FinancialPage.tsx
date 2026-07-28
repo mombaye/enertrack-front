@@ -371,7 +371,7 @@ function DeltaBadge({ value }: { value: number | null }) {
 }
 
 function Card({ children, style }: { children: ReactNode; style?: CSSProperties }) {
-  return <div style={{ background: "rgba(255,255,255,.94)", border: `1px solid ${C.slate[200]}`, borderRadius: 20, boxShadow: "0 18px 45px rgba(15,23,42,.07)", overflow: "hidden", ...style }}>{children}</div>;
+  return <div style={{ background: "#fff", border: "1px solid #E4E9F0", borderRadius: 10, boxShadow: "0 1px 2px rgba(15,23,42,.04), 0 1px 1px rgba(15,23,42,.03)", overflow: "hidden", ...style }}>{children}</div>;
 }
 
 function SectionTitle({ icon, title, subtitle, right }: { icon: ReactNode; title: string; subtitle?: string; right?: ReactNode }) {
@@ -391,7 +391,7 @@ function SectionTitle({ icon, title, subtitle, right }: { icon: ReactNode; title
 
 function KpiCard({ label, value, sub, icon, accent, help, negative }: { label: string; value: string; sub?: string; icon: ReactNode; accent: string; help?: string; negative?: boolean }) {
   return (
-    <div style={{ position: "relative", overflow: "hidden", borderRadius: 18, background: "rgba(255,255,255,.09)", border: "1px solid rgba(255,255,255,.14)", padding: "15px 16px", minHeight: 94, boxShadow: "inset 0 1px 0 rgba(255,255,255,.12)" }}>
+    <div style={{ position: "relative", overflow: "hidden", borderRadius: 10, background: "rgba(255,255,255,.09)", border: "1px solid rgba(255,255,255,.14)", padding: "14px 15px", minHeight: 94, boxShadow: "inset 0 1px 0 rgba(255,255,255,.12)" }}>
       <div style={{ position: "absolute", inset: 0, background: `radial-gradient(circle at 90% 12%,${accent}33,transparent 32%)` }} />
       <div style={{ position: "relative", display: "flex", justifyContent: "space-between", gap: 12 }}>
         <div style={{ minWidth: 0 }}>
@@ -760,7 +760,8 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
         .fin-sticky-head { position: sticky !important; left: 0; z-index: 30 !important; }
       `}</style>
 
-      <div style={{ background: HDR, color: "#fff", padding: "22px 24px 18px", boxShadow: "0 18px 45px rgba(1,14,42,.24)" }}>
+      <div style={{ maxWidth: 1600, margin: "0 auto", padding: "22px 24px 70px" }}>
+      <div style={{ background: HDR, color: "#fff", borderRadius: 10, padding: "22px 24px 18px", boxShadow: "0 4px 20px -8px rgba(11,31,77,.35)", marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
           <div>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 9px", background: "rgba(255,255,255,.10)", border: "1px solid rgba(255,255,255,.14)", borderRadius: 999, fontSize: 11, fontWeight: 950, color: "rgba(255,255,255,.72)" }}>
@@ -787,7 +788,7 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
         </div>
       </div>
 
-      <div style={{ padding: 22, display: "grid", gap: 16 }}>
+      <div style={{ display: "grid", gap: 16 }}>
         <Card>
           <div style={{ padding: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <div style={{ position: "relative", minWidth: 260 }}>
@@ -878,6 +879,7 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
         {activeTab === "donnees" ? (
           <Card style={{ padding: 18 }}><FinancialDataPage /></Card>
         ) : null}
+      </div>
       </div>
 
       {modalSite ? <FinancialSiteDetailModal siteId={modalSite.siteId} siteName={modalSite.siteName} year={modalSite.year} monthStart={modalSite.monthStart} monthEnd={modalSite.monthEnd} onClose={() => setModalSite(null)} /> : null}

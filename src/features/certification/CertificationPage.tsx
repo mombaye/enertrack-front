@@ -162,13 +162,13 @@ function StepBar({ current }: { current: Step }) {
     <div className="flex items-center gap-1">
       {steps.map((s, i) => (
         <div key={s.key} className="flex items-center gap-1">
-          <div className={`flex items-center gap-1.5 px-3 py-1 rounded text-[11px] font-semibold tracking-wide transition-all ${i === idx ? "bg-white/10 text-white" : i < idx ? "text-emerald-400" : "text-slate-500"}`}>
-            <span className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold shrink-0 ${i < idx ? "bg-emerald-500 text-white" : i === idx ? "bg-white text-slate-900" : "bg-slate-700 text-slate-500"}`}>
+          <div className={`flex items-center gap-1.5 px-3 py-1 rounded text-[11px] font-semibold tracking-wide transition-all ${i === idx ? "bg-white/15 text-white" : i < idx ? "text-emerald-300" : "text-blue-200/70"}`}>
+            <span className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold shrink-0 ${i < idx ? "bg-emerald-500 text-white" : i === idx ? "bg-white text-blue-900" : "bg-white/15 text-blue-200/70"}`}>
               {i < idx ? <Check className="w-2.5 h-2.5" /> : i + 1}
             </span>
             {s.label}
           </div>
-          {i < steps.length - 1 && <div className={`h-px w-4 ${i < idx ? "bg-emerald-700" : "bg-slate-700"}`} />}
+          {i < steps.length - 1 && <div className={`h-px w-4 ${i < idx ? "bg-emerald-500/50" : "bg-white/20"}`} />}
         </div>
       ))}
     </div>
@@ -177,12 +177,12 @@ function StepBar({ current }: { current: Step }) {
 
 function EfmsDot({ reachable, loading }: { reachable: boolean | undefined; loading: boolean }) {
   if (loading) return (
-    <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+    <div className="flex items-center gap-1.5 text-[11px] text-blue-200/70">
       <Loader2 className="w-3 h-3 animate-spin" /> eFMS…
     </div>
   );
   return (
-    <div className={`flex items-center gap-1.5 text-[11px] font-medium ${reachable ? "text-emerald-400" : "text-red-400"}`}>
+    <div className={`flex items-center gap-1.5 text-[11px] font-medium ${reachable ? "text-emerald-300" : "text-red-300"}`}>
       {reachable ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
       {reachable ? "eFMS connecté" : "eFMS hors ligne"}
     </div>
@@ -690,7 +690,10 @@ export default function CertificationPage() {
     queryKey: ["cert-batch-status", pollingBatchId],
     queryFn: () => pollBatchStatus(pollingBatchId!),
     enabled: pollingBatchId !== null,
-    refetchInterval: (d: any) => (!d || d.status === "RUNNING" || d.status === "PENDING") ? 2500 : false,
+    refetchInterval: (q) => {
+      const d = q.state.data;
+      return (!d || d.status === "RUNNING" || d.status === "PENDING") ? 2500 : false;
+    },
   });
 
   const billingBatchId = importResult?.batchId ?? null;
@@ -698,7 +701,10 @@ export default function CertificationPage() {
     queryKey: ["billing-task-status", billingBatchId],
     queryFn: () => pollBillingImportStatus(billingBatchId!),
     enabled: billingBatchId !== null && step === "upload",
-    refetchInterval: (d: any) => (!d || d.task_status === "PENDING" || d.task_status === "RUNNING") ? 2000 : false,
+    refetchInterval: (q) => {
+      const d = q.state.data;
+      return (!d || d.task_status === "PENDING" || d.task_status === "RUNNING") ? 2000 : false;
+    },
   });
 
   useEffect(() => {
@@ -810,19 +816,25 @@ export default function CertificationPage() {
     <div className="min-h-screen bg-[#F5F5F3]">
 
       {/* ── Topbar ── */}
-      <header className="bg-slate-950 border-b border-slate-800 px-6 py-0 sticky top-0 z-30">
+      <header
+        className="px-6 py-0 sticky top-0 z-30"
+        style={{
+          background: "linear-gradient(135deg, #0B1F4D 0%, #123C8C 45%, #1A56C4 75%, #3272E0 100%)",
+          boxShadow: "0 4px 20px -8px rgba(11,31,77,.45)",
+        }}
+      >
         <div className="max-w-7xl mx-auto h-12 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded bg-sky-500 flex items-center justify-center shrink-0">
+            <div className="w-6 h-6 rounded-lg bg-white/15 border border-white/25 flex items-center justify-center shrink-0">
               <ShieldCheck className="w-3.5 h-3.5 text-white" />
             </div>
             <span className="text-[13px] font-bold text-white tracking-tight">Certification</span>
-            <span className="text-slate-700 mx-1">|</span>
-            <span className="text-[11px] text-slate-500 font-medium">Factures Sénélec</span>
+            <span className="text-white/25 mx-1">|</span>
+            <span className="text-[11px] text-blue-100/80 font-medium">Factures Sénélec</span>
           </div>
           <div className="flex items-center gap-5">
             <EfmsDot reachable={efms?.efms_reachable} loading={efmsLoading} />
-            <div className="h-3 w-px bg-slate-800" />
+            <div className="h-3 w-px bg-white/20" />
             <StepBar current={step} />
           </div>
         </div>

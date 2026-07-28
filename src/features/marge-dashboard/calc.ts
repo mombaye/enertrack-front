@@ -39,6 +39,50 @@ export function typoFamilyOptions(rows: MargeRow[]): string[] {
   return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
 }
 
+// ── Secteurs client (regroupement de typologies demandé par le client) ─────
+// Secteur = A_Ax_GG + D2_GG | Secteur GE = idem + GE | Secteur Solaire = idem
+// + S0/S1/S2/S3 | Secteur Solaire GE = idem + S0..S3 + GE. Matching précis
+// (pas un simple préfixe) pour ne pas attraper A_Ax_GG-NG, A_Ax_S6, C4_GG,
+// E1_E2_GG... qui ne font pas partie du périmètre demandé.
+const CLIENT_FAMILY_BASES = ["a_ax_gg", "d2_gg"];
+
+export interface ClientFamily {
+  key: string;
+  label: string;
+  solar: boolean;
+  ge: boolean;
+}
+
+export const CLIENT_FAMILIES: ClientFamily[] = [
+  { key: "SECTEUR", label: "Secteur", solar: false, ge: false },
+  { key: "SECTEUR_GE", label: "Secteur GE", solar: false, ge: true },
+  { key: "SECTEUR_SOLAIRE", label: "Secteur Solaire", solar: true, ge: false },
+  { key: "SECTEUR_SOLAIRE_GE", label: "Secteur Solaire GE", solar: true, ge: true },
+];
+
+function matchesClientFamily(typo: string, fam: ClientFamily): boolean {
+  const t = normTypo(typo);
+  for (const base of CLIENT_FAMILY_BASES) {
+    if (!t.startsWith(base)) continue;
+    let rest = t.slice(base.length);
+    let hasGE = false;
+    if (rest.endsWith(" ge")) {
+      hasGE = true;
+      rest = rest.slice(0, -3);
+    }
+    const isSolar = /^ s[0-3]$/.test(rest);
+    const isBase = rest === "";
+    if (!isSolar && !isBase) continue;
+    if (isSolar !== fam.solar || hasGE !== fam.ge) continue;
+    return true;
+  }
+  return false;
+}
+
+export function clientFamilyLabel(key: string): string | null {
+  return CLIENT_FAMILIES.find((f) => f.key === key)?.label ?? null;
+}
+
 // ── §3 — Sélecteur de périmètre (4 modes : + multi-sélection libre) ────────
 export function applyScope(
   rows: MargeRow[],
@@ -55,6 +99,8 @@ export function applyScope(
   if (!value) return rows;
   const v = normTypo(value);
   if (mode === "exact") return rows.filter((r) => normTypo(r.typo_facturee) === v);
+  const clientFam = CLIENT_FAMILIES.find((f) => f.key === value);
+  if (clientFam) return rows.filter((r) => matchesClientFamily(r.typo_facturee, clientFam));
   return rows.filter((r) => normTypo(r.typo_facturee).startsWith(v)); // family
 }
 

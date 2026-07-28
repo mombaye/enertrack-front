@@ -3,7 +3,7 @@
 // Sélecteur de périmètre (portefeuille / famille / typologie exacte / multi-
 // sélection libre), sélecteur de base de marge (estimée / réelle), filtres
 // transverses — tout se recalcule côté client, sans rechargement.
-import { useMemo, useState, type ReactNode, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type ReactNode, type CSSProperties } from "react";
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer,
@@ -16,7 +16,8 @@ import {
   applyScope, annotateBase, applyFilters, computeKpis, computeInsights, groupSumNok,
   groupCount, reliabilityBuckets, trendBuckets, transitionMatrix, coverageSplit,
   magnitudeBuckets, typoFamily, typoExactOptions, typoFamilyOptions, fmtXof, fmtXofExact,
-  fmtPct, EMPTY_FILTERS, type ScopeMode, type BaseMode, type Filters, type AnnotatedRow,
+  fmtPct, EMPTY_FILTERS, CLIENT_FAMILIES, clientFamilyLabel,
+  type ScopeMode, type BaseMode, type Filters, type AnnotatedRow,
 } from "./calc";
 
 // ─── Design tokens Camusat (identiques aux autres modules EnerTrack) ──────────
@@ -118,9 +119,14 @@ const SORT_ACCESSORS: Record<string, (r: AnnotatedRow) => string | number> = {
   ecart: (r) => (r.marge_reelle !== null && r.marge_juin_est !== null ? r.marge_reelle - r.marge_juin_est : 0),
   categorie_bo: (r) => r.categorie_bo,
   owner: (r) => r.owner,
+  load_senelec_w: (r) => r.load_senelec_w ?? -1,
 };
 
 const CURRENT_YEAR = new Date().getFullYear();
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 export default function MargeDashboardPage() {
   // undefined = laisse le backend choisir par défaut (dernière période de
@@ -129,8 +135,38 @@ export default function MargeDashboardPage() {
   const [period, setPeriod] = useState<MargePeriod | undefined>(undefined);
   const { data, isLoading, isError } = useMargeDashboard(period);
 
+  // Plage de dates §3 : filtre juste la liste des mois sélectionnables (les
+  // seuls mois avec facture Sénélec rapprochée), par défaut janvier → aujourd'hui
+  // de l'année en cours. On sélectionne toujours UN seul mois au final (pas
+  // d'agrégation multi-mois) — la plage ne fait que réduire les choix proposés.
+  const [dateFrom, setDateFrom] = useState(`${CURRENT_YEAR}-01-01`);
+  const [dateTo, setDateTo] = useState(todayIso());
+
+  const filteredPeriods = useMemo(() => {
+    const all = data?.meta?.available_periods ?? [];
+    const fromKey = dateFrom.slice(0, 7); // "YYYY-MM"
+    const toKey = dateTo.slice(0, 7);
+    return all.filter((p) => {
+      const key = `${p.year}-${String(p.month).padStart(2, "0")}`;
+      return key >= fromKey && key <= toKey;
+    });
+  }, [data?.meta?.available_periods, dateFrom, dateTo]);
+
+  // Si la période actuellement affichée sort de la plage choisie, on retombe
+  // sur la plus récente période encore valide dans la nouvelle plage.
+  useEffect(() => {
+    const meta = data?.meta;
+    if (!meta) return;
+    const stillValid = filteredPeriods.some((p) => p.year === meta.reelle_year && p.month === meta.reelle_month);
+    if (!stillValid && filteredPeriods.length) {
+      const latest = filteredPeriods[filteredPeriods.length - 1];
+      setPeriod({ year: latest.year, month: latest.month });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredPeriods]);
+
   const [scopeMode, setScopeMode] = useState<ScopeMode>("family");
-  const [scopeValue, setScopeValue] = useState("A_Ax_GG");
+  const [scopeValue, setScopeValue] = useState(CLIENT_FAMILIES[0].key);
   const [multiValues, setMultiValues] = useState<string[]>([]);
   const [base, setBase] = useState<BaseMode>("estimee");
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -206,7 +242,7 @@ export default function MargeDashboardPage() {
 
   function changeScope(mode: ScopeMode) {
     setScopeMode(mode);
-    setScopeValue(mode === "family" ? typoFamilies[0] ?? "" : mode === "exact" ? typoExacts[0] ?? "" : "");
+    setScopeValue(mode === "family" ? CLIENT_FAMILIES[0].key : mode === "exact" ? typoExacts[0] ?? "" : "");
     setMultiValues([]);
     setPage(1);
   }
@@ -242,7 +278,7 @@ export default function MargeDashboardPage() {
           <h1 style={{ fontSize: 23, fontWeight: 800, margin: "0 0 6px", letterSpacing: "-.01em" }}>Dashboard d'Analyse de Marge Grid — Focus Sites en Marge Négative</h1>
           <div style={{ fontSize: 13, color: "rgba(255,255,255,.82)", maxWidth: 760, lineHeight: 1.5 }}>
             Comparaison {meta.month_a_label} → {meta.month_b_label} {meta.year} — {scopeLabel}
-            {scopeMode !== "portfolio" && scopeValue ? <> · <span style={{ fontFamily: "ui-monospace, Menlo, monospace", background: "rgba(255,255,255,.16)", padding: "2px 8px", borderRadius: 20 }}>{scopeValue}</span></> : null}
+            {scopeMode !== "portfolio" && scopeValue ? <> · <span style={{ fontFamily: "ui-monospace, Menlo, monospace", background: "rgba(255,255,255,.16)", padding: "2px 8px", borderRadius: 20 }}>{clientFamilyLabel(scopeValue) ?? scopeValue}</span></> : null}
             {" — "}<strong>{kpis.total.toLocaleString("fr-FR")} sites</strong>
           </div>
         </header>
@@ -259,6 +295,26 @@ export default function MargeDashboardPage() {
             </div>
             {scopeMode === "family" && (
               <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".06em", color: C.slate[400], fontWeight: 800, marginBottom: 7 }}>Secteurs</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                  {CLIENT_FAMILIES.map((f) => {
+                    const checked = scopeValue === f.key;
+                    return (
+                      <button
+                        key={f.key}
+                        onClick={() => { setScopeValue(f.key); setPage(1); }}
+                        style={{
+                          padding: "6px 13px", borderRadius: 20, fontSize: 12, fontWeight: 800, cursor: "pointer",
+                          border: `1px solid ${checked ? C.blue[700] : C.slate[200]}`,
+                          background: checked ? C.blue[700] : "#fff", color: checked ? "#fff" : C.slate[600],
+                        }}
+                      >
+                        {f.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".06em", color: C.slate[400], fontWeight: 800, marginBottom: 7 }}>Autre famille</div>
                 <Select value={scopeValue} onChange={(v) => { setScopeValue(v); setPage(1); }} options={typoFamilies} placeholder="— Choisir une famille —" />
               </div>
             )}
@@ -297,22 +353,45 @@ export default function MargeDashboardPage() {
           </Card>
           <Card>
             <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".08em", color: C.slate[400], fontWeight: 800, marginBottom: 10 }}>③ Période (marge réelle)</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 10, color: C.slate[400], fontWeight: 700, marginBottom: 3 }}>Du</div>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  max={dateTo}
+                  onChange={(e) => e.target.value && setDateFrom(e.target.value)}
+                  style={{ width: "100%", background: C.slate[50], border: `1px solid ${C.slate[200]}`, color: C.slate[800], borderRadius: 10, padding: "8px 10px", fontSize: 12, fontWeight: 700 }}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 10, color: C.slate[400], fontWeight: 700, marginBottom: 3 }}>Au</div>
+                <input
+                  type="date"
+                  value={dateTo}
+                  min={dateFrom}
+                  onChange={(e) => e.target.value && setDateTo(e.target.value)}
+                  style={{ width: "100%", background: C.slate[50], border: `1px solid ${C.slate[200]}`, color: C.slate[800], borderRadius: 10, padding: "8px 10px", fontSize: 12, fontWeight: 700 }}
+                />
+              </div>
+            </div>
             <select
-              value={`${meta.reelle_year}-${meta.reelle_month}`}
+              value={filteredPeriods.some((p) => p.year === meta.reelle_year && p.month === meta.reelle_month) ? `${meta.reelle_year}-${meta.reelle_month}` : ""}
               onChange={(e) => {
                 const [y, m] = e.target.value.split("-").map(Number);
                 setPeriod({ year: y, month: m });
               }}
               style={{ width: "100%", background: C.slate[50], border: `1px solid ${C.slate[200]}`, color: C.slate[800], borderRadius: 10, padding: "10px 12px", fontSize: 12.5, cursor: "pointer", fontWeight: 700 }}
             >
-              {meta.available_periods.map((p) => (
+              {!filteredPeriods.length && <option value="">— Aucun mois dans cette plage —</option>}
+              {filteredPeriods.map((p) => (
                 <option key={`${p.year}-${p.month}`} value={`${p.year}-${p.month}`}>
                   {MONTH_LABELS[p.month - 1]} {p.year}{p.year === CURRENT_YEAR ? " · année en cours" : ""}
                 </option>
               ))}
             </select>
             <div style={{ fontSize: 11, color: C.slate[400], marginTop: 9, lineHeight: 1.4 }}>
-              Seuls {meta.available_periods.length} mois ont une facture Sénélec rapprochée à ce jour — choisis-en un pour voir la marge réelle.
+              {filteredPeriods.length} mois avec facture Sénélec rapprochée dans la plage choisie (sur {meta.available_periods.length} au total) — choisis-en un pour voir la marge réelle.
             </div>
           </Card>
         </div>
@@ -532,7 +611,7 @@ export default function MargeDashboardPage() {
                   {[
                     ["site_id", "Site ID"], ["site_name", "Nom du site"], ["region", "Région"], ["batch", "Batch"],
                     ["marge_juin_est", "Marge Estimée (XOF)"], ["marge_reelle", "Marge Réelle (XOF)"], ["ecart", "Écart Réel−Est."],
-                    ["categorie_bo", "Catégorie BO"], ["owner", "Owner"],
+                    ["categorie_bo", "Catégorie BO"], ["owner", "Owner"], ["load_senelec_w", "Load Senelec (W)"],
                   ].map(([key, label]) => (
                     <th
                       key={key}
@@ -558,6 +637,7 @@ export default function MargeDashboardPage() {
                       <td style={{ padding: "9px 13px", fontFamily: "ui-monospace, Menlo, monospace", color: C.slate[700] }}>{ecart === null ? "—" : (ecart >= 0 ? "+" : "") + ecart.toLocaleString("fr-FR")}</td>
                       <td style={{ padding: "9px 13px", color: C.slate[600], maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.categorie_bo}>{r.categorie_bo}</td>
                       <td style={{ padding: "9px 13px", color: C.slate[600] }}>{r.owner}</td>
+                      <td style={{ padding: "9px 13px", fontFamily: "ui-monospace, Menlo, monospace", color: C.slate[700] }}>{r.load_senelec_w === null ? "—" : Math.round(r.load_senelec_w).toLocaleString("fr-FR")}</td>
                     </tr>
                   );
                 })}

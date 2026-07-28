@@ -50,6 +50,7 @@ import {
   YAxis,
 } from "recharts";
 import { api } from "@/services/api";
+import { fetchBORequests, fetchBOSnapshots, type BOAnalysisRequest, type BOMarginSnapshot } from "@/features/bo-analysis/api";
 
 const C = {
   blue: { 950: "#010E2A", 900: "#021A40", 800: "#032566", 700: "#0A3D96", 600: "#1A56C4", 500: "#3272E0", 400: "#5B91F0", 300: "#91B9F8", 200: "#C0D8FB", 100: "#E4EFFE", 50: "#F2F6FE" },
@@ -62,7 +63,7 @@ const C = {
   estim: { main: "#8B5CF6", light: "#EDE9FE", dark: "#5B21B6" },
 };
 
-const HDR = "linear-gradient(135deg,#010E2A 0%,#032566 52%,#0A3D96 100%)";
+const HDR = "linear-gradient(135deg, #0B1F4D 0%, #123C8C 45%, #1A56C4 75%, #3272E0 100%)";
 const PAGE_BG = "linear-gradient(180deg,#F8FAFC 0%,#EEF4FF 100%)";
 const MONTHS_FR = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
 
@@ -331,7 +332,7 @@ function TypoBadge({ typo }: { typo: string | null }) {
 
 function KpiCard({ label, value, sub, icon, accent, help }: { label: string; value: string; sub?: string; icon: ReactNode; accent: string; help?: string }) {
   return (
-    <div style={{ position: "relative", overflow: "hidden", borderRadius: 18, background: "rgba(255,255,255,.09)", border: "1px solid rgba(255,255,255,.14)", padding: "15px 16px", minHeight: 92, boxShadow: "inset 0 1px 0 rgba(255,255,255,.12)" }}>
+    <div style={{ position: "relative", overflow: "hidden", borderRadius: 10, background: "rgba(255,255,255,.09)", border: "1px solid rgba(255,255,255,.14)", padding: "14px 15px", minHeight: 92, boxShadow: "inset 0 1px 0 rgba(255,255,255,.12)" }}>
       <div style={{ position: "absolute", inset: 0, background: `radial-gradient(circle at 90% 12%,${accent}30,transparent 32%)` }} />
       <div style={{ position: "relative", display: "flex", justifyContent: "space-between", gap: 12 }}>
         <div>
@@ -350,7 +351,7 @@ function KpiCard({ label, value, sub, icon, accent, help }: { label: string; val
 }
 
 function Card({ children, style }: { children: ReactNode; style?: CSSProperties }) {
-  return <div style={{ background: "rgba(255,255,255,.94)", border: `1px solid ${C.slate[200]}`, borderRadius: 20, boxShadow: "0 18px 45px rgba(15,23,42,.07)", overflow: "hidden", ...style }}>{children}</div>;
+  return <div style={{ background: "#fff", border: "1px solid #E4E9F0", borderRadius: 10, boxShadow: "0 1px 2px rgba(15,23,42,.04), 0 1px 1px rgba(15,23,42,.03)", overflow: "hidden", ...style }}>{children}</div>;
 }
 
 function SectionTitle({ icon, title, subtitle, right }: { icon: ReactNode; title: string; subtitle?: string; right?: ReactNode }) {
@@ -587,6 +588,8 @@ export default function SuiviConsoPage() {
   const [rows, setRows] = useState<ConsoRow[]>([]);
   const [chartRows, setChartRows] = useState<ConsoRow[]>([]);
   const [chartLimited, setChartLimited] = useState(false);
+  const [boBySite, setBoBySite] = useState<Record<string, BOAnalysisRequest>>({});
+  const [boSnapshotBySite, setBoSnapshotBySite] = useState<Record<string, BOMarginSnapshot>>({});
 
   const [loading, setLoading] = useState(false);
   const [chartLoading, setChartLoading] = useState(false);
@@ -659,6 +662,29 @@ export default function SuiviConsoPage() {
 
   useEffect(() => { fetchRows(); }, [fetchRows]);
   useEffect(() => { fetchChartRows(); }, [fetchChartRows]);
+
+  useEffect(() => {
+    fetchBORequests({ status: "done", page_size: 200 })
+      .then((data) => {
+        const map: Record<string, BOAnalysisRequest> = {};
+        for (const r of data.results) {
+          if (!map[r.site_id]) map[r.site_id] = r; // déjà trié -requested_at côté API : 1ère occurrence = la plus récente
+        }
+        setBoBySite(map);
+      })
+      .catch(() => setBoBySite({}));
+
+    // Historique BO importé depuis Analyse Marge.xlsx (~3300 sites, déjà rempli
+    // à l'import) — c'est la vraie donnée disponible aujourd'hui, avant même
+    // qu'une seule analyse ne soit passée par le nouveau workflow in-app.
+    fetchBOSnapshots({ page_size: 5000 })
+      .then((data) => {
+        const map: Record<string, BOMarginSnapshot> = {};
+        for (const s of data.results) map[s.site_id] = s;
+        setBoSnapshotBySite(map);
+      })
+      .catch(() => setBoSnapshotBySite({}));
+  }, []);
 
   const onPeriodChange = (s: number, e: number) => {
     setStartKey(s);
@@ -760,7 +786,8 @@ export default function SuiviConsoPage() {
     <div style={{ minHeight: "100vh", background: PAGE_BG, color: C.slate[800] }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } } @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } } .suivi-row:hover { background: #EFF6FF !important; } .suivi-table th { position: sticky; top: 0; z-index: 20; } .sticky-site { position: sticky; left: 0; z-index: 12; box-shadow: 12px 0 18px rgba(15,23,42,.04); } .sticky-site-head { position: sticky !important; left: 0; z-index: 30 !important; }`}</style>
 
-      <div style={{ background: HDR, color: "#fff", padding: "22px 24px 18px", boxShadow: "0 16px 38px rgba(1,14,42,.22)" }}>
+      <div style={{ maxWidth: 1600, margin: "0 auto", padding: "22px 24px 70px" }}>
+      <div style={{ background: HDR, color: "#fff", borderRadius: 10, padding: "22px 24px 18px", boxShadow: "0 4px 20px -8px rgba(11,31,77,.35)", marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
           <div>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 9px", background: "rgba(255,255,255,.10)", border: "1px solid rgba(255,255,255,.14)", borderRadius: 999, fontSize: 11, fontWeight: 900, color: "rgba(255,255,255,.72)" }}><ShieldCheck size={13} /> Module financier · Suivi conso</div>
@@ -784,7 +811,7 @@ export default function SuiviConsoPage() {
         </div>
       </div>
 
-      <div style={{ padding: 22, display: "grid", gap: 16 }}>
+      <div style={{ display: "grid", gap: 16 }}>
         {showHelp ? (
           <Card style={{ animation: "fadeUp .22s ease-out" }}>
             <div style={{ padding: "14px 16px", display: "flex", alignItems: "flex-start", gap: 13 }}>
@@ -856,7 +883,8 @@ export default function SuiviConsoPage() {
 
         {!loading && !error && activeTab === "synthese" ? <SyntheseView chartData={chartData} statusPie={statusPie} topTargetNok={topTargetNok} /> : null}
         {!loading && !error && activeTab === "chart" ? <ChartView chartData={chartData} chartMode={chartMode} setChartMode={setChartMode} selectedSites={selectedSites} setSelectedSites={setSelectedSites} allSites={allSites} /> : null}
-        {!loading && !error && activeTab === "table" ? <TableView tableRows={tableRows} pages={pages} page={page} setPage={setPage} buttonStyle={buttonStyle} /> : null}
+        {!loading && !error && activeTab === "table" ? <TableView tableRows={tableRows} pages={pages} page={page} setPage={setPage} buttonStyle={buttonStyle} boBySite={boBySite} boSnapshotBySite={boSnapshotBySite} /> : null}
+      </div>
       </div>
     </div>
   );
@@ -917,14 +945,14 @@ function ChartView({ chartData, chartMode, setChartMode, selectedSites, setSelec
   );
 }
 
-function TableView({ tableRows, pages, page, setPage, buttonStyle }: { tableRows: ConsoRow[]; pages: number; page: number; setPage: Dispatch<SetStateAction<number>>; buttonStyle: CSSProperties }) {
+function TableView({ tableRows, pages, page, setPage, buttonStyle, boBySite, boSnapshotBySite }: { tableRows: ConsoRow[]; pages: number; page: number; setPage: Dispatch<SetStateAction<number>>; buttonStyle: CSSProperties; boBySite: Record<string, BOAnalysisRequest>; boSnapshotBySite: Record<string, BOMarginSnapshot> }) {
   return (
     <Card style={{ overflow: "hidden" }}>
       <SectionTitle icon={<BarChart3 size={18} />} title="Tableau détaillé" subtitle="Consommations uniquement : facturée, eFMS, solaire, estimation et target. Aucun montant financier." right={<Badge tone="blue">{tableRows.length.toLocaleString("fr-FR")} lignes affichées</Badge>} />
       <div style={{ overflow: "auto", maxHeight: "calc(100vh - 260px)" }}>
         <table className="suivi-table" style={{ width: "100%", minWidth: 1480, borderCollapse: "separate", borderSpacing: 0, fontSize: 11.5 }}>
           <thead>
-            <tr style={{ background: C.blue[900] }}><th className="sticky-site-head" colSpan={3} style={groupTh(C.blue[900])}>Site</th><th colSpan={3} style={groupTh(C.blue[800])}>Facturée</th><th colSpan={4} style={groupTh(C.teal.dark)}>eFMS / ACM</th><th colSpan={3} style={groupTh(C.solar.dark)}>Solaire</th><th colSpan={2} style={groupTh(C.estim.dark)}>Estimation</th><th colSpan={4} style={groupTh(C.blue[800])}>Target</th></tr>
+            <tr style={{ background: C.blue[900] }}><th className="sticky-site-head" colSpan={3} style={groupTh(C.blue[900])}>Site</th><th colSpan={3} style={groupTh(C.blue[800])}>Facturée</th><th colSpan={4} style={groupTh(C.teal.dark)}>eFMS / ACM</th><th colSpan={3} style={groupTh(C.solar.dark)}>Solaire</th><th colSpan={2} style={groupTh(C.estim.dark)}>Estimation</th><th colSpan={4} style={groupTh(C.blue[800])}>Target</th><th colSpan={1} style={groupTh(C.slate[700])}>BO</th></tr>
             <tr style={{ background: C.blue[700] }}>
               <TH sticky><THLabel label="Site" help="Identifiant et nom du site." /></TH><TH><THLabel label="Zone" help="Zone opérationnelle du site." /></TH><TH><THLabel label="Période" help="Mois de consolidation de la ligne." /></TH>
               <TH right><THLabel label="Jours" help="Nombre de jours couverts par le mois ou la facture." /></TH><TH right><THLabel label="Conso facturée" help="Consommation issue des factures Sénélec." /></TH><TH center><THLabel label="Réf." help="La facturée est prioritaire pour le statut target si elle existe." /></TH>
@@ -932,9 +960,10 @@ function TableView({ tableRows, pages, page, setPage, buttonStyle }: { tableRows
               <TH right><THLabel label="Solar kWh" help="Donnée solaire réelle sur la période." /></TH><TH right><THLabel label="Solar Target" help="Cible solaire calculée selon typologie, load et jours." /></TH><TH center><THLabel label="Δ Sol/Cible" help="Écart entre le solaire réel et la cible solaire." /></TH>
               <TH right><THLabel label="Conso estimée" help="Consommation estimée depuis EstimationResult." /></TH><TH center><THLabel label="Source estim." help="Source utilisée pour l’estimation : ACM, GRID, HISTO, TARGET, etc." /></TH>
               <TH><THLabel label="Typologie" help="Typologie utilisée pour les règles de target." /></TH><TH right><THLabel label="Conso Target" help="Cible de consommation utilisée pour le statut target." /></TH><TH center><THLabel label="Statut target" help="OK si la consommation de référence est <= target. NOK si elle dépasse la target." /></TH><TH center><THLabel label="Δ vs Target" help="Écart entre la consommation de référence et la target." /></TH>
+              <TH center><THLabel label="Analyse BO" help="Analyse BO du site (catégorie, owner, commentaire) : la plus récente soumise via le workflow in-app, sinon celle importée depuis l'historique Analyse Marge.xlsx." /></TH>
             </tr>
           </thead>
-          <tbody>{!tableRows.length ? <tr><td colSpan={19}><EmptyState title="Aucune donnée" subtitle="Aucune ligne ne correspond aux filtres sélectionnés." /></td></tr> : tableRows.map((r, i) => <ConsoTableRow key={`${r.site_id}-${r.year}-${r.month}-${i}`} r={r} i={i} />)}</tbody>
+          <tbody>{!tableRows.length ? <tr><td colSpan={20}><EmptyState title="Aucune donnée" subtitle="Aucune ligne ne correspond aux filtres sélectionnés." /></td></tr> : tableRows.map((r, i) => <ConsoTableRow key={`${r.site_id}-${r.year}-${r.month}-${i}`} r={r} i={i} bo={boBySite[r.site_id]} snapshot={boSnapshotBySite[r.site_id]} />)}</tbody>
         </table>
       </div>
       {pages > 1 ? <div style={{ padding: "12px 16px", borderTop: `1px solid ${C.slate[200]}`, background: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between" }}><div style={{ fontSize: 12, color: C.slate[500] }}>Page {page} / {pages}</div><div style={{ display: "flex", gap: 8 }}><button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} style={{ ...buttonStyle, background: page <= 1 ? C.slate[100] : C.blue[50], color: page <= 1 ? C.slate[400] : C.blue[700], border: `1px solid ${C.slate[200]}` }}><ChevronLeft size={14} /> Précédent</button><button type="button" disabled={page >= pages} onClick={() => setPage((p) => Math.min(pages, p + 1))} style={{ ...buttonStyle, background: page >= pages ? C.slate[100] : C.blue[700], color: page >= pages ? C.slate[400] : "#fff" }}>Suivant <ChevronRight size={14} /></button></div></div> : null}
@@ -942,7 +971,7 @@ function TableView({ tableRows, pages, page, setPage, buttonStyle }: { tableRows
   );
 }
 
-function ConsoTableRow({ r, i }: { r: ConsoRow; i: number }) {
+function ConsoTableRow({ r, i, bo, snapshot }: { r: ConsoRow; i: number; bo?: BOAnalysisRequest; snapshot?: BOMarginSnapshot }) {
   const st = getTargetStatus(r);
   const fmsMain = r.fms_grid_kwh || r.fms_acm_kwh;
   const dFms = deltaPct(fmsMain, r.conso_facturee_kwh ?? r.conso_kwh);
@@ -969,6 +998,22 @@ function ConsoTableRow({ r, i }: { r: ConsoRow; i: number }) {
       <TD right>{fmtKwh(r.conso_target)}</TD>
       <TD center><TargetStatusBadge row={r} /></TD>
       <TD center><DeltaBadge value={st.gapPct} /></TD>
+      <TD>
+        {bo?.analysis ? (
+          <div title={bo.analysis.commentaire || bo.analysis.commentaire_bo || undefined}>
+            <Badge tone="slate">{bo.analysis.categorie_bo_display}</Badge>
+            <div style={{ fontSize: 10, color: C.slate[500], marginTop: 3 }}>{bo.analysis.action_owner_display}</div>
+          </div>
+        ) : snapshot?.categorie_bo_display ? (
+          <div title={snapshot.commentaire || snapshot.commentaire_bo || undefined}>
+            <Badge tone="slate">{snapshot.categorie_bo_display}</Badge>
+            <div style={{ fontSize: 10, color: C.slate[500], marginTop: 3 }}>{snapshot.action_owner_display}</div>
+            <div style={{ fontSize: 9.5, color: C.slate[400], marginTop: 1, fontStyle: "italic" }}>Historique (import)</div>
+          </div>
+        ) : (
+          <span style={{ color: C.slate[400] }}>—</span>
+        )}
+      </TD>
     </tr>
   );
 }

@@ -24,6 +24,7 @@ export interface MargeRow {
   comment_bo: string;
   owner: string;
   commentaire: string;
+  load_senelec_w: number | null;
 }
 
 export interface MargePeriod {

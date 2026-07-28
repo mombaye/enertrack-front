@@ -28,7 +28,8 @@ import { DashboardSheet } from "./sheets/DashboardSheet";
 import { JournalSheet } from "./sheets/JournalSheet";
 import { ConsoMensuelleSheet } from "./sheets/ConsoMensuelleSheet";
 import { RefSitesSheet } from "./sheets/RefSitesSheet";
-import { CphSheet, ListesSheet, StockDepotSheet } from "./sheets/OtherSheets";
+import { StockDepotSheet } from "./sheets/StockDepotSheet";
+import { CphSheet, ListesSheet } from "./sheets/OtherSheets";
 
 type SheetKey = "DASHBOARD" | "JOURNAL_RAVITAILLEMENT" | "CONSO_MENSUELLE" | "STOCK_DEPOT" | "CPH" | "REF_SITES" | "LISTES";
 
@@ -344,7 +345,7 @@ export default function FuelTrackingPage() {
             </>
           )}
 
-          {activeSheet === "STOCK_DEPOT" && <StockDepotSheet />}
+          {activeSheet === "STOCK_DEPOT" && <StockDepotSheet rows={rows} loading={monthlyQ.isLoading} />}
           {activeSheet === "CPH" && <CphSheet data={cphMatrixQ.data?.data ?? []} loading={cphMatrixQ.isLoading} />}
           {activeSheet === "REF_SITES" && <RefSitesSheet rows={rows} loading={monthlyQ.isLoading} />}
           {activeSheet === "LISTES" && <ListesSheet />}

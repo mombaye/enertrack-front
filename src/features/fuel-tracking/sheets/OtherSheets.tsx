@@ -1,46 +1,13 @@
 // src/features/fuel-tracking/sheets/OtherSheets.tsx
-// Feuilles STOCK_DÉPÔT, CPH et LISTES — structure conservée pour la V2.
+// Feuilles CPH et LISTES — structure conservée pour la V2.
+// (STOCK_DÉPÔT a été déplacée dans son propre fichier, StockDepotSheet.tsx —
+// elle a maintenant une vraie logique, ce n'est plus un simple placeholder.)
 
-import { Gauge, ListChecks, Warehouse } from "lucide-react";
+import { Gauge, ListChecks } from "lucide-react";
 import type { CphMatrixEngine } from "@/services/fuelTracking";
 import { ExcelGrid, type ExcelGroup } from "../ExcelGrid";
 import { Card, SheetTitle } from "../ui";
 import { FT } from "../theme";
-
-type StockRow = { id: string };
-
-export function StockDepotSheet() {
-  const groups: ExcelGroup<StockRow>[] = [
-    {
-      id: "stock",
-      label: "Mouvements dépôt central",
-      color: "slate",
-      columns: [
-        { id: "date", header: "Date", width: 120, render: () => "—" },
-        { id: "fournisseur", header: "Fournisseur", width: 150, render: () => "—" },
-        { id: "bl", header: "N° BL", width: 120, render: () => "—" },
-        { id: "entree", header: "Entrée (L)", width: 110, render: () => "—" },
-        { id: "sortie_vers", header: "Sortie vers site", width: 130, render: () => "—" },
-        { id: "site_dest", header: "Site Destinataire", width: 150, render: () => "—" },
-        { id: "qte_sortie", header: "Quantité sortie (L)", width: 150, render: () => "—" },
-        { id: "solde_depot", header: "Solde Dépôt (L)", width: 140, render: () => "—" },
-        { id: "solde_theo", header: "Solde Théorique (L)", width: 150, render: () => "—" },
-        { id: "ecart_depot", header: "Écart Dépôt (L)", width: 140, render: () => "—" },
-        { id: "responsable", header: "Responsable", width: 140, render: () => "—" },
-        { id: "commentaire", header: "Commentaire", width: 180, render: () => "—" },
-      ],
-    },
-  ];
-
-  return (
-    <Card padded={false} style={{ padding: 20 }}>
-      <SheetTitle icon={<Warehouse size={17} />} title="STOCK_DÉPÔT — Entrées fournisseurs / sorties vers sites" subtitle="Structure de la feuille conservée pour préparer la V2." />
-      <div style={{ marginTop: 16 }}>
-        <ExcelGrid groups={groups} rows={[]} rowKey={(r) => r.id} pinnedCount={0} emptyIcon={<Warehouse size={20} />} emptyTitle="Module à venir" emptySubtitle="Le suivi du stock au dépôt central sera intégré après validation client." />
-      </div>
-    </Card>
-  );
-}
 
 const CPH_STEPS = ["0", "0.1", "0.15", "0.2", "0.25", "0.3", "0.35", "0.4", "0.45", "0.5", "0.55", "0.6", "0.65", "0.7", "0.75", "0.8", "0.85", "0.9", "0.95", "1"];
 
