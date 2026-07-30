@@ -6,7 +6,8 @@
 // Unlock = sessionStorage : re-saisie à la fermeture de l'onglet.
 //
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Lock, TrendingUp, X, RefreshCw, ShieldCheck } from "lucide-react";
+import { Lock, TrendingUp, RefreshCw, ShieldCheck } from "lucide-react";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 // ─── Env ──────────────────────────────────────────────────────────────────────
 const EXPECTED_CODE = import.meta.env.VITE_FINANCIAL_ACCESS_CODE as string | undefined;
@@ -137,19 +138,14 @@ function ResetModal({ onClose }: { onClose: () => void }) {
   const confirmed = typed.toUpperCase() === "CONFIRMER";
 
   return (
-    <div
-      style={{
-        position: "fixed", inset: 0, zIndex: 200,
-        background: "rgba(15,23,42,.65)", backdropFilter: "blur(8px)",
-        display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
-      }}
-      onClick={e => e.target === e.currentTarget && onClose()}
-    >
-      <div style={{
-        background: "white", borderRadius: 24, padding: 32, maxWidth: 400, width: "100%",
-        boxShadow: "0 32px 80px rgba(0,0,0,.22)",
-        animation: "slideUp .22s cubic-bezier(.34,1.4,.64,1)",
-      }}>
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent
+        className="p-0 gap-0 border-0"
+        style={{
+          background: "white", borderRadius: 24, padding: 32, maxWidth: 400, width: "100%",
+          boxShadow: "0 32px 80px rgba(0,0,0,.22)",
+        }}
+      >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
           <div style={{
             width: 44, height: 44, borderRadius: 13,
@@ -159,18 +155,13 @@ function ResetModal({ onClose }: { onClose: () => void }) {
           }}>
             <RefreshCw size={19} color="#dc2626" />
           </div>
-          <button onClick={onClose} style={{
-            background: "rgba(0,0,0,.06)", border: "none", borderRadius: 9,
-            padding: 6, cursor: "pointer", color: "#64748b",
-            display: "grid", placeItems: "center",
-          }}>
-            <X size={15} />
-          </button>
         </div>
 
-        <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", margin: "0 0 6px" }}>
-          Verrouiller la session
-        </h3>
+        <DialogTitle asChild>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", margin: "0 0 6px" }}>
+            Verrouiller la session
+          </h3>
+        </DialogTitle>
         <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 18px", lineHeight: 1.5 }}>
           La session sera verrouillée et le code sera demandé à nouveau.
           Le code d'accès est configuré via{" "}
@@ -219,8 +210,8 @@ function ResetModal({ onClose }: { onClose: () => void }) {
             Verrouiller
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

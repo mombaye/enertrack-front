@@ -1,5 +1,5 @@
 // src/layouts/Sidebar.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Home, User, Menu, X, Receipt,
@@ -8,10 +8,12 @@ import {
   Building2,TrendingUp, DollarSign,
   BrainCircuit,
   Fuel,
-  
+  LogOut,
+
 } from "lucide-react";
 import camusatLogo from "@/assets/images/camusat-logo.png";
 import { useAuth } from "@/auth/AuthContext";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 type Section = "ANALYSE" | "FACTURATION" | "CONSO & ESTIMATION" | "MODULES" | "ADMINISTRATION" | "RÉSEAU";
 type LinkItem = {
@@ -154,12 +156,12 @@ function NavItem({ to, icon, label, collapsed, adminOnly, end, comingSoon }: {
       >
         {({ isActive }) => (
           <>
-            {/* Orange left bar when active */}
+            {/* Left bar when active */}
             <span style={{
               position: "absolute",
               left: 0, top: "18%", bottom: "18%", width: 3,
               borderRadius: "0 3px 3px 0",
-              background: isActive ? "#E8401C" : "transparent",
+              background: isActive ? "#ffffff" : "transparent",
               transition: "background .18s",
             }}/>
 
@@ -168,10 +170,10 @@ function NavItem({ to, icon, label, collapsed, adminOnly, end, comingSoon }: {
               width: 34, height: 34, borderRadius: 9,
               display: "grid", placeItems: "center", flexShrink: 0,
               background: isActive
-                ? "rgba(30,58,138,.08)"
+                ? "rgba(0,60,113,.08)"
                 : hov ? "rgba(255,255,255,.09)" : "rgba(255,255,255,.06)",
-              border: `1px solid ${isActive ? "rgba(30,58,138,.1)" : "rgba(255,255,255,.07)"}`,
-              color: isActive ? "#1e3a8a" : "rgba(255,255,255,.72)",
+              border: `1px solid ${isActive ? "rgba(0,60,113,.1)" : "rgba(255,255,255,.07)"}`,
+              color: isActive ? "#003c71" : "rgba(255,255,255,.72)",
               transition: "all .18s",
             }}>
               <span className="[&_svg]:h-[17px] [&_svg]:w-[17px]">{icon}</span>
@@ -181,7 +183,7 @@ function NavItem({ to, icon, label, collapsed, adminOnly, end, comingSoon }: {
             {!collapsed && (
               <span style={{
                 fontSize: 13.5, fontWeight: 600, flex: 1,
-                color: isActive ? "#1e3a8a" : "rgba(255,255,255,.78)",
+                color: isActive ? "#003c71" : "rgba(255,255,255,.78)",
                 letterSpacing: "-.01em",
                 transition: "color .18s",
               }}>
@@ -194,8 +196,8 @@ function NavItem({ to, icon, label, collapsed, adminOnly, end, comingSoon }: {
               <span style={{
                 fontSize: 9, fontWeight: 700,
                 padding: "2px 6px", borderRadius: 100,
-                background: isActive ? "rgba(30,58,138,.09)" : "rgba(255,255,255,.09)",
-                color: isActive ? "#1e3a8a" : "rgba(255,255,255,.45)",
+                background: isActive ? "rgba(0,60,113,.09)" : "rgba(255,255,255,.09)",
+                color: isActive ? "#003c71" : "rgba(255,255,255,.45)",
                 letterSpacing: ".07em", textTransform: "uppercase",
               }}>Admin</span>
             )}
@@ -205,9 +207,9 @@ function NavItem({ to, icon, label, collapsed, adminOnly, end, comingSoon }: {
               <span style={{
                 fontSize: 8.5, fontWeight: 700,
                 padding: "2px 6px", borderRadius: 100,
-                background: "rgba(232,64,28,0.15)",
-                border: "1px solid rgba(232,64,28,0.25)",
-                color: "#ff7a5c",
+                background: "rgba(255,255,255,0.12)",
+                border: "1px solid rgba(255,255,255,0.2)",
+                color: "rgba(255,255,255,.75)",
                 letterSpacing: ".06em", textTransform: "uppercase",
                 whiteSpace: "nowrap",
               }}>Soon</span>
@@ -230,7 +232,7 @@ function Inner({
   onClose?: () => void;
   mode: "desktop" | "mobile";
 }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const role = user?.role || "analyst";
   const isCol = mode === "desktop" ? collapsed : false;
 
@@ -371,44 +373,84 @@ function Inner({
         })}
       </nav>
 
-      {/* ── User footer */}
+      {/* ── User footer (clique = déconnexion, seul accès logout depuis le retrait du Header) */}
       <div style={{ padding: isCol ? "10px 8px" : "10px" }}>
-        <div style={{
-          borderRadius: 13,
-          background: "rgba(0,0,0,.2)",
-          border: "1px solid rgba(255,255,255,.07)",
-          padding: isCol ? "9px 0" : "10px 12px",
-          display: "flex", alignItems: "center",
-          justifyContent: isCol ? "center" : "flex-start",
-          gap: 9, overflow: "hidden", position: "relative",
-        }}>
-          <div style={{
-            position: "absolute", top: -18, right: -18, width: 55, height: 55,
-            borderRadius: "50%", background: "rgba(255,255,255,.04)", pointerEvents: "none",
-          }}/>
-          <div style={{
-            width: 32, height: 32, borderRadius: 9, flexShrink: 0,
-            background: "linear-gradient(135deg,#E8401C,#ff6340)",
-            display: "grid", placeItems: "center",
-            fontSize: 12.5, fontWeight: 800, color: "white",
-            boxShadow: "0 3px 8px rgba(232,64,28,.22)",
-          }}>
-            {(user?.username || "U").slice(0, 1).toUpperCase()}
-          </div>
-          {!isCol && (
-            <div style={{ minWidth: 0 }}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              style={{
+                width: "100%",
+                borderRadius: 13,
+                background: "rgba(0,0,0,.2)",
+                border: "1px solid rgba(255,255,255,.07)",
+                padding: isCol ? "9px 0" : "10px 12px",
+                display: "flex", alignItems: "center",
+                justifyContent: isCol ? "center" : "flex-start",
+                gap: 9, overflow: "hidden", position: "relative",
+                cursor: "pointer",
+              }}
+            >
               <div style={{
-                fontSize: 12.5, fontWeight: 600, color: "white",
-                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                position: "absolute", top: -18, right: -18, width: 55, height: 55,
+                borderRadius: "50%", background: "rgba(255,255,255,.04)", pointerEvents: "none",
+              }}/>
+              <div style={{
+                width: 32, height: 32, borderRadius: 9, flexShrink: 0,
+                background: "linear-gradient(135deg,#003c71,#0a4f8f)",
+                display: "grid", placeItems: "center",
+                fontSize: 12.5, fontWeight: 800, color: "white",
+                boxShadow: "0 3px 8px rgba(0,60,113,.22)",
               }}>
+                {(user?.username || "U").slice(0, 1).toUpperCase()}
+              </div>
+              {!isCol && (
+                <div style={{ minWidth: 0 }}>
+                  <div style={{
+                    fontSize: 12.5, fontWeight: 600, color: "white",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>
+                    {user?.username || "Utilisateur"}
+                  </div>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,.35)", marginTop: 1 }}>
+                    {role === "admin" ? "Administrateur" : "Analyste"}
+                  </div>
+                </div>
+              )}
+            </button>
+          </DropdownMenuTrigger>
+
+          <DropdownMenuContent
+            side="top"
+            align="start"
+            sideOffset={8}
+            className="p-0 border-0 bg-transparent shadow-none"
+            style={{
+              background: "white",
+              border: "1px solid rgba(0,60,113,.1)",
+              borderRadius: 14,
+              boxShadow: "0 8px 32px rgba(0,0,0,.24)",
+              minWidth: 190,
+              overflow: "hidden",
+            }}
+          >
+            <div style={{ padding: "12px 14px 10px", borderBottom: "1px solid #f1f5ff" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#003c71" }}>
                 {user?.username || "Utilisateur"}
               </div>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,.35)", marginTop: 1 }}>
+              <div style={{ fontSize: 11, color: "#94a3b8" }}>
                 {role === "admin" ? "Administrateur" : "Analyste"}
               </div>
             </div>
-          )}
-        </div>
+            <DropdownMenuItem
+              onSelect={() => logout()}
+              style={{ padding: "10px 14px", fontSize: 13, fontWeight: 600, color: "#ef4444", cursor: "pointer", borderRadius: 0 }}
+            >
+              <LogOut size={14} />
+              Se déconnecter
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );
@@ -419,6 +461,8 @@ export default function Sidebar() {
   const [collapsed,   setCollapsed]   = useState(false);
   const [mobileOpen,  setMobileOpen]  = useState(false);
   const location = useLocation();
+  const mobileAsideRef = useRef<HTMLElement>(null);
+  const hamburgerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     document.documentElement.style.setProperty("--sbw", collapsed ? `${WC}px` : `${W}px`);
@@ -426,9 +470,43 @@ export default function Sidebar() {
 
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
 
+  // Focus management + Escape + Tab-trap for the mobile drawer
+  useEffect(() => {
+    if (!mobileOpen) return;
+
+    const aside = mobileAsideRef.current;
+    const focusables = aside?.querySelectorAll<HTMLElement>(
+      'button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    focusables?.[0]?.focus();
+
+    function handleKeydown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setMobileOpen(false);
+        return;
+      }
+      if (e.key !== "Tab" || !focusables?.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeydown);
+    return () => {
+      document.removeEventListener("keydown", handleKeydown);
+      hamburgerRef.current?.focus();
+    };
+  }, [mobileOpen]);
+
   const base: React.CSSProperties = {
     position: "fixed", top: 0, left: 0, bottom: 0,
-    background: "linear-gradient(175deg,#1e3a8a 0%,#162d6e 40%,#0d1f50 100%)",
+    background: "linear-gradient(175deg,#003c71 0%,#022f57 40%,#011c36 100%)",
     borderRight: "1px solid rgba(255,255,255,.07)",
     boxShadow: "4px 0 24px rgba(0,0,0,.18)",
     zIndex: 40, overflow: "hidden",
@@ -467,13 +545,14 @@ export default function Sidebar() {
 
       {/* Mobile hamburger */}
       <button
+        ref={hamburgerRef}
         className="md:hidden"
         onClick={() => setMobileOpen(true)}
         style={{
           position: "fixed", top: 14, left: 14, zIndex: 50,
-          background: "#1e3a8a", border: "1px solid rgba(255,255,255,.14)",
+          background: "#003c71", border: "1px solid rgba(255,255,255,.14)",
           borderRadius: 11, padding: 9, color: "white",
-          cursor: "pointer", boxShadow: "0 4px 14px rgba(30,58,138,.3)",
+          cursor: "pointer", boxShadow: "0 4px 14px rgba(0,60,113,.3)",
           display: "grid", placeItems: "center",
         }}
         aria-label="Menu"
@@ -483,11 +562,17 @@ export default function Sidebar() {
 
       {/* Mobile drawer */}
       <aside
+        ref={mobileAsideRef}
         className="md:hidden"
+        role="dialog"
+        aria-modal={mobileOpen}
+        aria-label="Menu de navigation"
+        aria-hidden={!mobileOpen}
         style={{
           ...base, width: W, zIndex: 50,
           transform: mobileOpen ? "translateX(0)" : "translateX(-100%)",
           transition: "transform .24s cubic-bezier(.4,0,.2,1)",
+          pointerEvents: mobileOpen ? "auto" : "none",
         }}
       >
         <div style={grid}/><div style={glow}/>

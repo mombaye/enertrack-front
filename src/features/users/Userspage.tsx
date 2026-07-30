@@ -6,10 +6,11 @@ import {
 import { toast } from "react-toastify";
 import {
   UserPlus, Search, Shield, Eye, EyeOff, Pencil,
-  Trash2, X, Check, Loader2, Users, Globe, Lock,
+  Trash2, Check, Loader2, Users, Globe, Lock,
 } from "lucide-react";
 import { api } from "@/services/api";
 import { useAuth } from "@/auth/AuthContext";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface AppUser {
@@ -182,39 +183,26 @@ function UserModal({ mode, initial, onClose, onSave, loading }: {
   }
 
   return (
-    <div style={{
-      position:"fixed", inset:0, zIndex:200,
-      display:"flex", alignItems:"center", justifyContent:"center",
-      background:"rgba(0,0,0,.45)", backdropFilter:"blur(4px)",
-    }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div style={{
-        background:T.white, borderRadius:20,
-        border:`1px solid ${T.border}`, boxShadow:"0 24px 60px rgba(0,0,0,.18)",
-        width:"100%", maxWidth:480, maxHeight:"92vh", overflowY:"auto",
-        position:"relative",
-        animation:"modal-in .25s cubic-bezier(.22,1,.36,1) both",
-      }}>
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent
+        className="p-0 gap-0 border-0"
+        style={{
+          background:T.white, borderRadius:20,
+          border:`1px solid ${T.border}`, boxShadow:"0 24px 60px rgba(0,0,0,.18)",
+          width:"100%", maxWidth:480, maxHeight:"92vh", overflowY:"auto",
+        }}
+      >
         <OrangeBar/>
 
         {/* Header */}
         <div style={{ padding:"22px 24px 16px", borderBottom:`1px solid ${T.border}` }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-            <div>
-              <div style={{ fontFamily:"'Outfit',sans-serif",fontSize:16,fontWeight:800,color:"#0f172a" }}>
-                {mode === "create" ? "Nouvel utilisateur" : "Modifier l'utilisateur"}
-              </div>
-              <div style={{ fontSize:11,color:"#94a3b8",marginTop:2 }}>
-                {mode === "create" ? "Créer un compte EnerTrack" : `Modification de ${initial.username}`}
-              </div>
+          <DialogTitle asChild>
+            <div style={{ fontFamily:"'Outfit',sans-serif",fontSize:16,fontWeight:800,color:"#0f172a" }}>
+              {mode === "create" ? "Nouvel utilisateur" : "Modifier l'utilisateur"}
             </div>
-            <button onClick={onClose} style={{
-              width:32,height:32,borderRadius:9,border:`1px solid ${T.border}`,
-              background:"white",cursor:"pointer",display:"grid",placeItems:"center",color:"#94a3b8",
-            }}>
-              <X size={15}/>
-            </button>
+          </DialogTitle>
+          <div style={{ fontSize:11,color:"#94a3b8",marginTop:2 }}>
+            {mode === "create" ? "Créer un compte EnerTrack" : `Modification de ${initial.username}`}
           </div>
         </div>
 
@@ -361,8 +349,8 @@ function UserModal({ mode, initial, onClose, onSave, loading }: {
             {mode === "create" ? "Créer l'utilisateur" : "Enregistrer"}
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -371,24 +359,23 @@ function DeleteModal({ user, onClose, onConfirm, loading }: {
   user: AppUser; onClose: () => void; onConfirm: () => void; loading: boolean;
 }) {
   return (
-    <div style={{
-      position:"fixed", inset:0, zIndex:200,
-      display:"flex", alignItems:"center", justifyContent:"center",
-      background:"rgba(0,0,0,.45)", backdropFilter:"blur(4px)",
-    }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{
-        background:T.white, borderRadius:18, border:`1px solid ${T.border}`,
-        boxShadow:"0 24px 60px rgba(0,0,0,.18)", width:380, padding:"24px",
-        animation:"modal-in .25s cubic-bezier(.22,1,.36,1) both",
-        position:"relative",
-      }}>
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent
+        className="p-0 gap-0 border-0"
+        style={{
+          background:T.white, borderRadius:18, border:`1px solid ${T.border}`,
+          boxShadow:"0 24px 60px rgba(0,0,0,.18)", width:380, maxWidth:"100%", padding:"24px",
+        }}
+      >
         <div style={{ position:"absolute",top:0,left:0,right:0,height:3,background:"linear-gradient(90deg,#dc2626,#f87171,transparent)",borderRadius:"18px 18px 0 0" }}/>
         <div style={{ display:"flex", alignItems:"flex-start", gap:12, marginBottom:18 }}>
           <div style={{ width:40,height:40,borderRadius:11,background:"#fef2f2",border:"1px solid #fecaca",display:"grid",placeItems:"center",flexShrink:0 }}>
             <Trash2 size={18} style={{color:"#dc2626"}}/>
           </div>
           <div>
-            <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:"#0f172a"}}>Supprimer l'utilisateur</div>
+            <DialogTitle asChild>
+              <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:"#0f172a"}}>Supprimer l'utilisateur</div>
+            </DialogTitle>
             <div style={{fontSize:12,color:"#94a3b8",marginTop:2}}>Cette action est irréversible.</div>
           </div>
         </div>
@@ -410,8 +397,8 @@ function DeleteModal({ user, onClose, onConfirm, loading }: {
             Supprimer
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

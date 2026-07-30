@@ -37,7 +37,7 @@ const STATUS_CFG: Record<string, { label: string; dot: string; pill: string }> =
   PENDING_CERTIFICATION: { label: "En attente",    dot: "bg-slate-300",   pill: "bg-slate-50   text-slate-500  border-slate-200" },
   CERTIFIED_FMS:         { label: "Certifié FMS",  dot: "bg-emerald-500", pill: "bg-emerald-50 text-emerald-700 border-emerald-200" },
   CERTIFIED_SENELEC:     { label: "Certifié Sénélec", dot: "bg-sky-500",  pill: "bg-sky-50     text-sky-700    border-sky-200" },
-  NEEDS_REVIEW:          { label: "À analyser",    dot: "bg-amber-400",   pill: "bg-amber-50   text-amber-700  border-amber-200" },
+  NEEDS_REVIEW:          { label: "Contestées",    dot: "bg-amber-400",   pill: "bg-amber-50   text-amber-700  border-amber-200" },
   UNKNOWN_CONTRACT:      { label: "Contrat inconnu", dot: "bg-red-400",   pill: "bg-red-50     text-red-600    border-red-200" },
   FMS_UNAVAILABLE:       { label: "FMS indispo",   dot: "bg-orange-400",  pill: "bg-orange-50  text-orange-600 border-orange-200" },
   // ✅ v4
@@ -265,7 +265,7 @@ function CertProgress({ counters, status }: { counters: Counters; status: string
     { label: "Certifié FMS",    val: counters.certified_fms,     cls: "text-emerald-600" },
     { label: "Certifié Sénélec",val: counters.certified_senelec, cls: "text-sky-600" },
     { label: "⚠ Mesure alerte", val: counters.mesure_alert ?? 0, cls: "text-orange-600" }, // ✅ v4
-    { label: "À analyser",      val: counters.needs_review,      cls: "text-amber-600" },
+    { label: "Contestées",      val: counters.needs_review,      cls: "text-amber-600" },
     { label: "Inconnu",         val: counters.unknown_contract,   cls: "text-red-500" },
     { label: "FMS indispo",     val: counters.fms_unavailable,    cls: "text-slate-400" },
   ];
@@ -506,11 +506,11 @@ function ResultRow({ result }: { result: CertificationResult }) {
               >
                 {/* Grid indispo (ACM utilisé à la place) */}
                 {acmUsed ? (
-                  <p className="text-[11px] text-slate-400 italic">
+                  <p className="text-[11px] text-slate-400">
                     Grid indisponible — ACM utilisé pour la certification
                   </p>
                 ) : !result.fms_available ? (
-                  <p className="text-[11px] text-slate-400 italic">Aucune donnée eFMS</p>
+                  <p className="text-[11px] text-slate-400">Aucune donnée eFMS</p>
                 ) : (
                   /* Grid disponible et utilisé */
                   <>
@@ -550,7 +550,7 @@ function ResultRow({ result }: { result: CertificationResult }) {
               >
                 {!acmDataAvailable ? (
                   /* Pas de donnée ACM du tout */
-                  <p className="text-[11px] text-slate-400 italic">Indisponible</p>
+                  <p className="text-[11px] text-slate-400">Indisponible</p>
                 ) : (
                   /* Donnée ACM présente — certifié via ACM OU juste affiché */
                   <>
@@ -568,7 +568,7 @@ function ResultRow({ result }: { result: CertificationResult }) {
                     )}
                     {/* Note informative quand Grid a certifié mais ACM est affiché */}
                     {!acmUsed && (
-                      <p className="text-[10px] text-slate-400 italic mt-1.5">
+                      <p className="text-[10px] text-slate-400 mt-1.5">
                         Affiché à titre informatif — Grid utilisé pour la certification
                       </p>
                     )}
@@ -801,7 +801,7 @@ export default function CertificationPage() {
     { val: "CERTIFIED_FMS",     label: "Certifié FMS" },
     { val: "CERTIFIED_SENELEC", label: "Certifié Sénélec" },
     { val: "MESURE_A_VERIFIER", label: "⚠ Mesure alerte" },
-    { val: "NEEDS_REVIEW",      label: "À analyser" },
+    { val: "NEEDS_REVIEW",      label: "Contestées" },
     { val: "UNKNOWN_CONTRACT",  label: "Inconnu" },
     { val: "FMS_UNAVAILABLE",   label: "FMS indispo" },
   ];

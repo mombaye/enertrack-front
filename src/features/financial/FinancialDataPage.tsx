@@ -26,6 +26,7 @@ import {
   Info,
   Wand2,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const MONTHS = ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Août","Sep","Oct","Nov","Déc"];
@@ -71,23 +72,19 @@ function UploadModal({
   };
 
   return (
-    <div style={{ position:"fixed",inset:0,zIndex:400,background:"rgba(15,23,42,.6)",
-      backdropFilter:"blur(8px)", display:"flex",alignItems:"center",justifyContent:"center",padding:20 }}
-      onClick={e => e.target===e.currentTarget && !loading && onClose()}>
-      <div style={{ background:"white",borderRadius:22,padding:30,maxWidth:440,width:"100%",
-        boxShadow:"0 32px 80px rgba(0,0,0,.2)", animation:"slideUp .2s cubic-bezier(.34,1.4,.64,1)" }}>
-
+    <Dialog open onOpenChange={(next) => { if (!next && !loading) onClose(); }}>
+      <DialogContent
+        className="p-0 gap-0 border-0"
+        style={{ background:"white",borderRadius:22,padding:30,maxWidth:440,width:"100%",
+          boxShadow:"0 32px 80px rgba(0,0,0,.2)" }}
+      >
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18 }}>
           <div>
-            <h3 style={{ fontSize:15,fontWeight:700,color:"#0f172a",margin:"0 0 3px" }}>{title}</h3>
+            <DialogTitle asChild>
+              <h3 style={{ fontSize:15,fontWeight:700,color:"#0f172a",margin:"0 0 3px" }}>{title}</h3>
+            </DialogTitle>
             <p style={{ fontSize:12,color:"#64748b",margin:0 }}>{description}</p>
           </div>
-          {!loading && (
-            <button onClick={onClose} style={{ background:"rgba(0,0,0,.06)",border:"none",
-              borderRadius:8,padding:6,cursor:"pointer",color:"#64748b",display:"grid",placeItems:"center" }}>
-              <X size={14}/>
-            </button>
-          )}
         </div>
 
         {!result ? (<>
@@ -163,8 +160,8 @@ function UploadModal({
               fontSize:12.5,fontWeight:600,color:"white",cursor:"pointer"}}>Fermer</button>
           </div>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -225,21 +222,9 @@ function EvaluateLoadsModal({
   };
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 450,
-        background: "rgba(15,23,42,.6)",
-        backdropFilter: "blur(8px)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 20,
-      }}
-      onClick={(e) => e.target === e.currentTarget && !loading && onClose()}
-    >
-      <div
+    <Dialog open onOpenChange={(next) => { if (!next && !loading) onClose(); }}>
+      <DialogContent
+        className="p-0 gap-0 border-0"
         style={{
           background: "white",
           borderRadius: 22,
@@ -251,31 +236,15 @@ function EvaluateLoadsModal({
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
           <div>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", margin: "0 0 3px" }}>
-              Mettre à jour les stats financières
-            </h3>
+            <DialogTitle asChild>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", margin: "0 0 3px" }}>
+                Mettre à jour les stats financières
+              </h3>
+            </DialogTitle>
             <p style={{ fontSize: 12, color: "#64748b", margin: 0 }}>
               Recalcule les évaluations financières à partir des loads mensuels.
             </p>
           </div>
-
-          {!loading && (
-            <button
-              onClick={onClose}
-              style={{
-                background: "rgba(0,0,0,.06)",
-                border: "none",
-                borderRadius: 8,
-                padding: 6,
-                cursor: "pointer",
-                color: "#64748b",
-                display: "grid",
-                placeItems: "center",
-              }}
-            >
-              <X size={14} />
-            </button>
-          )}
         </div>
 
         {!result ? (
@@ -581,8 +550,8 @@ function EvaluateLoadsModal({
             </button>
           </div>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -52,6 +52,7 @@ import {
   YAxis,
 } from "recharts";
 import { api } from "@/services/api";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Design tokens
@@ -717,14 +718,6 @@ export default function FinancialSiteDetailModal({ siteId, siteName, year, month
       .finally(() => setLoading(false));
   }, [siteId, year, monthStart, monthEnd]);
 
-  useEffect(() => {
-    const handle = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handle);
-    return () => window.removeEventListener("keydown", handle);
-  }, [onClose]);
-
   const consoRows = data?.conso_comparison?.rows ?? [];
   const margeRows = data?.history ?? [];
   const billingRows = data?.billing?.rows ?? [];
@@ -774,17 +767,17 @@ export default function FinancialSiteDetailModal({ siteId, siteName, year, month
   ];
 
   return (
-    <div
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-      style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(2,6,23,.62)", backdropFilter: "blur(7px)", display: "flex", justifyContent: "flex-end" }}
-    >
+    <Sheet open onOpenChange={(next) => { if (!next) onClose(); }}>
       <style>{`
-        @keyframes slideInRight { from { transform: translateX(28px); opacity:.3; } to { transform: translateX(0); opacity:1; } }
         @keyframes spin { to { transform: rotate(360deg); } }
         .fsd-row:hover { background: #EFF6FF !important; }
       `}</style>
 
-      <div style={{ width: "min(1240px, 100vw)", height: "100vh", background: "linear-gradient(180deg,#F8FAFC 0%,#EEF4FF 100%)", boxShadow: "-24px 0 70px rgba(2,6,23,.28)", display: "flex", flexDirection: "column", animation: "slideInRight .20s ease-out" }}>
+      <SheetContent
+        side="right"
+        className="p-0 gap-0 border-0"
+        style={{ width: "min(1240px, 100vw)", maxWidth: "100vw", height: "100vh", background: "linear-gradient(180deg,#F8FAFC 0%,#EEF4FF 100%)", boxShadow: "-24px 0 70px rgba(2,6,23,.28)", display: "flex", flexDirection: "column" }}
+      >
         {/* Header */}
         <div style={{ background: HDR, color: "#fff", padding: "20px 22px 16px", flexShrink: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
@@ -796,9 +789,11 @@ export default function FinancialSiteDetailModal({ siteId, siteName, year, month
                 {data?.summary.count_hors_catalogue ? <Badge tone="warn">{data.summary.count_hors_catalogue} HC</Badge> : null}
               </div>
 
-              <h2 style={{ margin: "11px 0 5px", fontSize: 25, lineHeight: 1.08, fontWeight: 950, letterSpacing: "-.04em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {displayTitle}
-              </h2>
+              <SheetTitle asChild>
+                <h2 style={{ margin: "11px 0 5px", fontSize: 25, lineHeight: 1.08, fontWeight: 950, letterSpacing: "-.04em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "inherit" }}>
+                  {displayTitle}
+                </h2>
+              </SheetTitle>
 
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 12.5, color: "rgba(255,255,255,.62)" }}>
                 <span>{periodText}</span>
@@ -987,7 +982,7 @@ export default function FinancialSiteDetailModal({ siteId, siteName, year, month
             </div>
           </>
         ) : null}
-      </div>
-    </div>
+      </SheetContent>
+    </Sheet>
   );
 }
