@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ShieldCheck, Wifi, WifiOff, Upload, FileSpreadsheet,
-  X, ChevronDown, ChevronRight, Loader2, CheckCircle2,
+  X, ChevronRight, Loader2, CheckCircle2,
   AlertTriangle, RefreshCw, BarChart3, Filter,
   Zap, Check, Database, Calendar, FileDown,
   Cpu, Receipt, Activity, TrendingUp,
@@ -381,12 +381,12 @@ function ResultRow({ result }: { result: CertificationResult }) {
   return (
     <>
       <tr
-        onClick={() => setOpen(o => !o)}
+        onClick={() => setOpen(true)}
         className={`group border-b border-slate-100 cursor-pointer transition-all hover:bg-slate-50/80 ${isAlert ? "bg-orange-50/30" : ""}`}
       >
         <td className="pl-4 pr-2 py-2.5 w-6">
           <span className="text-slate-300 group-hover:text-slate-500 transition-colors">
-            {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+            <ChevronRight className="w-3.5 h-3.5" />
           </span>
         </td>
 
@@ -434,10 +434,37 @@ function ResultRow({ result }: { result: CertificationResult }) {
         </td>
       </tr>
 
-      {/* ── Detail panel ── */}
-      {open && (
-        <tr className="border-b border-blue-50 bg-slate-50/40">
-          <td colSpan={8} className="px-5 py-4">
+      {/* ── Detail modal ── */}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent
+          className="p-0 gap-0 border-0"
+          style={{
+            background: "white",
+            borderRadius: 20,
+            width: "100%",
+            maxWidth: 980,
+            maxHeight: "calc(100vh - 48px)",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+          }}
+        >
+          <div className="px-6 pt-5 pb-4 border-b border-slate-100 shrink-0">
+            <div className="flex items-center gap-2.5 mb-1">
+              {isAlert && <AlertTriangle className="w-4 h-4 text-orange-500 shrink-0" />}
+              <DialogTitle asChild>
+                <div className="font-mono text-[15px] font-bold text-slate-900">{result.numero_facture}</div>
+              </DialogTitle>
+              <StatusBadge status={result.status} hasAlert={isAlert} />
+            </div>
+            <div className="text-[11px] text-slate-500">
+              {result.site_id ?? "—"}{result.site_name ? ` · ${result.site_name}` : ""}
+              {" · "}{fmtDate(result.date_debut_periode)} → {fmtDate(result.date_fin_periode)}
+              {" · "}<span className="font-mono">{result.numero_compte_contrat}</span>
+            </div>
+          </div>
+
+          <div className="px-6 py-4 overflow-y-auto">
 
             {/* Alerte mesure v4 */}
             {/* ✅ v5 — Bandeau adaptatif : message différent selon certification */}
@@ -627,9 +654,9 @@ function ResultRow({ result }: { result: CertificationResult }) {
                 </span>
               </div>
             )}
-          </td>
-        </tr>
-      )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
