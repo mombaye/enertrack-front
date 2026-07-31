@@ -16,12 +16,12 @@ import {
   FileSpreadsheet,
   Loader2,
   Save,
-  X,
   ShieldCheck,
   Database,
   Settings2,
 } from "lucide-react";
 import { toast } from "react-toastify";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import type { GridTargetRule, Site } from "./api";
 import {
   useCreateSite,
@@ -282,7 +282,7 @@ function StatCard({
   );
 }
 
-function SiteModal({
+function SiteFormModal({
   open,
   mode,
   form,
@@ -299,8 +299,6 @@ function SiteModal({
   onClose: () => void;
   onSubmit: () => void;
 }) {
-  if (!open) return null;
-
   const title = mode === "create" ? "Nouveau site" : "Modifier le site";
 
   const setField = (key: keyof SiteFormState, value: string) => {
@@ -360,21 +358,15 @@ function SiteModal({
   );
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-6xl overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl">
+    <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="max-w-6xl w-full gap-0 rounded-[28px] border-slate-200 bg-white p-0 shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
           <div>
-            <h3 className="text-xl font-bold tracking-tight text-slate-900">{title}</h3>
+            <DialogTitle className="text-xl font-bold tracking-tight text-slate-900">{title}</DialogTitle>
             <p className="mt-1 text-sm text-slate-500">
               Renseignez les champs du référentiel site.
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-50"
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
 
         <div className="max-h-[75vh] overflow-y-auto px-6 py-5">
@@ -531,8 +523,8 @@ function SiteModal({
             Enregistrer
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1288,7 +1280,7 @@ export default function AdminSitesPage() {
           </div>
         </div>
 
-        <SiteModal
+        <SiteFormModal
           open={modalOpen}
           mode={editingSite ? "edit" : "create"}
           form={form}

@@ -13,6 +13,12 @@ export default {
   			sm: 'calc(var(--radius) - 4px)'
   		},
   		colors: {
+  			camublue: {
+  				900: '#003c71'
+  			},
+  			camugray: {
+  				100: '#f6f8fa'
+  			},
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			card: {

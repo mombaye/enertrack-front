@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { api } from "@/services/api";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 import {EstimationBatch, EstimationResult, fetchBatches, fetchBatchStatus, fetchResults, HistoryImportResult, importEstimationHistory, launchBatch } from '@/features/estimation/api' 
 
@@ -721,42 +722,30 @@ export default function EstimationPage() {
       </div>
 
             {showImport && (
-        <div
+      <Dialog open onOpenChange={(next) => { if (!next && !importing) setShowImport(false); }}>
+        <DialogContent
+          className="p-0 gap-0 border-0"
           style={{
-            position: "fixed", inset: 0, zIndex: 400,
-            background: "rgba(15,23,42,.6)", backdropFilter: "blur(8px)",
-            display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
-          }}
-          onClick={e => e.target === e.currentTarget && !importing && setShowImport(false)}
-        >
-          <div style={{
             background: "white", borderRadius: 24, padding: 32,
             maxWidth: 500, width: "100%",
             boxShadow: "0 32px 80px rgba(0,0,0,.22)",
-            animation: "ep-in .22s cubic-bezier(.34,1.4,.64,1)",
-          }}>
+          }}
+        >
             {/* Header */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
               <div>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", margin: "0 0 4px" }}>
-                  Importer l'historique des provisions
-                </h3>
+                <DialogTitle asChild>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", margin: "0 0 4px" }}>
+                    Importer l'historique des provisions
+                  </h3>
+                </DialogTitle>
                 <p style={{ fontSize: 12.5, color: "#64748b", margin: 0 }}>
                   Fichier <strong>Provisions_GRID_Conso.xlsx</strong> — colonnes :
                   site_ID · Conso_Kwh · Montant · Source · Mois
                 </p>
               </div>
-              {!importing && (
-                <button
-                  onClick={() => setShowImport(false)}
-                  style={{ background: "rgba(0,0,0,.06)", border: "none", borderRadius: 9,
-                    padding: 6, cursor: "pointer", color: "#64748b", display: "grid", placeItems: "center" }}
-                >
-                  <XCircle size={15} />
-                </button>
-              )}
             </div>
- 
+
             {!importResult ? (
               <>
                 {/* Drop zone */}
@@ -900,8 +889,8 @@ export default function EstimationPage() {
                 </button>
               </div>
             )}
-          </div>
-        </div>
+        </DialogContent>
+      </Dialog>
       )}
     </>
   );

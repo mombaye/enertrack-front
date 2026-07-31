@@ -1,5 +1,5 @@
 
-import { useState, useMemo, useRef, useEffect, type ReactNode, type CSSProperties } from "react";
+import { useState, useMemo, useRef, type ReactNode, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   AreaChart,
@@ -27,6 +27,7 @@ import {
 import { api } from "@/services/api";
 import * as XLSX from "xlsx";
 import { getFNPSites, type FNPResponse } from "@/features/sonatelBilling/api";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 
 // ─── Composant modal ─────────────────────────────────────────────────────────
@@ -76,15 +77,6 @@ export default function FNPModal({
   const [histFilter, setHistFilter] = useState<"" | "none" | "has">("");
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 12;
-
-  // Fermer sur Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
 
   const periods = useMemo(
     () => [...new Set(data.rows.map((r) => r.period))].sort(),
@@ -189,23 +181,9 @@ export default function FNPModal({
   );
 
   return (
-    // Faux overlay en flux normal (pas de position:fixed)
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(15,23,42,0.55)",
-        zIndex: 9000,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "24px 16px",
-      }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent
+        className="p-0 gap-0 border-0"
         style={{
           background: "white",
           borderRadius: 20,
@@ -218,7 +196,6 @@ export default function FNPModal({
           flexDirection: "column",
           overflow: "hidden",
         }}
-        onClick={(e) => e.stopPropagation()}
       >
         <div style={{ height: 3, flexShrink: 0, background: "linear-gradient(90deg, #0B1F4D 0%, #123C8C 45%, #1A56C4 75%, #3272E0 100%)" }} />
 
@@ -263,16 +240,18 @@ export default function FNPModal({
                   Factures Non Parvenues
                 </span>
               </div>
-              <div
-                style={{
-                  fontFamily: "'Syne', sans-serif",
-                  fontSize: 18,
-                  fontWeight: 800,
-                  color: T.text,
-                }}
-              >
-                Détail FNP — {dateStart} → {dateEnd}
-              </div>
+              <DialogTitle asChild>
+                <div
+                  style={{
+                    fontFamily: "'Syne', sans-serif",
+                    fontSize: 18,
+                    fontWeight: 800,
+                    color: T.text,
+                  }}
+                >
+                  Détail FNP — {dateStart} → {dateEnd}
+                </div>
+              </DialogTitle>
               <div style={{ fontSize: 12, color: T.textSub, marginTop: 3 }}>
                 {data.summary.sites_count} sites ·{" "}
                 {data.summary.fnp_count} périodes manquantes · Horizon{" "}
@@ -281,25 +260,6 @@ export default function FNPModal({
                 </strong>
               </div>
             </div>
-
-            <button
-              onClick={onClose}
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 9,
-                border: `1px solid ${T.border}`,
-                background: "white",
-                cursor: "pointer",
-                display: "grid",
-                placeItems: "center",
-                color: T.textMid,
-                fontSize: 16,
-                flexShrink: 0,
-              }}
-            >
-              ×
-            </button>
           </div>
 
           {/* Stat cards */}
@@ -653,7 +613,6 @@ export default function FNPModal({
                           style={{
                             fontSize: 11,
                             color: T.textSub,
-                            fontStyle: "italic",
                           }}
                         >
                           Nouveau site
@@ -871,7 +830,7 @@ export default function FNPModal({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

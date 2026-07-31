@@ -12,21 +12,20 @@ import {
   ArrowRight, CheckCircle2, AlertTriangle, Clock, Database,
   Activity, Calendar, RefreshCw, Wifi,
 } from "lucide-react";
-import { useAuth } from "@/auth/AuthContext";
 import { getDashboardSummary } from "@/services/dashboard";
 import type { DashboardCertBatch } from "@/services/dashboard";
 
 // ─── Tokens ──────────────────────────────────────────────────────────────────
 const T = {
-  blue:   "#1e3a8a",
-  blueMd: "#1e40af",
-  orange: "#E8401C",
+  blue:   "#003c71",
+  blueMd: "#0a4f8f",
+  orange: "#0891b2",
   white:  "#ffffff",
   off:    "#f0f4ff",
-  offDk:  "#f8faff",
-  border: "rgba(30,58,138,.09)",
-  shadow: "0 1px 3px rgba(30,58,138,.04), 0 8px 28px rgba(30,58,138,.06)",
-  sm:     "0 1px 3px rgba(30,58,138,.04)",
+  offDk:  "#f6f8fa",
+  border: "rgba(0,60,113,.09)",
+  shadow: "0 1px 3px rgba(0,60,113,.04), 0 8px 28px rgba(0,60,113,.06)",
+  sm:     "0 1px 3px rgba(0,60,113,.04)",
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -82,11 +81,6 @@ function AnimatedNum({ target, prefix = "", suffix = "", duration = 1000 }: {
   return <>{prefix}{numFmt(val)}{suffix}</>;
 }
 
-// ─── OrangeBar ────────────────────────────────────────────────────────────────
-function OrangeBar() {
-  return <div style={{ position:"absolute",top:0,left:0,right:0,height:3, background:`linear-gradient(90deg,${T.orange},#ff7350,transparent)` }}/>;
-}
-
 // ─── SectionTitle ─────────────────────────────────────────────────────────────
 function SectionTitle({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -113,7 +107,7 @@ function KpiCard({ label, value, sub, icon, accent, delay = 0 }: {
       animation: `db-in .4s cubic-bezier(.22,1,.36,1) ${delay}s both`,
       transition: "box-shadow .2s, transform .2s",
     }}
-    onMouseEnter={e => { const el = e.currentTarget as HTMLDivElement; el.style.boxShadow = "0 4px 20px rgba(30,58,138,.12)"; el.style.transform = "translateY(-2px)"; }}
+    onMouseEnter={e => { const el = e.currentTarget as HTMLDivElement; el.style.boxShadow = "0 4px 20px rgba(0,60,113,.12)"; el.style.transform = "translateY(-2px)"; }}
     onMouseLeave={e => { const el = e.currentTarget as HTMLDivElement; el.style.boxShadow = T.shadow; el.style.transform = "translateY(0)"; }}
     >
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
@@ -229,7 +223,7 @@ function ChartTip({ active, payload, label, mode = "money" }: any) {
     <div style={{
       background:T.white, border:`1px solid ${T.border}`,
       borderRadius:10, padding:"10px 14px",
-      boxShadow:"0 4px 20px rgba(30,58,138,.1)",
+      boxShadow:"0 4px 20px rgba(0,60,113,.1)",
       fontFamily:"'DM Sans',sans-serif", fontSize:12,
     }}>
       <div style={{ fontWeight:700, color:"#0f172a", marginBottom:6 }}>{label}</div>
@@ -249,10 +243,10 @@ function ChartTip({ active, payload, label, mode = "money" }: any) {
 // ─── Status badge ─────────────────────────────────────────────────────────────
 const STATUS_CFG: Record<string, { label:string; color:string; bg:string; border:string }> = {
   VALIDATED: { label:"Validée",   color:"#059669", bg:"#f0fdf4", border:"#a7f3d0" },
-  CREATED:   { label:"Créée",     color:"#1e40af", bg:"#eff6ff", border:"#bfdbfe" },
+  CREATED:   { label:"Créée",     color:"#0a4f8f", bg:"#eff6ff", border:"#bfdbfe" },
   CONTESTED: { label:"Contestée", color:"#d97706", bg:"#fffbeb", border:"#fde68a" },
   DONE:      { label:"Terminé",   color:"#059669", bg:"#f0fdf4", border:"#a7f3d0" },
-  RUNNING:   { label:"En cours",  color:"#1e40af", bg:"#eff6ff", border:"#bfdbfe" },
+  RUNNING:   { label:"En cours",  color:"#0a4f8f", bg:"#eff6ff", border:"#bfdbfe" },
   FAILED:    { label:"Échec",     color:"#dc2626", bg:"#fef2f2", border:"#fecaca" },
   PENDING:   { label:"En attente",color:"#64748b", bg:"#f8fafc", border:"#e2e8f0" },
 };
@@ -279,7 +273,6 @@ const inputStyle: React.CSSProperties = {
 // MAIN
 // ─────────────────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
-  const { user } = useAuth();
   const def = useMemo(() => defaultRange(), []);
   const [start, setStart] = useState(def.start);
   const [end,   setEnd]   = useState(def.end);
@@ -328,15 +321,15 @@ export default function DashboardPage() {
           50%     { opacity:.8; box-shadow:0 0 0 5px rgba(16,185,129,0); }
         }
 
-        .db input[type=date]:focus { border-color:${T.blue} !important; box-shadow:0 0 0 3px rgba(30,58,138,.09) !important; }
+        .db input[type=date]:focus { border-color:${T.blue} !important; box-shadow:0 0 0 3px rgba(0,60,113,.09) !important; }
 
         .db .recharts-cartesian-grid-horizontal line,
-        .db .recharts-cartesian-grid-vertical line { stroke:rgba(30,58,138,.06); }
+        .db .recharts-cartesian-grid-vertical line { stroke:rgba(0,60,113,.06); }
 
         .db .history-row {
           display:flex; align-items:center; justify-content:space-between;
           padding:9px 14px; border-radius:9px;
-          border:1px solid rgba(30,58,138,.07);
+          border:1px solid rgba(0,60,113,.07);
           background:white; transition:background .12s;
         }
         .db .history-row:hover { background:${T.offDk}; }
@@ -344,28 +337,24 @@ export default function DashboardPage() {
 
       <div className="db" style={{ display:"flex", flexDirection:"column", gap:16 }}>
 
+        {/* ══ STICKY HEADER + KPI ═════════════════════════════════════════════ */}
+        <div style={{
+          position:"sticky", top:0, zIndex:10,
+          display:"flex", flexDirection:"column", gap:16,
+          background:T.offDk, paddingBottom:2,
+        }}>
+
         {/* ══ PAGE HEADER ══════════════════════════════════════════════════════ */}
         <div style={{
           background:T.white, borderRadius:20,
-          border:`1px solid ${T.border}`, boxShadow:T.shadow,
+          boxShadow:T.shadow,
           position:"relative", overflow:"hidden",
           animation:"db-in .35s cubic-bezier(.22,1,.36,1) both",
         }}>
-          <OrangeBar/>
           <div style={{ padding:"22px 24px 20px" }}>
             <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
               {/* Left: title */}
               <div>
-                <div style={{
-                  display:"inline-flex", alignItems:"center", gap:6,
-                  background:"rgba(232,64,28,.08)", border:"1px solid rgba(232,64,28,.18)",
-                  borderRadius:100, padding:"3px 10px", marginBottom:8,
-                }}>
-                  <div style={{ width:5,height:5,borderRadius:"50%",background:T.orange, animation:"pulse-dot 2s infinite" }}/>
-                  <span style={{ fontSize:10,fontWeight:700,letterSpacing:".12em",color:T.orange,textTransform:"uppercase" }}>
-                    EnerTrack Live
-                  </span>
-                </div>
                 <h1 className="display" style={{ fontSize:22,fontWeight:900,color:"#0f172a",letterSpacing:"-.03em",margin:0,lineHeight:1.2 }}>
                   Tableau de bord
                 </h1>
@@ -407,37 +396,41 @@ export default function DashboardPage() {
                 </button>
               </div>
             </div>
-
-            {/* User greeting */}
-            {user && (
-              <div style={{
-                marginTop:16, paddingTop:16,
-                borderTop:`1px solid rgba(30,58,138,.07)`,
-                display:"flex", alignItems:"center", gap:10,
-              }}>
-                <div style={{
-                  width:34, height:34, borderRadius:10, flexShrink:0,
-                  background:`linear-gradient(135deg,${T.orange},#ff7350)`,
-                  display:"grid", placeItems:"center",
-                  fontFamily:"'Outfit',sans-serif", fontSize:13, fontWeight:800, color:"white",
-                }}>
-                  {(user.username || "?")[0].toUpperCase()}
-                </div>
-                <div>
-                  <div style={{ fontSize:13, fontWeight:700, color:"#0f172a" }}>
-                    Bonjour {user.username} 👋
-                  </div>
-                  <div style={{ fontSize:11, color:"#94a3b8" }}>
-                    {data?.range
-                      ? `Période : ${data.range.start} → ${data.range.end}`
-                      : "Chargement des données..."
-                    }
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
+
+        {/* ══ KPI ROW ══════════════════════════════════════════════════════ */}
+        {data && (
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,220px))", gap:10, justifyContent:"center" }}>
+            <KpiCard
+              delay={.05} label="Factures" icon={<FileSpreadsheet size={14}/>}
+              value={<AnimatedNum target={b?.total_invoices ?? 0}/>}
+              sub={`${b?.active_contracts ?? 0} contrats actifs`}
+            />
+            <KpiCard
+              delay={.10} label="Montant TTC" icon={<TrendingUp size={14}/>} accent={T.blue}
+              value={money(b?.total_ttc, true)}
+              sub={`HT : ${money(b?.total_ht, true)}`}
+            />
+            <KpiCard
+              delay={.15} label="NRJ (HT)" icon={<Zap size={14}/>} accent={T.orange}
+              value={money(b?.total_nrj, true)}
+              sub={`${b?.total_conso_kwh ? (parseFloat(b.total_conso_kwh)/1e6).toFixed(1)+" GWh" : "—"}`}
+            />
+            <KpiCard
+              delay={.20} label="Sites actifs" icon={<Activity size={14}/>} accent="#10b981"
+              value={<AnimatedNum target={b?.active_sites ?? 0}/>}
+              sub={`${data.range.start} → ${data.range.end}`}
+            />
+            <KpiCard
+              delay={.25} label="Taux certifié" icon={<ShieldCheck size={14}/>} accent={c?.global_rate.certified_fms ? "#10b981" : "#94a3b8"}
+              value={`${((c?.global_rate.certified_fms ?? 0) + (c?.global_rate.certified_senelec ?? 0)).toFixed(1)}%`}
+              sub={`${c?.total_batches_in_range ?? 0} campagne(s)`}
+            />
+          </div>
+        )}
+        </div>
+        {/* ══ end sticky wrapper ══ */}
 
         {/* ══ LOADING / ERROR ══════════════════════════════════════════════════ */}
         {isLoading && (
@@ -462,34 +455,6 @@ export default function DashboardPage() {
 
         {data && (
           <>
-            {/* ══ KPI ROW ══════════════════════════════════════════════════════ */}
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:10 }}>
-              <KpiCard
-                delay={.05} label="Factures" icon={<FileSpreadsheet size={14}/>}
-                value={<AnimatedNum target={b?.total_invoices ?? 0}/>}
-                sub={`${b?.active_contracts ?? 0} contrats actifs`}
-              />
-              <KpiCard
-                delay={.10} label="Montant TTC" icon={<TrendingUp size={14}/>} accent={T.blue}
-                value={money(b?.total_ttc, true)}
-                sub={`HT : ${money(b?.total_ht, true)}`}
-              />
-              <KpiCard
-                delay={.15} label="NRJ (HT)" icon={<Zap size={14}/>} accent={T.orange}
-                value={money(b?.total_nrj, true)}
-                sub={`${b?.total_conso_kwh ? (parseFloat(b.total_conso_kwh)/1e6).toFixed(1)+" GWh" : "—"}`}
-              />
-              <KpiCard
-                delay={.20} label="Sites actifs" icon={<Activity size={14}/>} accent="#10b981"
-                value={<AnimatedNum target={b?.active_sites ?? 0}/>}
-                sub={`${data.range.start} → ${data.range.end}`}
-              />
-              <KpiCard
-                delay={.25} label="Taux certifié" icon={<ShieldCheck size={14}/>} accent={c?.global_rate.certified_fms ? "#10b981" : "#94a3b8"}
-                value={`${((c?.global_rate.certified_fms ?? 0) + (c?.global_rate.certified_senelec ?? 0)).toFixed(1)}%`}
-                sub={`${c?.total_batches_in_range ?? 0} campagne(s)`}
-              />
-            </div>
 
             {/* ══ ROW 2 : Évolution + Certification ════════════════════════════ */}
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>

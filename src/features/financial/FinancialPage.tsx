@@ -55,6 +55,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { financialLock, financialUnlock, isFinancialUnlocked } from "./FinancialAccessGate";
 import FinancialAccessGate from "./FinancialAccessGate";
 import FinancialDataPage from "./FinancialDataPage";
@@ -451,14 +452,18 @@ function UploadModal({ title, description, accept = ".xlsx,.xls,.csv", onClose, 
   }
 
   return (
-    <div onClick={(e) => e.currentTarget === e.target && !loading && onClose()} style={{ position: "fixed", inset: 0, zIndex: 700, background: "rgba(2,6,23,.62)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ width: "min(480px,100%)", background: "#fff", borderRadius: 24, boxShadow: "0 30px 90px rgba(2,6,23,.28)", padding: 26 }}>
+    <Dialog open onOpenChange={(next) => { if (!next && !loading) onClose(); }}>
+      <DialogContent
+        className="p-0 gap-0 border-0"
+        style={{ width: "min(480px,100%)", background: "#fff", borderRadius: 24, boxShadow: "0 30px 90px rgba(2,6,23,.28)", padding: 26 }}
+      >
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, marginBottom: 18 }}>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 950, color: C.blue[950] }}>{title}</div>
+            <DialogTitle asChild>
+              <div style={{ fontSize: 16, fontWeight: 950, color: C.blue[950] }}>{title}</div>
+            </DialogTitle>
             <div style={{ fontSize: 12.5, color: C.slate[500], marginTop: 4 }}>{description}</div>
           </div>
-          {!loading ? <button type="button" onClick={onClose} style={{ width: 30, height: 30, borderRadius: 10, border: "none", background: C.slate[100], color: C.slate[500], cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><X size={15} /></button> : null}
         </div>
 
         {!result ? (
@@ -500,8 +505,8 @@ function UploadModal({ title, description, accept = ".xlsx,.xls,.csv", onClose, 
             <button type="button" onClick={onClose} style={{ width: "100%", padding: "10px 0", border: "none", borderRadius: 13, background: C.blue[800], color: "#fff", fontWeight: 950, cursor: "pointer" }}>Fermer</button>
           </div>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

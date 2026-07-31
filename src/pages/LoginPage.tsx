@@ -95,12 +95,10 @@ export default function LoginPage() {
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap');
 
         :root {
-          --blue:    #1e3a8a;
-          --blue-md: #2d55b3;
-          --orange:  #E8401C;
-          --orange2: #ff6340;
+          --blue:    #003c71;
+          --blue-md: #0a4f8f;
           --white:   #ffffff;
-          --off:     #f7f9ff;
+          --off:     #f6f8fa;
           --slate:   #64748b;
           --light:   #e8eeff;
         }
@@ -220,7 +218,7 @@ export default function LoginPage() {
         .field:focus {
           background:#fff;
           border-color: var(--blue);
-          box-shadow: 0 0 0 4px rgba(30,58,138,.09);
+          box-shadow: 0 0 0 4px rgba(0,60,113,.09);
         }
         .field.has-error {
           border-color:#f87171;
@@ -270,7 +268,7 @@ export default function LoginPage() {
         .btn-connect:not(:disabled):hover {
           background: #1e40af;
           transform:translateY(-1px);
-          box-shadow:0 8px 28px rgba(30,58,138,.28);
+          box-shadow:0 8px 28px rgba(0,60,113,.28);
         }
         .btn-connect:not(:disabled):hover::before {
           animation:shimmer .6s ease forwards;
@@ -282,7 +280,7 @@ export default function LoginPage() {
         .btn-connect .orange-strip {
           position:absolute;
           bottom:0; left:20%; right:20%; height:2px;
-          background:linear-gradient(90deg,transparent,var(--orange),transparent);
+          background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);
           border-radius:2px;
           opacity:0;
           transition:opacity .2s;
@@ -329,7 +327,7 @@ export default function LoginPage() {
           <div style={{
             position:"absolute", top:0, left:0, zIndex:10,
             width:"calc(50% - 40px)", height:3,
-            background:"linear-gradient(90deg,var(--orange),var(--orange2),transparent)",
+            background:"linear-gradient(90deg,rgba(255,255,255,.4),rgba(255,255,255,.1),transparent)",
           }}/>
 
           {/* Glow blob */}
@@ -338,7 +336,7 @@ export default function LoginPage() {
             bottom:-120, left:-80,
             width:400, height:400,
             borderRadius:"50%",
-            background:"radial-gradient(circle,rgba(232,64,28,.18) 0%,transparent 70%)",
+            background:"radial-gradient(circle,rgba(255,255,255,.10) 0%,transparent 70%)",
             pointerEvents:"none",
           }}/>
           <div style={{
@@ -376,17 +374,17 @@ export default function LoginPage() {
               {/* Orange badge */}
               <div className="rl2" style={{
                 display:"inline-flex", alignItems:"center", gap:8,
-                background:"rgba(232,64,28,.15)",
-                border:"1px solid rgba(232,64,28,.3)",
+                background:"rgba(255,255,255,.08)",
+                border:"1px solid rgba(255,255,255,.15)",
                 borderRadius:100,
                 padding:"5px 14px",
                 marginBottom:24,
                 width:"fit-content",
               }}>
-                <div style={{ width:6, height:6, borderRadius:"50%", background:"#E8401C" }}/>
+                <div style={{ width:6, height:6, borderRadius:"50%", background:"#ffffff" }}/>
                 <span className="display" style={{
                   fontSize:10.5, fontWeight:600,
-                  letterSpacing:".12em", color:"#ffb39e",
+                  letterSpacing:".12em", color:"rgba(255,255,255,.75)",
                   textTransform:"uppercase",
                 }}>
                   EnerTrack — Plateforme interne
@@ -480,7 +478,7 @@ export default function LoginPage() {
             top:-100, right:-100,
             width:400, height:400,
             borderRadius:"50%",
-            background:"radial-gradient(circle, rgba(30,58,138,.04) 0%, transparent 70%)",
+            background:"radial-gradient(circle, rgba(0,60,113,.04) 0%, transparent 70%)",
             pointerEvents:"none",
           }}/>
           <div style={{
@@ -488,7 +486,7 @@ export default function LoginPage() {
             bottom:-80, left:-60,
             width:300, height:300,
             borderRadius:"50%",
-            background:"radial-gradient(circle, rgba(232,64,28,.03) 0%, transparent 70%)",
+            background:"radial-gradient(circle, rgba(0,60,113,.03) 0%, transparent 70%)",
             pointerEvents:"none",
           }}/>
 
@@ -503,7 +501,7 @@ export default function LoginPage() {
             <div className="ru1 display" style={{
               fontSize:11, fontWeight:700,
               letterSpacing:".15em", textTransform:"uppercase",
-              color:"var(--orange)",
+              color:"var(--blue)",
               marginBottom:10,
             }}>
               Connexion
@@ -532,9 +530,9 @@ export default function LoginPage() {
               padding:"28px 28px 24px",
               border:"1px solid #e8eeff",
               boxShadow:
-                "0 1px 2px rgba(30,58,138,.04)," +
-                "0 4px 16px rgba(30,58,138,.07)," +
-                "0 24px 48px rgba(30,58,138,.05)",
+                "0 1px 2px rgba(0,60,113,.04)," +
+                "0 4px 16px rgba(0,60,113,.07)," +
+                "0 24px 48px rgba(0,60,113,.05)",
             }}>
 
               <form onSubmit={handleSubmit(onSubmit)}>

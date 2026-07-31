@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { useEffect } from "react";
 import { Site, createSite, updateSite } from "@/services/sites";
 import { toast } from "react-toastify";
+import { Building2 } from "lucide-react";
 
 const ZONES = [
   { value: "DKR", label: "Dakar" },
@@ -79,23 +80,28 @@ export function SiteModal({ open, onOpenChange, onSaved, initial, mode = "add" }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-xl rounded-2xl">
         <DialogHeader>
-          <DialogTitle>
-            {mode === "edit" ? "Modifier un site" : "Ajouter un site"}
-          </DialogTitle>
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl bg-camublue-900/10 text-camublue-900">
+              <Building2 size={18} />
+            </div>
+            <DialogTitle className="text-camublue-900">
+              {mode === "edit" ? "Modifier un site" : "Ajouter un site"}
+            </DialogTitle>
+          </div>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-2">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-            <label className="block text-sm font-medium text-blue-900 mb-1" htmlFor="site_id">
+            <label className="block text-sm font-medium text-camublue-900 mb-1" htmlFor="site_id">
                 ID du site
             </label>
             <Input id="site_id" placeholder="Ex : DKR_0001" {...register("site_id", { required: true })} />
             </div>
 
             <div>
-            <label className="block text-sm font-medium text-blue-900 mb-1" htmlFor="name">
+            <label className="block text-sm font-medium text-camublue-900 mb-1" htmlFor="name">
                 Nom du site
             </label>
             <Input id="name" placeholder="Nom" {...register("name", { required: true })} />
@@ -118,7 +124,7 @@ export function SiteModal({ open, onOpenChange, onSaved, initial, mode = "add" }
               </SelectContent>
             </Select>
             <div>
-            <label className="block text-sm font-medium text-blue-900 mb-1" htmlFor="name">
+            <label className="block text-sm font-medium text-camublue-900 mb-1" htmlFor="name">
                 Nom du site
             </label>
             <Input id="name" placeholder="Nom" {...register("name", { required: true })} />
@@ -134,7 +140,7 @@ export function SiteModal({ open, onOpenChange, onSaved, initial, mode = "add" }
             <DialogClose asChild>
               <Button type="button" variant="outline">Annuler</Button>
             </DialogClose>
-           <Button type="submit" disabled={isSubmitting} className="bg-blue-900 text-white rounded-xl flex items-center gap-2">
+           <Button type="submit" disabled={isSubmitting} className="bg-camublue-900 hover:bg-camublue-900/90 text-white rounded-xl flex items-center gap-2">
             {isSubmitting && (
                 <svg className="animate-spin h-4 w-4 mr-1 text-white" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />

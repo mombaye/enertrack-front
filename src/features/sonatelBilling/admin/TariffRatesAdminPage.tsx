@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import { Plus, UploadCloud, RefreshCw, Search, Pencil, Trash2, MoreVertical } from "lucide-react";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   createTariff,
   deleteTariff,
@@ -43,8 +44,6 @@ function ImportModal({
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
 
-  if (!open) return null;
-
   const onImport = async () => {
     if (!file) return toast.error("Sélectionne un fichier Excel.");
     setLoading(true);
@@ -61,11 +60,12 @@ function ImportModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-      <div className="absolute inset-0 bg-black/35" onClick={onClose} />
-      <div className="relative w-full max-w-xl rounded-3xl bg-white border border-slate-200 shadow-2xl">
+    <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="max-w-xl p-0 gap-0 rounded-3xl border-slate-200">
         <div className="p-6 border-b border-slate-200">
-          <div className="text-lg font-semibold text-slate-900">Importer les tarifs</div>
+          <DialogTitle asChild>
+            <div className="text-lg font-semibold text-slate-900">Importer les tarifs</div>
+          </DialogTitle>
           <div className="text-sm text-slate-600 mt-1">
             Format attendu (ton fichier) : Categori, Heures Hors Pointe, Heures de Pointe, Prime Fixe, Date debut, Date Fin.
           </div>
@@ -111,8 +111,8 @@ function ImportModal({
             {loading ? "Import..." : "Importer"}
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
