@@ -579,7 +579,7 @@ const outScopeCountQ = useQuery({
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)", padding: 24 }}>
-      <div style={{ maxWidth: 1440, margin: "0 auto", display: "grid", gap: 18 }}>
+      <div style={{ display: "grid", gap: 18 }}>
         <div
           style={{
             background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",

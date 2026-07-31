@@ -32,7 +32,6 @@ import {
   X,
   Building2,
   Globe,
-  TrendingUp,
   CheckCircle2,
   PackageX, 
   Clock, 
@@ -42,6 +41,7 @@ import { api } from "@/services/api";
 import * as XLSX from "xlsx";
 import { getFNPSites, type FNPResponse } from "@/features/sonatelBilling/api";
 import FNPModal from "./FNPModal";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -242,72 +242,254 @@ async function searchSites(q: string): Promise<SiteOption[]> {
   });
 }
 
-function exportToExcel(data: StatsResponse, siteCode?: string, scope: GlobalScope = "ALL") {
+type ExportSectionKey =
+  | "evolution"
+  | "top"
+  | "distribution"
+  | "payment"
+  | "certifBilling"
+  | "certifTech";
+
+const EXPORT_SECTIONS: { key: ExportSectionKey; label: string; isAvailable: (d: StatsResponse) => boolean }[] = [
+  { key: "evolution", label: "Évolution mensuelle", isAvailable: (d) => d.evolution.length > 0 },
+  { key: "top", label: "Top Sites (Cos φ / Montant)", isAvailable: (d) => d.top.conso_vs_montant.length > 0 },
+  { key: "distribution", label: "Distribution HT", isAvailable: (d) => d.distribution_ht.parts.length > 0 },
+  { key: "payment", label: "Statuts de paiement (résumé)", isAvailable: (d) => !!d.payment_statuses },
+  { key: "certifBilling", label: "Certification billing (résumé)", isAvailable: (d) => !!d.invoice_certification },
+  { key: "certifTech", label: "Certification technique (résumé)", isAvailable: (d) => !!d.certification },
+];
+
+function exportToExcel(
+  data: StatsResponse,
+  siteCode: string | undefined,
+  scope: GlobalScope,
+  sections: Record<ExportSectionKey, boolean>
+) {
   const wb = XLSX.utils.book_new();
 
-  const evoRows = data.evolution.map((r) => ({
-    "Période": r.period,
-    "Nb Factures": r.invoices,
-    "Montant HT (FCFA)": Number(r.montant_ht),
-    "Montant TTC (FCFA)": Number(r.montant_ttc),
-    "NRJ (FCFA)": Number(r.nrj),
-    "Abonnement (FCFA)": Number(r.abonnement),
-    "Pénalité Prime (FCFA)": Number(r.penalite_prime),
-    "Cos φ (FCFA)": Number(r.cosphi),
-  }));
-  const ws1 = XLSX.utils.json_to_sheet(evoRows);
-  ws1["!cols"] = [
-    { wch: 12 },
-    { wch: 12 },
-    { wch: 20 },
-    { wch: 20 },
-    { wch: 16 },
-    { wch: 18 },
-    { wch: 22 },
-    { wch: 14 },
-  ];
-  XLSX.utils.book_append_sheet(wb, ws1, "Évolution mensuelle");
+  if (sections.evolution) {
+    const evoRows = data.evolution.map((r) => ({
+      "Période": r.period,
+      "Nb Factures": r.invoices,
+      "Montant HT (FCFA)": Number(r.montant_ht),
+      "Montant TTC (FCFA)": Number(r.montant_ttc),
+      "NRJ (FCFA)": Number(r.nrj),
+      "Abonnement (FCFA)": Number(r.abonnement),
+      "Pénalité Prime (FCFA)": Number(r.penalite_prime),
+      "Cos φ (FCFA)": Number(r.cosphi),
+    }));
+    const ws1 = XLSX.utils.json_to_sheet(evoRows);
+    ws1["!cols"] = [
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 16 },
+      { wch: 18 },
+      { wch: 22 },
+      { wch: 14 },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws1, "Évolution mensuelle");
+  }
 
-  const topRows = data.top.conso_vs_montant.map((r) => ({
-    "Site ID": r.site_id,
-    "Site Nom": r.site_name,
-    "Montant HT (FCFA)": Number(r.montant_ht),
-    "Cos φ (FCFA)": Number(r.montant_cosphi),
-    "Pénalité (FCFA)": Number(r.penalite_prime),
-    "Abonnement (FCFA)": Number(r.abonnement),
-  }));
-  const ws2 = XLSX.utils.json_to_sheet(topRows);
-  ws2["!cols"] = [{ wch: 14 }, { wch: 28 }, { wch: 20 }, { wch: 14 }, { wch: 16 }, { wch: 18 }];
-  XLSX.utils.book_append_sheet(wb, ws2, "Top Sites");
+  if (sections.top) {
+    const topRows = data.top.conso_vs_montant.map((r) => ({
+      "Site ID": r.site_id,
+      "Site Nom": r.site_name,
+      "Montant HT (FCFA)": Number(r.montant_ht),
+      "Cos φ (FCFA)": Number(r.montant_cosphi),
+      "Pénalité (FCFA)": Number(r.penalite_prime),
+      "Abonnement (FCFA)": Number(r.abonnement),
+    }));
+    const ws2 = XLSX.utils.json_to_sheet(topRows);
+    ws2["!cols"] = [{ wch: 14 }, { wch: 28 }, { wch: 20 }, { wch: 14 }, { wch: 16 }, { wch: 18 }];
+    XLSX.utils.book_append_sheet(wb, ws2, "Top Sites");
+  }
 
-  const distRows = data.distribution_ht.parts.map((p) => ({
-    "Composante": p.label,
-    "Montant (FCFA)": Number(p.value),
-    "% du HT": p.percent,
-  }));
-  const ws3 = XLSX.utils.json_to_sheet(distRows);
-  ws3["!cols"] = [{ wch: 20 }, { wch: 20 }, { wch: 10 }];
-  XLSX.utils.book_append_sheet(wb, ws3, "Distribution HT");
+  if (sections.distribution) {
+    const distRows = data.distribution_ht.parts.map((p) => ({
+      "Composante": p.label,
+      "Montant (FCFA)": Number(p.value),
+      "% du HT": p.percent,
+    }));
+    const ws3 = XLSX.utils.json_to_sheet(distRows);
+    ws3["!cols"] = [{ wch: 20 }, { wch: 20 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, ws3, "Distribution HT");
+  }
 
-  if (data.payment_statuses) {
+  if (sections.payment && data.payment_statuses) {
     const ws4 = XLSX.utils.json_to_sheet([data.payment_statuses.summary]);
     XLSX.utils.book_append_sheet(wb, ws4, "Paiement résumé");
   }
 
-  if (data.invoice_certification) {
+  if (sections.certifBilling && data.invoice_certification) {
     const ws5 = XLSX.utils.json_to_sheet([data.invoice_certification.summary]);
     XLSX.utils.book_append_sheet(wb, ws5, "Certif billing résumé");
   }
 
-  if (data.certification) {
+  if (sections.certifTech && data.certification) {
     const ws6 = XLSX.utils.json_to_sheet([data.certification.summary]);
     XLSX.utils.book_append_sheet(wb, ws6, "Certification tech résumé");
   }
+
+  if (wb.SheetNames.length === 0) return;
 
   const start = data.range.start.replace(/-/g, "");
   const end = data.range.end.replace(/-/g, "");
   const suffix = siteCode ? `_${siteCode}` : "";
   XLSX.writeFile(wb, `suivi_facturation_${scope}${suffix}_${start}_${end}.xlsx`);
+}
+
+// ─── Export modal ───────────────────────────────────────────────────────────────
+function ExportModal({
+  data,
+  siteCode,
+  scope,
+  scopeLabel,
+  onClose,
+}: {
+  data: StatsResponse;
+  siteCode?: string;
+  scope: GlobalScope;
+  scopeLabel: string;
+  onClose: () => void;
+}) {
+  const availableSections = EXPORT_SECTIONS.filter((s) => s.isAvailable(data));
+  const [selected, setSelected] = useState<Record<ExportSectionKey, boolean>>(() => {
+    const init = {} as Record<ExportSectionKey, boolean>;
+    EXPORT_SECTIONS.forEach((s) => { init[s.key] = s.isAvailable(data); });
+    return init;
+  });
+
+  const selectedCount = availableSections.filter((s) => selected[s.key]).length;
+
+  return (
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent
+        className="p-0 gap-0 border-0"
+        style={{
+          background: "white",
+          borderRadius: 20,
+          border: `1px solid ${T.border}`,
+          boxShadow: "0 24px 80px rgba(15,23,42,0.22)",
+          width: "100%",
+          maxWidth: 460,
+        }}
+      >
+        <div style={{ padding: "20px 24px 0" }}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              background: T.blueL,
+              borderRadius: 100,
+              padding: "3px 10px",
+              marginBottom: 8,
+            }}
+          >
+            <Download size={10} color={T.blue} />
+            <span style={{ fontSize: 10, fontWeight: 700, color: T.blue, letterSpacing: ".08em", textTransform: "uppercase" }}>
+              Exporter
+            </span>
+          </div>
+          <DialogTitle asChild>
+            <div style={{ fontSize: 17, fontWeight: 800, color: T.text }}>
+              Choisir les données à exporter
+            </div>
+          </DialogTitle>
+          <div style={{ fontSize: 12, color: T.textSub, marginTop: 3, marginBottom: 16 }}>
+            {scopeLabel} · {data.range.start} → {data.range.end}
+            {siteCode ? ` · ${siteCode}` : ""}
+          </div>
+        </div>
+
+        <div style={{ padding: "0 24px", display: "flex", flexDirection: "column", gap: 8, maxHeight: 320, overflowY: "auto" }}>
+          {availableSections.map((s) => (
+            <label
+              key={s.key}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: `1px solid ${selected[s.key] ? "rgba(27,63,160,.25)" : T.border}`,
+                background: selected[s.key] ? T.blueL : "white",
+                cursor: "pointer",
+                transition: "all .15s",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={selected[s.key]}
+                onChange={(e) => setSelected((prev) => ({ ...prev, [s.key]: e.target.checked }))}
+                style={{ width: 16, height: 16, accentColor: T.blue, cursor: "pointer" }}
+              />
+              <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{s.label}</span>
+            </label>
+          ))}
+
+          {availableSections.length === 0 && (
+            <div style={{ fontSize: 13, color: T.textSub, padding: "12px 0" }}>
+              Aucune donnée disponible à exporter pour la période sélectionnée.
+            </div>
+          )}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            gap: 8,
+            padding: "16px 24px 20px",
+            marginTop: 16,
+          }}
+        >
+          <button
+            onClick={onClose}
+            style={{
+              padding: "9px 16px",
+              borderRadius: 9,
+              border: `1px solid ${T.border}`,
+              background: "white",
+              color: T.textMid,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Annuler
+          </button>
+          <button
+            disabled={selectedCount === 0}
+            onClick={() => {
+              exportToExcel(data, siteCode, scope, selected);
+              onClose();
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "9px 18px",
+              borderRadius: 9,
+              background: selectedCount > 0 ? T.blue : "#CBD5E1",
+              color: "white",
+              border: "none",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: selectedCount > 0 ? "pointer" : "not-allowed",
+              boxShadow: selectedCount > 0 ? `0 4px 12px ${T.blue}33` : "none",
+              transition: "all .15s",
+            }}
+          >
+            <Download size={13} />
+            Exporter ({selectedCount})
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -921,6 +1103,7 @@ export default function BillingTrackingPage() {
 
   const siteCode = selectedSite?.site_id ?? undefined;
   const [showFNPModal, setShowFNPModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const q = useQuery({
     queryKey: ["billing-tracking", dateStart, dateEnd, siteCode, globalScope],
     queryFn: () => fetchStats(dateStart, dateEnd, siteCode, globalScope),
@@ -1088,9 +1271,10 @@ export default function BillingTrackingPage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800;900&family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap');
 
         .btp * { font-family: 'DM Sans', sans-serif; box-sizing: border-box; }
+        .btp .display { font-family: 'Outfit', sans-serif; }
 
         @keyframes fadeUp {
           from { opacity: 0; transform: translateY(10px); }
@@ -1122,6 +1306,7 @@ export default function BillingTrackingPage() {
       `}</style>
 
       <div className="btp" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ position: "sticky", top: 0, zIndex: 10, display: "flex", flexDirection: "column", gap: 16, background: "#f6f8fa", paddingBottom: 2 }}>
         <div
           className="btp-fade"
           style={{
@@ -1132,13 +1317,6 @@ export default function BillingTrackingPage() {
             overflow: "hidden",
           }}
         >
-          <div
-            style={{
-              height: 3,
-              background: `linear-gradient(90deg, ${T.blue} 0%, ${T.orange} 60%, transparent 100%)`,
-            }}
-          />
-
           <div style={{ padding: "20px 24px 0" }}>
             <div
               style={{
@@ -1151,59 +1329,102 @@ export default function BillingTrackingPage() {
               }}
             >
               <div>
-                <div
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 5,
-                    background: T.blueL,
-                    border: "1px solid rgba(27,63,160,.15)",
-                    borderRadius: 100,
-                    padding: "3px 10px",
-                    marginBottom: 8,
-                  }}
-                >
-                  <TrendingUp size={10} color={T.blue} />
-                  <span
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      letterSpacing: ".1em",
-                      color: T.blue,
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    Suivi Facturation
-                  </span>
-                </div>
-
                 <h1
+                  className="display"
                   style={{
-                    fontFamily: "'Syne', sans-serif",
                     fontSize: 22,
-                    fontWeight: 800,
-                    color: T.text,
+                    fontWeight: 900,
+                    color: "#0f172a",
                     letterSpacing: "-.03em",
                     margin: 0,
                     lineHeight: 1.2,
                   }}
                 >
-                  Évolution de la facturation
+                  Suivi Facturation
                 </h1>
 
                 <p
                   style={{
                     fontSize: 13,
-                    color: T.textSub,
-                    margin: "5px 0 0",
+                    color: "#64748b",
+                    marginTop: 4,
                     fontWeight: 400,
                   }}
                 >
-                  Suivez mois par mois les montants, NRJ, abonnement, pénalités, cos φ et certification.
+                  Évolution de la facturation · Montants, NRJ, abonnement, pénalités, cos φ et certification.
                 </p>
               </div>
 
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    background: selectedSite ? T.blueL : T.slateL,
+                    border: `1px solid ${selectedSite ? "rgba(27,63,160,.18)" : T.border}`,
+                    borderRadius: 10,
+                    padding: "8px 12px",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 26,
+                      height: 26,
+                      borderRadius: 7,
+                      background: selectedSite ? "rgba(27,63,160,.14)" : "#E2E8F0",
+                      display: "grid",
+                      placeItems: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {selectedSite ? <Building2 size={12} color={T.blue} /> : <Globe size={12} color={T.textSub} />}
+                  </div>
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 8,
+                        fontWeight: 700,
+                        color: T.textSub,
+                        textTransform: "uppercase",
+                        letterSpacing: ".1em",
+                      }}
+                    >
+                      Vue active
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: selectedSite ? T.blue : T.textMid,
+                      }}
+                    >
+                      {selectedSite ? selectedSite.site_id : "Tous les sites"}
+                    </div>
+                  </div>
+                  {selectedSite && (
+                    <button
+                      onClick={() => setSelectedSite(null)}
+                      aria-label="Effacer la sélection de site"
+                      style={{
+                        display: "grid",
+                        placeItems: "center",
+                        width: 20,
+                        height: 20,
+                        borderRadius: 6,
+                        border: `1px solid ${T.border}`,
+                        background: "white",
+                        color: T.textMid,
+                        cursor: "pointer",
+                        flexShrink: 0,
+                        marginLeft: 2,
+                      }}
+                    >
+                      <X size={11} />
+                    </button>
+                  )}
+                </div>
+
                 <div
                   style={{
                     display: "flex",
@@ -1271,7 +1492,7 @@ export default function BillingTrackingPage() {
 
                 <button
                   disabled={!data}
-                  onClick={() => data && exportToExcel(data, siteCode, globalScope)}
+                  onClick={() => data && setShowExportModal(true)}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -1293,119 +1514,46 @@ export default function BillingTrackingPage() {
                 </button>
               </div>
             </div>
-
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: "12px 16px",
-                borderRadius: 12,
-                background: selectedSite ? T.blueL : T.slateL,
-                border: `1px solid ${selectedSite ? "rgba(27,63,160,.18)" : T.border}`,
-                transition: "all .2s",
-                marginBottom: 16,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                <div
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 9,
-                    background: selectedSite ? "rgba(27,63,160,.14)" : "#E2E8F0",
-                    display: "grid",
-                    placeItems: "center",
-                  }}
-                >
-                  {selectedSite ? <Building2 size={13} color={T.blue} /> : <Globe size={13} color={T.textSub} />}
-                </div>
-                <div>
-                  <div
-                    style={{
-                      fontSize: 9,
-                      fontWeight: 700,
-                      color: T.textSub,
-                      textTransform: "uppercase",
-                      letterSpacing: ".1em",
-                    }}
-                  >
-                    Vue active
-                  </div>
-                  <div
-                    style={{
-                      fontFamily: "'Syne', sans-serif",
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: selectedSite ? T.blue : T.textMid,
-                    }}
-                  >
-                    {selectedSite ? selectedSite.site_id : "Tous les sites"}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ width: 1, height: 28, background: T.border }} />
-
-              <div style={{ flex: 1 }}>
-                <SiteSearchBar selectedSite={selectedSite} onSelect={setSelectedSite} onClear={() => setSelectedSite(null)} />
-              </div>
-
-              {selectedSite && (
-                <button
-                  onClick={() => setSelectedSite(null)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 5,
-                    padding: "6px 12px",
-                    borderRadius: 8,
-                    background: "white",
-                    border: `1px solid ${T.border}`,
-                    cursor: "pointer",
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: T.textMid,
-                    flexShrink: 0,
-                    transition: "all .15s",
-                  }}
-                >
-                  <Globe size={10} /> Vue globale
-                </button>
-              )}
-            </div>
           </div>
 
           <div style={{ padding: "0 24px 20px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: T.textSub,
-                  textTransform: "uppercase",
-                  letterSpacing: ".08em",
-                }}
-              >
-                Filtre global
-              </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "nowrap", justifyContent: "space-between" }}>
+              <div style={{ flex: "0 0 520px" }}>
+                <SiteSearchBar selectedSite={selectedSite} onSelect={setSelectedSite} onClear={() => setSelectedSite(null)} />
+              </div>
 
-              {(
-                ["ALL", "PAID", "UNPAID", "OUT_OF_SCOPE", "UNDEFINED", "CERTIFIED", "CONTESTED", "CREATED"] as GlobalScope[]
-              ).map((scope) => (
-                <MetricBtn
-                  key={scope}
-                  active={globalScope === scope}
-                  color={scopeMeta[scope].color}
-                  label={scopeMeta[scope].label}
-                  onClick={() => setGlobalScope(scope)}
-                />
-              ))}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "nowrap", overflowX: "auto", flex: "1 1 auto", minWidth: 0, paddingBottom: 2 }}>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: T.textSub,
+                    textTransform: "uppercase",
+                    letterSpacing: ".08em",
+                    flexShrink: 0,
+                  }}
+                >
+                  Filtre global
+                </span>
+
+                {(
+                  ["ALL", "PAID", "UNPAID", "OUT_OF_SCOPE", "UNDEFINED", "CERTIFIED", "CONTESTED", "CREATED"] as GlobalScope[]
+                ).map((scope) => (
+                  <span key={scope} style={{ flexShrink: 0 }}>
+                    <MetricBtn
+                      active={globalScope === scope}
+                      color={scopeMeta[scope].color}
+                      label={scopeMeta[scope].label}
+                      onClick={() => setGlobalScope(scope)}
+                    />
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 220px))", gap: 12, justifyContent: "center" }}>
           {isLoading ? (
             Array(5)
               .fill(0)
@@ -1498,6 +1646,8 @@ export default function BillingTrackingPage() {
             </>
           ) : null}
         </div>
+        </div>
+        {/* ══ end sticky wrapper ══ */}
 
         <div className="btp-fade" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Card>
@@ -2120,6 +2270,16 @@ export default function BillingTrackingPage() {
             dateStart={dateStart}
             dateEnd={dateEnd}
             onClose={() => setShowFNPModal(false)}
+          />
+        )}
+
+        {showExportModal && data && (
+          <ExportModal
+            data={data}
+            siteCode={siteCode}
+            scope={globalScope}
+            scopeLabel={scopeMeta[globalScope].label}
+            onClose={() => setShowExportModal(false)}
           />
         )}
       </div>

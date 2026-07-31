@@ -611,7 +611,6 @@ export default function FNPModal({
                           style={{
                             fontSize: 11,
                             color: T.textSub,
-                            fontStyle: "italic",
                           }}
                         >
                           Nouveau site

@@ -337,6 +337,13 @@ export default function DashboardPage() {
 
       <div className="db" style={{ display:"flex", flexDirection:"column", gap:16 }}>
 
+        {/* ══ STICKY HEADER + KPI ═════════════════════════════════════════════ */}
+        <div style={{
+          position:"sticky", top:0, zIndex:10,
+          display:"flex", flexDirection:"column", gap:16,
+          background:T.offDk, paddingBottom:2,
+        }}>
+
         {/* ══ PAGE HEADER ══════════════════════════════════════════════════════ */}
         <div style={{
           background:T.white, borderRadius:20,
@@ -392,6 +399,39 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* ══ KPI ROW ══════════════════════════════════════════════════════ */}
+        {data && (
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,220px))", gap:10, justifyContent:"center" }}>
+            <KpiCard
+              delay={.05} label="Factures" icon={<FileSpreadsheet size={14}/>}
+              value={<AnimatedNum target={b?.total_invoices ?? 0}/>}
+              sub={`${b?.active_contracts ?? 0} contrats actifs`}
+            />
+            <KpiCard
+              delay={.10} label="Montant TTC" icon={<TrendingUp size={14}/>} accent={T.blue}
+              value={money(b?.total_ttc, true)}
+              sub={`HT : ${money(b?.total_ht, true)}`}
+            />
+            <KpiCard
+              delay={.15} label="NRJ (HT)" icon={<Zap size={14}/>} accent={T.orange}
+              value={money(b?.total_nrj, true)}
+              sub={`${b?.total_conso_kwh ? (parseFloat(b.total_conso_kwh)/1e6).toFixed(1)+" GWh" : "—"}`}
+            />
+            <KpiCard
+              delay={.20} label="Sites actifs" icon={<Activity size={14}/>} accent="#10b981"
+              value={<AnimatedNum target={b?.active_sites ?? 0}/>}
+              sub={`${data.range.start} → ${data.range.end}`}
+            />
+            <KpiCard
+              delay={.25} label="Taux certifié" icon={<ShieldCheck size={14}/>} accent={c?.global_rate.certified_fms ? "#10b981" : "#94a3b8"}
+              value={`${((c?.global_rate.certified_fms ?? 0) + (c?.global_rate.certified_senelec ?? 0)).toFixed(1)}%`}
+              sub={`${c?.total_batches_in_range ?? 0} campagne(s)`}
+            />
+          </div>
+        )}
+        </div>
+        {/* ══ end sticky wrapper ══ */}
+
         {/* ══ LOADING / ERROR ══════════════════════════════════════════════════ */}
         {isLoading && (
           <div style={{ display:"flex",alignItems:"center",justifyContent:"center",gap:10,padding:"40px 0",color:"#94a3b8",fontSize:14 }}>
@@ -415,34 +455,6 @@ export default function DashboardPage() {
 
         {data && (
           <>
-            {/* ══ KPI ROW ══════════════════════════════════════════════════════ */}
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,220px))", gap:10, justifyContent:"center" }}>
-              <KpiCard
-                delay={.05} label="Factures" icon={<FileSpreadsheet size={14}/>}
-                value={<AnimatedNum target={b?.total_invoices ?? 0}/>}
-                sub={`${b?.active_contracts ?? 0} contrats actifs`}
-              />
-              <KpiCard
-                delay={.10} label="Montant TTC" icon={<TrendingUp size={14}/>} accent={T.blue}
-                value={money(b?.total_ttc, true)}
-                sub={`HT : ${money(b?.total_ht, true)}`}
-              />
-              <KpiCard
-                delay={.15} label="NRJ (HT)" icon={<Zap size={14}/>} accent={T.orange}
-                value={money(b?.total_nrj, true)}
-                sub={`${b?.total_conso_kwh ? (parseFloat(b.total_conso_kwh)/1e6).toFixed(1)+" GWh" : "—"}`}
-              />
-              <KpiCard
-                delay={.20} label="Sites actifs" icon={<Activity size={14}/>} accent="#10b981"
-                value={<AnimatedNum target={b?.active_sites ?? 0}/>}
-                sub={`${data.range.start} → ${data.range.end}`}
-              />
-              <KpiCard
-                delay={.25} label="Taux certifié" icon={<ShieldCheck size={14}/>} accent={c?.global_rate.certified_fms ? "#10b981" : "#94a3b8"}
-                value={`${((c?.global_rate.certified_fms ?? 0) + (c?.global_rate.certified_senelec ?? 0)).toFixed(1)}%`}
-                sub={`${c?.total_batches_in_range ?? 0} campagne(s)`}
-              />
-            </div>
 
             {/* ══ ROW 2 : Évolution + Certification ════════════════════════════ */}
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
