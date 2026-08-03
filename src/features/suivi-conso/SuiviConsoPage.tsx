@@ -803,20 +803,19 @@ export default function SuiviConsoPage() {
               <div style={{ fontSize: 13, color: "#64748b", maxWidth: 900 }}>Analyse comparative par site et par mois. Aucun montant financier n’est affiché ici ; cette page se concentre uniquement sur les consommations et les targets.</div>
             </div>
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {([["table", "Tableau", <BarChart3 size={14} />],
+                ["chart", "Graphiques", <LineIcon size={14} />],  ["synthese", "Synthèse", <ShieldCheck size={14} />]] as const).map(([key, label, icon]) => (
+                  <button key={key} type="button" onClick={() => setActiveTab(key)} style={{ border: `1px solid ${activeTab === key ? C.blue[600] : C.slate[200]}`, background: activeTab === key ? C.blue[700] : "#fff", color: activeTab === key ? "#fff" : C.slate[600], borderRadius: 999, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 900, cursor: "pointer", boxShadow: activeTab === key ? "0 10px 24px rgba(10,61,150,.22)" : "0 1px 2px rgba(0,0,0,.04)" }}>{icon} {label}</button>
+                ))}
+                {chartLoading ? <span style={{ marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, color: C.slate[500], fontWeight: 800 }}><span style={{ width: 13, height: 13, border: `2px solid ${C.blue[100]}`, borderTopColor: C.blue[600], borderRadius: "50%", animation: "spin .8s linear infinite" }} /> Préparation des courbes…</span> : null}
+                {chartLimited ? <span style={{ marginLeft: 8 }}><Badge tone="warn">Graphes limités aux premières pages</Badge></span> : null}
+              </div>
               <DateRangePicker startKey={startKey} endKey={endKey} onChange={onPeriodChange} />
               <button onClick={() => setHelpModalOpen(true)} type="button" style={{ ...buttonStyle, background: C.blue[50], color: C.blue[700], border: `1px solid ${C.blue[100]}` }}><Info size={14} /> Comprendre le statut</button>
               <button onClick={() => { fetchRows(); fetchChartRows(); }} type="button" style={{ ...buttonStyle, background: C.slate[50], color: C.slate[700], border: `1px solid ${C.slate[200]}` }}><RefreshCw size={14} /> Actualiser</button>
               <a href={exportUrl} style={{ ...buttonStyle, background: C.blue[700], color: "#fff", textDecoration: "none" }}><Download size={14} /> Export CSV</a>
             </div>
-          </div>
-
-          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 16, paddingTop: 16, borderTop: `1px solid ${C.slate[100]}` }}>
-            {([["table", "Tableau", <BarChart3 size={14} />],
-            ["chart", "Graphiques", <LineIcon size={14} />],  ["synthese", "Synthèse", <ShieldCheck size={14} />]] as const).map(([key, label, icon]) => (
-              <button key={key} type="button" onClick={() => setActiveTab(key)} style={{ border: `1px solid ${activeTab === key ? C.blue[600] : C.slate[200]}`, background: activeTab === key ? C.blue[700] : "#fff", color: activeTab === key ? "#fff" : C.slate[600], borderRadius: 999, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 900, cursor: "pointer", boxShadow: activeTab === key ? "0 10px 24px rgba(10,61,150,.22)" : "0 1px 2px rgba(0,0,0,.04)" }}>{icon} {label}</button>
-            ))}
-            {chartLoading ? <span style={{ marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, color: C.slate[500], fontWeight: 800 }}><span style={{ width: 13, height: 13, border: `2px solid ${C.blue[100]}`, borderTopColor: C.blue[600], borderRadius: "50%", animation: "spin .8s linear infinite" }} /> Préparation des courbes…</span> : null}
-            {chartLimited ? <span style={{ marginLeft: 8 }}><Badge tone="warn">Graphes limités aux premières pages</Badge></span> : null}
           </div>
         </header>
 
