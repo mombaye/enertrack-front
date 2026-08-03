@@ -1,13 +1,12 @@
 // src/features/fuel-tracking/FuelTrackingPage.tsx
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   BarChart3,
   Calendar,
   ClipboardList,
   Download,
-  FileSpreadsheet,
   Fuel,
   Gauge,
   Layers3,
@@ -63,7 +62,28 @@ export default function FuelTrackingPage() {
   const [operationType, setOperationType] = useState("ALL");
   const [monthlyPage, setMonthlyPage] = useState(1);
   const [journalPage, setJournalPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
   const [exporting, setExporting] = useState(false);
+
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
+
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    setHeaderHeight(el.getBoundingClientRect().height);
+    const ro = new ResizeObserver(() => {
+      setHeaderHeight(el.getBoundingClientRect().height);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  function changePageSize(n: number) {
+    setPageSize(n);
+    setMonthlyPage(1);
+    setJournalPage(1);
+  }
 
   async function handleExport() {
     setExporting(true);
@@ -81,14 +101,14 @@ export default function FuelTrackingPage() {
   });
 
   const monthlyQ = useQuery({
-    queryKey: ["fuel-monthly-template", month, site, zone, status, monthlyPage],
-    queryFn: () => getFuelMonthlyTracking({ month, site, zone, status, page: monthlyPage, limit: 50 }),
+    queryKey: ["fuel-monthly-template", month, site, zone, status, monthlyPage, pageSize],
+    queryFn: () => getFuelMonthlyTracking({ month, site, zone, status, page: monthlyPage, limit: pageSize }),
     staleTime: 60_000,
   });
 
   const journalQ = useQuery({
-    queryKey: ["fuel-journal-template", month, site, zone, operationType, journalPage],
-    queryFn: () => getFuelEnocJournal({ month, site, zone, operation_type: operationType, page: journalPage, limit: 50 }),
+    queryKey: ["fuel-journal-template", month, site, zone, operationType, journalPage, pageSize],
+    queryFn: () => getFuelEnocJournal({ month, site, zone, operation_type: operationType, page: journalPage, limit: pageSize }),
     staleTime: 60_000,
   });
 
@@ -108,7 +128,6 @@ export default function FuelTrackingPage() {
   const rows = monthlyQ.data?.data ?? [];
   const journalRows = journalQ.data?.data ?? [];
   const kpis = monthlyQ.data?.kpis;
-  const efms = syncQ.data?.efms?.[0];
   const enoc = syncQ.data?.enoc?.[0];
 
   const sheetSubtitle = useMemo(() => {
@@ -126,51 +145,20 @@ export default function FuelTrackingPage() {
       <style>{GLOBAL_STYLES}</style>
 
       <div className="fuelbook" style={{ display: "flex", flexDirection: "column", gap: 14, background: FT.pageBg, margin: -20, padding: 20 }}>
-        {/* ── En-tête ──────────────────────────────────────────────────────── */}
-        <div className="ft-fade" style={{ background: FT.headerGrad, borderRadius: FT.radius, boxShadow: FT.shadowLg, padding: "20px 24px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap", alignItems: "flex-start" }}>
+        {/* ── En-tête (fixe) ──────────────────────────────────────────────── */}
+        <div
+          ref={headerRef}
+          className="ft-fade"
+          style={{ position: "sticky", top: 0, zIndex: 10, background: "#fff", border: `1px solid ${FT.border}`, borderRadius: FT.radius, boxShadow: FT.shadow, padding: "20px 24px" }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap", alignItems: "center" }}>
             <div>
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 7,
-                  padding: "3px 10px",
-                  borderRadius: 6,
-                  background: "rgba(255,255,255,.12)",
-                  color: "#fff",
-                  border: "1px solid rgba(255,255,255,.22)",
-                  fontSize: 10.5,
-                  fontWeight: 700,
-                  textTransform: "uppercase",
-                  letterSpacing: ".08em",
-                  marginBottom: 9,
-                }}
-              >
-                <FileSpreadsheet size={11} />
-                Suivi Carburant
-              </div>
-              <h1 style={{ margin: 0, color: "#FFFFFF", fontSize: 21, lineHeight: 1.25, fontWeight: 700, letterSpacing: "-.01em" }}>
+              <h1 style={{ margin: 0, color: "#0f172a", fontSize: 22, lineHeight: 1.25, fontWeight: 900, letterSpacing: "-.03em" }}>
                 {SHEETS.find((s) => s.key === activeSheet)?.label}
               </h1>
-              <p style={{ margin: "5px 0 0", color: FT.textOnDarkSub, fontSize: 12.5 }}>{sheetSubtitle}</p>
+              <p style={{ margin: "5px 0 0", color: "#64748b", fontSize: 13 }}>{sheetSubtitle}</p>
             </div>
 
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              <Pill label={`eFMS : ${efms?.status || "—"}`} tone={efms?.status === "SUCCESS" ? "green" : efms?.status === "FAILED" ? "red" : "slate"} />
-              <Pill label={`ENOC : ${enoc?.status || "—"}`} tone={enoc?.status === "SUCCESS" ? "green" : enoc?.status === "FAILED" ? "red" : "slate"} />
-              <span style={{ color: FT.textOnDarkSub, fontSize: 11 }}>Sync ENOC : {fmtDateTime(enoc?.started_at)}</span>
-            </div>
-          </div>
-
-          <div style={{ marginTop: 16 }}>
-            <SegmentedTabs options={SHEETS} value={activeSheet} onChange={setActiveSheet} />
-          </div>
-        </div>
-
-        {/* ── Barre de filtres ─────────────────────────────────────────────── */}
-        <Card style={{ padding: 14 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px" }}>
                 <Calendar size={14} color={FT.textSub} />
@@ -186,7 +174,7 @@ export default function FuelTrackingPage() {
                 />
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px", minWidth: 210 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px", minWidth: 190 }}>
                 <Search size={14} color={FT.textSub} />
                 <input
                   value={site}
@@ -200,7 +188,7 @@ export default function FuelTrackingPage() {
                 />
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px", minWidth: 150 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px", minWidth: 140 }}>
                 <MapPin size={14} color={FT.textSub} />
                 <input
                   value={zone}
@@ -221,15 +209,22 @@ export default function FuelTrackingPage() {
                   syncQ.refetch();
                 }}
                 title="Rafraîchir"
-                style={{ width: 33, height: 33, borderRadius: 9, border: `1px solid ${FT.border}`, background: FT.slateL, display: "grid", placeItems: "center", cursor: "pointer", color: FT.textMid }}
+                style={{ width: 33, height: 33, borderRadius: 9, border: `1px solid ${FT.border}`, background: FT.slateL, display: "grid", placeItems: "center", cursor: "pointer", color: FT.textMid, flexShrink: 0 }}
               >
                 <RefreshCw size={14} className={monthlyQ.isFetching || journalQ.isFetching ? "ft-spin" : ""} />
               </button>
-            </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <Pill label={sourceStatusQ.data?.efms.latest_month ? `eFMS jusqu'à ${sourceStatusQ.data.efms.latest_month}` : "eFMS indisponible"} tone={sourceStatusQ.data?.efms.available ? "green" : "red"} />
-              <Pill label={sourceStatusQ.data?.enoc.latest_operation_date ? `ENOC ${sourceStatusQ.data.enoc.total_movements} mouvement(s)` : "ENOC indisponible"} tone={sourceStatusQ.data?.enoc.available ? "green" : "red"} />
+              <Pill
+                label={sourceStatusQ.data?.efms.latest_month ? `eFMS jusqu'à ${sourceStatusQ.data.efms.latest_month}` : "eFMS indisponible"}
+                tone={sourceStatusQ.data?.efms.available ? "green" : "red"}
+              />
+              <span title={`Dernière sync ENOC : ${fmtDateTime(enoc?.started_at)}`}>
+                <Pill
+                  label={sourceStatusQ.data?.enoc.latest_operation_date ? `ENOC ${sourceStatusQ.data.enoc.total_movements} mouvement(s)` : "ENOC indisponible"}
+                  tone={sourceStatusQ.data?.enoc.available ? "green" : "red"}
+                />
+              </span>
+
               <button
                 onClick={handleExport}
                 disabled={exporting}
@@ -246,6 +241,7 @@ export default function FuelTrackingPage() {
                   fontWeight: 700,
                   cursor: exporting ? "not-allowed" : "pointer",
                   opacity: exporting ? 0.7 : 1,
+                  flexShrink: 0,
                 }}
               >
                 <Download size={13} className={exporting ? "ft-spin" : ""} />
@@ -253,61 +249,65 @@ export default function FuelTrackingPage() {
               </button>
             </div>
           </div>
-        </Card>
 
-        {/* ── Filtres contextuels ────────────────────────────────────────── */}
-        {(activeSheet === "DASHBOARD" || activeSheet === "CONSO_MENSUELLE") && (
-          <div className="ft-fade" style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center", padding: "12px 14px", background: FT.card, border: `1px solid ${FT.border}`, borderRadius: 14 }}>
-            <span style={{ fontSize: 11, fontWeight: 850, color: FT.textSub, textTransform: "uppercase", letterSpacing: ".07em" }}>Statut</span>
-            {(Object.keys(STATUS_META) as FuelStatusCode[]).map((s) => {
-              const meta = STATUS_META[s];
-              const c = toneColors(meta.tone);
-              const active = status === s;
-              return (
-                <button
-                  key={s}
-                  onClick={() => {
-                    setStatus(s);
-                    setMonthlyPage(1);
-                  }}
-                  style={{
-                    border: `1px solid ${active ? c.fg : FT.border}`,
-                    background: active ? c.fg : FT.card,
-                    color: active ? "white" : FT.textMid,
-                    borderRadius: 999,
-                    padding: "5px 11px",
-                    fontSize: 11,
-                    fontWeight: 850,
-                    cursor: "pointer",
-                  }}
-                >
-                  {meta.label}
-                </button>
-              );
-            })}
+          <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${FT.border}`, display: "flex", justifyContent: "center" }}>
+            <SegmentedTabs options={SHEETS} value={activeSheet} onChange={setActiveSheet} />
           </div>
-        )}
 
-        {activeSheet === "JOURNAL_RAVITAILLEMENT" && (
-          <div className="ft-fade" style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", padding: "12px 14px", background: FT.card, border: `1px solid ${FT.border}`, borderRadius: 14 }}>
-            <div style={{ color: FT.textSub, fontSize: 12, fontWeight: 700 }}>
-              {journalQ.data?.summary.total_movements ?? 0} mouvement(s) · {fmtL(journalQ.data?.summary.total_quantity_added_liters ?? 0)}
+          {/* ── Filtres contextuels (fixés avec le header) ─────────────────── */}
+          {(activeSheet === "DASHBOARD" || activeSheet === "CONSO_MENSUELLE") && (
+            <div className="ft-fade" style={{ marginTop: 16, display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center", justifyContent: "center", padding: "12px 14px", background: FT.slateL, border: `1px solid ${FT.border}`, borderRadius: 14 }}>
+              <span style={{ fontSize: 11, fontWeight: 850, color: FT.textSub, textTransform: "uppercase", letterSpacing: ".07em" }}>Statut</span>
+              {(Object.keys(STATUS_META) as FuelStatusCode[]).map((s) => {
+                const meta = STATUS_META[s];
+                const c = toneColors(meta.tone);
+                const active = status === s;
+                return (
+                  <button
+                    key={s}
+                    onClick={() => {
+                      setStatus(s);
+                      setMonthlyPage(1);
+                    }}
+                    style={{
+                      border: `1px solid ${active ? c.fg : FT.border}`,
+                      background: active ? c.fg : FT.card,
+                      color: active ? "white" : FT.textMid,
+                      borderRadius: 999,
+                      padding: "5px 11px",
+                      fontSize: 11,
+                      fontWeight: 850,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {meta.label}
+                  </button>
+                );
+              })}
             </div>
-            <select
-              value={operationType}
-              onChange={(e) => {
-                setOperationType(e.target.value);
-                setJournalPage(1);
-              }}
-              style={{ height: 34, borderRadius: 9, border: `1px solid ${FT.border}`, background: "white", color: FT.text, padding: "0 10px", fontSize: 12, fontWeight: 800, outline: "none" }}
-            >
-              <option value="ALL">Tous types</option>
-              <option value="TRUCK">TRUCK</option>
-              <option value="TOTAL_CARD">TOTAL_CARD</option>
-              <option value="PONCTION">PONCTION</option>
-            </select>
-          </div>
-        )}
+          )}
+
+          {activeSheet === "JOURNAL_RAVITAILLEMENT" && (
+            <div className="ft-fade" style={{ marginTop: 16, display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", padding: "12px 14px", background: FT.slateL, border: `1px solid ${FT.border}`, borderRadius: 14 }}>
+              <div style={{ color: FT.textSub, fontSize: 12, fontWeight: 700 }}>
+                {journalQ.data?.summary.total_movements ?? 0} mouvement(s) · {fmtL(journalQ.data?.summary.total_quantity_added_liters ?? 0)}
+              </div>
+              <select
+                value={operationType}
+                onChange={(e) => {
+                  setOperationType(e.target.value);
+                  setJournalPage(1);
+                }}
+                style={{ height: 34, borderRadius: 9, border: `1px solid ${FT.border}`, background: "white", color: FT.text, padding: "0 10px", fontSize: 12, fontWeight: 800, outline: "none" }}
+              >
+                <option value="ALL">Tous types</option>
+                <option value="TRUCK">TRUCK</option>
+                <option value="TOTAL_CARD">TOTAL_CARD</option>
+                <option value="PONCTION">PONCTION</option>
+              </select>
+            </div>
+          )}
+        </div>
 
         {/* ── Contenu de la feuille active ───────────────────────────────── */}
         <div className="ft-fade">
@@ -316,7 +316,7 @@ export default function FuelTrackingPage() {
           {activeSheet === "JOURNAL_RAVITAILLEMENT" && (
             <>
               <JournalSheet rows={journalRows} loading={journalQ.isLoading} monthlyRows={rows} />
-              {journalQ.data && journalQ.data.pagination.totalPages > 1 && (
+              {journalQ.data && (
                 <Pager
                   page={journalQ.data.pagination.page}
                   totalPages={journalQ.data.pagination.totalPages}
@@ -324,6 +324,8 @@ export default function FuelTrackingPage() {
                   hasNext={journalQ.data.pagination.hasNext}
                   onPrev={() => setJournalPage((p) => Math.max(1, p - 1))}
                   onNext={() => setJournalPage((p) => p + 1)}
+                  pageSize={pageSize}
+                  onPageSizeChange={changePageSize}
                 />
               )}
             </>
@@ -331,8 +333,8 @@ export default function FuelTrackingPage() {
 
           {activeSheet === "CONSO_MENSUELLE" && (
             <>
-              <ConsoMensuelleSheet rows={rows} loading={monthlyQ.isLoading} />
-              {monthlyQ.data && monthlyQ.data.pagination.totalPages > 1 && (
+              <ConsoMensuelleSheet rows={rows} loading={monthlyQ.isLoading} stickyTop={headerHeight} />
+              {monthlyQ.data && (
                 <Pager
                   page={monthlyQ.data.pagination.page}
                   totalPages={monthlyQ.data.pagination.totalPages}
@@ -340,12 +342,30 @@ export default function FuelTrackingPage() {
                   hasNext={monthlyQ.data.pagination.hasNext}
                   onPrev={() => setMonthlyPage((p) => Math.max(1, p - 1))}
                   onNext={() => setMonthlyPage((p) => p + 1)}
+                  pageSize={pageSize}
+                  onPageSizeChange={changePageSize}
                 />
               )}
             </>
           )}
 
-          {activeSheet === "STOCK_DEPOT" && <StockDepotSheet rows={rows} loading={monthlyQ.isLoading} />}
+          {activeSheet === "STOCK_DEPOT" && (
+            <>
+              <StockDepotSheet rows={rows} loading={monthlyQ.isLoading} />
+              {monthlyQ.data && (
+                <Pager
+                  page={monthlyQ.data.pagination.page}
+                  totalPages={monthlyQ.data.pagination.totalPages}
+                  hasPrev={monthlyQ.data.pagination.hasPrev}
+                  hasNext={monthlyQ.data.pagination.hasNext}
+                  onPrev={() => setMonthlyPage((p) => Math.max(1, p - 1))}
+                  onNext={() => setMonthlyPage((p) => p + 1)}
+                  pageSize={pageSize}
+                  onPageSizeChange={changePageSize}
+                />
+              )}
+            </>
+          )}
           {activeSheet === "CPH" && <CphSheet data={cphMatrixQ.data?.data ?? []} loading={cphMatrixQ.isLoading} />}
           {activeSheet === "REF_SITES" && <RefSitesSheet rows={rows} loading={monthlyQ.isLoading} />}
           {activeSheet === "LISTES" && <ListesSheet />}

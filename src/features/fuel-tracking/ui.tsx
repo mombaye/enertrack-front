@@ -182,8 +182,8 @@ export function SegmentedTabs<T extends string>({
         gap: 3,
         padding: 4,
         borderRadius: 12,
-        background: "rgba(255,255,255,.08)",
-        border: "1px solid rgba(255,255,255,.14)",
+        background: FT.slateL,
+        border: `1px solid ${FT.border}`,
         flexWrap: "wrap",
       }}
     >
@@ -201,7 +201,8 @@ export function SegmentedTabs<T extends string>({
               borderRadius: 9,
               border: "none",
               background: active ? "#FFFFFF" : "transparent",
-              color: active ? FT.navy : FT.textOnDarkSub,
+              color: active ? FT.navy : FT.textMid,
+              boxShadow: active ? FT.shadow : "none",
               fontSize: 12.5,
               fontWeight: 800,
               cursor: "pointer",
@@ -326,6 +327,9 @@ export function Pager({
   hasNext,
   onPrev,
   onNext,
+  pageSize,
+  onPageSizeChange,
+  pageSizeOptions = [15, 25, 50, 100],
 }: {
   page: number;
   totalPages: number;
@@ -333,18 +337,40 @@ export function Pager({
   hasNext: boolean;
   onPrev: () => void;
   onNext: () => void;
+  pageSize?: number;
+  onPageSizeChange?: (n: number) => void;
+  pageSizeOptions?: number[];
 }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
-      <span style={{ fontSize: 12, color: FT.textSub, fontWeight: 700 }}>
-        Page {page} / {totalPages}
-      </span>
-      <button disabled={!hasPrev} onClick={onPrev} style={pagerBtn(!hasPrev)}>
-        ‹ Précédent
-      </button>
-      <button disabled={!hasNext} onClick={onNext} style={pagerBtn(!hasNext)}>
-        Suivant ›
-      </button>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+      {onPageSizeChange ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 12, color: FT.textSub, fontWeight: 700 }}>Lignes par page</span>
+          <select
+            value={pageSize}
+            onChange={(e) => onPageSizeChange(Number(e.target.value))}
+            style={{ height: 30, borderRadius: 8, border: `1px solid ${FT.border}`, background: "white", color: FT.text, padding: "0 8px", fontSize: 12, fontWeight: 700, outline: "none", cursor: "pointer" }}
+          >
+            {pageSizeOptions.map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        <span />
+      )}
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 12, color: FT.textSub, fontWeight: 700 }}>
+          Page {page} / {totalPages}
+        </span>
+        <button disabled={!hasPrev} onClick={onPrev} style={pagerBtn(!hasPrev)}>
+          ‹ Précédent
+        </button>
+        <button disabled={!hasNext} onClick={onNext} style={pagerBtn(!hasNext)}>
+          Suivant ›
+        </button>
+      </div>
     </div>
   );
 }

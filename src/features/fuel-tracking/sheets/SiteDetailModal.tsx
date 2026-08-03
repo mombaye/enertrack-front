@@ -4,6 +4,7 @@
 
 import { X, MapPin, Zap, Fuel as FuelIcon, ShieldCheck, FileText, Gauge, Droplets } from "lucide-react";
 import type { FuelMonthlyRow } from "@/services/fuelTracking";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { FT } from "../theme";
 import { Pill } from "../ui";
 import {
@@ -85,22 +86,33 @@ export default function SiteDetailModal({ row, onClose }: { row: SiteDetailRow; 
   const zone = row.zone_label || row.zone || row.enoc_site_ref?.region || "—";
 
   return (
-    <div
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-      style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(2,6,23,.6)", backdropFilter: "blur(7px)", display: "flex", justifyContent: "flex-end" }}
-    >
-      <div style={{ width: "min(560px, 100vw)", height: "100vh", background: "#fff", boxShadow: "-24px 0 70px rgba(2,6,23,.28)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        {/* En-tête */}
-        <div style={{ background: FT.headerGrad, color: "#fff", padding: "20px 22px", flexShrink: 0 }}>
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent
+        className="p-0 gap-0 border-0"
+        style={{
+          width: "100%",
+          maxWidth: 920,
+          maxHeight: "calc(100vh - 48px)",
+          borderRadius: 20,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          boxShadow: "0 24px 80px rgba(2,6,23,.28)",
+        }}
+      >
+        {/* En-tête — même interface que la page (fond blanc, texte foncé) */}
+        <div style={{ background: "#fff", borderBottom: `1px solid ${FT.border}`, padding: "20px 22px", flexShrink: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14 }}>
             <div style={{ minWidth: 0 }}>
-              <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 10px", background: "rgba(255,255,255,.14)", border: "1px solid rgba(255,255,255,.24)", borderRadius: 999, fontSize: 10, fontWeight: 900, marginBottom: 8 }}>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 10px", background: FT.blueL, border: `1px solid ${FT.border}`, borderRadius: 999, fontSize: 10, fontWeight: 900, marginBottom: 8, color: FT.navy }}>
                 <MapPin size={11} /> Fiche site
               </div>
-              <div style={{ fontSize: 20, fontWeight: 950, letterSpacing: "-.02em", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{siteId}</div>
-              <div style={{ fontSize: 13, color: "rgba(255,255,255,.72)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{siteName}</div>
+              <DialogTitle asChild>
+                <div style={{ fontSize: 20, fontWeight: 950, letterSpacing: "-.02em", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", color: "#0f172a" }}>{siteId}</div>
+              </DialogTitle>
+              <div style={{ fontSize: 13, color: FT.textSub, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{siteName}</div>
             </div>
-            <button onClick={onClose} style={{ width: 34, height: 34, borderRadius: 11, border: "1px solid rgba(255,255,255,.2)", background: "rgba(255,255,255,.1)", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <button onClick={onClose} style={{ width: 34, height: 34, borderRadius: 11, border: `1px solid ${FT.border}`, background: FT.slateL, color: FT.textMid, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <X size={16} />
             </button>
           </div>
@@ -214,7 +226,7 @@ export default function SiteDetailModal({ row, onClose }: { row: SiteDetailRow; 
             <InfoTile label="Scope" value={row.site_ref?.scope_status || row.enoc_site_ref?.scope_initial || "—"} />
           </Section>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

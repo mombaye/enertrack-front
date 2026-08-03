@@ -6,7 +6,7 @@
 // (GE, cuves, cibles, CPH, stock RMS) en colonnes optionnelles (bouton
 // "Colonnes avancées") ou dans la fiche site complète au clic sur une ligne.
 
-import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { AlertTriangle, ArrowDown, ArrowUp, ChevronRight, Fuel, SlidersHorizontal } from "lucide-react";
 import type { FuelMonthlyRow } from "@/services/fuelTracking";
 import { Card, EmptyState, Pill, SheetTitle, Skeleton } from "../ui";
@@ -34,14 +34,14 @@ function ravitaillementOf(r: FuelMonthlyRow): number {
   return n(r.enoc.refueling_liters) + n(r.enoc.ajout_in_liters);
 }
 
-function HoursValue({ value, source }: { value: number | null | undefined; source?: string | null }) {
+function HoursValue({ value }: { value: number | null | undefined }) {
   if (value === null || value === undefined) return <span style={{ color: FT.textSub }}>—</span>;
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
-      <span style={{ fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace" }}>{fmt2.format(n(value))}</span>
-      {source && source !== "NO_DATA" && <Pill label={RH_SOURCE_LABEL[source] || source} tone={source === "SNOWFLAKE_DSE_COUNTER" ? "green" : "cyan"} />}
-    </div>
-  );
+  return <span style={{ fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace" }}>{fmt2.format(n(value))}</span>;
+}
+
+function SourcePill({ source }: { source?: string | null }) {
+  if (!source || source === "NO_DATA") return <span style={{ color: FT.textSub }}>—</span>;
+  return <Pill label={RH_SOURCE_LABEL[source] || source} tone={source === "SNOWFLAKE_DSE_COUNTER" ? "green" : "cyan"} />;
 }
 
 interface Col {
@@ -71,11 +71,19 @@ const COLUMNS: Col[] = [
   },
   {
     key: "rh_prev", label: "RH Mois Préc. (h)", align: "right", sortAccessor: (r) => n(r.efms.rh_initial_hours),
-    render: (r) => <HoursValue value={r.efms.rh_initial_hours} source={r.efms.rh_initial_source} />,
+    render: (r) => <HoursValue value={r.efms.rh_initial_hours} />,
+  },
+  {
+    key: "rh_prev_source", label: "Source RH Préc.", align: "center", sortAccessor: (r) => RH_SOURCE_LABEL[r.efms.rh_initial_source || ""] || r.efms.rh_initial_source || "",
+    render: (r) => <SourcePill source={r.efms.rh_initial_source} />,
   },
   {
     key: "rh_final", label: "RH Final (h)", align: "right", sortAccessor: rhFinalOf,
-    render: (r) => <HoursValue value={r.efms.rh_hours ?? (n(r.efms.ge_working_hours) || null)} source={r.efms.rh_source} />,
+    render: (r) => <HoursValue value={r.efms.rh_hours ?? (n(r.efms.ge_working_hours) || null)} />,
+  },
+  {
+    key: "rh_final_source", label: "Source RH Final", align: "center", sortAccessor: (r) => RH_SOURCE_LABEL[r.efms.rh_source || ""] || r.efms.rh_source || "",
+    render: (r) => <SourcePill source={r.efms.rh_source} />,
   },
   {
     key: "ravitaillement", label: "Ravitaillement (L)", align: "right", sortAccessor: ravitaillementOf,
@@ -151,12 +159,29 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   return dir === "asc" ? <ArrowUp size={11} style={{ marginLeft: 4 }} /> : <ArrowDown size={11} style={{ marginLeft: 4 }} />;
 }
 
-export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[]; loading: boolean }) {
+export function ConsoMensuelleSheet({ rows, loading, stickyTop = 0 }: { rows: FuelMonthlyRow[]; loading: boolean; stickyTop?: number }) {
   const [anomaliesOnly, setAnomaliesOnly] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [detailRow, setDetailRow] = useState<FuelMonthlyRow | null>(null);
   const [sortKey, setSortKey] = useState("ecart");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  const titleRowRef = useRef<HTMLDivElement | null>(null);
+  const [titleRowHeight, setTitleRowHeight] = useState(0);
+
+  useLayoutEffect(() => {
+    const el = titleRowRef.current;
+    if (!el) return;
+    setTitleRowHeight(el.getBoundingClientRect().height);
+    const ro = new ResizeObserver(() => {
+      setTitleRowHeight(el.getBoundingClientRect().height);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const GAP = 16;
+  const tableStickyTop = stickyTop + titleRowHeight + GAP;
 
   function sortBy(key: string) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -187,7 +212,20 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
 
   return (
     <Card padded={false} style={{ padding: 20 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+      <div
+        ref={titleRowRef}
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+          gap: 12,
+          position: "sticky",
+          top: stickyTop,
+          zIndex: 9,
+          background: FT.card,
+        }}
+      >
         <SheetTitle
           icon={<Fuel size={17} />}
           title="Conso mensuelle — suivi carburant par site"
@@ -239,7 +277,18 @@ export function ConsoMensuelleSheet({ rows, loading }: { rows: FuelMonthlyRow[];
         </div>
       </div>
 
-      <div style={{ marginTop: 16, border: `1px solid ${FT.border}`, borderRadius: FT.radius, overflow: "hidden" }}>
+      <div
+        style={{
+          marginTop: GAP,
+          border: `1px solid ${FT.border}`,
+          borderRadius: FT.radius,
+          overflow: "hidden",
+          position: "sticky",
+          top: tableStickyTop,
+          background: FT.card,
+          zIndex: 8,
+        }}
+      >
         {loading ? (
           <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 6 }}>
             {[...Array(6)].map((_, i) => <Skeleton key={i} h={44} />)}

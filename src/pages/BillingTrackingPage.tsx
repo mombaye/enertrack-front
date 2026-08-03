@@ -347,18 +347,20 @@ function KpiCard({
   label: string; value: string; sub?: string; icon: ReactNode; accent: string; trend?: number; trendPrev?: number;
 }) {
   return (
-    <div style={{ position: "relative", overflow: "hidden", borderRadius: 16, background: `${accent}12`, border: `1px solid ${accent}2E`, padding: "14px 15px", minHeight: 92 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <div style={{ fontSize: 10, fontWeight: 950, color: accent, letterSpacing: ".08em", textTransform: "uppercase" }}>{label}</div>
-            {trend !== undefined && trendPrev !== undefined ? <Trend current={trend} previous={trendPrev} /> : null}
-          </div>
-          <div style={{ fontSize: 19, fontWeight: 950, color: C.slate[900], marginTop: 7, letterSpacing: "-.03em", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</div>
-          {sub ? <div style={{ fontSize: 11, color: C.slate[500], marginTop: 4 }}>{sub}</div> : null}
+    <div style={{ background: "#fff", borderRadius: 16, border: `1px solid ${C.slate[200]}`, boxShadow: "0 1px 3px rgba(15,23,42,.04), 0 8px 28px rgba(15,23,42,.06)", padding: "18px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: C.slate[400], letterSpacing: ".06em", textTransform: "uppercase" }}>{label}</span>
+          {trend !== undefined && trendPrev !== undefined ? <Trend current={trend} previous={trendPrev} /> : null}
         </div>
-        <div style={{ width: 34, height: 34, borderRadius: 11, background: accent, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</div>
+        <div style={{ width: 32, height: 32, borderRadius: 9, background: `${accent}15`, display: "grid", placeItems: "center", color: accent, flexShrink: 0 }}>
+          {icon}
+        </div>
       </div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", letterSpacing: "-.025em", lineHeight: 1, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {value}
+      </div>
+      {sub ? <div style={{ fontSize: 11, color: C.slate[400] }}>{sub}</div> : null}
     </div>
   );
 }
@@ -767,8 +769,8 @@ export default function BillingTrackingPage() {
         .btp-row:hover { background: ${C.blue[50]} !important; }
       `}</style>
 
-      {/* ─── En-tête (fond blanc, compact) ─────────────────────────────────── */}
-      <div style={{ background: "#fff", borderBottom: `1px solid ${C.slate[200]}`, padding: "16px 24px 14px", boxShadow: "0 1px 3px rgba(15,23,42,.04)" }}>
+      {/* ─── En-tête (fond blanc, compact, fixe) ────────────────────────────── */}
+      <div style={{ position: "sticky", top: 0, zIndex: 10, background: "#fff", borderBottom: `1px solid ${C.slate[200]}`, padding: "16px 24px 14px", boxShadow: "0 1px 3px rgba(15,23,42,.04)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 36, height: 36, borderRadius: 11, background: C.blue[700], display: "grid", placeItems: "center", flexShrink: 0 }}>
@@ -827,7 +829,7 @@ export default function BillingTrackingPage() {
         </div>
 
         {/* Filtre global */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
           <span style={{ fontSize: 10.5, fontWeight: 900, color: C.slate[400], textTransform: "uppercase", letterSpacing: ".08em" }}>Filtre global</span>
           {(["ALL", "PAID", "UNPAID", "OUT_OF_SCOPE", "UNDEFINED", "CERTIFIED", "CONTESTED", "CREATED"] as GlobalScope[]).map((scope) => (
             <button
@@ -835,8 +837,8 @@ export default function BillingTrackingPage() {
               onClick={() => setGlobalScope(scope)}
               style={{
                 padding: "6px 12px", borderRadius: 999, fontSize: 11.5, fontWeight: 800, cursor: "pointer",
-                border: `1px solid ${globalScope === scope ? scopeMeta[scope].color : C.slate[200]}`,
-                background: globalScope === scope ? scopeMeta[scope].color : "#fff",
+                border: `1px solid ${globalScope === scope ? C.blue[700] : C.slate[200]}`,
+                background: globalScope === scope ? C.blue[700] : "#fff",
                 color: globalScope === scope ? "#fff" : C.slate[600],
               }}
             >
@@ -846,7 +848,7 @@ export default function BillingTrackingPage() {
         </div>
 
         {/* Bande KPI */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px,1fr))", gap: 12, marginTop: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px,220px))", gap: 12, marginTop: 16, justifyContent: "center" }}>
           {isLoading ? (
             Array(5).fill(0).map((_, i) => <div key={i} className="btp-skel" style={{ height: 92, borderRadius: 16 }} />)
           ) : kpis ? (
@@ -980,10 +982,10 @@ export default function BillingTrackingPage() {
                 right={
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <MetricBtn active={globalScope === "ALL"} color={C.blue[700]} label="Brut" onClick={() => setGlobalScope("ALL")} />
-                    <MetricBtn active={globalScope === "PAID"} color={C.ok.main} label="Payées" onClick={() => setGlobalScope("PAID")} />
-                    <MetricBtn active={globalScope === "UNPAID"} color={C.nok.main} label="Impayées" onClick={() => setGlobalScope("UNPAID")} />
-                    <MetricBtn active={globalScope === "OUT_OF_SCOPE"} color={C.warn.main} label="Hors scope" onClick={() => setGlobalScope("OUT_OF_SCOPE")} />
-                    <MetricBtn active={globalScope === "UNDEFINED"} color={C.slate[500]} label="Non défini" onClick={() => setGlobalScope("UNDEFINED")} />
+                    <MetricBtn active={globalScope === "PAID"} color={C.blue[700]} label="Payées" onClick={() => setGlobalScope("PAID")} />
+                    <MetricBtn active={globalScope === "UNPAID"} color={C.blue[700]} label="Impayées" onClick={() => setGlobalScope("UNPAID")} />
+                    <MetricBtn active={globalScope === "OUT_OF_SCOPE"} color={C.blue[700]} label="Hors scope" onClick={() => setGlobalScope("OUT_OF_SCOPE")} />
+                    <MetricBtn active={globalScope === "UNDEFINED"} color={C.blue[700]} label="Non défini" onClick={() => setGlobalScope("UNDEFINED")} />
                   </div>
                 }
               >
@@ -1034,9 +1036,9 @@ export default function BillingTrackingPage() {
                 right={
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <MetricBtn active={globalScope === "ALL"} color={C.blue[700]} label="Brut" onClick={() => setGlobalScope("ALL")} />
-                    <MetricBtn active={globalScope === "CERTIFIED"} color={C.ok.main} label="Certifiées" onClick={() => setGlobalScope("CERTIFIED")} />
-                    <MetricBtn active={globalScope === "CONTESTED"} color={C.nok.main} label="Contestées" onClick={() => setGlobalScope("CONTESTED")} />
-                    <MetricBtn active={globalScope === "CREATED"} color={C.warn.main} label="Brutes à traiter" onClick={() => setGlobalScope("CREATED")} />
+                    <MetricBtn active={globalScope === "CERTIFIED"} color={C.blue[700]} label="Certifiées" onClick={() => setGlobalScope("CERTIFIED")} />
+                    <MetricBtn active={globalScope === "CONTESTED"} color={C.blue[700]} label="Contestées" onClick={() => setGlobalScope("CONTESTED")} />
+                    <MetricBtn active={globalScope === "CREATED"} color={C.blue[700]} label="Brutes à traiter" onClick={() => setGlobalScope("CREATED")} />
                   </div>
                 }
               >

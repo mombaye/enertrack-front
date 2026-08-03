@@ -5,6 +5,7 @@
 
 import { X, MapPin, Gauge, Truck, FileCheck2, ShieldAlert } from "lucide-react";
 import type { FuelEnocMovement } from "@/services/fuelTracking";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { FT } from "../theme";
 import { Pill } from "../ui";
 import { InfoTile, Section } from "./SiteDetailModal";
@@ -19,27 +20,38 @@ export default function MovementDetailModal({ row, onClose, onViewSite }: { row:
   const gapPct = blGapPercent(row);
 
   return (
-    <div
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-      style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(2,6,23,.6)", backdropFilter: "blur(7px)", display: "flex", justifyContent: "flex-end" }}
-    >
-      <div style={{ width: "min(520px, 100vw)", height: "100vh", background: "#fff", boxShadow: "-24px 0 70px rgba(2,6,23,.28)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <div style={{ background: FT.headerGrad, color: "#fff", padding: "18px 20px", flexShrink: 0 }}>
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent
+        className="p-0 gap-0 border-0"
+        style={{
+          width: "100%",
+          maxWidth: 880,
+          maxHeight: "calc(100vh - 48px)",
+          borderRadius: 20,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          boxShadow: "0 24px 80px rgba(2,6,23,.28)",
+        }}
+      >
+        <div style={{ background: "#fff", borderBottom: `1px solid ${FT.border}`, padding: "18px 20px", flexShrink: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14 }}>
             <div style={{ minWidth: 0 }}>
-              <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 10px", background: "rgba(255,255,255,.14)", border: "1px solid rgba(255,255,255,.24)", borderRadius: 6, fontSize: 10, fontWeight: 700, marginBottom: 8 }}>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 10px", background: FT.blueL, border: `1px solid ${FT.border}`, borderRadius: 6, fontSize: 10, fontWeight: 700, marginBottom: 8, color: FT.navy }}>
                 <Truck size={11} /> Mouvement ENOC
               </div>
-              <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-.01em", fontFamily: "ui-monospace, Menlo, monospace" }}>{row.request_code || row.site_id || "—"}</div>
-              <div style={{ fontSize: 12.5, color: "rgba(255,255,255,.72)", marginTop: 2 }}>{row.site_id} — {row.site_name}</div>
+              <DialogTitle asChild>
+                <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-.01em", fontFamily: "ui-monospace, Menlo, monospace", color: "#0f172a" }}>{row.request_code || row.site_id || "—"}</div>
+              </DialogTitle>
+              <div style={{ fontSize: 12.5, color: FT.textSub, marginTop: 2 }}>{row.site_id} — {row.site_name}</div>
             </div>
-            <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid rgba(255,255,255,.2)", background: "rgba(255,255,255,.1)", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.slateL, color: FT.textMid, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <X size={15} />
             </button>
           </div>
           <button
             onClick={onViewSite}
-            style={{ marginTop: 12, display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid rgba(255,255,255,.24)", background: "rgba(255,255,255,.1)", color: "#fff", borderRadius: 7, padding: "6px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}
+            style={{ marginTop: 12, display: "inline-flex", alignItems: "center", gap: 6, border: `1px solid ${FT.border}`, background: FT.slateL, color: FT.textMid, borderRadius: 7, padding: "6px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}
           >
             <MapPin size={12} /> Voir la fiche site complète
           </button>
@@ -80,7 +92,7 @@ export default function MovementDetailModal({ row, onClose, onViewSite }: { row:
             <InfoTile label="Balance Check" value={<Pill label={balance} tone={balance === "OK" ? "green" : balance === "Écart" ? "orange" : "slate"} />} />
           </Section>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
