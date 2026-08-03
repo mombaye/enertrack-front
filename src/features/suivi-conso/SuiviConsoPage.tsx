@@ -3,7 +3,7 @@
 // Focus : Facturée · eFMS · Solaire · Estimation · Target
 // Statut affiché : statut TARGET, pas statut marge.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from "react";
 import {
   Activity,
@@ -51,6 +51,7 @@ import {
 } from "recharts";
 import { api } from "@/services/api";
 import { fetchBORequests, fetchBOSnapshots, type BOAnalysisRequest, type BOMarginSnapshot } from "@/features/bo-analysis/api";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 const C = {
   blue: { 950: "#010E2A", 900: "#021A40", 800: "#032566", 700: "#0A3D96", 600: "#1A56C4", 500: "#3272E0", 400: "#5B91F0", 300: "#91B9F8", 200: "#C0D8FB", 100: "#E4EFFE", 50: "#F2F6FE" },
@@ -63,8 +64,8 @@ const C = {
   estim: { main: "#8B5CF6", light: "#EDE9FE", dark: "#5B21B6" },
 };
 
-const HDR = "linear-gradient(135deg, #0B1F4D 0%, #123C8C 45%, #1A56C4 75%, #3272E0 100%)";
-const PAGE_BG = "linear-gradient(180deg,#F8FAFC 0%,#EEF4FF 100%)";
+const CARD_BORDER_CLR = "#E4E9F0";
+const CARD_SHADOW = "0 1px 2px rgba(15,23,42,.04), 0 1px 1px rgba(15,23,42,.03)";
 const MONTHS_FR = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
 
 const SITE_PALETTE = [
@@ -332,20 +333,16 @@ function TypoBadge({ typo }: { typo: string | null }) {
 
 function KpiCard({ label, value, sub, icon, accent, help }: { label: string; value: string; sub?: string; icon: ReactNode; accent: string; help?: string }) {
   return (
-    <div style={{ position: "relative", overflow: "hidden", borderRadius: 10, background: "rgba(255,255,255,.09)", border: "1px solid rgba(255,255,255,.14)", padding: "14px 15px", minHeight: 92, boxShadow: "inset 0 1px 0 rgba(255,255,255,.12)" }}>
-      <div style={{ position: "absolute", inset: 0, background: `radial-gradient(circle at 90% 12%,${accent}30,transparent 32%)` }} />
-      <div style={{ position: "relative", display: "flex", justifyContent: "space-between", gap: 12 }}>
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <div style={{ fontSize: 10, fontWeight: 900, color: "rgba(255,255,255,.52)", letterSpacing: ".08em", textTransform: "uppercase" }}>{label}</div>
-            {help ? <HelpTip text={help} /> : null}
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 900, color: "#fff", marginTop: 8, letterSpacing: "-.03em", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{value}</div>
-          {sub ? <div style={{ fontSize: 11, color: "rgba(255,255,255,.48)", marginTop: 4 }}>{sub}</div> : null}
+    <div style={{ background: "#fff", borderRadius: 16, border: `1px solid ${CARD_BORDER_CLR}`, boxShadow: CARD_SHADOW, padding: "18px 20px", minHeight: 104, display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: C.slate[400], letterSpacing: ".06em", textTransform: "uppercase" }}>{label}</span>
+          {help ? <HelpTip text={help} light={false} /> : null}
         </div>
-        <div style={{ width: 38, height: 38, borderRadius: 14, background: "rgba(255,255,255,.10)", display: "flex", alignItems: "center", justifyContent: "center", color: accent, flexShrink: 0 }}>{icon}</div>
+        <div style={{ width: 32, height: 32, borderRadius: 9, background: `${accent}15`, color: accent, display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</div>
       </div>
-      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 3, background: `linear-gradient(90deg,${accent},transparent)` }} />
+      <div style={{ fontSize: 21, fontWeight: 800, color: C.slate[900], letterSpacing: "-.02em", fontFamily: "ui-monospace, Menlo, monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</div>
+      {sub ? <div style={{ fontSize: 11, color: C.slate[400] }}>{sub}</div> : null}
     </div>
   );
 }
@@ -475,10 +472,10 @@ function DateRangePicker({ startKey, endKey, onChange }: { startKey: number; end
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      <button onClick={() => { setOpen((v) => !v); setSel(null); }} type="button" style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", border: `1px solid ${open ? "rgba(255,255,255,.50)" : "rgba(255,255,255,.20)"}`, borderRadius: 12, background: "rgba(255,255,255,.10)", cursor: "pointer", whiteSpace: "nowrap", color: "#fff", boxShadow: open ? "0 0 0 3px rgba(255,255,255,.10)" : "none" }}>
-        <Calendar size={14} style={{ color: "rgba(255,255,255,.72)" }} />
-        <span style={{ fontFamily: "monospace", fontWeight: 900, fontSize: 12 }}>{label}</span>
-        <ChevronDown size={13} style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .18s" }} />
+      <button onClick={() => { setOpen((v) => !v); setSel(null); }} type="button" style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", border: `1px solid ${open ? C.blue[500] : C.slate[200]}`, borderRadius: 12, background: open ? C.blue[50] : "#fff", cursor: "pointer", whiteSpace: "nowrap", color: C.slate[700], boxShadow: open ? `0 0 0 3px ${C.blue[100]}` : "0 1px 2px rgba(0,0,0,.04)" }}>
+        <Calendar size={14} style={{ color: C.slate[400] }} />
+        <span style={{ fontFamily: "monospace", fontWeight: 900, fontSize: 12, color: C.blue[700] }}>{label}</span>
+        <ChevronDown size={13} style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .18s", color: C.slate[400] }} />
       </button>
 
       {open ? (
@@ -603,7 +600,19 @@ export default function SuiviConsoPage() {
   const [search, setSearch] = useState("");
   const [typoFilter, setTypoFilter] = useState("");
   const [targetStatusFilter, setTargetStatusFilter] = useState("");
-  const [showHelp, setShowHelp] = useState(true);
+  const [helpModalOpen, setHelpModalOpen] = useState(false);
+
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
+
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    setHeaderHeight(el.getBoundingClientRect().height);
+    const ro = new ResizeObserver(() => setHeaderHeight(el.getBoundingClientRect().height));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const minKey = Math.min(startKey, endKey);
   const maxKey = Math.max(startKey, endKey);
@@ -780,64 +789,49 @@ export default function SuiviConsoPage() {
 
   const inputStyle: CSSProperties = { padding: "9px 12px", borderRadius: 12, border: `1px solid ${C.slate[200]}`, background: "#fff", fontSize: 12, color: C.slate[700], outline: "none", boxShadow: "0 1px 2px rgba(0,0,0,.04)" };
   const buttonStyle: CSSProperties = { border: "none", borderRadius: 12, padding: "9px 12px", fontSize: 12, fontWeight: 900, display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer" };
-  const periodLabel = `${fmtPeriod(ys, ms)} → ${fmtPeriod(ye, me)}`;
 
   return (
-    <div style={{ minHeight: "100vh", background: PAGE_BG, color: C.slate[800] }}>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } } @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } } .suivi-row:hover { background: #EFF6FF !important; } .suivi-table th { position: sticky; top: 0; z-index: 20; } .sticky-site { position: sticky; left: 0; z-index: 12; box-shadow: 12px 0 18px rgba(15,23,42,.04); } .sticky-site-head { position: sticky !important; left: 0; z-index: 30 !important; }`}</style>
+    <div style={{ display: "flex", flexDirection: "column", color: C.slate[800] }}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } } .suivi-row:hover { background: #EFF6FF !important; } .suivi-table th { position: sticky; top: 0; z-index: 20; } .sticky-site { position: sticky; left: 0; z-index: 12; box-shadow: 12px 0 18px rgba(15,23,42,.04); } .sticky-site-head { position: sticky !important; left: 0; z-index: 30 !important; }`}</style>
 
-      <div style={{ maxWidth: 1600, margin: "0 auto", padding: "22px 24px 70px" }}>
-      <div style={{ background: HDR, color: "#fff", borderRadius: 10, padding: "22px 24px 18px", boxShadow: "0 4px 20px -8px rgba(11,31,77,.35)", marginBottom: 16 }}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
-          <div>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 9px", background: "rgba(255,255,255,.10)", border: "1px solid rgba(255,255,255,.14)", borderRadius: 999, fontSize: 11, fontWeight: 900, color: "rgba(255,255,255,.72)" }}><ShieldCheck size={13} /> Module financier · Suivi conso</div>
-            <h1 style={{ margin: "12px 0 4px", fontSize: 27, lineHeight: 1.1, letterSpacing: "-.04em", fontWeight: 950 }}>Suivi consommation facturée, eFMS, solaire & estimations</h1>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,.62)", maxWidth: 900 }}>Analyse comparative par site et par mois. Aucun montant financier n’est affiché ici ; cette page se concentre uniquement sur les consommations et les targets.</div>
-          </div>
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <DateRangePicker startKey={startKey} endKey={endKey} onChange={onPeriodChange} />
-            <button onClick={() => { fetchRows(); fetchChartRows(); }} type="button" style={{ ...buttonStyle, background: "rgba(255,255,255,.12)", color: "#fff", border: "1px solid rgba(255,255,255,.18)" }}><RefreshCw size={14} /> Actualiser</button>
-            <a href={exportUrl} style={{ ...buttonStyle, background: "#fff", color: C.blue[800], textDecoration: "none" }}><Download size={14} /> Export CSV</a>
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(150px,1fr))", gap: 12, marginTop: 18 }}>
-          <KpiCard label="Facturée" value={fmtKwh(stats.fact)} sub="Conso Sénélec" accent={C.blue[300]} icon={<Zap size={22} />} help="Consommation issue des factures Sénélec." />
-          <KpiCard label="eFMS" value={fmtKwh(stats.fms)} sub={`${stats.withFms} lignes avec données`} accent={C.teal.main} icon={<Activity size={22} />} help="Valeur eFMS principale : Grid si disponible, sinon ACM." />
-          <KpiCard label="Solaire" value={fmtKwh(stats.solar)} sub={stats.solarTarget ? `Cible ${fmtKwh(stats.solarTarget)}` : "Donnée solaire"} accent={C.solar.main} icon={<Sun size={22} />} help="Données solaires récupérées pour la période." />
-          <KpiCard label="Estimée" value={fmtKwh(stats.estim)} sub={`${stats.withEstim} lignes estimées`} accent={C.estim.main} icon={<Target size={22} />} help="Consommation provenant du modèle EstimationResult." />
-          <KpiCard label="Target NOK" value={`${stats.nok}`} sub={`${stats.ok} OK · ${stats.noTarget} sans target`} accent={stats.nok ? C.nok.main : C.ok.main} icon={stats.nok ? <XCircle size={22} /> : <CheckCircle2 size={22} />} help="Nombre de lignes dont la consommation de référence dépasse la target." />
-          <KpiCard label="Écart target" value={fmtPct(stats.avgGapTarget)} sub="Moyenne des écarts" accent={stats.avgGapTarget === null ? C.slate[300] : Math.abs(stats.avgGapTarget) > 20 ? C.nok.main : C.ok.main} icon={<TrendingUp size={22} />} help="Écart moyen entre la consommation de référence et la target." />
-        </div>
-      </div>
-
-      <div style={{ display: "grid", gap: 16 }}>
-        {showHelp ? (
-          <Card style={{ animation: "fadeUp .22s ease-out" }}>
-            <div style={{ padding: "14px 16px", display: "flex", alignItems: "flex-start", gap: 13 }}>
-              <div style={{ width: 38, height: 38, borderRadius: 14, background: C.blue[50], color: C.blue[700], display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Info size={19} /></div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 950, color: C.blue[950] }}>Comprendre le statut target</div>
-                    <div style={{ fontSize: 12.5, color: C.slate[600], marginTop: 4, lineHeight: 1.55 }}>Le statut <strong>Target OK / Target NOK</strong> compare une consommation de référence à la target. La référence utilisée suit cet ordre : <strong>Facturée</strong>, sinon <strong>eFMS</strong>, sinon <strong>Estimation</strong>.</div>
-                  </div>
-                  <button onClick={() => setShowHelp(false)} type="button" style={{ border: "none", background: C.slate[100], color: C.slate[500], width: 28, height: 28, borderRadius: 9, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><X size={14} /></button>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginTop: 12 }}>
-                  <InfoBox tone="ok" icon={<CheckCircle2 size={14} />} title="Target OK" text="La consommation de référence est inférieure ou égale à la target." />
-                  <InfoBox tone="nok" icon={<XCircle size={14} />} title="Target NOK" text="La consommation de référence dépasse la target." />
-                  <InfoBox tone="slate" icon={<Target size={14} />} title="Sans target" text="Aucune cible de consommation n’est disponible." />
-                  <InfoBox tone="warn" icon={<AlertCircle size={14} />} title="Sans donnée" text="Aucune consommation exploitable pour comparer à la target." />
-                </div>
-              </div>
+      <div ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 10, display: "flex", flexDirection: "column", gap: 16, background: "#f6f8fa", paddingBottom: 2 }}>
+        <header style={{ background: "#fff", borderRadius: 20, padding: "22px 24px 20px", boxShadow: CARD_SHADOW, border: `1px solid ${CARD_BORDER_CLR}` }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 9px", background: C.blue[50], border: `1px solid ${C.blue[100]}`, borderRadius: 999, fontSize: 11, fontWeight: 900, color: C.blue[700] }}><ShieldCheck size={13} /> Module financier · Suivi conso</div>
+              <h1 style={{ margin: "12px 0 4px", fontSize: 22, lineHeight: 1.2, letterSpacing: "-.03em", fontWeight: 900, color: "#0f172a" }}>Suivi consommation facturée, eFMS, solaire & estimations</h1>
+              <div style={{ fontSize: 13, color: "#64748b", maxWidth: 900 }}>Analyse comparative par site et par mois. Aucun montant financier n’est affiché ici ; cette page se concentre uniquement sur les consommations et les targets.</div>
             </div>
-          </Card>
-        ) : null}
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <DateRangePicker startKey={startKey} endKey={endKey} onChange={onPeriodChange} />
+              <button onClick={() => setHelpModalOpen(true)} type="button" style={{ ...buttonStyle, background: C.blue[50], color: C.blue[700], border: `1px solid ${C.blue[100]}` }}><Info size={14} /> Comprendre le statut</button>
+              <button onClick={() => { fetchRows(); fetchChartRows(); }} type="button" style={{ ...buttonStyle, background: C.slate[50], color: C.slate[700], border: `1px solid ${C.slate[200]}` }}><RefreshCw size={14} /> Actualiser</button>
+              <a href={exportUrl} style={{ ...buttonStyle, background: C.blue[700], color: "#fff", textDecoration: "none" }}><Download size={14} /> Export CSV</a>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 16, paddingTop: 16, borderTop: `1px solid ${C.slate[100]}` }}>
+            {([["table", "Tableau", <BarChart3 size={14} />],
+            ["chart", "Graphiques", <LineIcon size={14} />],  ["synthese", "Synthèse", <ShieldCheck size={14} />]] as const).map(([key, label, icon]) => (
+              <button key={key} type="button" onClick={() => setActiveTab(key)} style={{ border: `1px solid ${activeTab === key ? C.blue[600] : C.slate[200]}`, background: activeTab === key ? C.blue[700] : "#fff", color: activeTab === key ? "#fff" : C.slate[600], borderRadius: 999, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 900, cursor: "pointer", boxShadow: activeTab === key ? "0 10px 24px rgba(10,61,150,.22)" : "0 1px 2px rgba(0,0,0,.04)" }}>{icon} {label}</button>
+            ))}
+            {chartLoading ? <span style={{ marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, color: C.slate[500], fontWeight: 800 }}><span style={{ width: 13, height: 13, border: `2px solid ${C.blue[100]}`, borderTopColor: C.blue[600], borderRadius: "50%", animation: "spin .8s linear infinite" }} /> Préparation des courbes…</span> : null}
+            {chartLimited ? <span style={{ marginLeft: 8 }}><Badge tone="warn">Graphes limités aux premières pages</Badge></span> : null}
+          </div>
+        </header>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(150px,1fr))", gap: 14 }}>
+          <KpiCard label="Facturée" value={fmtKwh(stats.fact)} sub="Conso Sénélec" accent={C.blue[600]} icon={<Zap size={17} />} help="Consommation issue des factures Sénélec." />
+          <KpiCard label="eFMS" value={fmtKwh(stats.fms)} sub={`${stats.withFms} lignes avec données`} accent={C.teal.main} icon={<Activity size={17} />} help="Valeur eFMS principale : Grid si disponible, sinon ACM." />
+          <KpiCard label="Solaire" value={fmtKwh(stats.solar)} sub={stats.solarTarget ? `Cible ${fmtKwh(stats.solarTarget)}` : "Donnée solaire"} accent={C.solar.main} icon={<Sun size={17} />} help="Données solaires récupérées pour la période." />
+          <KpiCard label="Estimée" value={fmtKwh(stats.estim)} sub={`${stats.withEstim} lignes estimées`} accent={C.estim.main} icon={<Target size={17} />} help="Consommation provenant du modèle EstimationResult." />
+          <KpiCard label="Target NOK" value={`${stats.nok}`} sub={`${stats.ok} OK · ${stats.noTarget} sans target`} accent={stats.nok ? C.nok.main : C.ok.main} icon={stats.nok ? <XCircle size={17} /> : <CheckCircle2 size={17} />} help="Nombre de lignes dont la consommation de référence dépasse la target." />
+          <KpiCard label="Écart target" value={fmtPct(stats.avgGapTarget)} sub="Moyenne des écarts" accent={stats.avgGapTarget === null ? C.slate[400] : Math.abs(stats.avgGapTarget) > 20 ? C.nok.main : C.ok.main} icon={<TrendingUp size={17} />} help="Écart moyen entre la consommation de référence et la target." />
+        </div>
 
         <Card>
           <div style={{ padding: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ position: "relative", minWidth: 260 }}>
+            <div style={{ position: "relative", flex: "1 1 420px", minWidth: 320 }}>
               <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: C.slate[400] }} />
               <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Rechercher site, nom…" style={{ ...inputStyle, paddingLeft: 34, width: "100%" }} />
             </div>
@@ -860,31 +854,23 @@ export default function SuiviConsoPage() {
             <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, color: C.slate[500], fontSize: 12, fontWeight: 800 }}><SlidersHorizontal size={14} /> {total.toLocaleString("fr-FR")} lignes</div>
           </div>
           <div style={{ padding: "0 14px 14px", display: "flex", flexWrap: "wrap", gap: 8 }}>
-            <FilterChip label="Période" value={periodLabel} />
             {zone ? <FilterChip label="Zone" value={zone} onClear={() => { setZone(""); setPage(1); }} /> : null}
             {typoFilter ? <FilterChip label="Typologie" value={typoFilter} onClear={() => { setTypoFilter(""); setPage(1); }} /> : null}
             {search ? <FilterChip label="Recherche" value={search} onClear={() => { setSearch(""); setPage(1); }} /> : null}
             {targetStatusFilter ? <FilterChip label="Statut target" value={targetStatusFilter} onClear={() => setTargetStatusFilter("")} /> : null}
           </div>
         </Card>
+      </div>
 
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          
-          {([["table", "Tableau", <BarChart3 size={14} />],
-          ["chart", "Graphiques", <LineIcon size={14} />],  ["synthese", "Synthèse", <ShieldCheck size={14} />]] as const).map(([key, label, icon]) => (
-            <button key={key} type="button" onClick={() => setActiveTab(key)} style={{ border: `1px solid ${activeTab === key ? C.blue[600] : C.slate[200]}`, background: activeTab === key ? C.blue[700] : "#fff", color: activeTab === key ? "#fff" : C.slate[600], borderRadius: 999, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 900, cursor: "pointer", boxShadow: activeTab === key ? "0 10px 24px rgba(10,61,150,.22)" : "0 1px 2px rgba(0,0,0,.04)" }}>{icon} {label}</button>
-          ))}
-          {chartLoading ? <span style={{ marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, color: C.slate[500], fontWeight: 800 }}><span style={{ width: 13, height: 13, border: `2px solid ${C.blue[100]}`, borderTopColor: C.blue[600], borderRadius: "50%", animation: "spin .8s linear infinite" }} /> Préparation des courbes…</span> : null}
-          {chartLimited ? <span style={{ marginLeft: 8 }}><Badge tone="warn">Graphes limités aux premières pages</Badge></span> : null}
-        </div>
+      {helpModalOpen ? <TargetStatusHelpModal onClose={() => setHelpModalOpen(false)} /> : null}
 
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 16 }}>
         {error ? <div style={{ padding: "14px 16px", borderRadius: 16, background: C.nok.light, border: `1px solid ${C.nok.mid}`, color: C.nok.dark, display: "flex", alignItems: "center", gap: 10 }}><AlertCircle size={18} /> {error}</div> : null}
         {loading ? <Card><div style={{ padding: 64, display: "flex", alignItems: "center", justifyContent: "center", gap: 12, color: C.slate[500], fontWeight: 800 }}><div style={{ width: 20, height: 20, border: `3px solid ${C.blue[100]}`, borderTopColor: C.blue[600], borderRadius: "50%", animation: "spin .8s linear infinite" }} />Chargement du suivi conso…</div></Card> : null}
 
         {!loading && !error && activeTab === "synthese" ? <SyntheseView chartData={chartData} statusPie={statusPie} topTargetNok={topTargetNok} /> : null}
         {!loading && !error && activeTab === "chart" ? <ChartView chartData={chartData} chartMode={chartMode} setChartMode={setChartMode} selectedSites={selectedSites} setSelectedSites={setSelectedSites} allSites={allSites} /> : null}
-        {!loading && !error && activeTab === "table" ? <TableView tableRows={tableRows} pages={pages} page={page} setPage={setPage} buttonStyle={buttonStyle} boBySite={boBySite} boSnapshotBySite={boSnapshotBySite} /> : null}
-      </div>
+        {!loading && !error && activeTab === "table" ? <TableView tableRows={tableRows} pages={pages} page={page} setPage={setPage} buttonStyle={buttonStyle} boBySite={boBySite} boSnapshotBySite={boSnapshotBySite} stickyTop={headerHeight} /> : null}
       </div>
     </div>
   );
@@ -898,6 +884,34 @@ function InfoBox({ tone, icon, title, text }: { tone: "ok" | "nok" | "warn" | "s
     slate: { bg: C.slate[50], border: C.slate[200], color: C.slate[700] },
   }[tone];
   return <div style={{ padding: 12, borderRadius: 14, background: map.bg, border: `1px solid ${map.border}` }}><div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 950, color: map.color }}>{icon} {title}</div><div style={{ fontSize: 11.5, color: map.color, marginTop: 5, lineHeight: 1.45 }}>{text}</div></div>;
+}
+
+function TargetStatusHelpModal({ onClose }: { onClose: () => void }) {
+  return (
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent
+        className="p-0 gap-0 border-0"
+        style={{ width: "100%", maxWidth: 640, borderRadius: 20, overflow: "hidden", boxShadow: "0 24px 80px rgba(2,6,23,.28)" }}
+      >
+        <div style={{ padding: "20px 22px", borderBottom: `1px solid ${C.slate[100]}`, display: "flex", alignItems: "flex-start", gap: 13 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 14, background: C.blue[50], color: C.blue[700], display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Info size={19} /></div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <DialogTitle asChild>
+              <div style={{ fontSize: 15, fontWeight: 950, color: C.blue[950] }}>Comprendre le statut target</div>
+            </DialogTitle>
+            <div style={{ fontSize: 12.5, color: C.slate[600], marginTop: 4, lineHeight: 1.55 }}>Le statut <strong>Target OK / Target NOK</strong> compare une consommation de référence à la target. La référence utilisée suit cet ordre : <strong>Facturée</strong>, sinon <strong>eFMS</strong>, sinon <strong>Estimation</strong>.</div>
+          </div>
+          <button onClick={onClose} type="button" style={{ border: "none", background: C.slate[100], color: C.slate[500], width: 28, height: 28, borderRadius: 9, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><X size={14} /></button>
+        </div>
+        <div style={{ padding: 18, display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10 }}>
+          <InfoBox tone="ok" icon={<CheckCircle2 size={14} />} title="Target OK" text="La consommation de référence est inférieure ou égale à la target." />
+          <InfoBox tone="nok" icon={<XCircle size={14} />} title="Target NOK" text="La consommation de référence dépasse la target." />
+          <InfoBox tone="slate" icon={<Target size={14} />} title="Sans target" text="Aucune cible de consommation n’est disponible." />
+          <InfoBox tone="warn" icon={<AlertCircle size={14} />} title="Sans donnée" text="Aucune consommation exploitable pour comparer à la target." />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function SyntheseView({ chartData, statusPie, topTargetNok }: { chartData: ChartPoint[]; statusPie: { name: string; value: number; color: string }[]; topTargetNok: { row: ConsoRow; st: ReturnType<typeof getTargetStatus> }[] }) {
@@ -945,11 +959,11 @@ function ChartView({ chartData, chartMode, setChartMode, selectedSites, setSelec
   );
 }
 
-function TableView({ tableRows, pages, page, setPage, buttonStyle, boBySite, boSnapshotBySite }: { tableRows: ConsoRow[]; pages: number; page: number; setPage: Dispatch<SetStateAction<number>>; buttonStyle: CSSProperties; boBySite: Record<string, BOAnalysisRequest>; boSnapshotBySite: Record<string, BOMarginSnapshot> }) {
+function TableView({ tableRows, pages, page, setPage, buttonStyle, boBySite, boSnapshotBySite, stickyTop = 0 }: { tableRows: ConsoRow[]; pages: number; page: number; setPage: Dispatch<SetStateAction<number>>; buttonStyle: CSSProperties; boBySite: Record<string, BOAnalysisRequest>; boSnapshotBySite: Record<string, BOMarginSnapshot>; stickyTop?: number }) {
   return (
     <Card style={{ overflow: "hidden" }}>
       <SectionTitle icon={<BarChart3 size={18} />} title="Tableau détaillé" subtitle="Consommations uniquement : facturée, eFMS, solaire, estimation et target. Aucun montant financier." right={<Badge tone="blue">{tableRows.length.toLocaleString("fr-FR")} lignes affichées</Badge>} />
-      <div style={{ overflow: "auto", maxHeight: "calc(100vh - 260px)" }}>
+      <div style={{ overflow: "auto", maxHeight: `calc(100vh - ${Math.round(stickyTop + 150)}px)` }}>
         <table className="suivi-table" style={{ width: "100%", minWidth: 1480, borderCollapse: "separate", borderSpacing: 0, fontSize: 11.5 }}>
           <thead>
             <tr style={{ background: C.blue[900] }}><th className="sticky-site-head" colSpan={3} style={groupTh(C.blue[900])}>Site</th><th colSpan={3} style={groupTh(C.blue[800])}>Facturée</th><th colSpan={4} style={groupTh(C.teal.dark)}>eFMS / ACM</th><th colSpan={3} style={groupTh(C.solar.dark)}>Solaire</th><th colSpan={2} style={groupTh(C.estim.dark)}>Estimation</th><th colSpan={4} style={groupTh(C.blue[800])}>Target</th><th colSpan={1} style={groupTh(C.slate[700])}>BO</th></tr>

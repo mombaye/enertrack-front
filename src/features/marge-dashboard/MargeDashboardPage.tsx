@@ -29,8 +29,6 @@ const C = {
   warn: { main: "#D97706", light: "#FEF3C7", dark: "#92400E" },
   ras: { main: "#64748B", light: "#F1F5F9", dark: "#334155" },
 };
-const HDR = "linear-gradient(135deg, #0B1F4D 0%, #123C8C 45%, #1A56C4 75%, #3272E0 100%)";
-const PAGE_BG = "linear-gradient(180deg,#F8FAFC 0%,#EEF4FF 100%)";
 const PIE_COLORS = [C.blue[700], C.blue[950], C.warn.main, C.nok.main, C.ok.main, C.slate[400]];
 const PAGE_SIZE = 100;
 const MONTH_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
@@ -61,13 +59,13 @@ function CardH3({ children }: { children: ReactNode }) {
 }
 function KpiCard({ label, value, sub, icon, accent }: { label: string; value: string; sub?: string; icon: ReactNode; accent: string }) {
   return (
-    <div style={{ position: "relative", background: "#fff", borderRadius: RADIUS, border: CARD_BORDER, borderLeft: `3px solid ${accent}`, boxShadow: CARD_SHADOW, padding: "15px 16px 16px", minHeight: 104, display: "flex", flexDirection: "column" }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
-        <div style={{ fontSize: 10.5, fontWeight: 700, color: C.slate[500], letterSpacing: ".06em", textTransform: "uppercase", lineHeight: 1.3 }}>{label}</div>
-        <div style={{ width: 26, height: 26, borderRadius: 7, border: `1px solid ${accent}35`, color: accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</div>
+    <div style={{ background: "#fff", borderRadius: 16, border: CARD_BORDER, boxShadow: CARD_SHADOW, padding: "18px 20px", minHeight: 104, display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontSize: 10.5, fontWeight: 700, color: C.slate[400], letterSpacing: ".06em", textTransform: "uppercase" }}>{label}</span>
+        <div style={{ width: 32, height: 32, borderRadius: 9, background: `${accent}15`, color: accent, display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</div>
       </div>
-      <div style={{ fontSize: 21, fontWeight: 700, color: C.slate[900], letterSpacing: "-.01em", fontFamily: "ui-monospace, Menlo, monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</div>
-      {sub ? <div style={{ fontSize: 11.5, color: C.slate[500], marginTop: "auto", paddingTop: 7 }}>{sub}</div> : null}
+      <div style={{ fontSize: 21, fontWeight: 800, color: C.slate[900], letterSpacing: "-.02em", fontFamily: "ui-monospace, Menlo, monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</div>
+      {sub ? <div style={{ fontSize: 11, color: C.slate[400] }}>{sub}</div> : null}
     </div>
   );
 }
@@ -258,30 +256,29 @@ export default function MargeDashboardPage() {
   }
 
   if (isLoading) {
-    return <div style={{ minHeight: "100vh", background: PAGE_BG, display: "grid", placeItems: "center", color: C.slate[500] }}>Chargement du Dashboard Marge…</div>;
+    return <div style={{ minHeight: "60vh", display: "grid", placeItems: "center", color: C.slate[500] }}>Chargement du Dashboard Marge…</div>;
   }
   if (isError || !data) {
-    return <div style={{ minHeight: "100vh", background: PAGE_BG, display: "grid", placeItems: "center", color: C.nok.main }}>Erreur de chargement des données.</div>;
+    return <div style={{ minHeight: "60vh", display: "grid", placeItems: "center", color: C.nok.main }}>Erreur de chargement des données.</div>;
   }
 
   const meta = data.meta;
   const scopeLabel = scopeMode === "portfolio" ? "Portefeuille entier" : scopeMode === "family" ? "Famille de typologie" : scopeMode === "exact" ? "Typologie exacte" : "Sélection de typologies";
 
   return (
-    <div style={{ minHeight: "100vh", background: PAGE_BG }}>
-      <div style={{ maxWidth: 1440, margin: "0 auto", padding: "24px 24px 70px" }}>
+    <div style={{ display: "flex", flexDirection: "column" }}>
 
-        <header style={{ background: HDR, borderRadius: RADIUS, padding: "24px 26px 22px", color: "#fff", boxShadow: "0 4px 20px -8px rgba(11,31,77,.35)", marginBottom: 22 }}>
-          <div style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", color: "#BFD4FA", marginBottom: 8 }}>
-            Aktivco · Grid &amp; Energy Manager · Module Évaluation Financière
-          </div>
-          <h1 style={{ fontSize: 23, fontWeight: 800, margin: "0 0 6px", letterSpacing: "-.01em" }}>Dashboard d'Analyse de Marge Grid — Focus Sites en Marge Négative</h1>
-          <div style={{ fontSize: 13, color: "rgba(255,255,255,.82)", maxWidth: 760, lineHeight: 1.5 }}>
-            Comparaison {meta.month_a_label} → {meta.month_b_label} {meta.year} — {scopeLabel}
-            {scopeMode !== "portfolio" && scopeValue ? <> · <span style={{ fontFamily: "ui-monospace, Menlo, monospace", background: "rgba(255,255,255,.16)", padding: "2px 8px", borderRadius: 20 }}>{clientFamilyLabel(scopeValue) ?? scopeValue}</span></> : null}
-            {" — "}<strong>{kpis.total.toLocaleString("fr-FR")} sites</strong>
-          </div>
-        </header>
+      <header style={{ background: "#fff", borderRadius: 20, padding: "22px 24px 20px", boxShadow: CARD_SHADOW, border: CARD_BORDER, marginBottom: 22 }}>
+        <div style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: C.blue[700], marginBottom: 8 }}>
+          Aktivco · Grid &amp; Energy Manager · Module Évaluation Financière
+        </div>
+        <h1 style={{ fontSize: 22, fontWeight: 900, margin: "0 0 6px", letterSpacing: "-.03em", color: "#0f172a" }}>Dashboard d'Analyse de Marge Grid — Focus Sites en Marge Négative</h1>
+        <div style={{ fontSize: 13, color: "#64748b", maxWidth: 760, lineHeight: 1.5 }}>
+          Comparaison {meta.month_a_label} → {meta.month_b_label} {meta.year} — {scopeLabel}
+          {scopeMode !== "portfolio" && scopeValue ? <> · <span style={{ fontFamily: "ui-monospace, Menlo, monospace", background: C.blue[50], color: C.blue[700], padding: "2px 8px", borderRadius: 20, border: `1px solid ${C.blue[100]}` }}>{clientFamilyLabel(scopeValue) ?? scopeValue}</span></> : null}
+          {" — "}<strong style={{ color: "#0f172a" }}>{kpis.total.toLocaleString("fr-FR")} sites</strong>
+        </div>
+      </header>
 
         {/* ── Sélecteurs §1/§2 ─────────────────────────────────────────── */}
         <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr .7fr", gap: 14, marginBottom: 22 }}>
@@ -656,11 +653,10 @@ export default function MargeDashboardPage() {
           </div>
         </Card>
 
-        <footer style={{ marginTop: 36, paddingTop: 16, borderTop: `1px solid ${C.slate[200]}`, fontSize: 11, color: C.slate[400], fontFamily: "ui-monospace, Menlo, monospace", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-          <span>Aktivco Grid &amp; Energy Manager — Module Évaluation Financière</span>
-          <span>Marge estimée = redevance grid − estimation consommation · Marge réelle = redevance grid − facture Sénélec</span>
-        </footer>
-      </div>
+      <footer style={{ marginTop: 36, paddingTop: 16, borderTop: `1px solid ${C.slate[200]}`, fontSize: 11, color: C.slate[400], fontFamily: "ui-monospace, Menlo, monospace", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+        <span>Aktivco Grid &amp; Energy Manager — Module Évaluation Financière</span>
+        <span>Marge estimée = redevance grid − estimation consommation · Marge réelle = redevance grid − facture Sénélec</span>
+      </footer>
     </div>
   );
 }
