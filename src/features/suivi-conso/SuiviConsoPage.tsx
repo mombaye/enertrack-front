@@ -395,6 +395,12 @@ const PRESETS = [
 
 function DateRangePicker({ startKey, endKey, onChange }: { startKey: number; endKey: number; onChange: (s: number, e: number) => void }) {
   const [open, setOpen] = useState(false);
+  // "single" : un clic = un mois, appliqué immédiatement (pas de 2e clic requis).
+  // "range"  : 1er clic = juste mémoriser le début (aucune requête tant que
+  // la fin n'est pas choisie — avant ce correctif, le 1er clic appliquait déjà
+  // un filtre "mois unique" pour rien, avant même que l'utilisateur ait fini
+  // de choisir son intervalle).
+  const [mode, setMode] = useState<"single" | "range">(() => (startKey === endKey ? "single" : "range"));
   const [sel, setSel] = useState<number | null>(null);
   const [hov, setHov] = useState<number | null>(null);
   const [ly, setLy] = useState(() => keyToYM(startKey).year);
@@ -413,6 +419,9 @@ function DateRangePicker({ startKey, endKey, onChange }: { startKey: number; end
   }, []);
 
   function getCls(k: number) {
+    if (mode === "single") {
+      return k === startKey && k === endKey ? "start" : "";
+    }
     const lo = Math.min(startKey, endKey);
     const hi = Math.max(startKey, endKey);
     if (sel !== null) {
@@ -432,9 +441,13 @@ function DateRangePicker({ startKey, endKey, onChange }: { startKey: number; end
 
   function pick(y: number, mi: number) {
     const k = periodKey(y, mi + 1);
-    if (!sel) {
-      setSel(k);
+    if (mode === "single") {
       onChange(k, k);
+      setOpen(false);
+      return;
+    }
+    if (sel === null) {
+      setSel(k); // mémorise juste le début, aucune requête tant que la fin n'est pas choisie
     } else {
       onChange(Math.min(sel, k), Math.max(sel, k));
       setSel(null);
@@ -472,17 +485,41 @@ function DateRangePicker({ startKey, endKey, onChange }: { startKey: number; end
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      <button onClick={() => { setOpen((v) => !v); setSel(null); }} type="button" style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", border: `1px solid ${open ? C.blue[500] : C.slate[200]}`, borderRadius: 12, background: open ? C.blue[50] : "#fff", cursor: "pointer", whiteSpace: "nowrap", color: C.slate[700], boxShadow: open ? `0 0 0 3px ${C.blue[100]}` : "0 1px 2px rgba(0,0,0,.04)" }}>
+      <button
+        onClick={() => {
+          setOpen((v) => !v);
+          setSel(null);
+          setMode(startKey === endKey ? "single" : "range");
+        }}
+        type="button"
+        style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", border: `1px solid ${open ? C.blue[500] : C.slate[200]}`, borderRadius: 12, background: open ? C.blue[50] : "#fff", cursor: "pointer", whiteSpace: "nowrap", color: C.slate[700], boxShadow: open ? `0 0 0 3px ${C.blue[100]}` : "0 1px 2px rgba(0,0,0,.04)" }}
+      >
         <Calendar size={14} style={{ color: C.slate[400] }} />
         <span style={{ fontFamily: "monospace", fontWeight: 900, fontSize: 12, color: C.blue[700] }}>{label}</span>
         <ChevronDown size={13} style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .18s", color: C.slate[400] }} />
       </button>
 
       {open ? (
-        <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 300, background: "#fff", border: `1px solid ${C.slate[200]}`, borderRadius: 16, boxShadow: "0 24px 60px rgba(15,23,42,.22)", padding: "16px 16px 62px", width: 500, display: "flex", gap: 16 }}>
-          {cal(ly, setLy)}
-          <div style={{ width: 1, background: C.slate[200] }} />
-          {cal(ry, setRy)}
+        <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 300, background: "#fff", border: `1px solid ${C.slate[200]}`, borderRadius: 16, boxShadow: "0 24px 60px rgba(15,23,42,.22)", padding: "16px 16px 62px", width: 500, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", border: `1px solid ${C.slate[200]}`, borderRadius: 10, overflow: "hidden", alignSelf: "flex-start" }}>
+            {(["single", "range"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => { setMode(m); setSel(null); }}
+                style={{ border: "none", padding: "7px 14px", fontSize: 12, fontWeight: 900, cursor: "pointer", background: mode === m ? C.blue[700] : "#fff", color: mode === m ? "#fff" : C.slate[600] }}
+              >
+                {m === "single" ? "Un mois" : "Intervalle"}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 16 }}>
+            {cal(ly, setLy)}
+            <div style={{ width: 1, background: C.slate[200] }} />
+            {cal(ry, setRy)}
+          </div>
+
           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, borderTop: `1px solid ${C.slate[200]}`, padding: "9px 12px", background: C.slate[50], borderRadius: "0 0 16px 16px", display: "flex", flexWrap: "wrap", gap: 6 }}>
             {PRESETS.map((p) => (
               <button key={p.label} onClick={() => { onChange(p.range[0], p.range[1]); setSel(null); setOpen(false); }} type="button" style={{ padding: "5px 9px", borderRadius: 999, border: `1px solid ${C.slate[200]}`, background: "#fff", fontSize: 11, color: C.slate[700], cursor: "pointer", fontWeight: 700 }}>{p.label}</button>
@@ -649,18 +686,15 @@ export default function SuiviConsoPage() {
     setChartLoading(true);
     setChartLimited(false);
     try {
-      const chartPageSize = 500;
-      const first = await api.get<ApiListResponse<ConsoRow>>("/financial/suivi-conso/", { params: { ...baseParams, page: 1, page_size: chartPageSize } });
-      const all: ConsoRow[] = [...(first.data.results || [])];
-      const totalPages = first.data.pages || Math.max(1, Math.ceil((first.data.count || 0) / chartPageSize));
-      const maxPages = Math.min(totalPages, 60);
-      if (totalPages > maxPages) setChartLimited(true);
-      const pageNumbers = Array.from({ length: Math.max(0, maxPages - 1) }, (_, i) => i + 2);
-      const chunkSize = 6;
-      for (let i = 0; i < pageNumbers.length; i += chunkSize) {
-        const responses = await Promise.all(pageNumbers.slice(i, i + chunkSize).map((p) => api.get<ApiListResponse<ConsoRow>>("/financial/suivi-conso/", { params: { ...baseParams, page: p, page_size: chartPageSize } })));
-        for (const res of responses) all.push(...(res.data.results || []));
-      }
+      // Un seul appel avec un grand page_size — le backend recalcule tout
+      // result_rows à chaque requête (coûteux), donc paginer par petits lots
+      // pour tout récupérer forçait des dizaines d'appels qui refaisaient
+      // chacun tout le calcul depuis zéro (jusqu'à ~60 requêtes séquentielles
+      // avant ce correctif). Le serveur plafonne à 20000 lignes par appel.
+      const chartPageSize = 20000;
+      const res = await api.get<ApiListResponse<ConsoRow>>("/financial/suivi-conso/", { params: { ...baseParams, page: 1, page_size: chartPageSize } });
+      const all = res.data.results || [];
+      if ((res.data.count || 0) > chartPageSize) setChartLimited(true);
       setChartRows(all);
     } catch {
       setChartRows([]);
