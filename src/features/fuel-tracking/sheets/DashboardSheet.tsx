@@ -1,114 +1,206 @@
 // src/features/fuel-tracking/sheets/DashboardSheet.tsx
-// Feuille DASHBOARD — synthèse mensuelle globale.
+// Feuille DASHBOARD — réplique exacte de la feuille Excel "Synthèse Commande"
+// (fichier mensuel "Commande FUEL ESCO SENEGAL <mois>.xlsb") : import brut,
+// aucun recalcul côté frontend, les valeurs affichées sont celles importées
+// telles quelles. Mise en page calquée sur le fichier source (en-têtes
+// fusionnés bleu marine, bandes alternées, lignes TOTAL en surbrillance).
 
-import { AlertTriangle, BarChart3, Droplets, Fuel, Gauge, ShieldCheck, ShieldX, Truck } from "lucide-react";
-import type { FuelMonthlyRow } from "@/services/fuelTracking";
+import type { CSSProperties, ReactNode } from "react";
+import { Layers3, Tags } from "lucide-react";
+import type { FuelCommandeSyntheseResponse, FuelCommandeSyntheseRow } from "@/services/fuelTracking";
+import { Card, EmptyState, SheetTitle, Skeleton } from "../ui";
 import { FT } from "../theme";
-import { Card, ComingCell, KpiCard, Skeleton } from "../ui";
-import { fmt, fmtL, n } from "../helpers";
+import { fmt } from "../helpers";
 
-export function DashboardSheet({ rows, kpis, loading }: { rows: FuelMonthlyRow[]; kpis: any; loading: boolean }) {
-  if (loading) return <Skeleton h={420} />;
+const NAVY = "#0B1F4D";
+const BAND = "#EAF1FB";
+const GOLD = "#FBBF24";
 
-  const topRows = [...rows].sort((a, b) => n(b.enoc.quantity_added_liters) - n(a.enoc.quantity_added_liters)).slice(0, 8);
-  const maxTop = Math.max(...topRows.map((x) => n(x.enoc.quantity_added_liters)), 1);
+function monthLabel(yyyymm: string | null | undefined) {
+  if (!yyyymm) return "—";
+  const [y, m] = yyyymm.split("-");
+  const names = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"];
+  const idx = Number(m) - 1;
+  return `${names[idx] ?? m} ${y}`;
+}
 
-  const causes = [
-    "Automatisme GE",
-    "Carburant volé",
-    "Faible autonomie",
-    "Faible production solaire",
-    "Mauvaise perf. solaire",
-    "Besoin spare",
-    "Coupure Grid",
-    "Données erronées",
-    "Sous investigation",
-    "Autre",
-  ];
+const th: CSSProperties = {
+  background: NAVY,
+  color: "#fff",
+  fontSize: 10.5,
+  fontWeight: 800,
+  textTransform: "uppercase",
+  letterSpacing: ".04em",
+  textAlign: "center",
+  padding: "7px 8px",
+  border: "1px solid rgba(255,255,255,.16)",
+  whiteSpace: "nowrap",
+};
+
+function Num({ value, bold, color }: { value: number; bold?: boolean; color?: string }) {
+  if (value === 0) return <span style={{ color: "#B6C1D6" }}>—</span>;
+  return <span style={{ fontWeight: bold ? 800 : 600, fontFamily: "ui-monospace, Menlo, monospace", color }}>{fmt.format(value)}</span>;
+}
+
+function EcartCell({ value }: { value: number }) {
+  if (value === 0) {
+    return (
+      <td style={{ ...td, textAlign: "right", color: FT.textSub }}>
+        —
+      </td>
+    );
+  }
+  const positive = value > 0;
+  return (
+    <td
+      style={{
+        ...td,
+        textAlign: "right",
+        background: positive ? "#DCFCE7" : "#FEE2E2",
+        color: positive ? "#15803D" : "#B91C1C",
+        fontWeight: 800,
+        fontFamily: "ui-monospace, Menlo, monospace",
+      }}
+    >
+      {fmt.format(value)}
+    </td>
+  );
+}
+
+const td: CSSProperties = {
+  padding: "7px 10px",
+  border: `1px solid ${FT.border}`,
+  fontSize: 12.5,
+};
+
+function SyntheseTable({
+  labelHeader,
+  currentLabel,
+  prevLabel,
+  rows,
+  emptyIcon,
+  emptyTitle,
+}: {
+  labelHeader: string;
+  currentLabel: string;
+  prevLabel: string;
+  rows: FuelCommandeSyntheseRow[];
+  emptyIcon: ReactNode;
+  emptyTitle: string;
+}) {
+  if (rows.length === 0) {
+    return <EmptyState icon={emptyIcon} title={emptyTitle} subtitle="Importe le fichier Excel mensuel via le bouton « Importer »." />;
+  }
+
+  return (
+    <div style={{ overflowX: "auto", borderRadius: 12, border: `1px solid ${FT.border}` }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1100 }}>
+        <thead>
+          <tr>
+            <th rowSpan={3} style={{ ...th, textAlign: "left", minWidth: 190 }}>{labelHeader}</th>
+            <th colSpan={10} style={th}>COMMANDE (L)</th>
+            <th rowSpan={3} style={{ ...th, minWidth: 200 }}>COMMENTAIRES</th>
+          </tr>
+          <tr>
+            <th colSpan={4} style={th}>{currentLabel}</th>
+            <th colSpan={4} style={th}>{prevLabel}</th>
+            <th colSpan={2} style={th}>ECART</th>
+          </tr>
+          <tr>
+            <th style={th}>Nbre de Site</th>
+            <th style={th}>Commande Normale</th>
+            <th style={th}>Commande Saison Hivernale</th>
+            <th style={th}>TOTAL</th>
+            <th style={th}>Nbre de Site</th>
+            <th style={th}>Commande Normale</th>
+            <th style={th}>Commande Saison Hivernale</th>
+            <th style={th}>TOTAL</th>
+            <th style={th}>Site</th>
+            <th style={th}>Qté</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => {
+            const isGrandTotal = r.label.toUpperCase() === "TOTAL COMMANDE";
+            const numColor = r.is_total_row ? (isGrandTotal ? GOLD : "#fff") : undefined;
+            const rowStyle: CSSProperties = r.is_total_row
+              ? { background: NAVY, color: "#fff" }
+              : { background: i % 2 === 0 ? BAND : "#fff" };
+            return (
+              <tr key={`${r.label}-${i}`} style={rowStyle}>
+                <td style={{ ...td, fontWeight: r.is_total_row ? 800 : 700, color: r.is_total_row ? "#fff" : FT.text }}>{r.label}</td>
+                <td style={{ ...td, textAlign: "right" }}><Num value={r.nb_sites} bold={r.is_total_row} color={numColor} /></td>
+                <td style={{ ...td, textAlign: "right" }}><Num value={r.commande_normale_l} bold={r.is_total_row} color={numColor} /></td>
+                <td style={{ ...td, textAlign: "right" }}><Num value={r.commande_hivernale_l} bold={r.is_total_row} color={numColor} /></td>
+                <td style={{ ...td, textAlign: "right" }}><Num value={r.total_l} bold color={numColor} /></td>
+                <td style={{ ...td, textAlign: "right" }}><Num value={r.nb_sites_prev} bold={r.is_total_row} color={numColor} /></td>
+                <td style={{ ...td, textAlign: "right" }}><Num value={r.commande_normale_prev_l} bold={r.is_total_row} color={numColor} /></td>
+                <td style={{ ...td, textAlign: "right" }}><Num value={r.commande_hivernale_prev_l} bold={r.is_total_row} color={numColor} /></td>
+                <td style={{ ...td, textAlign: "right" }}><Num value={r.total_prev_l} bold color={numColor} /></td>
+                {r.is_total_row ? (
+                  <>
+                    <td style={{ ...td, textAlign: "right" }}><Num value={r.ecart_sites} bold color={numColor} /></td>
+                    <td style={{ ...td, textAlign: "right" }}><Num value={r.ecart_qte_l} bold color={numColor} /></td>
+                  </>
+                ) : (
+                  <>
+                    <EcartCell value={r.ecart_sites} />
+                    <EcartCell value={r.ecart_qte_l} />
+                  </>
+                )}
+                <td style={{ ...td, color: r.is_total_row ? "#fff" : FT.textMid }}>{r.commentaires || ""}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function DashboardSheet({ data, loading }: { data: FuelCommandeSyntheseResponse | undefined; loading: boolean }) {
+  if (loading) return <Skeleton h={520} />;
+
+  const currentLabel = monthLabel(data?.month_year);
+  const prevLabel = monthLabel(data?.prev_month_year);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
-        <KpiCard label="Target BOQ Total" value="À venir" tone="slate" icon={<Gauge size={14} />} />
-        <KpiCard label="Target Aktivco Total" value="À venir" sub="Après import REF_SITES" tone="slate" icon={<Gauge size={14} />} />
-        <KpiCard label="Consommation ENOC" value={fmtL(kpis?.enoc_quantity_added_liters)} sub="Opérations terrain" tone="green" icon={<Truck size={14} />} />
-        <KpiCard label="eFMS livré" value={fmtL(kpis?.fuel_deli_l)} sub="Données eFMS mensuelles" tone="blue" icon={<Fuel size={14} />} />
-        <KpiCard label="Écart total" value={fmtL(kpis?.gap_deli_vs_enoc_l)} sub="ENOC réel − eFMS livré" tone="orange" icon={<Droplets size={14} />} />
-        <KpiCard label="Sites OK" value={fmt.format(kpis?.ok ?? 0)} sub="Rapprochés" tone="green" icon={<ShieldCheck size={14} />} />
-        <KpiCard label="Sites NOK" value={fmt.format(kpis?.nok ?? 0)} sub={`${fmt.format(kpis?.warning ?? 0)} à suivre`} tone="red" icon={<ShieldX size={14} />} />
-        <KpiCard label="Stock critique" value="À venir" tone="slate" icon={<AlertTriangle size={14} />} />
-      </div>
+      <Card padded={false} style={{ padding: 20 }}>
+        <SheetTitle
+          icon={<Layers3 size={17} />}
+          title="Par catégorie / batch"
+          subtitle={`Import brut de la feuille "Synthèse Commande" — ${currentLabel} vs ${prevLabel}. Aucun recalcul, valeurs identiques au fichier source.`}
+        />
+        <div style={{ marginTop: 16 }}>
+          <SyntheseTable
+            labelHeader="CATEGORIE"
+            currentLabel={currentLabel}
+            prevLabel={prevLabel}
+            rows={data?.categorie ?? []}
+            emptyIcon={<Layers3 size={20} />}
+            emptyTitle="Aucune synthèse commande importée"
+          />
+        </div>
+      </Card>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.3fr .7fr", gap: 14 }}>
-        <Card>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: FT.greenL, display: "grid", placeItems: "center", color: FT.green }}>
-              <BarChart3 size={16} />
-            </div>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: FT.text }}>Top sites — volume réel ENOC</div>
-              <div style={{ fontSize: 12, color: FT.textSub }}>Classement des sites ayant des opérations terrain sur le mois.</div>
-            </div>
-          </div>
-
-          {topRows.length === 0 ? (
-            <div style={{ color: FT.textSub, fontSize: 13, padding: "30px 0", textAlign: "center" }}>Aucune donnée ENOC sur le mois.</div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {topRows.map((row, index) => {
-                const pct = (n(row.enoc.quantity_added_liters) / maxTop) * 100;
-                return (
-                  <div key={row.key} style={{ display: "grid", gridTemplateColumns: "26px 1fr 90px", gap: 10, alignItems: "center" }}>
-                    <div style={{ color: FT.textSub, fontSize: 12, fontWeight: 800, textAlign: "right" }}>{index + 1}</div>
-                    <div>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 5 }}>
-                        <strong style={{ fontSize: 12.5, color: FT.text }}>{row.site_id || row.site_name}</strong>
-                        <span style={{ fontSize: 11.5, color: FT.textSub }}>{row.enoc.movements_count} mouv.</span>
-                      </div>
-                      <div style={{ height: 6, borderRadius: 99, background: FT.slateL, overflow: "hidden" }}>
-                        <div style={{ width: `${pct}%`, height: "100%", background: `linear-gradient(90deg, ${FT.green}, #34D399)`, borderRadius: 99 }} />
-                      </div>
-                    </div>
-                    <strong style={{ color: FT.green, fontSize: 12.5, textAlign: "right" }}>{fmtL(row.enoc.quantity_added_liters)}</strong>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </Card>
-
-        <Card>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: FT.orangeL, display: "grid", placeItems: "center", color: FT.orange }}>
-              <AlertTriangle size={16} />
-            </div>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: FT.text }}>Causes surconsommation</div>
-              <div style={{ fontSize: 12, color: FT.textSub }}>Rubrique du template, à arbitrer avec le client.</div>
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gap: 8 }}>
-            {causes.map((cause) => (
-              <div
-                key={cause}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "9px 11px",
-                  borderRadius: 10,
-                  border: `1px solid ${FT.border}`,
-                  background: FT.slateL,
-                }}
-              >
-                <span style={{ fontSize: 12, color: FT.textMid, fontWeight: 700 }}>{cause}</span>
-                <ComingCell />
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
+      <Card padded={false} style={{ padding: 20 }}>
+        <SheetTitle
+          icon={<Tags size={17} />}
+          title="Par typologie facturée"
+          subtitle={`Import brut de la feuille "Synthèse Commande" — ${currentLabel} vs ${prevLabel}. Aucun recalcul, valeurs identiques au fichier source.`}
+        />
+        <div style={{ marginTop: 16 }}>
+          <SyntheseTable
+            labelHeader="Typologie facturée"
+            currentLabel={currentLabel}
+            prevLabel={prevLabel}
+            rows={data?.typologie ?? []}
+            emptyIcon={<Tags size={20} />}
+            emptyTitle="Aucune synthèse commande importée"
+          />
+        </div>
+      </Card>
     </div>
   );
 }

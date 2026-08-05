@@ -1,7 +1,8 @@
 // src/features/fuel-tracking/FuelTrackingPage.tsx
 
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "react-toastify";
 import {
   BarChart3,
   Calendar,
@@ -15,12 +16,13 @@ import {
   RefreshCw,
   Search,
   Settings2,
+  Upload,
   Warehouse,
 } from "lucide-react";
 
-import { exportFuelTrackingWorkbook, getCphMatrix, getFuelEnocJournal, getFuelMonthlyTracking, getFuelSourceStatus, getFuelSyncRuns, type FuelStatusCode } from "@/services/fuelTracking";
+import { exportFuelTrackingWorkbook, getCphMatrix, getFuelCommandeSynthese, getFuelEnocJournal, getFuelMonthlyTracking, getFuelSourceStatus, getFuelSyncRuns, importFuelCommandeSynthese } from "@/services/fuelTracking";
 
-import { FT, toneColors } from "./theme";
+import { FT } from "./theme";
 import { Card, GLOBAL_STYLES, Pager, Pill, SegmentedTabs } from "./ui";
 import { currentMonth, fmtDateTime, fmtL } from "./helpers";
 import { DashboardSheet } from "./sheets/DashboardSheet";
@@ -42,29 +44,19 @@ const SHEETS: Array<{ key: SheetKey; label: string; icon: ReactNode }> = [
   { key: "LISTES", label: "Listes", icon: <ListChecks size={14} /> },
 ];
 
-const STATUS_META: Record<FuelStatusCode, { label: string; tone: Parameters<typeof toneColors>[0] }> = {
-  ALL: { label: "Tous", tone: "blue" },
-  OK: { label: "OK", tone: "green" },
-  WARNING: { label: "À suivre", tone: "orange" },
-  NOK: { label: "NOK", tone: "red" },
-  EFMS_ONLY: { label: "eFMS seul", tone: "blue" },
-  ENOC_ONLY: { label: "ENOC seul", tone: "violet" },
-  NO_BASE: { label: "Base insuffisante", tone: "slate" },
-  NO_DATA: { label: "Aucune donnée", tone: "slate" },
-};
-
 export default function FuelTrackingPage() {
   const [activeSheet, setActiveSheet] = useState<SheetKey>("CONSO_MENSUELLE");
   const [month, setMonth] = useState(currentMonth());
   const [site, setSite] = useState("");
   const [zone, setZone] = useState("");
-  const [status, setStatus] = useState<FuelStatusCode>("ALL");
   const [operationType, setOperationType] = useState("ALL");
   const [monthlyPage, setMonthlyPage] = useState(1);
   const [journalPage, setJournalPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
   const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
 
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const headerRef = useRef<HTMLDivElement | null>(null);
   const [headerHeight, setHeaderHeight] = useState(0);
 
@@ -94,6 +86,23 @@ export default function FuelTrackingPage() {
     }
   }
 
+  const queryClient = useQueryClient();
+
+  async function handleImportFile(file: File) {
+    setImporting(true);
+    try {
+      const result = await importFuelCommandeSynthese(file);
+      toast.success(`${result.rows_imported} lignes importées pour ${result.month_year}.`);
+      setActiveSheet("DASHBOARD");
+      setMonth(result.month_year);
+      queryClient.invalidateQueries({ queryKey: ["fuel-commande-synthese"] });
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || "Échec de l'import du fichier.");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   const sourceStatusQ = useQuery({
     queryKey: ["fuel-source-status", month],
     queryFn: () => getFuelSourceStatus({ country: "Senegal", month }),
@@ -101,8 +110,8 @@ export default function FuelTrackingPage() {
   });
 
   const monthlyQ = useQuery({
-    queryKey: ["fuel-monthly-template", month, site, zone, status, monthlyPage, pageSize],
-    queryFn: () => getFuelMonthlyTracking({ month, site, zone, status, page: monthlyPage, limit: pageSize }),
+    queryKey: ["fuel-monthly-template", month, site, zone, monthlyPage, pageSize],
+    queryFn: () => getFuelMonthlyTracking({ month, site, zone, page: monthlyPage, limit: pageSize }),
     staleTime: 60_000,
   });
 
@@ -125,9 +134,15 @@ export default function FuelTrackingPage() {
     staleTime: 5 * 60_000,
   });
 
+  const commandeSyntheseQ = useQuery({
+    queryKey: ["fuel-commande-synthese", month],
+    queryFn: () => getFuelCommandeSynthese({ month }),
+    enabled: activeSheet === "DASHBOARD",
+    staleTime: 60_000,
+  });
+
   const rows = monthlyQ.data?.data ?? [];
   const journalRows = journalQ.data?.data ?? [];
-  const kpis = monthlyQ.data?.kpis;
   const enoc = syncQ.data?.enoc?.[0];
 
   const sheetSubtitle = useMemo(() => {
@@ -207,6 +222,7 @@ export default function FuelTrackingPage() {
                   monthlyQ.refetch();
                   journalQ.refetch();
                   syncQ.refetch();
+                  commandeSyntheseQ.refetch();
                 }}
                 title="Rafraîchir"
                 style={{ width: 33, height: 33, borderRadius: 9, border: `1px solid ${FT.border}`, background: FT.slateL, display: "grid", placeItems: "center", cursor: "pointer", color: FT.textMid, flexShrink: 0 }}
@@ -224,6 +240,40 @@ export default function FuelTrackingPage() {
                   tone={sourceStatusQ.data?.enoc.available ? "green" : "red"}
                 />
               </span>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsb,.xlsx,.xlsm"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file) handleImportFile(file);
+                }}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={importing}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 7,
+                  padding: "8px 14px",
+                  borderRadius: 9,
+                  border: `1px solid ${FT.border}`,
+                  background: FT.card,
+                  color: FT.text,
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  cursor: importing ? "not-allowed" : "pointer",
+                  opacity: importing ? 0.7 : 1,
+                  flexShrink: 0,
+                }}
+              >
+                <Upload size={13} className={importing ? "ft-spin" : ""} />
+                {importing ? "Import…" : "Importer"}
+              </button>
 
               <button
                 onClick={handleExport}
@@ -254,39 +304,6 @@ export default function FuelTrackingPage() {
             <SegmentedTabs options={SHEETS} value={activeSheet} onChange={setActiveSheet} />
           </div>
 
-          {/* ── Filtres contextuels (fixés avec le header) ─────────────────── */}
-          {(activeSheet === "DASHBOARD" || activeSheet === "CONSO_MENSUELLE") && (
-            <div className="ft-fade" style={{ marginTop: 16, display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center", justifyContent: "center", padding: "12px 14px", background: FT.slateL, border: `1px solid ${FT.border}`, borderRadius: 14 }}>
-              <span style={{ fontSize: 11, fontWeight: 850, color: FT.textSub, textTransform: "uppercase", letterSpacing: ".07em" }}>Statut</span>
-              {(Object.keys(STATUS_META) as FuelStatusCode[]).map((s) => {
-                const meta = STATUS_META[s];
-                const c = toneColors(meta.tone);
-                const active = status === s;
-                return (
-                  <button
-                    key={s}
-                    onClick={() => {
-                      setStatus(s);
-                      setMonthlyPage(1);
-                    }}
-                    style={{
-                      border: `1px solid ${active ? c.fg : FT.border}`,
-                      background: active ? c.fg : FT.card,
-                      color: active ? "white" : FT.textMid,
-                      borderRadius: 999,
-                      padding: "5px 11px",
-                      fontSize: 11,
-                      fontWeight: 850,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {meta.label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
           {activeSheet === "JOURNAL_RAVITAILLEMENT" && (
             <div className="ft-fade" style={{ marginTop: 16, display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", padding: "12px 14px", background: FT.slateL, border: `1px solid ${FT.border}`, borderRadius: 14 }}>
               <div style={{ color: FT.textSub, fontSize: 12, fontWeight: 700 }}>
@@ -311,7 +328,7 @@ export default function FuelTrackingPage() {
 
         {/* ── Contenu de la feuille active ───────────────────────────────── */}
         <div className="ft-fade">
-          {activeSheet === "DASHBOARD" && <DashboardSheet rows={rows} kpis={kpis} loading={monthlyQ.isLoading} />}
+          {activeSheet === "DASHBOARD" && <DashboardSheet data={commandeSyntheseQ.data} loading={commandeSyntheseQ.isLoading} />}
 
           {activeSheet === "JOURNAL_RAVITAILLEMENT" && (
             <>
