@@ -6,23 +6,14 @@
 // fusionnés bleu marine, bandes alternées, lignes TOTAL en surbrillance).
 
 import type { CSSProperties, ReactNode } from "react";
-import { Layers3, Tags } from "lucide-react";
+import { CalendarX2, Layers3, Tags } from "lucide-react";
 import type { FuelCommandeSyntheseResponse, FuelCommandeSyntheseRow } from "@/services/fuelTracking";
 import { Card, EmptyState, SheetTitle, Skeleton } from "../ui";
 import { FT } from "../theme";
-import { fmt } from "../helpers";
+import { fmt, monthLabel } from "../helpers";
 
 const NAVY = "#0B1F4D";
 const BAND = "#EAF1FB";
-const GOLD = "#FBBF24";
-
-function monthLabel(yyyymm: string | null | undefined) {
-  if (!yyyymm) return "—";
-  const [y, m] = yyyymm.split("-");
-  const names = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"];
-  const idx = Number(m) - 1;
-  return `${names[idx] ?? m} ${y}`;
-}
 
 const th: CSSProperties = {
   background: NAVY,
@@ -37,34 +28,18 @@ const th: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+/**
+ * Format identique au fichier Excel source : zéro affiché "—", négatif entre
+ * parenthèses sans signe moins (convention comptable utilisée dans le
+ * fichier). Aucune coloration ajoutée ici — on n'a pas accès à la mise en
+ * forme conditionnelle du fichier (elle n'est pas toujours cohérente avec le
+ * simple signe de la valeur), donc on ne l'invente pas : les données sont
+ * sensibles, on affiche la valeur telle quelle plutôt qu'une interprétation.
+ */
 function Num({ value, bold, color }: { value: number; bold?: boolean; color?: string }) {
-  if (value === 0) return <span style={{ color: "#B6C1D6" }}>—</span>;
-  return <span style={{ fontWeight: bold ? 800 : 600, fontFamily: "ui-monospace, Menlo, monospace", color }}>{fmt.format(value)}</span>;
-}
-
-function EcartCell({ value }: { value: number }) {
-  if (value === 0) {
-    return (
-      <td style={{ ...td, textAlign: "right", color: FT.textSub }}>
-        —
-      </td>
-    );
-  }
-  const positive = value > 0;
-  return (
-    <td
-      style={{
-        ...td,
-        textAlign: "right",
-        background: positive ? "#DCFCE7" : "#FEE2E2",
-        color: positive ? "#15803D" : "#B91C1C",
-        fontWeight: 800,
-        fontFamily: "ui-monospace, Menlo, monospace",
-      }}
-    >
-      {fmt.format(value)}
-    </td>
-  );
+  if (value === 0) return <span style={{ color: color ?? "#B6C1D6" }}>—</span>;
+  const text = value < 0 ? `(${fmt.format(Math.abs(value))})` : fmt.format(value);
+  return <span style={{ fontWeight: bold ? 800 : 600, fontFamily: "ui-monospace, Menlo, monospace", color }}>{text}</span>;
 }
 
 const td: CSSProperties = {
@@ -121,8 +96,7 @@ function SyntheseTable({
         </thead>
         <tbody>
           {rows.map((r, i) => {
-            const isGrandTotal = r.label.toUpperCase() === "TOTAL COMMANDE";
-            const numColor = r.is_total_row ? (isGrandTotal ? GOLD : "#fff") : undefined;
+            const numColor = r.is_total_row ? "#fff" : undefined;
             const rowStyle: CSSProperties = r.is_total_row
               ? { background: NAVY, color: "#fff" }
               : { background: i % 2 === 0 ? BAND : "#fff" };
@@ -137,17 +111,8 @@ function SyntheseTable({
                 <td style={{ ...td, textAlign: "right" }}><Num value={r.commande_normale_prev_l} bold={r.is_total_row} color={numColor} /></td>
                 <td style={{ ...td, textAlign: "right" }}><Num value={r.commande_hivernale_prev_l} bold={r.is_total_row} color={numColor} /></td>
                 <td style={{ ...td, textAlign: "right" }}><Num value={r.total_prev_l} bold color={numColor} /></td>
-                {r.is_total_row ? (
-                  <>
-                    <td style={{ ...td, textAlign: "right" }}><Num value={r.ecart_sites} bold color={numColor} /></td>
-                    <td style={{ ...td, textAlign: "right" }}><Num value={r.ecart_qte_l} bold color={numColor} /></td>
-                  </>
-                ) : (
-                  <>
-                    <EcartCell value={r.ecart_sites} />
-                    <EcartCell value={r.ecart_qte_l} />
-                  </>
-                )}
+                <td style={{ ...td, textAlign: "right" }}><Num value={r.ecart_sites} bold={r.is_total_row} color={numColor} /></td>
+                <td style={{ ...td, textAlign: "right" }}><Num value={r.ecart_qte_l} bold={r.is_total_row} color={numColor} /></td>
                 <td style={{ ...td, color: r.is_total_row ? "#fff" : FT.textMid }}>{r.commentaires || ""}</td>
               </tr>
             );
@@ -163,6 +128,20 @@ export function DashboardSheet({ data, loading }: { data: FuelCommandeSyntheseRe
 
   const currentLabel = monthLabel(data?.month_year);
   const prevLabel = monthLabel(data?.prev_month_year);
+
+  const hasNoDataForMonth = !!data?.month_year && data.categorie.length === 0 && data.typologie.length === 0;
+
+  if (hasNoDataForMonth) {
+    return (
+      <Card padded={false} style={{ padding: 20 }}>
+        <EmptyState
+          icon={<CalendarX2 size={22} />}
+          title={`Aucune donnée importée pour ${currentLabel}`}
+          subtitle={`Le fichier "Commande FUEL ESCO SENEGAL" n'a pas encore été importé pour ce mois. Utilise le bouton « Importer » du header, ou choisis un autre mois dans le filtre.`}
+        />
+      </Card>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

@@ -31,6 +31,8 @@ export type FuelCommandeSyntheseResponse = {
   prev_month_year: string | null;
   categorie: FuelCommandeSyntheseRow[];
   typologie: FuelCommandeSyntheseRow[];
+  /** Mois pour lesquels un fichier a déjà été importé, triés du plus récent au plus ancien. */
+  available_months: string[];
 };
 
 export async function getFuelCommandeSynthese(params?: { month?: string }) {
@@ -49,11 +51,15 @@ export type FuelCommandeSyntheseImportResult = {
 /**
  * Upload du classeur Excel mensuel complet ("Commande FUEL ESCO SENEGAL
  * <mois>.xlsb") — le backend en extrait la feuille "Synthèse Commande" et
- * remplace les lignes du mois détecté dans FuelCommandeSynthese.
+ * remplace les lignes du mois concerné dans FuelCommandeSynthese. Le mois
+ * concerné et le mois précédent (ex: Août / Juillet) sont obligatoires —
+ * fournis par l'utilisateur, pas de détection automatique côté serveur.
  */
-export async function importFuelCommandeSynthese(file: File) {
+export async function importFuelCommandeSynthese(file: File, monthYear: string, prevMonthYear: string) {
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("month_year", monthYear);
+  formData.append("prev_month_year", prevMonthYear);
   const { data } = await api.post<FuelCommandeSyntheseImportResult>(`${BASE}/commande-synthese/import/`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });
