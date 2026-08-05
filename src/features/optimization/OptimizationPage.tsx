@@ -386,7 +386,7 @@ export default function OptimizationPage() {
 
   return (
     <div className="min-h-screen bg-[#F5F7FB] px-4 py-4 lg:px-6">
-      <div className="mx-auto max-w-[1540px] space-y-4">
+      <div className="space-y-4">
         {/* Header */}
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col gap-5 p-5 lg:flex-row lg:items-center lg:justify-between">

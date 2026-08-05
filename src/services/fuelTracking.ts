@@ -46,14 +46,19 @@ export type FuelCommandeSyntheseImportResult = {
   month_year: string;
   rows_imported: number;
   filename: string;
+  /** Feuille "Suivis commande" importée en même temps (voir suivi_commande_import.py) — null si échec, ne bloque pas l'import principal. */
+  suivi_commande_rows_imported: number | null;
+  suivi_commande_error: string | null;
 };
 
 /**
  * Upload du classeur Excel mensuel complet ("Commande FUEL ESCO SENEGAL
  * <mois>.xlsb") — le backend en extrait la feuille "Synthèse Commande" et
- * remplace les lignes du mois concerné dans FuelCommandeSynthese. Le mois
- * concerné et le mois précédent (ex: Août / Juillet) sont obligatoires —
- * fournis par l'utilisateur, pas de détection automatique côté serveur.
+ * remplace les lignes du mois concerné dans FuelCommandeSynthese, ainsi que
+ * la feuille "Suivis commande" (colonnes bleues) dans FuelSuiviCommandeSite.
+ * Le mois concerné et le mois précédent (ex: Août / Juillet) sont
+ * obligatoires — fournis par l'utilisateur, pas de détection automatique
+ * côté serveur.
  */
 export async function importFuelCommandeSynthese(file: File, monthYear: string, prevMonthYear: string) {
   const formData = new FormData();
@@ -62,6 +67,58 @@ export async function importFuelCommandeSynthese(file: File, monthYear: string, 
   formData.append("prev_month_year", prevMonthYear);
   const { data } = await api.post<FuelCommandeSyntheseImportResult>(`${BASE}/commande-synthese/import/`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+}
+
+export type Pagination = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+};
+
+export type FuelSuiviCommandeSite = {
+  site_id: string;
+  site_name: string | null;
+  typologie_contractuelle: string | null;
+  load_commande: number;
+  indoor_outdoor: string | null;
+  longitude: number | null;
+  batch: string | null;
+  typologie_facturee: string | null;
+  conso_moy_jour_l: number;
+  commande_sans_marge_l: number;
+  commande_avec_marge_l: number;
+  estimation_stock_final_l: number;
+  typo_operations: string | null;
+};
+
+export type FuelSuiviCommandeKpis = {
+  total_sites: number;
+  total_conso_moy_jour_l: number;
+  total_commande_sans_marge_l: number;
+  total_commande_avec_marge_l: number;
+  total_estimation_stock_final_l: number;
+};
+
+export type FuelSuiviCommandeResponse = {
+  month_year: string | null;
+  data: FuelSuiviCommandeSite[];
+  pagination: Pagination | null;
+  available_months: string[];
+  kpis: FuelSuiviCommandeKpis | null;
+};
+
+/**
+ * Liste paginée du snapshot par site — colonnes mises en bleu de la feuille
+ * "Suivis commande", import brut sans recalcul.
+ */
+export async function getFuelSuiviCommande(params?: { month?: string; search?: string; page?: number; limit?: number }) {
+  const { data } = await api.get<FuelSuiviCommandeResponse>(`${BASE}/suivi-commande/`, {
+    params: cleanParams(params ?? {}),
   });
   return data;
 }

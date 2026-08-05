@@ -5,12 +5,13 @@
 // telles quelles. Mise en page calquée sur le fichier source (en-têtes
 // fusionnés bleu marine, bandes alternées, lignes TOTAL en surbrillance).
 
-import type { CSSProperties, ReactNode } from "react";
-import { CalendarX2, Layers3, Tags } from "lucide-react";
+import { useState, type CSSProperties, type ReactNode } from "react";
+import { ArrowLeftRight, BarChart3, CalendarX2, Droplets, Layers3, MapPin, Table2, Tags } from "lucide-react";
 import type { FuelCommandeSyntheseResponse, FuelCommandeSyntheseRow } from "@/services/fuelTracking";
-import { Card, EmptyState, SheetTitle, Skeleton } from "../ui";
+import { Card, EmptyState, KpiCard, SheetTitle, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { fmt, monthLabel } from "../helpers";
+import { GroupBarChart } from "./CommandeSyntheseChart";
 
 const NAVY = "#0B1F4D";
 const BAND = "#EAF1FB";
@@ -123,7 +124,112 @@ function SyntheseTable({
   );
 }
 
-export function DashboardSheet({ data, loading }: { data: FuelCommandeSyntheseResponse | undefined; loading: boolean }) {
+/** Même convention que le tableau : négatif entre parenthèses, pas de recalcul. */
+function formatL(value: number) {
+  const text = value < 0 ? `(${fmt.format(Math.abs(value))})` : fmt.format(value);
+  return `${text} L`;
+}
+
+/**
+ * Statistiques clés — juste les variables importantes, extraites telles
+ * quelles de la ligne "TOTAL COMMANDE" (déjà calculée dans le fichier
+ * source, donc fiable) : nombre de sites, volume total du mois courant et
+ * du mois précédent, écart. Aucun recalcul, juste une mise en avant.
+ */
+function DashboardKpis({ data, stickyTop }: { data: FuelCommandeSyntheseResponse | undefined; stickyTop: number }) {
+  const total = data?.categorie.find((r) => r.label.toUpperCase() === "TOTAL COMMANDE")
+    ?? data?.typologie.find((r) => r.label.toUpperCase() === "TOTAL COMMANDE");
+
+  if (!total) return null;
+
+  const currentLabel = monthLabel(data?.month_year);
+  const prevLabel = monthLabel(data?.prev_month_year);
+
+  return (
+    <div
+      style={{
+        position: "sticky",
+        top: stickyTop,
+        zIndex: 9,
+        background: FT.card,
+        borderRadius: FT.radius,
+        border: `1px solid ${FT.border}`,
+        boxShadow: FT.shadow,
+        padding: 14,
+      }}
+    >
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
+        <KpiCard label="Nombre de sites" value={fmt.format(total.nb_sites)} sub={currentLabel} tone="blue" icon={<MapPin size={14} />} />
+        <KpiCard label={`Commande totale — ${currentLabel}`} value={formatL(total.total_l)} tone="gold" icon={<Droplets size={14} />} />
+        <KpiCard label={`Commande totale — ${prevLabel}`} value={formatL(total.total_prev_l)} tone="slate" icon={<Droplets size={14} />} />
+        <KpiCard label="Écart (Qté)" value={formatL(total.ecart_qte_l)} sub={`${currentLabel} vs ${prevLabel}`} tone={total.ecart_qte_l < 0 ? "red" : "green"} icon={<ArrowLeftRight size={14} />} />
+      </div>
+    </div>
+  );
+}
+
+function SectionBlock({
+  icon,
+  title,
+  subtitle,
+  labelHeader,
+  rows,
+  emptyIcon,
+  emptyTitle,
+  currentLabel,
+  prevLabel,
+}: {
+  icon: ReactNode;
+  title: string;
+  subtitle: string;
+  labelHeader: string;
+  rows: FuelCommandeSyntheseRow[];
+  emptyIcon: ReactNode;
+  emptyTitle: string;
+  currentLabel: string;
+  prevLabel: string;
+}) {
+  const [view, setView] = useState<"table" | "chart">("table");
+
+  return (
+    <Card padded={false} style={{ padding: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+        <SheetTitle icon={icon} title={title} subtitle={subtitle} />
+        {rows.length > 0 && (
+          <button
+            onClick={() => setView((v) => (v === "table" ? "chart" : "table"))}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "6px 12px",
+              borderRadius: 999,
+              border: `1px solid ${FT.border}`,
+              background: FT.slateL,
+              color: FT.textMid,
+              fontSize: 11.5,
+              fontWeight: 800,
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            {view === "table" ? <BarChart3 size={13} /> : <Table2 size={13} />}
+            {view === "table" ? "Graphique" : "Tableau"}
+          </button>
+        )}
+      </div>
+      <div style={{ marginTop: 16 }}>
+        {view === "table" ? (
+          <SyntheseTable labelHeader={labelHeader} currentLabel={currentLabel} prevLabel={prevLabel} rows={rows} emptyIcon={emptyIcon} emptyTitle={emptyTitle} />
+        ) : (
+          <GroupBarChart rows={rows} currentLabel={currentLabel} prevLabel={prevLabel} />
+        )}
+      </div>
+    </Card>
+  );
+}
+
+export function DashboardSheet({ data, loading, stickyTop = 0 }: { data: FuelCommandeSyntheseResponse | undefined; loading: boolean; stickyTop?: number }) {
   if (loading) return <Skeleton h={520} />;
 
   const currentLabel = monthLabel(data?.month_year);
@@ -145,41 +251,31 @@ export function DashboardSheet({ data, loading }: { data: FuelCommandeSyntheseRe
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <Card padded={false} style={{ padding: 20 }}>
-        <SheetTitle
-          icon={<Layers3 size={17} />}
-          title="Par catégorie / batch"
-          subtitle={`Import brut de la feuille "Synthèse Commande" — ${currentLabel} vs ${prevLabel}. Aucun recalcul, valeurs identiques au fichier source.`}
-        />
-        <div style={{ marginTop: 16 }}>
-          <SyntheseTable
-            labelHeader="CATEGORIE"
-            currentLabel={currentLabel}
-            prevLabel={prevLabel}
-            rows={data?.categorie ?? []}
-            emptyIcon={<Layers3 size={20} />}
-            emptyTitle="Aucune synthèse commande importée"
-          />
-        </div>
-      </Card>
+      <DashboardKpis data={data} stickyTop={stickyTop + 14} />
 
-      <Card padded={false} style={{ padding: 20 }}>
-        <SheetTitle
-          icon={<Tags size={17} />}
-          title="Par typologie facturée"
-          subtitle={`Import brut de la feuille "Synthèse Commande" — ${currentLabel} vs ${prevLabel}. Aucun recalcul, valeurs identiques au fichier source.`}
-        />
-        <div style={{ marginTop: 16 }}>
-          <SyntheseTable
-            labelHeader="Typologie facturée"
-            currentLabel={currentLabel}
-            prevLabel={prevLabel}
-            rows={data?.typologie ?? []}
-            emptyIcon={<Tags size={20} />}
-            emptyTitle="Aucune synthèse commande importée"
-          />
-        </div>
-      </Card>
+      <SectionBlock
+        icon={<Layers3 size={17} />}
+        title="Par catégorie / batch"
+        subtitle={`Import brut de la feuille "Synthèse Commande" — ${currentLabel} vs ${prevLabel}. Aucun recalcul, valeurs identiques au fichier source.`}
+        labelHeader="CATEGORIE"
+        currentLabel={currentLabel}
+        prevLabel={prevLabel}
+        rows={data?.categorie ?? []}
+        emptyIcon={<Layers3 size={20} />}
+        emptyTitle="Aucune synthèse commande importée"
+      />
+
+      <SectionBlock
+        icon={<Tags size={17} />}
+        title="Par typologie facturée"
+        subtitle={`Import brut de la feuille "Synthèse Commande" — ${currentLabel} vs ${prevLabel}. Aucun recalcul, valeurs identiques au fichier source.`}
+        labelHeader="Typologie facturée"
+        currentLabel={currentLabel}
+        prevLabel={prevLabel}
+        rows={data?.typologie ?? []}
+        emptyIcon={<Tags size={20} />}
+        emptyTitle="Aucune synthèse commande importée"
+      />
     </div>
   );
 }

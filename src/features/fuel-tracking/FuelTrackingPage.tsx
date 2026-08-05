@@ -17,32 +17,65 @@
 // l'upload — obligatoires, la détection automatique depuis le fichier s'est
 // révélée peu fiable et n'est plus utilisée que par la commande CLI.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
-import { BarChart3, Calendar, FileSpreadsheet, Loader2, RefreshCw, Settings2, Upload } from "lucide-react";
+import { BarChart3, Calendar, ClipboardList, FileSpreadsheet, LayoutGrid, Loader2, RefreshCw, Settings2, Upload } from "lucide-react";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { getFuelCommandeSynthese, importFuelCommandeSynthese } from "@/services/fuelTracking";
+import { getFuelCommandeSynthese, getFuelSuiviCommande, importFuelCommandeSynthese } from "@/services/fuelTracking";
 
 import { FT } from "./theme";
-import { Card, GLOBAL_STYLES } from "./ui";
+import { Card, GLOBAL_STYLES, SegmentedTabs } from "./ui";
 import { shiftMonth } from "./helpers";
 import { DashboardSheet } from "./sheets/DashboardSheet";
+import { SuiviCommandeSheet } from "./sheets/SuiviCommandeSheet";
+
+type MainTab = "DASHBOARD" | "SUIVI_COMMANDE";
+
+const MAIN_TABS: Array<{ key: MainTab; label: string; icon: ReactNode }> = [
+  { key: "DASHBOARD", label: "Dashboard", icon: <LayoutGrid size={14} /> },
+  { key: "SUIVI_COMMANDE", label: "Suivi Commande", icon: <ClipboardList size={14} /> },
+];
 
 export default function FuelTrackingPage() {
+  const [activeTab, setActiveTab] = useState<MainTab>("DASHBOARD");
   const [month, setMonth] = useState<string | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importMonthYear, setImportMonthYear] = useState("");
   const [importPrevMonthYear, setImportPrevMonthYear] = useState("");
   const [importing, setImporting] = useState(false);
+  const [suiviSearch, setSuiviSearch] = useState("");
+  const [suiviPage, setSuiviPage] = useState(1);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const queryClient = useQueryClient();
+
+  // Hauteur réelle du header (fixe) — sert de décalage aux stats sticky
+  // affichées juste en dessous, pour qu'elles restent visibles au défilement
+  // sans jamais passer sous le header.
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
+
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    setHeaderHeight(el.getBoundingClientRect().height);
+    const ro = new ResizeObserver(() => setHeaderHeight(el.getBoundingClientRect().height));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const commandeSyntheseQ = useQuery({
     queryKey: ["fuel-commande-synthese", month],
     queryFn: () => getFuelCommandeSynthese({ month: month ?? undefined }),
+    staleTime: 60_000,
+  });
+
+  const suiviCommandeQ = useQuery({
+    queryKey: ["fuel-suivi-commande", month, suiviSearch, suiviPage],
+    queryFn: () => getFuelSuiviCommande({ month: month ?? undefined, search: suiviSearch, page: suiviPage, limit: 50 }),
+    enabled: activeTab === "SUIVI_COMMANDE",
     staleTime: 60_000,
   });
 
@@ -68,9 +101,17 @@ export default function FuelTrackingPage() {
     setImporting(true);
     try {
       const result = await importFuelCommandeSynthese(importFile, importMonthYear, importPrevMonthYear);
-      toast.success(`${result.rows_imported} lignes importées pour ${result.month_year}.`);
+      const suiviMsg = result.suivi_commande_rows_imported !== null
+        ? ` + ${result.suivi_commande_rows_imported} sites (Suivi Commande)`
+        : "";
+      toast.success(`${result.rows_imported} lignes importées pour ${result.month_year}${suiviMsg}.`);
+      if (result.suivi_commande_error) {
+        toast.warning(`Suivi Commande non importé : ${result.suivi_commande_error}`);
+      }
       setMonth(result.month_year);
+      setSuiviPage(1);
       queryClient.invalidateQueries({ queryKey: ["fuel-commande-synthese"] });
+      queryClient.invalidateQueries({ queryKey: ["fuel-suivi-commande"] });
       setShowImportModal(false);
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || "Échec de l'import du fichier.");
@@ -85,6 +126,7 @@ export default function FuelTrackingPage() {
 
       <div className="fuelbook" style={{ display: "flex", flexDirection: "column", gap: 14, background: FT.pageBg, margin: -20, padding: 20 }}>
         <div
+          ref={headerRef}
           className="ft-fade"
           style={{ position: "sticky", top: 0, zIndex: 10, background: "#fff", border: `1px solid ${FT.border}`, borderRadius: FT.radius, boxShadow: FT.shadow, padding: "20px 24px" }}
         >
@@ -140,11 +182,34 @@ export default function FuelTrackingPage() {
               </button>
             </div>
           </div>
+
+          <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${FT.border}`, display: "flex", justifyContent: "center" }}>
+            <SegmentedTabs options={MAIN_TABS} value={activeTab} onChange={setActiveTab} />
+          </div>
         </div>
 
-        <div className="ft-fade">
-          <DashboardSheet data={commandeSyntheseQ.data} loading={commandeSyntheseQ.isLoading} />
-        </div>
+        {activeTab === "DASHBOARD" && (
+          <div className="ft-fade">
+            <DashboardSheet data={commandeSyntheseQ.data} loading={commandeSyntheseQ.isLoading} stickyTop={headerHeight} />
+          </div>
+        )}
+
+        {activeTab === "SUIVI_COMMANDE" && (
+          <div className="ft-fade">
+            <SuiviCommandeSheet
+              data={suiviCommandeQ.data}
+              loading={suiviCommandeQ.isLoading}
+              search={suiviSearch}
+              onSearchChange={(v) => {
+                setSuiviSearch(v);
+                setSuiviPage(1);
+              }}
+              page={suiviPage}
+              onPageChange={setSuiviPage}
+              stickyTop={headerHeight}
+            />
+          </div>
+        )}
 
         <Card style={{ background: FT.slateL }}>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
