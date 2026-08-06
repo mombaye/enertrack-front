@@ -51,6 +51,17 @@ export type FuelCommandeSyntheseImportResult = {
   suivi_commande_error: string | null;
 };
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Vrai si l'erreur axios n'a jamais reçu de réponse du serveur (coupure
+ * réseau, timeout de connexion...) — par opposition à une erreur métier
+ * (400/500) renvoyée par le backend, qu'il ne faut pas réessayer aveuglément. */
+function isNetworkError(err: any) {
+  return !err?.response;
+}
+
 /**
  * Upload du classeur Excel mensuel complet ("Commande FUEL ESCO SENEGAL
  * <mois>.xlsb") — le backend en extrait la feuille "Synthèse Commande" et
@@ -59,16 +70,42 @@ export type FuelCommandeSyntheseImportResult = {
  * Le mois concerné et le mois précédent (ex: Août / Juillet) sont
  * obligatoires — fournis par l'utilisateur, pas de détection automatique
  * côté serveur.
+ *
+ * Le fichier peut peser plusieurs dizaines de Mo : `onProgress` (0-100)
+ * permet d'afficher une progression d'upload plutôt qu'un écran figé, et les
+ * échecs purement réseau (pas d'erreur renvoyée par le serveur — coupure,
+ * timeout de connexion) sont réessayés automatiquement avant d'abandonner.
  */
-export async function importFuelCommandeSynthese(file: File, monthYear: string, prevMonthYear: string) {
+export async function importFuelCommandeSynthese(
+  file: File,
+  monthYear: string,
+  prevMonthYear: string,
+  onProgress?: (pct: number) => void,
+) {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("month_year", monthYear);
   formData.append("prev_month_year", prevMonthYear);
-  const { data } = await api.post<FuelCommandeSyntheseImportResult>(`${BASE}/commande-synthese/import/`, formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
-  return data;
+
+  const MAX_ATTEMPTS = 3;
+  let lastErr: any;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      onProgress?.(0);
+      const { data } = await api.post<FuelCommandeSyntheseImportResult>(`${BASE}/commande-synthese/import/`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+        onUploadProgress: (evt) => {
+          if (evt.total) onProgress?.(Math.round((evt.loaded / evt.total) * 100));
+        },
+      });
+      return data;
+    } catch (err: any) {
+      lastErr = err;
+      if (!isNetworkError(err) || attempt === MAX_ATTEMPTS) throw err;
+      await sleep(1500 * attempt);
+    }
+  }
+  throw lastErr;
 }
 
 export type Pagination = {

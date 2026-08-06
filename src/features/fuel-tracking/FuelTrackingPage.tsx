@@ -46,6 +46,7 @@ export default function FuelTrackingPage() {
   const [importMonthYear, setImportMonthYear] = useState("");
   const [importPrevMonthYear, setImportPrevMonthYear] = useState("");
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
   const [suiviSearch, setSuiviSearch] = useState("");
   const [suiviPage, setSuiviPage] = useState(1);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -99,8 +100,11 @@ export default function FuelTrackingPage() {
   async function handleImportSubmit() {
     if (!importFile || !canSubmitImport) return;
     setImporting(true);
+    setImportProgress(0);
     try {
-      const result = await importFuelCommandeSynthese(importFile, importMonthYear, importPrevMonthYear);
+      const result = await importFuelCommandeSynthese(
+        importFile, importMonthYear, importPrevMonthYear, setImportProgress,
+      );
       const suiviMsg = result.suivi_commande_rows_imported !== null
         ? ` + ${result.suivi_commande_rows_imported} sites (Suivi Commande)`
         : "";
@@ -114,9 +118,13 @@ export default function FuelTrackingPage() {
       queryClient.invalidateQueries({ queryKey: ["fuel-suivi-commande"] });
       setShowImportModal(false);
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Échec de l'import du fichier.");
+      const msg = err?.response?.data?.detail
+        || (!err?.response ? "Connexion au serveur interrompue pendant l'envoi du fichier. Vérifie ta connexion et réessaie." : null)
+        || "Échec de l'import du fichier.";
+      toast.error(msg);
     } finally {
       setImporting(false);
+      setImportProgress(0);
     }
   }
 
@@ -296,6 +304,17 @@ export default function FuelTrackingPage() {
                 <div style={{ fontSize: 12.5, fontWeight: 700, color: FT.textMid }}>Cliquer pour choisir le fichier (.xlsb, .xlsx)</div>
               )}
             </div>
+
+            {importing && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ height: 6, borderRadius: 999, background: FT.slateL, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${importProgress}%`, background: FT.navy, transition: "width .2s ease", borderRadius: 999 }} />
+                </div>
+                <div style={{ fontSize: 11.5, color: FT.textSub, textAlign: "center" }}>
+                  {importProgress < 100 ? `Envoi du fichier… ${importProgress}%` : "Traitement du fichier sur le serveur…"}
+                </div>
+              </div>
+            )}
 
             <div style={{ display: "flex", gap: 10 }}>
               <button
