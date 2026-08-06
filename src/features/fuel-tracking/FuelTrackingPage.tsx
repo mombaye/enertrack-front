@@ -20,14 +20,20 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
-import { BarChart3, Calendar, ClipboardList, FileSpreadsheet, LayoutGrid, Loader2, RefreshCw, Settings2, Upload } from "lucide-react";
+import { BarChart3, Calendar, ClipboardList, FileSpreadsheet, History, LayoutGrid, Loader2, RefreshCw, Settings2, Trash2, Upload } from "lucide-react";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { getFuelCommandeSynthese, getFuelSuiviCommande, importFuelCommandeSynthese } from "@/services/fuelTracking";
+import {
+  deleteFuelCommandeSyntheseMonth,
+  getFuelCommandeSynthese,
+  getFuelCommandeSyntheseHistory,
+  getFuelSuiviCommande,
+  importFuelCommandeSynthese,
+} from "@/services/fuelTracking";
 
 import { FT } from "./theme";
 import { Card, GLOBAL_STYLES, SegmentedTabs } from "./ui";
-import { shiftMonth } from "./helpers";
+import { monthLabel, shiftMonth } from "./helpers";
 import { DashboardSheet } from "./sheets/DashboardSheet";
 import { SuiviCommandeSheet } from "./sheets/SuiviCommandeSheet";
 
@@ -47,6 +53,8 @@ export default function FuelTrackingPage() {
   const [importPrevMonthYear, setImportPrevMonthYear] = useState("");
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [deletingMonth, setDeletingMonth] = useState<string | null>(null);
   const [suiviSearch, setSuiviSearch] = useState("");
   const [suiviPage, setSuiviPage] = useState(1);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -79,6 +87,31 @@ export default function FuelTrackingPage() {
     enabled: activeTab === "SUIVI_COMMANDE",
     staleTime: 60_000,
   });
+
+  const historyQ = useQuery({
+    queryKey: ["fuel-commande-synthese-history"],
+    queryFn: getFuelCommandeSyntheseHistory,
+    enabled: showHistoryModal,
+    staleTime: 30_000,
+  });
+
+  async function handleDeleteMonth(monthYear: string) {
+    const ok = window.confirm(`Supprimer définitivement toutes les données importées pour ${monthYear} (Synthèse Commande + Suivi Commande) ?`);
+    if (!ok) return;
+    setDeletingMonth(monthYear);
+    try {
+      const result = await deleteFuelCommandeSyntheseMonth(monthYear);
+      toast.success(`${monthYear} supprimé (${result.deleted_commande_synthese + result.deleted_suivi_commande} lignes).`);
+      queryClient.invalidateQueries({ queryKey: ["fuel-commande-synthese-history"] });
+      queryClient.invalidateQueries({ queryKey: ["fuel-commande-synthese"] });
+      queryClient.invalidateQueries({ queryKey: ["fuel-suivi-commande"] });
+      if (month === monthYear) setMonth(null);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || `Échec de la suppression de ${monthYear}.`);
+    } finally {
+      setDeletingMonth(null);
+    }
+  }
 
   // Premier chargement (month encore null) : on adopte le mois résolu par le
   // backend (le plus récent importé), pour que le champ mois affiche cette valeur.
@@ -166,6 +199,27 @@ export default function FuelTrackingPage() {
                 style={{ width: 33, height: 33, borderRadius: 9, border: `1px solid ${FT.border}`, background: FT.slateL, display: "grid", placeItems: "center", cursor: "pointer", color: FT.textMid, flexShrink: 0 }}
               >
                 <RefreshCw size={14} className={commandeSyntheseQ.isFetching ? "ft-spin" : ""} />
+              </button>
+
+              <button
+                onClick={() => setShowHistoryModal(true)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 7,
+                  padding: "8px 14px",
+                  borderRadius: 9,
+                  border: `1px solid ${FT.border}`,
+                  background: FT.slateL,
+                  color: FT.textMid,
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  flexShrink: 0,
+                }}
+              >
+                <History size={13} />
+                Historique
               </button>
 
               <button
@@ -347,6 +401,74 @@ export default function FuelTrackingPage() {
                 {importing ? "Import en cours…" : "Importer"}
               </button>
             </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {showHistoryModal && (
+        <Dialog open onOpenChange={(next) => { if (!next) setShowHistoryModal(false); }}>
+          <DialogContent className="p-0 gap-0 border-0" style={{ background: "white", borderRadius: 20, padding: 28, maxWidth: 620, width: "100%", boxShadow: "0 32px 80px rgba(0,0,0,.22)" }}>
+            <DialogTitle asChild>
+              <h3 style={{ fontSize: 16, fontWeight: 800, color: FT.text, margin: "0 0 4px" }}>Historique des imports</h3>
+            </DialogTitle>
+            <p style={{ fontSize: 12.5, color: FT.textSub, margin: "0 0 18px" }}>
+              Un import par mois — Synthèse Commande + Suivi Commande. Supprimer un mois efface définitivement ses données des deux onglets.
+            </p>
+
+            <div style={{ maxHeight: 420, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
+              {historyQ.isLoading && (
+                <div style={{ padding: 20, textAlign: "center", color: FT.textSub, fontSize: 12.5 }}>Chargement…</div>
+              )}
+              {!historyQ.isLoading && (historyQ.data?.length ?? 0) === 0 && (
+                <div style={{ padding: 20, textAlign: "center", color: FT.textSub, fontSize: 12.5 }}>Aucun fichier importé pour le moment.</div>
+              )}
+              {historyQ.data?.map((item) => (
+                <div
+                  key={item.month_year}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+                    border: `1px solid ${FT.border}`, borderRadius: 12, padding: "12px 14px",
+                    background: FT.slateL,
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: FT.text }}>{monthLabel(item.month_year)}</span>
+                      {item.prev_month_year && (
+                        <span style={{ fontSize: 11, color: FT.textSub }}>(vs {monthLabel(item.prev_month_year)})</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: FT.textSub, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {item.filename ?? "—"}
+                    </div>
+                    <div style={{ fontSize: 11, color: FT.textSub, marginTop: 3 }}>
+                      {item.rows_commande_synthese} lignes (Synthèse) · {item.rows_suivi_commande} sites (Suivi)
+                      {item.imported_at && ` · importé le ${new Date(item.imported_at).toLocaleString("fr-FR")}`}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteMonth(item.month_year)}
+                    disabled={deletingMonth === item.month_year}
+                    title={`Supprimer les données de ${monthLabel(item.month_year)}`}
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      width: 34, height: 34, borderRadius: 9, border: `1px solid ${FT.redL}`,
+                      background: "#fff", color: FT.red, flexShrink: 0,
+                      cursor: deletingMonth === item.month_year ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {deletingMonth === item.month_year ? <Loader2 size={14} className="ft-spin" /> : <Trash2 size={14} />}
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setShowHistoryModal(false)}
+              style={{ marginTop: 18, width: "100%", padding: "10px 0", borderRadius: 10, border: `1px solid ${FT.border}`, background: "#fff", fontSize: 13, fontWeight: 700, color: FT.textMid, cursor: "pointer" }}
+            >
+              Fermer
+            </button>
           </DialogContent>
         </Dialog>
       )}

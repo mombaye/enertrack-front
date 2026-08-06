@@ -108,6 +108,30 @@ export async function importFuelCommandeSynthese(
   throw lastErr;
 }
 
+export type FuelCommandeSyntheseHistoryItem = {
+  month_year: string;
+  prev_month_year: string | null;
+  filename: string | null;
+  imported_at: string | null;
+  rows_commande_synthese: number;
+  rows_suivi_commande: number;
+};
+
+/** Historique des imports (un par mois) — pour le bouton "Historique". */
+export async function getFuelCommandeSyntheseHistory() {
+  const { data } = await api.get<{ results: FuelCommandeSyntheseHistoryItem[] }>(`${BASE}/commande-synthese/history/`);
+  return data.results;
+}
+
+/** Supprime toutes les données importées (Synthèse Commande + Suivis commande) pour un mois donné. */
+export async function deleteFuelCommandeSyntheseMonth(monthYear: string) {
+  const { data } = await api.delete<{ month_year: string; deleted_commande_synthese: number; deleted_suivi_commande: number }>(
+    `${BASE}/commande-synthese/history/`,
+    { params: { month: monthYear } },
+  );
+  return data;
+}
+
 export type Pagination = {
   page: number;
   limit: number;
