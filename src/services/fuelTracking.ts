@@ -26,8 +26,14 @@ export type FuelConsommationSite = {
   site_type: string | null;
   dg_count: string | null;
   power_supply: string | null;
+  has_genset: boolean;
+  has_genset_snowflake: boolean;
+  has_genset_enoc: boolean;
+  nb_ge_enoc: number | null;
   conso_snowflake_l: number | null;
   nb_jours_data: number;
+  conso_estimee_enoc_l: number | null;
+  conso_estimee_nb_releves: number | null;
   conso_specifique_moy_l_kwh: number | null;
   sensor_status: string | null;
   enoc_qte_demandee_l: number;
@@ -39,6 +45,9 @@ export type FuelConsommationSite = {
 
 export type FuelConsommationKpis = {
   total_sites: number;
+  sites_avec_ge: number;
+  sites_sans_ge: number;
+  sites_ge_enoc_only: number;
   sites_avec_conso: number;
   total_conso_snowflake_l: number;
   total_enoc_qte_ajoutee_l: number;
@@ -71,7 +80,7 @@ export type FuelConsommationResponse = {
  * ENOC), voir sync_fuel_consommation côté backend. Pas d'upload : alimentée
  * par une synchronisation planifiée.
  */
-export async function getFuelConsommation(params?: { month?: string; search?: string; country?: string; page?: number; limit?: number }) {
+export async function getFuelConsommation(params?: { month?: string; search?: string; country?: string; has_genset?: "true" | "false"; page?: number; limit?: number }) {
   const { data } = await api.get<FuelConsommationResponse>(`${BASE}/consommation/`, {
     params: cleanParams(params ?? {}),
   });

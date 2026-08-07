@@ -61,6 +61,7 @@ export default function FuelTrackingPage() {
   const [month, setMonth] = useState<string | null>(null);
   const [consoSearch, setConsoSearch] = useState("");
   const [consoPage, setConsoPage] = useState(1);
+  const [consoGeFilter, setConsoGeFilter] = useState<"all" | "true" | "false">("all");
 
   // Hauteur réelle du header (fixe) — sert de décalage aux stats sticky
   // affichées juste en dessous, pour qu'elles restent visibles au défilement
@@ -80,8 +81,14 @@ export default function FuelTrackingPage() {
   // Pas de `enabled` sur l'onglet actif : le statut des sources (badges du
   // header) doit rester visible même hors de l'onglet Consommation.
   const consommationQ = useQuery({
-    queryKey: ["fuel-consommation", month, consoSearch, consoPage],
-    queryFn: () => getFuelConsommation({ month: month ?? undefined, search: consoSearch, page: consoPage, limit: 50 }),
+    queryKey: ["fuel-consommation", month, consoSearch, consoPage, consoGeFilter],
+    queryFn: () => getFuelConsommation({
+      month: month ?? undefined,
+      search: consoSearch,
+      page: consoPage,
+      limit: 50,
+      has_genset: consoGeFilter === "all" ? undefined : consoGeFilter,
+    }),
     staleTime: 60_000,
   });
 
@@ -164,6 +171,11 @@ export default function FuelTrackingPage() {
               search={consoSearch}
               onSearchChange={(v) => {
                 setConsoSearch(v);
+                setConsoPage(1);
+              }}
+              geFilter={consoGeFilter}
+              onGeFilterChange={(v) => {
+                setConsoGeFilter(v);
                 setConsoPage(1);
               }}
               page={consoPage}
