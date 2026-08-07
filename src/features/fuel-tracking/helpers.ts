@@ -11,10 +11,3 @@ export function monthLabel(yyyymm: string | null | undefined) {
   const idx = Number(m) - 1;
   return `${MONTH_NAMES[idx] ?? m} ${y}`;
 }
-
-/** Décale un mois "YYYY-MM" de `delta` mois (négatif pour reculer). */
-export function shiftMonth(yyyymm: string, delta: number) {
-  const [y, m] = yyyymm.split("-").map(Number);
-  const d = new Date(y, m - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}

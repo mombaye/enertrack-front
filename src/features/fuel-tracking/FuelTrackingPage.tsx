@@ -1,64 +1,66 @@
 // src/features/fuel-tracking/FuelTrackingPage.tsx
 //
-// Module suivi-carburant : toutes les données viennent d'un import manuel du
-// fichier Excel mensuel "Commande FUEL ESCO SENEGAL <mois>" (bouton
-// "Importer" ci-dessous). Plus de récupération automatique eFMS/ENOC/
-// Snowflake — chaque futur onglet sera reconstruit un par un, sur le même
-// principe (upload de sa propre feuille source), quand le mapping sera défini.
-//
-// Chaque import ne remplace que les lignes du mois qu'il couvre (voir
-// fuel_tracking/services/commande_synthese_import.py côté backend) : les
-// mois précédemment importés restent stockés et consultables via le filtre
-// mois du header — si le mois choisi n'a pas encore été importé, le Dashboard
-// l'indique clairement plutôt que d'afficher un tableau vide sans explication.
-//
-// Le mois concerné et le mois précédent (ex: Août / Juillet, tels qu'ils
-// apparaissent dans le fichier) sont saisis par l'utilisateur au moment de
-// l'upload — obligatoires, la détection automatique depuis le fichier s'est
-// révélée peu fiable et n'est plus utilisée que par la commande CLI.
+// Module suivi-carburant : automatisé, plus d'import manuel de fichier.
+// 4 sous-parties construites étape par étape :
+//   - Dashboard   : résumé automatique des 3 autres parties (pas encore
+//                   alimenté — en attente que Consommation/Stock/Commande
+//                   soient toutes automatisées).
+//   - Consommation: automatisée (Snowflake DB_GFMS_PROD.GOLD + ENOC), voir
+//                   fuel_tracking/services/fuel_consommation_snowflake.py et
+//                   la commande sync_fuel_consommation côté backend.
+//   - Stock       : à venir.
+//   - Commande    : à venir.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "react-toastify";
-import { BarChart3, Calendar, ClipboardList, FileSpreadsheet, History, LayoutGrid, Loader2, RefreshCw, Settings2, Trash2, Upload } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { BarChart3, Calendar, Droplets, Fuel, LayoutGrid, RefreshCw, Warehouse } from "lucide-react";
 
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import {
-  deleteFuelCommandeSyntheseMonth,
-  getFuelCommandeSynthese,
-  getFuelCommandeSyntheseHistory,
-  getFuelSuiviCommande,
-  importFuelCommandeSynthese,
-} from "@/services/fuelTracking";
+import { getFuelConsommation, type FuelSourceStatus } from "@/services/fuelTracking";
 
 import { FT } from "./theme";
-import { Card, GLOBAL_STYLES, SegmentedTabs } from "./ui";
-import { monthLabel, shiftMonth } from "./helpers";
-import { DashboardSheet } from "./sheets/DashboardSheet";
-import { SuiviCommandeSheet } from "./sheets/SuiviCommandeSheet";
+import { GLOBAL_STYLES, SegmentedTabs } from "./ui";
+import { ConsommationSheet } from "./sheets/ConsommationSheet";
+import { PlaceholderSheet } from "./sheets/PlaceholderSheet";
 
-type MainTab = "DASHBOARD" | "SUIVI_COMMANDE";
+type MainTab = "DASHBOARD" | "CONSOMMATION" | "STOCK" | "COMMANDE";
 
 const MAIN_TABS: Array<{ key: MainTab; label: string; icon: ReactNode }> = [
   { key: "DASHBOARD", label: "Dashboard", icon: <LayoutGrid size={14} /> },
-  { key: "SUIVI_COMMANDE", label: "Suivi Commande", icon: <ClipboardList size={14} /> },
+  { key: "CONSOMMATION", label: "Suivis Consommations", icon: <Droplets size={14} /> },
+  { key: "STOCK", label: "Suivis Stock", icon: <Warehouse size={14} /> },
+  { key: "COMMANDE", label: "Commandes", icon: <Fuel size={14} /> },
 ];
+
+/** Pastille de statut d'une source de données (connectée/non connectée),
+ * avec le détail (dernière synchro, erreur) en info-bulle. */
+function SourceBadge({ label, status }: { label: string; status: FuelSourceStatus | undefined }) {
+  const connected = !!status?.connected;
+  const title = status?.error
+    ? `${label} : ${status.error}`
+    : status?.last_run_at
+      ? `${label} : dernière synchro ${new Date(status.last_run_at).toLocaleString("fr-FR")}`
+      : `${label} : jamais synchronisé`;
+
+  return (
+    <span
+      title={title}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 999,
+        fontSize: 11, fontWeight: 800, border: `1px solid ${connected ? FT.greenL : FT.redL}`,
+        background: connected ? FT.greenL : FT.redL, color: connected ? FT.green : FT.red, cursor: "help",
+      }}
+    >
+      <span style={{ width: 6, height: 6, borderRadius: 999, background: "currentColor", flexShrink: 0 }} />
+      {label}
+    </span>
+  );
+}
 
 export default function FuelTrackingPage() {
   const [activeTab, setActiveTab] = useState<MainTab>("DASHBOARD");
   const [month, setMonth] = useState<string | null>(null);
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [importMonthYear, setImportMonthYear] = useState("");
-  const [importPrevMonthYear, setImportPrevMonthYear] = useState("");
-  const [importing, setImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState(0);
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [deletingMonth, setDeletingMonth] = useState<string | null>(null);
-  const [suiviSearch, setSuiviSearch] = useState("");
-  const [suiviPage, setSuiviPage] = useState(1);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const queryClient = useQueryClient();
+  const [consoSearch, setConsoSearch] = useState("");
+  const [consoPage, setConsoPage] = useState(1);
 
   // Hauteur réelle du header (fixe) — sert de décalage aux stats sticky
   // affichées juste en dessous, pour qu'elles restent visibles au défilement
@@ -75,91 +77,21 @@ export default function FuelTrackingPage() {
     return () => ro.disconnect();
   }, []);
 
-  const commandeSyntheseQ = useQuery({
-    queryKey: ["fuel-commande-synthese", month],
-    queryFn: () => getFuelCommandeSynthese({ month: month ?? undefined }),
+  // Pas de `enabled` sur l'onglet actif : le statut des sources (badges du
+  // header) doit rester visible même hors de l'onglet Consommation.
+  const consommationQ = useQuery({
+    queryKey: ["fuel-consommation", month, consoSearch, consoPage],
+    queryFn: () => getFuelConsommation({ month: month ?? undefined, search: consoSearch, page: consoPage, limit: 50 }),
     staleTime: 60_000,
   });
-
-  const suiviCommandeQ = useQuery({
-    queryKey: ["fuel-suivi-commande", month, suiviSearch, suiviPage],
-    queryFn: () => getFuelSuiviCommande({ month: month ?? undefined, search: suiviSearch, page: suiviPage, limit: 50 }),
-    enabled: activeTab === "SUIVI_COMMANDE",
-    staleTime: 60_000,
-  });
-
-  const historyQ = useQuery({
-    queryKey: ["fuel-commande-synthese-history"],
-    queryFn: getFuelCommandeSyntheseHistory,
-    enabled: showHistoryModal,
-    staleTime: 30_000,
-  });
-
-  async function handleDeleteMonth(monthYear: string) {
-    const ok = window.confirm(`Supprimer définitivement toutes les données importées pour ${monthYear} (Synthèse Commande + Suivi Commande) ?`);
-    if (!ok) return;
-    setDeletingMonth(monthYear);
-    try {
-      const result = await deleteFuelCommandeSyntheseMonth(monthYear);
-      toast.success(`${monthYear} supprimé (${result.deleted_commande_synthese + result.deleted_suivi_commande} lignes).`);
-      queryClient.invalidateQueries({ queryKey: ["fuel-commande-synthese-history"] });
-      queryClient.invalidateQueries({ queryKey: ["fuel-commande-synthese"] });
-      queryClient.invalidateQueries({ queryKey: ["fuel-suivi-commande"] });
-      if (month === monthYear) setMonth(null);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.detail || `Échec de la suppression de ${monthYear}.`);
-    } finally {
-      setDeletingMonth(null);
-    }
-  }
 
   // Premier chargement (month encore null) : on adopte le mois résolu par le
-  // backend (le plus récent importé), pour que le champ mois affiche cette valeur.
+  // backend (le plus récent synchronisé), pour que le champ mois affiche cette valeur.
   useEffect(() => {
-    if (month === null && commandeSyntheseQ.data?.month_year) {
-      setMonth(commandeSyntheseQ.data.month_year);
+    if (month === null && consommationQ.data?.month_year) {
+      setMonth(consommationQ.data.month_year);
     }
-  }, [month, commandeSyntheseQ.data?.month_year]);
-
-  function openImportModal() {
-    setImportFile(null);
-    setImportMonthYear("");
-    setImportPrevMonthYear("");
-    setShowImportModal(true);
-  }
-
-  const canSubmitImport = !!importFile && !!importMonthYear && !!importPrevMonthYear && importMonthYear !== importPrevMonthYear;
-
-  async function handleImportSubmit() {
-    if (!importFile || !canSubmitImport) return;
-    setImporting(true);
-    setImportProgress(0);
-    try {
-      const result = await importFuelCommandeSynthese(
-        importFile, importMonthYear, importPrevMonthYear, setImportProgress,
-      );
-      const suiviMsg = result.suivi_commande_rows_imported !== null
-        ? ` + ${result.suivi_commande_rows_imported} sites (Suivi Commande)`
-        : "";
-      toast.success(`${result.rows_imported} lignes importées pour ${result.month_year}${suiviMsg}.`);
-      if (result.suivi_commande_error) {
-        toast.warning(`Suivi Commande non importé : ${result.suivi_commande_error}`);
-      }
-      setMonth(result.month_year);
-      setSuiviPage(1);
-      queryClient.invalidateQueries({ queryKey: ["fuel-commande-synthese"] });
-      queryClient.invalidateQueries({ queryKey: ["fuel-suivi-commande"] });
-      setShowImportModal(false);
-    } catch (err: any) {
-      const msg = err?.response?.data?.detail
-        || (!err?.response ? "Connexion au serveur interrompue pendant l'envoi du fichier. Vérifie ta connexion et réessaie." : null)
-        || "Échec de l'import du fichier.";
-      toast.error(msg);
-    } finally {
-      setImporting(false);
-      setImportProgress(0);
-    }
-  }
+  }, [month, consommationQ.data?.month_year]);
 
   return (
     <>
@@ -178,7 +110,11 @@ export default function FuelTrackingPage() {
               </div>
               <div>
                 <h1 style={{ margin: 0, color: "#0f172a", fontSize: 22, lineHeight: 1.25, fontWeight: 900, letterSpacing: "-.03em" }}>Suivi Carburant</h1>
-                <p style={{ margin: "5px 0 0", color: "#64748b", fontSize: 13 }}>Synthèse mensuelle importée depuis le fichier Excel "Commande FUEL ESCO SENEGAL".</p>
+                <p style={{ margin: "5px 0 0", color: "#64748b", fontSize: 13 }}>Suivi automatisé de la consommation, du stock et des commandes carburant.</p>
+                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                  <SourceBadge label="Snowflake" status={consommationQ.data?.sources?.snowflake} />
+                  <SourceBadge label="ENOC" status={consommationQ.data?.sources?.enoc} />
+                </div>
               </div>
             </div>
 
@@ -187,60 +123,18 @@ export default function FuelTrackingPage() {
                 <Calendar size={14} color={FT.textSub} />
                 <input
                   type="month"
-                  value={month ?? commandeSyntheseQ.data?.month_year ?? ""}
+                  value={month ?? consommationQ.data?.month_year ?? ""}
                   onChange={(e) => setMonth(e.target.value)}
                   style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, color: FT.text, fontWeight: 700 }}
                 />
               </div>
 
               <button
-                onClick={() => commandeSyntheseQ.refetch()}
+                onClick={() => consommationQ.refetch()}
                 title="Rafraîchir"
                 style={{ width: 33, height: 33, borderRadius: 9, border: `1px solid ${FT.border}`, background: FT.slateL, display: "grid", placeItems: "center", cursor: "pointer", color: FT.textMid, flexShrink: 0 }}
               >
-                <RefreshCw size={14} className={commandeSyntheseQ.isFetching ? "ft-spin" : ""} />
-              </button>
-
-              <button
-                onClick={() => setShowHistoryModal(true)}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 7,
-                  padding: "8px 14px",
-                  borderRadius: 9,
-                  border: `1px solid ${FT.border}`,
-                  background: FT.slateL,
-                  color: FT.textMid,
-                  fontSize: 12.5,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  flexShrink: 0,
-                }}
-              >
-                <History size={13} />
-                Historique
-              </button>
-
-              <button
-                onClick={openImportModal}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 7,
-                  padding: "8px 14px",
-                  borderRadius: 9,
-                  border: "none",
-                  background: FT.navy,
-                  color: "#fff",
-                  fontSize: 12.5,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  flexShrink: 0,
-                }}
-              >
-                <Upload size={13} />
-                Importer
+                <RefreshCw size={14} className={consommationQ.isFetching ? "ft-spin" : ""} />
               </button>
             </div>
           </div>
@@ -252,226 +146,57 @@ export default function FuelTrackingPage() {
 
         {activeTab === "DASHBOARD" && (
           <div className="ft-fade">
-            <DashboardSheet data={commandeSyntheseQ.data} loading={commandeSyntheseQ.isLoading} stickyTop={headerHeight} />
+            <PlaceholderSheet
+              icon={<LayoutGrid size={17} />}
+              title="Dashboard"
+              subtitle="Résumé automatique de Consommation, Stock et Commande."
+              emptyTitle="Aucune donnée pour le moment"
+              emptyMessage="Le résumé sera alimenté automatiquement une fois les 3 sous-parties synchronisées depuis leurs sources de données."
+            />
           </div>
         )}
 
-        {activeTab === "SUIVI_COMMANDE" && (
+        {activeTab === "CONSOMMATION" && (
           <div className="ft-fade">
-            <SuiviCommandeSheet
-              data={suiviCommandeQ.data}
-              loading={suiviCommandeQ.isLoading}
-              search={suiviSearch}
+            <ConsommationSheet
+              data={consommationQ.data}
+              loading={consommationQ.isLoading}
+              search={consoSearch}
               onSearchChange={(v) => {
-                setSuiviSearch(v);
-                setSuiviPage(1);
+                setConsoSearch(v);
+                setConsoPage(1);
               }}
-              page={suiviPage}
-              onPageChange={setSuiviPage}
+              page={consoPage}
+              onPageChange={setConsoPage}
               stickyTop={headerHeight}
             />
           </div>
         )}
 
-        <Card style={{ background: FT.slateL }}>
-          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: "white", display: "grid", placeItems: "center", color: FT.gold, flexShrink: 0 }}>
-              <Settings2 size={16} />
-            </div>
-            <div>
-              <div style={{ color: FT.text, fontSize: 14, fontWeight: 850 }}>Module en reconstruction</div>
-              <div style={{ color: FT.textSub, fontSize: 12.5, lineHeight: 1.6, marginTop: 3 }}>
-                La récupération automatique eFMS / ENOC / Snowflake a été retirée. Seul le Dashboard (import du fichier "Commande FUEL ESCO SENEGAL") est actif pour le moment ;
-                les autres onglets (Journal ravitaillement, Conso mensuelle, Stock dépôt, CPH, Référentiel sites, Listes) seront reconstruits un par un, chacun sur la base d'un fichier importé.
-              </div>
-            </div>
+        {activeTab === "STOCK" && (
+          <div className="ft-fade">
+            <PlaceholderSheet
+              icon={<Warehouse size={17} />}
+              title="Stock"
+              subtitle="Suivi automatisé du stock carburant par site."
+              emptyTitle="On va y travailler bientôt"
+              emptyMessage="Cette sous-partie sera automatisée sur le même principe que Consommation."
+            />
           </div>
-        </Card>
+        )}
+
+        {activeTab === "COMMANDE" && (
+          <div className="ft-fade">
+            <PlaceholderSheet
+              icon={<Fuel size={17} />}
+              title="Commande"
+              subtitle="Suivi automatisé des commandes carburant."
+              emptyTitle="On va y travailler bientôt"
+              emptyMessage="Cette sous-partie sera automatisée sur le même principe que Consommation."
+            />
+          </div>
+        )}
       </div>
-
-      {showImportModal && (
-        <Dialog open onOpenChange={(next) => { if (!next && !importing) setShowImportModal(false); }}>
-          <DialogContent className="p-0 gap-0 border-0" style={{ background: "white", borderRadius: 20, padding: 28, maxWidth: 460, width: "100%", boxShadow: "0 32px 80px rgba(0,0,0,.22)" }}>
-            <DialogTitle asChild>
-              <h3 style={{ fontSize: 16, fontWeight: 800, color: FT.text, margin: "0 0 4px" }}>Importer la Synthèse Commande</h3>
-            </DialogTitle>
-            <p style={{ fontSize: 12.5, color: FT.textSub, margin: "0 0 20px" }}>
-              Fichier "Commande FUEL ESCO SENEGAL" — précise les 2 mois concernés par ce fichier (ex: Août / Juillet), tels qu'ils apparaissent dans la feuille.
-            </p>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-              <label style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                <span style={{ fontSize: 11, fontWeight: 800, color: FT.textMid, textTransform: "uppercase", letterSpacing: ".04em" }}>Mois concerné *</span>
-                <input
-                  type="month"
-                  required
-                  value={importMonthYear}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setImportMonthYear(v);
-                    if (v && !importPrevMonthYear) setImportPrevMonthYear(shiftMonth(v, -1));
-                  }}
-                  style={{ border: `1px solid ${FT.border}`, borderRadius: 9, padding: "8px 10px", fontSize: 13, fontWeight: 700, color: FT.text }}
-                />
-              </label>
-              <label style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                <span style={{ fontSize: 11, fontWeight: 800, color: FT.textMid, textTransform: "uppercase", letterSpacing: ".04em" }}>Mois précédent *</span>
-                <input
-                  type="month"
-                  required
-                  value={importPrevMonthYear}
-                  onChange={(e) => setImportPrevMonthYear(e.target.value)}
-                  style={{ border: `1px solid ${FT.border}`, borderRadius: 9, padding: "8px 10px", fontSize: 13, fontWeight: 700, color: FT.text }}
-                />
-              </label>
-            </div>
-
-            {importMonthYear && importPrevMonthYear && importMonthYear === importPrevMonthYear && (
-              <div style={{ marginBottom: 14, padding: "8px 12px", borderRadius: 9, background: FT.redL, color: FT.red, fontSize: 12, fontWeight: 700 }}>
-                Le mois concerné et le mois précédent doivent être différents.
-              </div>
-            )}
-
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              style={{
-                border: `2px dashed ${importFile ? "rgba(15,157,103,.4)" : FT.border}`,
-                borderRadius: 14,
-                padding: "24px 18px",
-                textAlign: "center",
-                cursor: "pointer",
-                background: importFile ? FT.greenL : FT.slateL,
-                marginBottom: 18,
-              }}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsb,.xlsx,.xlsm"
-                style={{ display: "none" }}
-                onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
-              />
-              <FileSpreadsheet size={26} color={importFile ? FT.green : FT.textSub} style={{ marginBottom: 8 }} />
-              {importFile ? (
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: FT.green }}>{importFile.name}</div>
-              ) : (
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: FT.textMid }}>Cliquer pour choisir le fichier (.xlsb, .xlsx)</div>
-              )}
-            </div>
-
-            {importing && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <div style={{ height: 6, borderRadius: 999, background: FT.slateL, overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: `${importProgress}%`, background: FT.navy, transition: "width .2s ease", borderRadius: 999 }} />
-                </div>
-                <div style={{ fontSize: 11.5, color: FT.textSub, textAlign: "center" }}>
-                  {importProgress < 100 ? `Envoi du fichier… ${importProgress}%` : "Traitement du fichier sur le serveur…"}
-                </div>
-              </div>
-            )}
-
-            <div style={{ display: "flex", gap: 10 }}>
-              <button
-                onClick={() => setShowImportModal(false)}
-                disabled={importing}
-                style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: `1px solid ${FT.border}`, background: "#fff", fontSize: 13, fontWeight: 700, color: FT.textMid, cursor: importing ? "not-allowed" : "pointer" }}
-              >
-                Annuler
-              </button>
-              <button
-                onClick={handleImportSubmit}
-                disabled={!canSubmitImport || importing}
-                style={{
-                  flex: 2,
-                  padding: "10px 0",
-                  borderRadius: 10,
-                  border: "none",
-                  background: canSubmitImport && !importing ? FT.navy : FT.slateL,
-                  color: canSubmitImport && !importing ? "#fff" : FT.textSub,
-                  fontSize: 13,
-                  fontWeight: 700,
-                  cursor: canSubmitImport && !importing ? "pointer" : "not-allowed",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 7,
-                }}
-              >
-                {importing && <Loader2 size={14} className="ft-spin" />}
-                {importing ? "Import en cours…" : "Importer"}
-              </button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
-
-      {showHistoryModal && (
-        <Dialog open onOpenChange={(next) => { if (!next) setShowHistoryModal(false); }}>
-          <DialogContent className="p-0 gap-0 border-0" style={{ background: "white", borderRadius: 20, padding: 28, maxWidth: 620, width: "100%", boxShadow: "0 32px 80px rgba(0,0,0,.22)" }}>
-            <DialogTitle asChild>
-              <h3 style={{ fontSize: 16, fontWeight: 800, color: FT.text, margin: "0 0 4px" }}>Historique des imports</h3>
-            </DialogTitle>
-            <p style={{ fontSize: 12.5, color: FT.textSub, margin: "0 0 18px" }}>
-              Un import par mois — Synthèse Commande + Suivi Commande. Supprimer un mois efface définitivement ses données des deux onglets.
-            </p>
-
-            <div style={{ maxHeight: 420, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
-              {historyQ.isLoading && (
-                <div style={{ padding: 20, textAlign: "center", color: FT.textSub, fontSize: 12.5 }}>Chargement…</div>
-              )}
-              {!historyQ.isLoading && (historyQ.data?.length ?? 0) === 0 && (
-                <div style={{ padding: 20, textAlign: "center", color: FT.textSub, fontSize: 12.5 }}>Aucun fichier importé pour le moment.</div>
-              )}
-              {historyQ.data?.map((item) => (
-                <div
-                  key={item.month_year}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
-                    border: `1px solid ${FT.border}`, borderRadius: 12, padding: "12px 14px",
-                    background: FT.slateL,
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: FT.text }}>{monthLabel(item.month_year)}</span>
-                      {item.prev_month_year && (
-                        <span style={{ fontSize: 11, color: FT.textSub }}>(vs {monthLabel(item.prev_month_year)})</span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: 11.5, color: FT.textSub, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {item.filename ?? "—"}
-                    </div>
-                    <div style={{ fontSize: 11, color: FT.textSub, marginTop: 3 }}>
-                      {item.rows_commande_synthese} lignes (Synthèse) · {item.rows_suivi_commande} sites (Suivi)
-                      {item.imported_at && ` · importé le ${new Date(item.imported_at).toLocaleString("fr-FR")}`}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleDeleteMonth(item.month_year)}
-                    disabled={deletingMonth === item.month_year}
-                    title={`Supprimer les données de ${monthLabel(item.month_year)}`}
-                    style={{
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      width: 34, height: 34, borderRadius: 9, border: `1px solid ${FT.redL}`,
-                      background: "#fff", color: FT.red, flexShrink: 0,
-                      cursor: deletingMonth === item.month_year ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    {deletingMonth === item.month_year ? <Loader2 size={14} className="ft-spin" /> : <Trash2 size={14} />}
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <button
-              onClick={() => setShowHistoryModal(false)}
-              style={{ marginTop: 18, width: "100%", padding: "10px 0", borderRadius: 10, border: `1px solid ${FT.border}`, background: "#fff", fontSize: 13, fontWeight: 700, color: FT.textMid, cursor: "pointer" }}
-            >
-              Fermer
-            </button>
-          </DialogContent>
-        </Dialog>
-      )}
     </>
   );
 }
