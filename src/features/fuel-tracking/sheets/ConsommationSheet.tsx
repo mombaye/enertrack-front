@@ -51,15 +51,27 @@ function formatL(value: number) {
   return `${fmt.format(value)} L`;
 }
 
-/** Conso ESTIMÉE (pas mesurée) — déduite de relevés de niveau de cuve ENOC
- * issus d'un import historique ponctuel, jamais au même niveau de confiance
- * que la conso Snowflake. Style visuellement distinct (italique, ton
- * différent) + info-bulle rappelant explicitement la réserve. */
-function EstimatedCell({ value, nbReleves }: { value: number | null; nbReleves: number | null }) {
+/** Conso ESTIMÉE (pas mesurée) — déduite d'un delta de niveau de cuve, jamais
+ * au même niveau de confiance que la conso Snowflake mesurée. Deux sources
+ * possibles, Snowflake (TANK_LEVEL_AVG, alimentée en continu) préférée à
+ * ENOC (import historique figé) quand les deux existent. Style visuellement
+ * distinct (italique, ton différent) + info-bulle précisant la source et le
+ * nombre de relevés utilisés. */
+function EstimatedCell({
+  snowflakeValue, snowflakeReleves, enocValue, enocReleves,
+}: {
+  snowflakeValue: number | null; snowflakeReleves: number | null;
+  enocValue: number | null; enocReleves: number | null;
+}) {
+  const useSnowflake = snowflakeValue !== null && snowflakeValue !== undefined;
+  const value = useSnowflake ? snowflakeValue : enocValue;
   if (value === null || value === undefined) return <span style={{ color: FT.textSub }}>—</span>;
+
+  const source = useSnowflake ? "Snowflake (TANK_LEVEL_AVG)" : "ENOC (relevés import historique)";
+  const releves = useSnowflake ? snowflakeReleves : enocReleves;
   return (
     <span
-      title={`Estimation à partir de ${nbReleves ?? "?"} relevé(s) de niveau de cuve ENOC (import historique ponctuel, pas une mesure en continu) — à prendre avec réserve.`}
+      title={`Estimation par delta de niveau de cuve — source : ${source}, ${releves ?? "?"} relevé(s) utilisé(s). Pas une mesure directe, à prendre avec réserve.`}
       style={{ fontFamily: "ui-monospace, Menlo, monospace", fontWeight: 600, fontStyle: "italic", color: FT.gold, cursor: "help" }}
     >
       ≈ {value.toLocaleString("fr-FR", { maximumFractionDigits: 0 })}
@@ -164,6 +176,7 @@ function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse 
         <KpiCard label="Sites avec GE" value={fmt.format(kpis.sites_avec_ge)} sub={`dont ${fmt.format(kpis.sites_ge_enoc_only)} vus uniquement par ENOC`} tone="gold" icon={<Fuel size={14} />} />
         <KpiCard label="Sites sans GE" value={fmt.format(kpis.sites_sans_ge)} tone="slate" icon={<Fuel size={14} />} />
         <KpiCard label="Conso mesurée (Snowflake)" value={formatL(kpis.total_conso_snowflake_l)} tone="cyan" icon={<Droplets size={14} />} />
+        <KpiCard label="Sites avec estimation" value={fmt.format(kpis.sites_avec_estimation)} sub="delta de niveau de cuve" tone="gold" icon={<Droplets size={14} />} />
         <KpiCard label="Qté ajoutée (ENOC validé)" value={formatL(kpis.total_enoc_qte_ajoutee_l)} tone="green" icon={<Fuel size={14} />} />
         <KpiCard label="Demandes ENOC" value={fmt.format(kpis.total_enoc_nb_demandes)} tone="blue" icon={<Gauge size={14} />} />
       </div>
@@ -263,7 +276,14 @@ export function ConsommationSheet({
                       <td style={td}><GeSourceBadge snowflake={r.has_genset_snowflake} enoc={r.has_genset_enoc} /></td>
                       <td style={td}>{r.power_supply || "—"}</td>
                       <td style={td}><NumCell value={r.conso_snowflake_l} /></td>
-                      <td style={td}><EstimatedCell value={r.conso_estimee_enoc_l} nbReleves={r.conso_estimee_nb_releves} /></td>
+                      <td style={td}>
+                        <EstimatedCell
+                          snowflakeValue={r.conso_estimee_snowflake_l}
+                          snowflakeReleves={r.conso_estimee_snowflake_nb_releves}
+                          enocValue={r.conso_estimee_enoc_l}
+                          enocReleves={r.conso_estimee_nb_releves}
+                        />
+                      </td>
                       <td style={td}><NumCell value={r.conso_specifique_moy_l_kwh} digits={3} /></td>
                       <td style={td}><StatusBadge status={r.sensor_status} /></td>
                       <td style={td}><NumCell value={r.enoc_qte_ajoutee_l} /></td>

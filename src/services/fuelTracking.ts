@@ -32,6 +32,8 @@ export type FuelConsommationSite = {
   nb_ge_enoc: number | null;
   conso_snowflake_l: number | null;
   nb_jours_data: number;
+  conso_estimee_snowflake_l: number | null;
+  conso_estimee_snowflake_nb_releves: number | null;
   conso_estimee_enoc_l: number | null;
   conso_estimee_nb_releves: number | null;
   conso_specifique_moy_l_kwh: number | null;
@@ -49,6 +51,7 @@ export type FuelConsommationKpis = {
   sites_sans_ge: number;
   sites_ge_enoc_only: number;
   sites_avec_conso: number;
+  sites_avec_estimation: number;
   total_conso_snowflake_l: number;
   total_enoc_qte_ajoutee_l: number;
   total_enoc_nb_demandes: number;

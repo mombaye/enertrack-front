@@ -134,12 +134,19 @@ type ConsoRow = {
   hors_catalogue?: boolean;
 };
 
+type SourceStatus = {
+  connected: boolean;
+  last_run_at: string | null;
+  error: string | null;
+};
+
 type ApiListResponse<T> = {
   count: number;
   page?: number;
   page_size?: number;
   pages?: number;
   results: T[];
+  sources?: { snowflake: SourceStatus; solar: SourceStatus };
 };
 
 type ChartPoint = {
@@ -309,6 +316,31 @@ function SourceBadge({ source }: { source?: string | null }) {
     <span title={`Source : ${src}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 8px", borderRadius: 999, background: `${color}18`, color, fontSize: 10, fontWeight: 900, border: `1px solid ${color}40`, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
       <span style={{ width: 6, height: 6, borderRadius: 999, background: color }} />
       {src}
+    </span>
+  );
+}
+
+/** Pastille de statut de connexion d'une source Snowflake (Grid/ACM, Solaire),
+ * avec le message d'erreur exact en info-bulle en cas de déconnexion. */
+function ConnStatusBadge({ label, status }: { label: string; status: SourceStatus | undefined }) {
+  const connected = !!status?.connected;
+  const title = status?.error
+    ? `${label} : ${status.error}`
+    : status?.last_run_at
+      ? `${label} : dernière synchro ${new Date(status.last_run_at).toLocaleString("fr-FR")}`
+      : `${label} : jamais synchronisé`;
+
+  return (
+    <span
+      title={title}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 999,
+        fontSize: 11, fontWeight: 800, border: `1px solid ${connected ? C.ok.mid : C.nok.mid}`,
+        background: connected ? C.ok.light : C.nok.light, color: connected ? C.ok.dark : C.nok.dark, cursor: "help",
+      }}
+    >
+      <span style={{ width: 6, height: 6, borderRadius: 999, background: "currentColor", flexShrink: 0 }} />
+      {label}
     </span>
   );
 }
@@ -622,6 +654,7 @@ export default function SuiviConsoPage() {
   const [rows, setRows] = useState<ConsoRow[]>([]);
   const [chartRows, setChartRows] = useState<ConsoRow[]>([]);
   const [chartLimited, setChartLimited] = useState(false);
+  const [sources, setSources] = useState<{ snowflake: SourceStatus; solar: SourceStatus } | undefined>(undefined);
   const [boBySite, setBoBySite] = useState<Record<string, BOAnalysisRequest>>({});
   const [boSnapshotBySite, setBoSnapshotBySite] = useState<Record<string, BOMarginSnapshot>>({});
 
@@ -672,6 +705,7 @@ export default function SuiviConsoPage() {
       setRows(res.data.results || []);
       setTotal(res.data.count || 0);
       setPages(res.data.pages || Math.max(1, Math.ceil((res.data.count || 0) / pageSize)));
+      if (res.data.sources) setSources(res.data.sources);
     } catch (e: any) {
       setError(e?.response?.data?.detail || e?.message || "Erreur lors du chargement du suivi conso.");
       setRows([]);
@@ -821,6 +855,20 @@ export default function SuiviConsoPage() {
 
   const topTargetNok = useMemo(() => statRows.map((r) => ({ row: r, st: getTargetStatus(r) })).filter((x) => x.st.status === "NOK").sort((a, b) => (b.st.gapPct || 0) - (a.st.gapPct || 0)).slice(0, 10), [statRows]);
 
+  // Un seul badge "Snowflake" : toutes les sources (Grid/ACM, Solaire) viennent
+  // de Snowflake depuis le 2026-08, distinguer les 2 n'apporte plus rien à
+  // l'utilisateur — connecté seulement si les 2 le sont, erreur = celle(s) en échec.
+  const combinedSnowflakeStatus = useMemo<SourceStatus | undefined>(() => {
+    if (!sources) return undefined;
+    const { snowflake, solar } = sources;
+    const errors = [snowflake.error, solar.error].filter(Boolean);
+    return {
+      connected: snowflake.connected && solar.connected,
+      last_run_at: snowflake.last_run_at || solar.last_run_at,
+      error: errors.length ? errors.join(" | ") : null,
+    };
+  }, [sources]);
+
   const inputStyle: CSSProperties = { padding: "9px 12px", borderRadius: 12, border: `1px solid ${C.slate[200]}`, background: "#fff", fontSize: 12, color: C.slate[700], outline: "none", boxShadow: "0 1px 2px rgba(0,0,0,.04)" };
   const buttonStyle: CSSProperties = { border: "none", borderRadius: 12, padding: "9px 12px", fontSize: 12, fontWeight: 900, display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer" };
 
@@ -832,7 +880,10 @@ export default function SuiviConsoPage() {
         <header style={{ background: "#fff", borderRadius: 20, padding: "22px 24px 20px", boxShadow: CARD_SHADOW, border: `1px solid ${CARD_BORDER_CLR}` }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
             <div>
-              <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 9px", background: C.blue[50], border: `1px solid ${C.blue[100]}`, borderRadius: 999, fontSize: 11, fontWeight: 900, color: C.blue[700] }}><ShieldCheck size={13} /> Module financier · Suivi conso</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 9px", background: C.blue[50], border: `1px solid ${C.blue[100]}`, borderRadius: 999, fontSize: 11, fontWeight: 900, color: C.blue[700] }}><ShieldCheck size={13} /> Module financier · Suivi conso</div>
+                <ConnStatusBadge label="Snowflake" status={combinedSnowflakeStatus} />
+              </div>
               <h1 style={{ margin: "12px 0 4px", fontSize: 22, lineHeight: 1.2, letterSpacing: "-.03em", fontWeight: 900, color: "#0f172a" }}>Suivi consommation facturée, eFMS, solaire & estimations</h1>
               <div style={{ fontSize: 13, color: "#64748b", maxWidth: 900 }}>Analyse comparative par site et par mois. Aucun montant financier n’est affiché ici ; cette page se concentre uniquement sur les consommations et les targets.</div>
             </div>
