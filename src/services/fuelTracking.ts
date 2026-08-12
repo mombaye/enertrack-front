@@ -37,7 +37,16 @@ export type FuelConsommationSite = {
   conso_estimee_enoc_l: number | null;
   conso_estimee_nb_releves: number | null;
   conso_specifique_moy_l_kwh: number | null;
+  ge_prod_kwh: number | null;
   sensor_status: string | null;
+  // Colonnes qualité VW_FUEL_REPORT — audit (spec 2026-08).
+  quality_status: string | null;
+  raw_point_count: number | null;
+  valid_point_count: number | null;
+  isolated_spike_count: number | null;
+  over_capacity_point_count: number | null;
+  refill_detected: boolean;
+  estimated_refill_volume_l: number | null;
   enoc_qte_demandee_l: number;
   enoc_qte_validee_l: number;
   enoc_qte_ajoutee_l: number;
@@ -85,6 +94,46 @@ export type FuelConsommationResponse = {
  */
 export async function getFuelConsommation(params?: { month?: string; search?: string; country?: string; has_genset?: "true" | "false"; page?: number; limit?: number }) {
   const { data } = await api.get<FuelConsommationResponse>(`${BASE}/consommation/`, {
+    params: cleanParams(params ?? {}),
+  });
+  return data;
+}
+
+export type FuelConsommationMonthlyPoint = {
+  month_year: string;
+  nb_sites_ge: number;
+  nb_sites_avec_conso: number;
+  nb_sites_monitored: number;
+  total_conso_snowflake_l: number;
+  total_enoc_qte_ajoutee_l: number;
+  total_enoc_nb_demandes: number;
+  nb_sites_enoc_ajoutee: number;
+  conso_specifique_moy_l_kwh: number | null;
+};
+
+export type FuelConsommationTopSite = {
+  site_id: string;
+  site_name: string | null;
+  total_conso_l: number;
+  nb_mois_avec_conso: number;
+};
+
+export type FuelConsommationDashboard = {
+  months: string[];
+  monthly: FuelConsommationMonthlyPoint[];
+  top_sites: FuelConsommationTopSite[];
+  total_ge_sites: number;
+  available_months: string[];
+};
+
+/**
+ * Vue d'ensemble pour l'onglet Dashboard. Portée de months/monthly/top_sites,
+ * par ordre de priorité : from_month+to_month (plage explicite) > month seul
+ * (mois choisi dans le header) > par défaut, les 3 derniers mois disponibles
+ * (jamais tout l'historique).
+ */
+export async function getFuelConsommationDashboard(params?: { month?: string; from_month?: string; to_month?: string }) {
+  const { data } = await api.get<FuelConsommationDashboard>(`${BASE}/consommation/dashboard/`, {
     params: cleanParams(params ?? {}),
   });
   return data;

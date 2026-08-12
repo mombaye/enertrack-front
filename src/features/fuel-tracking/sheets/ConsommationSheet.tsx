@@ -37,9 +37,15 @@ const td: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-function NumCell({ value, digits = 0 }: { value: number | null; digits?: number }) {
-  if (value === null || value === undefined) return <span style={{ color: FT.textSub }}>—</span>;
-  if (value === 0) return <span style={{ color: FT.textSub }}>—</span>;
+function EmptyCell({ reason }: { reason?: string }) {
+  return (
+    <span style={{ color: FT.textSub, cursor: reason ? "help" : undefined }} title={reason}>—</span>
+  );
+}
+
+function NumCell({ value, digits = 0, emptyReason }: { value: number | null; digits?: number; emptyReason?: string }) {
+  if (value === null || value === undefined) return <EmptyCell reason={emptyReason} />;
+  if (value === 0) return <EmptyCell reason={emptyReason} />;
   return (
     <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontWeight: 600 }}>
       {value.toLocaleString("fr-FR", { minimumFractionDigits: digits, maximumFractionDigits: digits })}
@@ -51,36 +57,8 @@ function formatL(value: number) {
   return `${fmt.format(value)} L`;
 }
 
-/** Conso ESTIMÉE (pas mesurée) — déduite d'un delta de niveau de cuve, jamais
- * au même niveau de confiance que la conso Snowflake mesurée. Deux sources
- * possibles, Snowflake (TANK_LEVEL_AVG, alimentée en continu) préférée à
- * ENOC (import historique figé) quand les deux existent. Style visuellement
- * distinct (italique, ton différent) + info-bulle précisant la source et le
- * nombre de relevés utilisés. */
-function EstimatedCell({
-  snowflakeValue, snowflakeReleves, enocValue, enocReleves,
-}: {
-  snowflakeValue: number | null; snowflakeReleves: number | null;
-  enocValue: number | null; enocReleves: number | null;
-}) {
-  const useSnowflake = snowflakeValue !== null && snowflakeValue !== undefined;
-  const value = useSnowflake ? snowflakeValue : enocValue;
-  if (value === null || value === undefined) return <span style={{ color: FT.textSub }}>—</span>;
-
-  const source = useSnowflake ? "Snowflake (TANK_LEVEL_AVG)" : "ENOC (relevés import historique)";
-  const releves = useSnowflake ? snowflakeReleves : enocReleves;
-  return (
-    <span
-      title={`Estimation par delta de niveau de cuve — source : ${source}, ${releves ?? "?"} relevé(s) utilisé(s). Pas une mesure directe, à prendre avec réserve.`}
-      style={{ fontFamily: "ui-monospace, Menlo, monospace", fontWeight: 600, fontStyle: "italic", color: FT.gold, cursor: "help" }}
-    >
-      ≈ {value.toLocaleString("fr-FR", { maximumFractionDigits: 0 })}
-    </span>
-  );
-}
-
 function StatusBadge({ status }: { status: string | null }) {
-  if (!status) return <span style={{ color: FT.textSub }}>—</span>;
+  if (!status) return <EmptyCell reason="Aucune donnée de supervision capteur remontée pour ce site ce mois-ci." />;
   const ok = status === "MONITORED";
   return (
     <span
@@ -258,7 +236,6 @@ export function ConsommationSheet({
                     <th style={th}>Source GE</th>
                     <th style={th}>Alimentation</th>
                     <th style={th}>Conso mesurée (L)</th>
-                    <th style={th} title="Estimation à partir des relevés de niveau de cuve ENOC — pas une mesure, à prendre avec réserve (voir info-bulle des valeurs).">Conso estimée (L)</th>
                     <th style={th}>Conso spécifique (L/kWh)</th>
                     <th style={th}>Statut capteur</th>
                     <th style={th}>Qté ajoutée ENOC (L)</th>
@@ -275,20 +252,37 @@ export function ConsommationSheet({
                       <td style={td}>{r.site_type || "—"}</td>
                       <td style={td}><GeSourceBadge snowflake={r.has_genset_snowflake} enoc={r.has_genset_enoc} /></td>
                       <td style={td}>{r.power_supply || "—"}</td>
-                      <td style={td}><NumCell value={r.conso_snowflake_l} /></td>
                       <td style={td}>
-                        <EstimatedCell
-                          snowflakeValue={r.conso_estimee_snowflake_l}
-                          snowflakeReleves={r.conso_estimee_snowflake_nb_releves}
-                          enocValue={r.conso_estimee_enoc_l}
-                          enocReleves={r.conso_estimee_nb_releves}
+                        <NumCell
+                          value={r.conso_snowflake_l}
+                          emptyReason="Aucune baisse de niveau de cuve fiable détectée ce mois-ci (DROP_DETECTED). Le capteur peut fonctionner normalement (voir Statut capteur) sans qu'aucun évènement de consommation n'ait été assez net pour être compté."
                         />
                       </td>
-                      <td style={td}><NumCell value={r.conso_specifique_moy_l_kwh} digits={3} /></td>
+                      <td style={td}>
+                        <NumCell
+                          value={r.conso_specifique_moy_l_kwh}
+                          digits={3}
+                          emptyReason="Nécessite à la fois une Conso mesurée ET une production groupe électrogène ce mois-ci pour ce site — l'une des deux (ou les deux) manque."
+                        />
+                      </td>
                       <td style={td}><StatusBadge status={r.sensor_status} /></td>
-                      <td style={td}><NumCell value={r.enoc_qte_ajoutee_l} /></td>
-                      <td style={td}>{r.enoc_nb_demandes || "—"}</td>
-                      <td style={td}><NumCell value={r.ecart_conso_vs_enoc_l} /></td>
+                      <td style={td}>
+                        <NumCell
+                          value={r.enoc_qte_ajoutee_l}
+                          emptyReason="Aucun ravitaillement validé par le fuel manager enregistré ce mois-ci pour ce site (ENOC)."
+                        />
+                      </td>
+                      <td style={td}>
+                        {r.enoc_nb_demandes || (
+                          <EmptyCell reason="Aucune demande de ravitaillement ENOC enregistrée ce mois-ci pour ce site." />
+                        )}
+                      </td>
+                      <td style={td}>
+                        <NumCell
+                          value={r.ecart_conso_vs_enoc_l}
+                          emptyReason="Nécessite à la fois une Conso mesurée ET une Qté ajoutée ENOC ce mois-ci pour ce site."
+                        />
+                      </td>
                     </tr>
                   ))}
                 </tbody>

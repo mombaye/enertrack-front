@@ -15,11 +15,12 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, Calendar, Droplets, Fuel, LayoutGrid, RefreshCw, Warehouse } from "lucide-react";
 
-import { getFuelConsommation, type FuelSourceStatus } from "@/services/fuelTracking";
+import { getFuelConsommation, getFuelConsommationDashboard, type FuelSourceStatus } from "@/services/fuelTracking";
 
 import { FT } from "./theme";
 import { GLOBAL_STYLES, SegmentedTabs } from "./ui";
 import { ConsommationSheet } from "./sheets/ConsommationSheet";
+import { DashboardSheet } from "./sheets/DashboardSheet";
 import { PlaceholderSheet } from "./sheets/PlaceholderSheet";
 
 type MainTab = "DASHBOARD" | "CONSOMMATION" | "STOCK" | "COMMANDE";
@@ -58,7 +59,13 @@ function SourceBadge({ label, status }: { label: string; status: FuelSourceStatu
 
 export default function FuelTrackingPage() {
   const [activeTab, setActiveTab] = useState<MainTab>("DASHBOARD");
-  const [month, setMonth] = useState<string | null>(null);
+  // Le header pilote une PLAGE de 2 mois (pas un mois unique) — sert
+  // directement le Dashboard (tendance) ; l'onglet Suivis Consommations
+  // (tableau site×mois) utilise le mois le plus récent de cette plage
+  // (`toMonth`). Initialisée automatiquement aux 3 derniers mois disponibles
+  // dès la 1ère réponse du Dashboard (voir useEffect plus bas).
+  const [fromMonth, setFromMonth] = useState<string | null>(null);
+  const [toMonth, setToMonth] = useState<string | null>(null);
   const [consoSearch, setConsoSearch] = useState("");
   const [consoPage, setConsoPage] = useState(1);
   const [consoGeFilter, setConsoGeFilter] = useState<"all" | "true" | "false">("all");
@@ -78,12 +85,13 @@ export default function FuelTrackingPage() {
     return () => ro.disconnect();
   }, []);
 
-  // Pas de `enabled` sur l'onglet actif : le statut des sources (badges du
-  // header) doit rester visible même hors de l'onglet Consommation.
+  // Pas de `enabled` sur l'onglet actif (ni pour consommationQ ni pour
+  // dashboardQ) : le statut des sources (badges du header) et la plage de
+  // mois doivent rester à jour même hors de leurs onglets respectifs.
   const consommationQ = useQuery({
-    queryKey: ["fuel-consommation", month, consoSearch, consoPage, consoGeFilter],
+    queryKey: ["fuel-consommation", toMonth, consoSearch, consoPage, consoGeFilter],
     queryFn: () => getFuelConsommation({
-      month: month ?? undefined,
+      month: toMonth ?? undefined,
       search: consoSearch,
       page: consoPage,
       limit: 50,
@@ -92,13 +100,25 @@ export default function FuelTrackingPage() {
     staleTime: 60_000,
   });
 
-  // Premier chargement (month encore null) : on adopte le mois résolu par le
-  // backend (le plus récent synchronisé), pour que le champ mois affiche cette valeur.
+  const dashboardQ = useQuery({
+    queryKey: ["fuel-consommation-dashboard", fromMonth, toMonth],
+    queryFn: () => getFuelConsommationDashboard({
+      from_month: fromMonth ?? undefined,
+      to_month: toMonth ?? undefined,
+    }),
+    staleTime: 60_000,
+  });
+
+  // Premier chargement (plage encore vide) : sans from_month/to_month, le
+  // backend retourne déjà les 3 derniers mois disponibles par défaut — on
+  // adopte cette plage résolue pour que les 2 champs du header l'affichent.
   useEffect(() => {
-    if (month === null && consommationQ.data?.month_year) {
-      setMonth(consommationQ.data.month_year);
+    if (fromMonth === null && toMonth === null && dashboardQ.data?.months?.length) {
+      const months = dashboardQ.data.months;
+      setFromMonth(months[0]);
+      setToMonth(months[months.length - 1]);
     }
-  }, [month, consommationQ.data?.month_year]);
+  }, [fromMonth, toMonth, dashboardQ.data?.months]);
 
   return (
     <>
@@ -130,8 +150,17 @@ export default function FuelTrackingPage() {
                 <Calendar size={14} color={FT.textSub} />
                 <input
                   type="month"
-                  value={month ?? consommationQ.data?.month_year ?? ""}
-                  onChange={(e) => setMonth(e.target.value)}
+                  value={fromMonth ?? ""}
+                  max={toMonth ?? undefined}
+                  onChange={(e) => setFromMonth(e.target.value)}
+                  style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, color: FT.text, fontWeight: 700 }}
+                />
+                <span style={{ color: FT.textSub, fontSize: 12 }}>à</span>
+                <input
+                  type="month"
+                  value={toMonth ?? ""}
+                  min={fromMonth ?? undefined}
+                  onChange={(e) => setToMonth(e.target.value)}
                   style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, color: FT.text, fontWeight: 700 }}
                 />
               </div>
@@ -153,13 +182,7 @@ export default function FuelTrackingPage() {
 
         {activeTab === "DASHBOARD" && (
           <div className="ft-fade">
-            <PlaceholderSheet
-              icon={<LayoutGrid size={17} />}
-              title="Dashboard"
-              subtitle="Résumé automatique de Consommation, Stock et Commande."
-              emptyTitle="Aucune donnée pour le moment"
-              emptyMessage="Le résumé sera alimenté automatiquement une fois les 3 sous-parties synchronisées depuis leurs sources de données."
-            />
+            <DashboardSheet data={dashboardQ.data} loading={dashboardQ.isLoading} />
           </div>
         )}
 
