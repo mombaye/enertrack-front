@@ -15,12 +15,13 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, Calendar, Droplets, Fuel, LayoutGrid, RefreshCw, Warehouse } from "lucide-react";
 
-import { getFuelConsommation, getFuelConsommationDashboard, type FuelSourceStatus } from "@/services/fuelTracking";
+import { getFuelConsommation, getFuelConsommationDashboard, getFuelStock, type FuelSourceStatus } from "@/services/fuelTracking";
 
 import { FT } from "./theme";
 import { GLOBAL_STYLES, SegmentedTabs } from "./ui";
 import { ConsommationSheet } from "./sheets/ConsommationSheet";
 import { DashboardSheet } from "./sheets/DashboardSheet";
+import { StockSheet } from "./sheets/StockSheet";
 import { PlaceholderSheet } from "./sheets/PlaceholderSheet";
 
 type MainTab = "DASHBOARD" | "CONSOMMATION" | "STOCK" | "COMMANDE";
@@ -69,6 +70,9 @@ export default function FuelTrackingPage() {
   const [consoSearch, setConsoSearch] = useState("");
   const [consoPage, setConsoPage] = useState(1);
   const [consoGeFilter, setConsoGeFilter] = useState<"all" | "true" | "false">("all");
+  const [stockSearch, setStockSearch] = useState("");
+  const [stockPage, setStockPage] = useState(1);
+  const [stockGeFilter, setStockGeFilter] = useState<"all" | "true" | "false">("all");
 
   // Hauteur réelle du header (fixe) — sert de décalage aux stats sticky
   // affichées juste en dessous, pour qu'elles restent visibles au défilement
@@ -106,6 +110,18 @@ export default function FuelTrackingPage() {
       from_month: fromMonth ?? undefined,
       to_month: toMonth ?? undefined,
     }),
+    staleTime: 60_000,
+  });
+
+  const stockQ = useQuery({
+    queryKey: ["fuel-stock", stockSearch, stockPage, stockGeFilter],
+    queryFn: () => getFuelStock({
+      search: stockSearch,
+      page: stockPage,
+      limit: 50,
+      has_genset: stockGeFilter === "all" ? undefined : stockGeFilter,
+    }),
+    enabled: activeTab === "STOCK",
     staleTime: 60_000,
   });
 
@@ -210,12 +226,22 @@ export default function FuelTrackingPage() {
 
         {activeTab === "STOCK" && (
           <div className="ft-fade">
-            <PlaceholderSheet
-              icon={<Warehouse size={17} />}
-              title="Stock"
-              subtitle="Suivi automatisé du stock carburant par site."
-              emptyTitle="On va y travailler bientôt"
-              emptyMessage="Cette sous-partie sera automatisée sur le même principe que Consommation."
+            <StockSheet
+              data={stockQ.data}
+              loading={stockQ.isLoading}
+              search={stockSearch}
+              onSearchChange={(v) => {
+                setStockSearch(v);
+                setStockPage(1);
+              }}
+              geFilter={stockGeFilter}
+              onGeFilterChange={(v) => {
+                setStockGeFilter(v);
+                setStockPage(1);
+              }}
+              page={stockPage}
+              onPageChange={setStockPage}
+              stickyTop={headerHeight}
             />
           </div>
         )}

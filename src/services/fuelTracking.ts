@@ -138,3 +138,51 @@ export async function getFuelConsommationDashboard(params?: { month?: string; fr
   });
   return data;
 }
+
+export type FuelStockSite = {
+  site_id: string;
+  site_name: string | null;
+  typology: string | null;
+  site_type: string | null;
+  dg_count: string | null;
+  power_supply: string | null;
+  has_genset: boolean;
+  has_genset_snowflake: boolean;
+  has_genset_enoc: boolean;
+  nb_ge_enoc: number | null;
+  stock_snowflake_l: number | null;
+  capacity_snowflake_l: number | null;
+  stock_snowflake_pct: number | null;
+  stock_snowflake_date: string | null;
+  quality_status: string | null;
+  stock_enoc_l: number | null;
+  stock_enoc_date: string | null;
+};
+
+export type FuelStockKpis = {
+  total_sites: number;
+  sites_avec_ge: number;
+  sites_sans_ge: number;
+  sites_avec_stock_snowflake: number;
+  sites_avec_stock_enoc: number;
+};
+
+export type FuelStockResponse = {
+  data: FuelStockSite[];
+  pagination: Pagination;
+  kpis: FuelStockKpis;
+  sources: FuelConsommationSources;
+};
+
+/**
+ * Stock carburant ACTUEL par site — pas de notion de mois (contrairement à
+ * getFuelConsommation), une seule ligne par site remplacée à chaque sync
+ * (sync_fuel_stock). Jointure Snowflake (VW_FUEL_REPORT) + ENOC
+ * (fuel_level_readings), 2 sources distinctes jamais fusionnées.
+ */
+export async function getFuelStock(params?: { search?: string; has_genset?: "true" | "false"; page?: number; limit?: number }) {
+  const { data } = await api.get<FuelStockResponse>(`${BASE}/stock/`, {
+    params: cleanParams(params ?? {}),
+  });
+  return data;
+}
