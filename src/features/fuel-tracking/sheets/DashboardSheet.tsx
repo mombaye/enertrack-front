@@ -143,66 +143,62 @@ export function DashboardSheet({
         </div>
       </Card>
 
-      {multiMonth && (
-        <>
-          <Card padded={false}>
-            <div style={{ padding: "16px 18px 4px" }}>
-              <SheetTitle
-                icon={<Droplets size={16} />}
-                title="Conso mesurée vs ENOC ajouté"
-                subtitle={`Évolution mensuelle — ${scopeLabel}, sites avec GE uniquement — courbes indépendantes, jamais fusionnées (2 sources distinctes).`}
-              />
-            </div>
-            <div style={{ padding: "8px 14px 18px", height: 280 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="ftConsoGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={FT.green} stopOpacity={0.28} />
-                      <stop offset="100%" stopColor={FT.green} stopOpacity={0.02} />
-                    </linearGradient>
-                    <linearGradient id="ftEnocGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={FT.gold} stopOpacity={0.22} />
-                      <stop offset="100%" stopColor={FT.gold} stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke={FT.border} vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: FT.textSub }} axisLine={{ stroke: FT.border }} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: FT.textSub }} axisLine={false} tickLine={false} width={56} tickFormatter={(v) => fmt.format(v)} />
-                  <Tooltip content={<ChartTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 11.5, fontWeight: 700 }} />
-                  <Area type="monotone" dataKey="conso" name="Conso mesurée (L)" stroke={FT.green} fill="url(#ftConsoGrad)" strokeWidth={2.2} />
-                  <Area type="monotone" dataKey="enoc" name="ENOC ajouté (L)" stroke={FT.gold} fill="url(#ftEnocGrad)" strokeWidth={2.2} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
+      <Card padded={false}>
+        <div style={{ padding: "16px 18px 4px" }}>
+          <SheetTitle
+            icon={<Droplets size={16} />}
+            title="Conso mesurée vs ENOC ajouté"
+            subtitle={`Évolution mensuelle — ${scopeLabel}, sites avec GE uniquement — courbes indépendantes, jamais fusionnées (2 sources distinctes).`}
+          />
+        </div>
+        <div style={{ padding: "8px 14px 18px", height: 280 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="ftConsoGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={FT.green} stopOpacity={0.28} />
+                  <stop offset="100%" stopColor={FT.green} stopOpacity={0.02} />
+                </linearGradient>
+                <linearGradient id="ftEnocGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={FT.gold} stopOpacity={0.22} />
+                  <stop offset="100%" stopColor={FT.gold} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke={FT.border} vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: FT.textSub }} axisLine={{ stroke: FT.border }} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: FT.textSub }} axisLine={false} tickLine={false} width={56} tickFormatter={(v) => fmt.format(v)} />
+              <Tooltip content={<ChartTooltip />} />
+              <Legend wrapperStyle={{ fontSize: 11.5, fontWeight: 700 }} />
+              <Area type="monotone" dataKey="conso" name="Conso mesurée (L)" stroke={FT.green} fill="url(#ftConsoGrad)" strokeWidth={2.2} />
+              <Area type="monotone" dataKey="enoc" name="ENOC ajouté (L)" stroke={FT.gold} fill="url(#ftEnocGrad)" strokeWidth={2.2} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
 
-          <Card padded={false}>
-            <div style={{ padding: "16px 18px 4px" }}>
-              <SheetTitle
-                icon={<Gauge size={16} />}
-                title="Couverture des sites"
-                subtitle="Nombre de sites avec GE, avec capteur MONITORED, et avec conso mesurée ce mois-là — pour situer l'écart entre 'instrumenté' et 'donnée effectivement produite'."
-              />
-            </div>
-            <div style={{ padding: "8px 14px 18px", height: 260 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                  <CartesianGrid stroke={FT.border} vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: FT.textSub }} axisLine={{ stroke: FT.border }} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: FT.textSub }} axisLine={false} tickLine={false} width={44} />
-                  <Tooltip content={<ChartTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 11.5, fontWeight: 700 }} />
-                  <Bar dataKey="sitesGe" name="Sites avec GE" fill={FT.slate} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="sitesMonitored" name="Sites MONITORED" fill={FT.blue} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="sitesConso" name="Sites avec conso mesurée" fill={FT.green} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-        </>
-      )}
+      <Card padded={false}>
+        <div style={{ padding: "16px 18px 4px" }}>
+          <SheetTitle
+            icon={<Gauge size={16} />}
+            title="Couverture des sites"
+            subtitle="Nombre de sites avec GE, avec capteur MONITORED, et avec conso mesurée ce mois-là — pour situer l'écart entre 'instrumenté' et 'donnée effectivement produite'."
+          />
+        </div>
+        <div style={{ padding: "8px 14px 18px", height: 260 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke={FT.border} vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: FT.textSub }} axisLine={{ stroke: FT.border }} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: FT.textSub }} axisLine={false} tickLine={false} width={44} />
+              <Tooltip content={<ChartTooltip />} />
+              <Legend wrapperStyle={{ fontSize: 11.5, fontWeight: 700 }} />
+              <Bar dataKey="sitesGe" name="Sites avec GE" fill={FT.slate} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="sitesMonitored" name="Sites MONITORED" fill={FT.blue} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="sitesConso" name="Sites avec conso mesurée" fill={FT.green} radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
 
       <Card padded={false}>
         <div style={{ padding: "16px 18px 4px" }}>

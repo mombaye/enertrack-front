@@ -417,6 +417,83 @@ function FilterChip({ label, value, onClear }: { label: string; value: string; o
   );
 }
 
+type ExportColumnDef = { key: string; label: string };
+type ExportColumnGroup = { title: string; columns: ExportColumnDef[] };
+
+const EXPORT_COLUMN_GROUPS: ExportColumnGroup[] = [
+  {
+    title: "Identification",
+    columns: [
+      { key: "site_id", label: "Site ID" },
+      { key: "site_name", label: "Nom" },
+      { key: "zone", label: "Zone" },
+      { key: "year", label: "Année" },
+      { key: "month", label: "Mois" },
+      { key: "nb_jours", label: "Nb jours" },
+      { key: "typology", label: "Typologie" },
+      { key: "load_w", label: "Load (W)" },
+    ],
+  },
+  {
+    title: "Facturée (Sénélec)",
+    columns: [
+      { key: "conso_facturee_kwh", label: "Conso facturée kWh" },
+      { key: "montant_ht", label: "Montant HT" },
+      { key: "montant_energie", label: "Montant énergie" },
+      { key: "cout_moyen_kwh", label: "Coût moyen kWh" },
+    ],
+  },
+  {
+    title: "Estimation",
+    columns: [
+      { key: "conso_estimee_kwh", label: "Conso estimée kWh" },
+      { key: "montant_estime", label: "Montant estimé" },
+      { key: "source_estimation", label: "Source estimation" },
+      { key: "est_acm_kwh", label: "Estim. ACM kWh" },
+      { key: "est_grid_kwh", label: "Estim. Grid kWh" },
+      { key: "est_histo_kwh", label: "Estim. Historique 30j kWh" },
+      { key: "est_target_kwh", label: "Estim. Target kWh" },
+      { key: "est_theorique_kwh", label: "Estim. Théorique kWh" },
+    ],
+  },
+  {
+    title: "eFMS",
+    columns: [
+      { key: "fms_grid_kwh", label: "eFMS Grid kWh" },
+      { key: "fms_acm_kwh", label: "eFMS ACM kWh" },
+    ],
+  },
+  {
+    title: "Solaire",
+    columns: [
+      { key: "solar_kwh", label: "Solaire kWh" },
+      { key: "solar_target", label: "Solaire Target kWh" },
+      { key: "unavail_hours", label: "Heures indisponibilité" },
+    ],
+  },
+  {
+    title: "Target & marge",
+    columns: [
+      { key: "conso_target", label: "Conso Target kWh" },
+      { key: "redevance", label: "Redevance" },
+      { key: "marge", label: "Marge" },
+      { key: "marge_statut", label: "Statut marge" },
+      { key: "recurrence_type", label: "Type récurrence" },
+      { key: "hors_catalogue", label: "Hors catalogue" },
+    ],
+  },
+];
+
+// Reproduit exactement l'ancien export CSV figé (mêmes colonnes, même ordre)
+// pour que la sélection par défaut du modal ne surprenne pas les habitués.
+const DEFAULT_EXPORT_COLUMNS = [
+  "site_id", "site_name", "zone", "year", "month", "nb_jours",
+  "conso_facturee_kwh", "conso_estimee_kwh", "source_estimation",
+  "fms_grid_kwh", "fms_acm_kwh", "solar_kwh", "solar_target",
+  "montant_ht", "montant_estime", "marge_statut", "recurrence_type",
+  "hors_catalogue", "typology", "load_w",
+];
+
 const PRESETS = [
   { label: "Année 2026", range: [periodKey(2026, 1), periodKey(2026, 12)] },
   { label: "Année 2025", range: [periodKey(2025, 1), periodKey(2025, 12)] },
@@ -671,6 +748,9 @@ export default function SuiviConsoPage() {
   const [typoFilter, setTypoFilter] = useState("");
   const [targetStatusFilter, setTargetStatusFilter] = useState("");
   const [helpModalOpen, setHelpModalOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportColumns, setExportColumns] = useState<string[]>(DEFAULT_EXPORT_COLUMNS);
+  const [exporting, setExporting] = useState(false);
 
   const headerRef = useRef<HTMLDivElement | null>(null);
   const [headerHeight, setHeaderHeight] = useState(0);
@@ -778,18 +858,30 @@ export default function SuiviConsoPage() {
     setPage(1);
   };
 
-  const exportUrl = useMemo(() => {
-    const p = new URLSearchParams();
-    p.set("year_start", String(ys));
-    p.set("month_start", String(ms));
-    p.set("year_end", String(ye));
-    p.set("month_end", String(me));
-    p.set("export", "csv");
-    if (zone) p.set("zone", zone);
-    if (search.trim()) p.set("search", search.trim());
-    if (typoFilter) p.set("typology", typoFilter);
-    return `/api/financial/suivi-conso/?${p.toString()}`;
-  }, [ys, ms, ye, me, zone, search, typoFilter]);
+  const handleExportConfirm = useCallback(async () => {
+    setExporting(true);
+    setError(null);
+    try {
+      const res = await api.get("/financial/suivi-conso/", {
+        params: { ...baseParams, export: "csv", columns: exportColumns.join(",") },
+        responseType: "blob",
+      });
+      const blob = new Blob([res.data], { type: "text/csv;charset=utf-8" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `suivi_conso_${ys}${String(ms).padStart(2, "0")}-${ye}${String(me).padStart(2, "0")}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setExportModalOpen(false);
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || e?.message || "Erreur lors de l'export CSV.");
+    } finally {
+      setExporting(false);
+    }
+  }, [baseParams, exportColumns, ys, ms, ye, me]);
 
   const tableRows = useMemo(() => rows.filter((r) => matchesTargetFilter(r, targetStatusFilter)), [rows, targetStatusFilter]);
   const chartFilteredRows = useMemo(() => chartRows.filter((r) => matchesTargetFilter(r, targetStatusFilter)), [chartRows, targetStatusFilter]);
@@ -899,7 +991,7 @@ export default function SuiviConsoPage() {
               <DateRangePicker startKey={startKey} endKey={endKey} onChange={onPeriodChange} />
               <button onClick={() => setHelpModalOpen(true)} type="button" style={{ ...buttonStyle, background: C.blue[50], color: C.blue[700], border: `1px solid ${C.blue[100]}` }}><Info size={14} /> Comprendre le statut</button>
               <button onClick={() => { fetchRows(); fetchChartRows(); }} type="button" style={{ ...buttonStyle, background: C.slate[50], color: C.slate[700], border: `1px solid ${C.slate[200]}` }}><RefreshCw size={14} /> Actualiser</button>
-              <a href={exportUrl} style={{ ...buttonStyle, background: C.blue[700], color: "#fff", textDecoration: "none" }}><Download size={14} /> Export CSV</a>
+              <button onClick={() => setExportModalOpen(true)} type="button" style={{ ...buttonStyle, background: C.blue[700], color: "#fff" }}><Download size={14} /> Export CSV</button>
             </div>
           </div>
         </header>
@@ -947,6 +1039,17 @@ export default function SuiviConsoPage() {
       </div>
 
       {helpModalOpen ? <TargetStatusHelpModal onClose={() => setHelpModalOpen(false)} /> : null}
+      {exportModalOpen ? (
+        <ExportCsvModal
+          onClose={() => { if (!exporting) setExportModalOpen(false); }}
+          selected={exportColumns}
+          onChangeSelected={setExportColumns}
+          onConfirm={handleExportConfirm}
+          exporting={exporting}
+          periodLabel={ys === ye && ms === me ? fmtPeriod(ys, ms) : `${fmtPeriod(ys, ms)} → ${fmtPeriod(ye, me)}`}
+          rowsCount={total}
+        />
+      ) : null}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 16 }}>
         {error ? <div style={{ padding: "14px 16px", borderRadius: 16, background: C.nok.light, border: `1px solid ${C.nok.mid}`, color: C.nok.dark, display: "flex", alignItems: "center", gap: 10 }}><AlertCircle size={18} /> {error}</div> : null}
@@ -992,6 +1095,96 @@ function TargetStatusHelpModal({ onClose }: { onClose: () => void }) {
           <InfoBox tone="nok" icon={<XCircle size={14} />} title="Target NOK" text="La consommation de référence dépasse la target." />
           <InfoBox tone="slate" icon={<Target size={14} />} title="Sans target" text="Aucune cible de consommation n’est disponible." />
           <InfoBox tone="warn" icon={<AlertCircle size={14} />} title="Sans donnée" text="Aucune consommation exploitable pour comparer à la target." />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ExportCsvModal({
+  onClose,
+  selected,
+  onChangeSelected,
+  onConfirm,
+  exporting,
+  periodLabel,
+  rowsCount,
+}: {
+  onClose: () => void;
+  selected: string[];
+  onChangeSelected: (keys: string[]) => void;
+  onConfirm: () => void;
+  exporting: boolean;
+  periodLabel: string;
+  rowsCount: number;
+}) {
+  const allKeys = useMemo(() => EXPORT_COLUMN_GROUPS.flatMap((g) => g.columns.map((c) => c.key)), []);
+  const toggle = (key: string) => onChangeSelected(selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key]);
+  const toggleGroup = (group: ExportColumnGroup) => {
+    const groupKeys = group.columns.map((c) => c.key);
+    const allSelected = groupKeys.every((k) => selected.includes(k));
+    onChangeSelected(allSelected ? selected.filter((k) => !groupKeys.includes(k)) : Array.from(new Set([...selected, ...groupKeys])));
+  };
+
+  return (
+    <Dialog open onOpenChange={(next) => { if (!next && !exporting) onClose(); }}>
+      <DialogContent
+        className="p-0 gap-0 border-0"
+        style={{ width: "100%", maxWidth: 620, borderRadius: 20, overflow: "hidden", boxShadow: "0 24px 80px rgba(2,6,23,.28)" }}
+      >
+        <div style={{ padding: "20px 22px", borderBottom: `1px solid ${C.slate[100]}`, display: "flex", alignItems: "flex-start", gap: 13 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 14, background: C.blue[50], color: C.blue[700], display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Download size={18} /></div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <DialogTitle asChild>
+              <div style={{ fontSize: 15, fontWeight: 950, color: C.blue[950] }}>Exporter en CSV</div>
+            </DialogTitle>
+            <div style={{ fontSize: 12.5, color: C.slate[600], marginTop: 4, lineHeight: 1.55 }}>
+              Choisissez les colonnes à inclure dans l’export. La période et les filtres actifs (<strong>{periodLabel}</strong>) s’appliquent — {rowsCount.toLocaleString("fr-FR")} ligne(s) concernée(s).
+            </div>
+          </div>
+          <button onClick={() => { if (!exporting) onClose(); }} type="button" style={{ border: "none", background: C.slate[100], color: C.slate[500], width: 28, height: 28, borderRadius: 9, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><X size={14} /></button>
+        </div>
+
+        <div style={{ padding: "14px 22px 4px", display: "flex", gap: 8 }}>
+          <button type="button" onClick={() => onChangeSelected(allKeys)} style={{ border: `1px solid ${C.blue[200]}`, background: C.blue[50], color: C.blue[700], borderRadius: 999, padding: "6px 12px", fontSize: 11.5, fontWeight: 900, cursor: "pointer" }}>Tout sélectionner</button>
+          <button type="button" onClick={() => onChangeSelected([])} style={{ border: `1px solid ${C.slate[200]}`, background: "#fff", color: C.slate[600], borderRadius: 999, padding: "6px 12px", fontSize: 11.5, fontWeight: 900, cursor: "pointer" }}>Tout désélectionner</button>
+        </div>
+
+        <div style={{ padding: "10px 22px 6px", maxHeight: 380, overflow: "auto", display: "grid", gap: 14 }}>
+          {EXPORT_COLUMN_GROUPS.map((group) => {
+            const groupKeys = group.columns.map((c) => c.key);
+            const allSelected = groupKeys.every((k) => selected.includes(k));
+            const someSelected = !allSelected && groupKeys.some((k) => selected.includes(k));
+            return (
+              <div key={group.title}>
+                <button type="button" onClick={() => toggleGroup(group)} style={{ display: "flex", alignItems: "center", gap: 8, border: "none", background: "transparent", padding: 0, marginBottom: 8, cursor: "pointer" }}>
+                  <span style={{ width: 15, height: 15, borderRadius: 4, border: `1.5px solid ${allSelected ? C.blue[600] : someSelected ? C.blue[400] : C.slate[300]}`, background: allSelected ? C.blue[600] : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    {allSelected ? <CheckCircle2 size={11} color="#fff" /> : someSelected ? <span style={{ width: 7, height: 2, background: C.blue[400], borderRadius: 2 }} /> : null}
+                  </span>
+                  <span style={{ fontSize: 12, fontWeight: 900, color: C.blue[900] }}>{group.title}</span>
+                </button>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 6, paddingLeft: 23 }}>
+                  {group.columns.map((col) => {
+                    const checked = selected.includes(col.key);
+                    return (
+                      <label key={col.key} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: C.slate[700], cursor: "pointer" }}>
+                        <input type="checkbox" checked={checked} onChange={() => toggle(col.key)} style={{ width: 13, height: 13, accentColor: C.blue[600] }} />
+                        {col.label}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ padding: "16px 22px 20px", borderTop: `1px solid ${C.slate[100]}`, display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <button type="button" onClick={onClose} disabled={exporting} style={{ border: `1px solid ${C.slate[200]}`, background: "#fff", color: C.slate[600], borderRadius: 12, padding: "9px 16px", fontSize: 12.5, fontWeight: 900, cursor: exporting ? "not-allowed" : "pointer" }}>Annuler</button>
+          <button type="button" onClick={onConfirm} disabled={exporting || selected.length === 0} style={{ border: "none", background: exporting || selected.length === 0 ? C.slate[300] : C.blue[700], color: "#fff", borderRadius: 12, padding: "9px 18px", fontSize: 12.5, fontWeight: 900, cursor: exporting || selected.length === 0 ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}>
+            {exporting ? <span style={{ width: 13, height: 13, border: "2px solid rgba(255,255,255,.4)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin .8s linear infinite" }} /> : <Download size={14} />}
+            {exporting ? "Export en cours…" : "Valider et exporter"}
+          </button>
         </div>
       </DialogContent>
     </Dialog>

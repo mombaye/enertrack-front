@@ -52,6 +52,19 @@ export type FuelConsommationSite = {
   enoc_qte_ajoutee_l: number;
   enoc_nb_demandes: number;
   ecart_conso_vs_enoc_l: number | null;
+  // Estimation CPH (télémétrie GFMS_DATA_TRACKER_NC) — 3e source, indépendante
+  // des 2 ci-dessus, pour les GE sans capteur de cuve fiable. "Sans litre
+  // inventé" : conso_estimee_cph_l ne compte que les jours au statut OK ;
+  // cph_status_breakdown explique pourquoi les autres jours sont vides.
+  conso_estimee_cph_l: number | null;
+  cph_l_per_h_moy: number | null;
+  cph_nb_jours_ok: number | null;
+  cph_nb_jours_calcules: number | null;
+  cph_calculation_status: string | null;
+  cph_status_breakdown: Record<string, number> | null;
+  cph_runtime_h_total: number | null;
+  cph_runtime_source: "TRACKER_5MIN" | "DSE_CONTROLLER" | "DG_ON_CALCULATED" | null;
+  cph_ge_type: string | null;
 };
 
 export type FuelConsommationKpis = {
@@ -78,6 +91,11 @@ export type FuelConsommationSources = {
   enoc: FuelSourceStatus;
 };
 
+export type FuelCphParametersStatus = {
+  sites_configures: number;
+  dernier_import: string | null;
+};
+
 export type FuelConsommationResponse = {
   month_year: string | null;
   data: FuelConsommationSite[];
@@ -85,6 +103,7 @@ export type FuelConsommationResponse = {
   available_months: string[];
   kpis: FuelConsommationKpis | null;
   sources?: FuelConsommationSources;
+  cph_parameters?: FuelCphParametersStatus;
 };
 
 /**
