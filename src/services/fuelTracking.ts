@@ -23,7 +23,9 @@ export type FuelConsommationSite = {
   site_id: string;
   site_name: string | null;
   typology: string | null;
+  typologie_simple: string | null;
   site_type: string | null;
+  type_ge: string | null;
   dg_count: string | null;
   power_supply: string | null;
   has_genset: boolean;
@@ -65,6 +67,39 @@ export type FuelConsommationSite = {
   cph_runtime_h_total: number | null;
   cph_runtime_source: "TRACKER_5MIN" | "DSE_CONTROLLER" | "DG_ON_CALCULATED" | null;
   cph_ge_type: string | null;
+  cph_pge_kva: number | null;
+  cph_power_factor: number | null;
+  cph_spc_l_per_kwh: number | null;
+  conso_fichier_l: number | null;
+  fichier_source: string | null;
+  // Colonnes Suivis Consommation (2026-08) — sourcées de Base GE.xlsx
+  // (identité, running time, CPH L/h, conso estimée/mesurée, charge GE) +
+  // détail énergie du pipeline CPH Snowflake (absent du fichier).
+  pge_kva_fichier: number | null;
+  ge_load_pct_fichier: number | null;
+  cph_lph_fichier: number | null;
+  // Valeurs résolues — Running Time/Conso estimée : pipeline CPH Snowflake
+  // (télémétrie) exclusivement ; _source indique l'origine précise (ex.
+  // "snowflake_dse_controller", "cph_snowflake"). Conso mesurée vue :
+  // Snowflake (capteur) en priorité, relevé de gardiennage (jauge manuelle)
+  // en repli quand Snowflake n'a rien — voir import_gardien_conso.
+  ge_runtime_fichier_h: number | null;
+  ge_runtime_source: string | null;
+  conso_estimee_fichier_l: number | null;
+  conso_estimee_source: string | null;
+  conso_mesuree_fichier_l: number | null;
+  conso_mesuree_source: "snowflake" | "gardiennage" | null;
+  gardien_statut: string | null;
+  ecart_fichier_l: number | null;
+  ecart_fichier_pct: number | null;
+  cph_site_load_energy_kwh: number | null;
+  cph_battery_dc_energy_kwh: number | null;
+  cph_battery_ac_energy_kwh: number | null;
+  cph_total_ge_energy_kwh: number | null;
+  // Explique, pour les valeurs manquantes de cette ligne (Running Time,
+  // Conso estimée, Conso mesurée vue), pourquoi aucune source disponible
+  // ne les a fournies. null si tout est renseigné.
+  commentaire: string | null;
 };
 
 export type FuelConsommationKpis = {
@@ -72,6 +107,7 @@ export type FuelConsommationKpis = {
   sites_avec_ge: number;
   sites_sans_ge: number;
   sites_ge_enoc_only: number;
+  sites_avec_ge_incomplet: number;
   sites_avec_conso: number;
   sites_avec_estimation: number;
   total_conso_snowflake_l: number;
@@ -96,6 +132,24 @@ export type FuelCphParametersStatus = {
   dernier_import: string | null;
 };
 
+// Recoupement Snowflake/ENOC/fichiers de référence — explique d'où viennent
+// les effectifs Avec GE/Sans GE et où se situent les sites des fichiers
+// (Base GE.xlsx / Base août 26 validée) par rapport aux sites GE réseau.
+export type FuelGeDetection = {
+  total_sites: number;
+  avec_ge: number;
+  sans_ge: number;
+  avec_ge_snowflake: number;
+  avec_ge_enoc: number;
+  vus_seulement_enoc: number;
+  vus_seulement_snowflake: number;
+  vus_par_les_deux: number;
+  sites_dans_fichier: number;
+  dans_fichier_et_ge: number;
+  dans_fichier_sans_ge: number;
+  ge_hors_fichier: number;
+};
+
 export type FuelConsommationResponse = {
   month_year: string | null;
   data: FuelConsommationSite[];
@@ -104,6 +158,7 @@ export type FuelConsommationResponse = {
   kpis: FuelConsommationKpis | null;
   sources?: FuelConsommationSources;
   cph_parameters?: FuelCphParametersStatus;
+  ge_detection?: FuelGeDetection | null;
 };
 
 /**
@@ -111,7 +166,7 @@ export type FuelConsommationResponse = {
  * ENOC), voir sync_fuel_consommation côté backend. Pas d'upload : alimentée
  * par une synchronisation planifiée.
  */
-export async function getFuelConsommation(params?: { month?: string; search?: string; country?: string; has_genset?: "true" | "false"; page?: number; limit?: number }) {
+export async function getFuelConsommation(params?: { month?: string; search?: string; country?: string; has_genset?: "true" | "false" | "incomplete"; page?: number; limit?: number }) {
   const { data } = await api.get<FuelConsommationResponse>(`${BASE}/consommation/`, {
     params: cleanParams(params ?? {}),
   });
@@ -128,6 +183,9 @@ export type FuelConsommationMonthlyPoint = {
   total_enoc_nb_demandes: number;
   nb_sites_enoc_ajoutee: number;
   conso_specifique_moy_l_kwh: number | null;
+  total_conso_estimee_cph_l: number;
+  nb_sites_avec_cph: number;
+  nb_sites_incomplet: number;
 };
 
 export type FuelConsommationTopSite = {
@@ -143,6 +201,7 @@ export type FuelConsommationDashboard = {
   top_sites: FuelConsommationTopSite[];
   total_ge_sites: number;
   available_months: string[];
+  cph_parameters: FuelCphParametersStatus;
 };
 
 /**
@@ -184,6 +243,9 @@ export type FuelStockKpis = {
   sites_sans_ge: number;
   sites_avec_stock_snowflake: number;
   sites_avec_stock_enoc: number;
+  sites_stock_critique: number;
+  sites_stock_alerte: number;
+  sites_sans_aucun_stock: number;
 };
 
 export type FuelStockResponse = {

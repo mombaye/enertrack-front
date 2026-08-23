@@ -13,7 +13,7 @@ import { Droplets, Fuel, Gauge, Search, Users, Warehouse } from "lucide-react";
 import type { FuelStockResponse } from "@/services/fuelTracking";
 import { Card, EmptyState, KpiCard, Pager, Skeleton } from "../ui";
 import { FT } from "../theme";
-import { fmt } from "../helpers";
+import { fmt, STOCK_AGING_DAYS, STOCK_FILL_CRITICAL, STOCK_FILL_WARNING, STOCK_STALE_DAYS } from "../helpers";
 
 const th: CSSProperties = {
   position: "sticky",
@@ -60,7 +60,7 @@ function DateCell({ date }: { date: string | null }) {
   if (!date) return <EmptyCell />;
   const d = new Date(date);
   const ageDays = Math.floor((Date.now() - d.getTime()) / 86_400_000);
-  const tone = ageDays > 15 ? { bg: FT.redL, fg: FT.red } : ageDays > 7 ? { bg: FT.orangeL, fg: FT.orange } : { bg: FT.greenL, fg: FT.green };
+  const tone = ageDays > STOCK_STALE_DAYS ? { bg: FT.redL, fg: FT.red } : ageDays > STOCK_AGING_DAYS ? { bg: FT.orangeL, fg: FT.orange } : { bg: FT.greenL, fg: FT.green };
   return (
     <span
       title={`Relevé du ${d.toLocaleDateString("fr-FR")} — ${ageDays} jour(s)`}
@@ -78,7 +78,7 @@ function DateCell({ date }: { date: string | null }) {
  * réserve carburant courants, à ajuster si le métier en donne d'autres). */
 function FillBar({ pct }: { pct: number | null }) {
   if (pct === null || pct === undefined) return <EmptyCell reason="Nécessite un stock ET une capacité de cuve connus (Snowflake)." />;
-  const tone = pct < 15 ? FT.red : pct < 40 ? FT.orange : FT.green;
+  const tone = pct < STOCK_FILL_CRITICAL ? FT.red : pct < STOCK_FILL_WARNING ? FT.orange : FT.green;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 90 }}>
       <div style={{ flex: 1, height: 7, borderRadius: 999, background: FT.slateL, overflow: "hidden" }}>

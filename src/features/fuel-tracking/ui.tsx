@@ -288,6 +288,32 @@ export function GroupToggleBar({
   );
 }
 
+export function Modal({ title, onClose, children }: { title?: string; onClose: () => void; children: ReactNode }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", display: "grid", placeItems: "center", zIndex: 1000, padding: 20 }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ background: FT.card, borderRadius: FT.radius, boxShadow: FT.shadow, maxWidth: 480, width: "100%", maxHeight: "80vh", overflow: "auto", padding: 22 }}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
+          {title && <div style={{ fontSize: 14.5, fontWeight: 800, color: FT.text }}>{title}</div>}
+          <button
+            onClick={onClose}
+            aria-label="Fermer"
+            style={{ border: "none", background: "transparent", cursor: "pointer", color: FT.textSub, fontSize: 20, lineHeight: 1, padding: 2, flexShrink: 0 }}
+          >
+            ×
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export function EmptyState({ icon, title, subtitle }: { icon: ReactNode; title: string; subtitle?: string }) {
   return (
     <div

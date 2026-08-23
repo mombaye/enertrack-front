@@ -69,7 +69,7 @@ export default function FuelTrackingPage() {
   const [toMonth, setToMonth] = useState<string | null>(null);
   const [consoSearch, setConsoSearch] = useState("");
   const [consoPage, setConsoPage] = useState(1);
-  const [consoGeFilter, setConsoGeFilter] = useState<"all" | "true" | "false">("all");
+  const [consoGeFilter, setConsoGeFilter] = useState<"all" | "true" | "false" | "incomplete">("all");
   const [stockSearch, setStockSearch] = useState("");
   const [stockPage, setStockPage] = useState(1);
   const [stockGeFilter, setStockGeFilter] = useState<"all" | "true" | "false">("all");
@@ -121,7 +121,9 @@ export default function FuelTrackingPage() {
       limit: 50,
       has_genset: stockGeFilter === "all" ? undefined : stockGeFilter,
     }),
-    enabled: activeTab === "STOCK",
+    // Aussi actif sur DASHBOARD : la section Stock du Dashboard réutilise
+    // cette même requête (pas de duplication d'appel réseau).
+    enabled: activeTab === "STOCK" || activeTab === "DASHBOARD",
     staleTime: 60_000,
   });
 
@@ -198,7 +200,12 @@ export default function FuelTrackingPage() {
 
         {activeTab === "DASHBOARD" && (
           <div className="ft-fade">
-            <DashboardSheet data={dashboardQ.data} loading={dashboardQ.isLoading} />
+            <DashboardSheet
+              data={dashboardQ.data}
+              loading={dashboardQ.isLoading}
+              stockData={stockQ.data}
+              stockLoading={stockQ.isLoading}
+            />
           </div>
         )}
 
