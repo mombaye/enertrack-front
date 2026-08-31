@@ -166,7 +166,20 @@ export type FuelConsommationResponse = {
  * ENOC), voir sync_fuel_consommation côté backend. Pas d'upload : alimentée
  * par une synchronisation planifiée.
  */
-export async function getFuelConsommation(params?: { month?: string; search?: string; country?: string; has_genset?: "true" | "false" | "incomplete"; page?: number; limit?: number }) {
+export type FuelGeDetectionFilter =
+  | "avec_ge"
+  | "sans_ge"
+  | "avec_ge_snowflake"
+  | "avec_ge_enoc"
+  | "vus_seulement_enoc"
+  | "vus_seulement_snowflake"
+  | "vus_par_les_deux"
+  | "sites_dans_fichier"
+  | "dans_fichier_et_ge"
+  | "dans_fichier_sans_ge"
+  | "ge_hors_fichier";
+
+export async function getFuelConsommation(params?: { month?: string; search?: string; country?: string; has_genset?: "true" | "false" | "incomplete"; detection?: FuelGeDetectionFilter; page?: number; limit?: number }) {
   const { data } = await api.get<FuelConsommationResponse>(`${BASE}/consommation/`, {
     params: cleanParams(params ?? {}),
   });
@@ -202,6 +215,7 @@ export type FuelConsommationDashboard = {
   total_ge_sites: number;
   available_months: string[];
   cph_parameters: FuelCphParametersStatus;
+  ge_detection: FuelGeDetection | null;
 };
 
 /**
@@ -235,6 +249,7 @@ export type FuelStockSite = {
   quality_status: string | null;
   stock_enoc_l: number | null;
   stock_enoc_date: string | null;
+  commentaire: string | null;
 };
 
 export type FuelStockKpis = {
@@ -263,6 +278,73 @@ export type FuelStockResponse = {
  */
 export async function getFuelStock(params?: { search?: string; has_genset?: "true" | "false"; page?: number; limit?: number }) {
   const { data } = await api.get<FuelStockResponse>(`${BASE}/stock/`, {
+    params: cleanParams(params ?? {}),
+  });
+  return data;
+}
+
+export type FuelCommandeSyntheseRow = {
+  label: string;
+  is_total_row: boolean;
+  nb_sites: number;
+  commande_normale_l: number;
+  commande_hivernale_l: number;
+  total_l: number;
+  nb_sites_prev: number;
+  commande_normale_prev_l: number;
+  commande_hivernale_prev_l: number;
+  total_prev_l: number;
+  ecart_sites: number;
+  ecart_qte_l: number;
+  commentaires: string | null;
+};
+
+export type FuelCommandeSite = {
+  site_id: string;
+  site_name: string | null;
+  typologie_contractuelle: string | null;
+  load_commande: number;
+  indoor_outdoor: string | null;
+  batch: string | null;
+  typologie_facturee: string | null;
+  typo_operations: string | null;
+  conso_moy_jour_l: number;
+  commande_sans_marge_l: number;
+  commande_avec_marge_l: number;
+  estimation_stock_final_l: number;
+};
+
+export type FuelCommandeKpis = {
+  total_sites: number;
+  total_commande_avec_marge_l: number;
+  total_commande_sans_marge_l: number;
+  nb_sites_commande_positive: number;
+  nb_sites_stock_negatif: number;
+};
+
+export type FuelCommandeResponse = {
+  month_year: string | null;
+  prev_month_year: string | null;
+  available_months: string[];
+  synthese: {
+    categorie: FuelCommandeSyntheseRow[];
+    typologie: FuelCommandeSyntheseRow[];
+  };
+  sites: {
+    data: FuelCommandeSite[];
+    pagination: Pagination | null;
+    kpis: FuelCommandeKpis | null;
+  };
+};
+
+/**
+ * Commande carburant mensuelle — import mensuel brut (pas de synchro
+ * automatisée : commande décidée par l'équipe Ops dans un fichier Excel,
+ * voir import_commande_fuel côté backend), lecture seule, aucun upload sur
+ * cette page.
+ */
+export async function getFuelCommandes(params?: { month?: string; search?: string; page?: number; limit?: number }) {
+  const { data } = await api.get<FuelCommandeResponse>(`${BASE}/commandes/`, {
     params: cleanParams(params ?? {}),
   });
   return data;

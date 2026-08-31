@@ -8,10 +8,10 @@
 // totalité à chaque sync (sync_fuel_stock) — 2 sources indépendantes,
 // jamais fusionnées.
 
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { Droplets, Fuel, Gauge, Search, Users, Warehouse } from "lucide-react";
 import type { FuelStockResponse } from "@/services/fuelTracking";
-import { Card, EmptyState, KpiCard, Pager, Skeleton } from "../ui";
+import { Card, EmptyState, KpiCard, Modal, Pager, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { fmt, STOCK_AGING_DAYS, STOCK_FILL_CRITICAL, STOCK_FILL_WARNING, STOCK_STALE_DAYS } from "../helpers";
 
@@ -179,6 +179,8 @@ export function StockSheet({
   onPageChange: (p: number) => void;
   stickyTop?: number;
 }) {
+  const [activeComment, setActiveComment] = useState<{ siteId: string; siteName: string | null; text: string } | null>(null);
+
   if (loading) return <Skeleton h={520} />;
 
   const rows = data?.data ?? [];
@@ -221,7 +223,7 @@ export function StockSheet({
         ) : (
           <>
             <div style={{ overflow: "auto", maxHeight: 600, borderRadius: 12, border: `1px solid ${FT.border}` }}>
-              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1300 }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1550 }}>
                 <thead>
                   <tr>
                     <th style={th}>Site ID</th>
@@ -234,6 +236,7 @@ export function StockSheet({
                     <th style={th}>Relevé Snowflake</th>
                     <th style={th}>Stock ENOC (L)</th>
                     <th style={th}>Relevé ENOC</th>
+                    <th style={{ ...th, textAlign: "left" }}>Commentaire</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -259,6 +262,23 @@ export function StockSheet({
                         />
                       </td>
                       <td style={td}><DateCell date={r.stock_enoc_date} /></td>
+                      <td style={{ ...td, textAlign: "left", maxWidth: 260 }}>
+                        {r.commentaire ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 11.5, color: FT.textSub, minWidth: 0 }}>
+                              {r.commentaire}
+                            </span>
+                            <button
+                              onClick={() => setActiveComment({ siteId: r.site_id, siteName: r.site_name, text: r.commentaire! })}
+                              style={{ flexShrink: 0, border: "none", background: "transparent", color: FT.blue, fontSize: 11, fontWeight: 800, cursor: "pointer", padding: 0, textDecoration: "underline" }}
+                            >
+                              Voir plus
+                            </button>
+                          </div>
+                        ) : (
+                          <span style={{ color: FT.green, fontSize: 11.5 }}>Toutes les données disponibles.</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -278,6 +298,12 @@ export function StockSheet({
           </>
         )}
       </Card>
+
+      {activeComment && (
+        <Modal title={`${activeComment.siteId}${activeComment.siteName ? ` — ${activeComment.siteName}` : ""}`} onClose={() => setActiveComment(null)}>
+          <p style={{ fontSize: 13, lineHeight: 1.6, color: FT.text, margin: 0, whiteSpace: "pre-wrap" }}>{activeComment.text}</p>
+        </Modal>
+      )}
     </div>
   );
 }

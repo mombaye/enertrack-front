@@ -7,8 +7,9 @@
 // rejoindront ce tableau plus tard, une fois leur format défini.
 
 import { useState, type CSSProperties } from "react";
+import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Droplets, Fuel, Gauge, Search, Users } from "lucide-react";
-import type { FuelConsommationResponse } from "@/services/fuelTracking";
+import type { FuelConsommationResponse, FuelGeDetectionFilter } from "@/services/fuelTracking";
 import { Card, EmptyState, KpiCard, Modal, Pager, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { fmt, monthLabel } from "../helpers";
@@ -174,50 +175,216 @@ function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse 
   );
 }
 
-function DetectionStat({ label, value }: { label: string; value: number }) {
+export const DETECTION_LABELS: Record<FuelGeDetectionFilter, string> = {
+  avec_ge: "Avec GE (Snowflake OU ENOC)",
+  sans_ge: "Sans GE",
+  avec_ge_snowflake: "Détectés par Snowflake (DG_COUNT>0)",
+  avec_ge_enoc: "Détectés par ENOC",
+  vus_seulement_enoc: "Vus seulement par ENOC",
+  vus_seulement_snowflake: "Vus seulement par Snowflake",
+  vus_par_les_deux: "Vus par les deux",
+  sites_dans_fichier: "Sites dans le(s) fichier(s)",
+  dans_fichier_et_ge: "Dans le fichier ET Snowflake/ENOC confirment GE",
+  dans_fichier_sans_ge: "Dans le fichier mais Snowflake/ENOC ne voient pas de GE",
+  ge_hors_fichier: "Snowflake/ENOC voient un GE, absent des fichiers",
+};
+
+type DonutSegment = { key: FuelGeDetectionFilter; label: string; value: number; color: string };
+
+function DetectionDonut({
+  title,
+  segments,
+  activeDetection,
+  onToggle,
+}: {
+  title: string;
+  segments: DonutSegment[];
+  activeDetection: FuelGeDetectionFilter | null;
+  onToggle: (key: FuelGeDetectionFilter) => void;
+}) {
+  const total = segments.reduce((a, s) => a + s.value, 0);
   return (
-    <div>
-      <div style={{ fontSize: 15, fontWeight: 800, color: FT.text, fontFamily: "ui-monospace, Menlo, monospace" }}>{fmt.format(value)}</div>
-      <div style={{ fontSize: 11, color: FT.textSub, marginTop: 2 }}>{label}</div>
+    <div style={{ flex: "1 1 260px", minWidth: 240 }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: FT.textSub, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 10 }}>
+        {title}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+        <div style={{ width: 140, height: 140, flexShrink: 0 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={segments}
+                dataKey="value"
+                nameKey="label"
+                innerRadius={40}
+                outerRadius={65}
+                paddingAngle={2}
+                strokeWidth={0}
+                onClick={(entry: any) => onToggle(entry.payload?.key ?? entry.key)}
+                cursor="pointer"
+              >
+                {segments.map((s) => (
+                  <Cell
+                    key={s.key}
+                    fill={s.color}
+                    opacity={activeDetection && activeDetection !== s.key && segments.some((seg) => seg.key === activeDetection) ? 0.35 : 1}
+                  />
+                ))}
+              </Pie>
+              <Tooltip formatter={(value: number, _name: string, entry: any) => [`${fmt.format(value)} site(s)`, entry?.payload?.label]} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div style={{ display: "grid", gap: 8, flex: 1, minWidth: 130 }}>
+          {segments.map((s) => (
+            <div
+              key={s.key}
+              onClick={() => onToggle(s.key)}
+              title="Cliquer pour voir ces sites dans le tableau ci-dessous"
+              style={{
+                display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
+                borderRadius: 7, padding: "3px 6px", margin: "-3px -6px",
+                background: activeDetection === s.key ? FT.blueL : "transparent",
+              }}
+            >
+              <span style={{ width: 10, height: 10, borderRadius: 999, background: s.color, flexShrink: 0 }} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: activeDetection === s.key ? FT.blue : FT.text, fontFamily: "ui-monospace, Menlo, monospace" }}>
+                  {fmt.format(s.value)} <span style={{ fontSize: 10.5, fontWeight: 700, color: FT.textSub }}>({total > 0 ? Math.round((s.value / total) * 100) : 0}%)</span>
+                </div>
+                <div style={{ fontSize: 10.5, color: FT.textSub }}>{s.label}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
 
-function GeDetectionPanel({ detection }: { detection: FuelConsommationResponse["ge_detection"] }) {
+type BarDatum = { key: FuelGeDetectionFilter; label: string; value: number; color: string };
+
+function DetectionBarChart({
+  title,
+  bars,
+  activeDetection,
+  onToggle,
+}: {
+  title: string;
+  bars: BarDatum[];
+  activeDetection: FuelGeDetectionFilter | null;
+  onToggle: (key: FuelGeDetectionFilter) => void;
+}) {
+  return (
+    <div style={{ flex: "1 1 240px", minWidth: 220 }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: FT.textSub, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 10 }}>
+        {title}
+      </div>
+      <div style={{ height: 132 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={bars} layout="vertical" margin={{ top: 2, right: 16, bottom: 2, left: 0 }}>
+            <XAxis type="number" hide />
+            <YAxis type="category" dataKey="label" width={150} tick={{ fontSize: 10.5, fill: FT.textMid }} axisLine={false} tickLine={false} />
+            <Tooltip formatter={(value: number) => [`${fmt.format(value)} site(s)`, ""]} cursor={{ fill: FT.slateL }} />
+            <Bar
+              dataKey="value"
+              radius={[0, 5, 5, 0]}
+              barSize={20}
+              onClick={(entry: any) => onToggle(entry.payload?.key ?? entry.key)}
+              cursor="pointer"
+              label={{ position: "right", fontSize: 11, fontWeight: 800, fill: FT.text, formatter: (v: any) => fmt.format(Number(v)) }}
+            >
+              {bars.map((b) => (
+                <Cell key={b.key} fill={activeDetection === b.key ? FT.blue : b.color} opacity={activeDetection && activeDetection !== b.key ? 0.5 : 1} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function GeDetectionPanel({
+  detection,
+  activeDetection,
+  onDetectionChange,
+}: {
+  detection: FuelConsommationResponse["ge_detection"];
+  activeDetection: FuelGeDetectionFilter | null;
+  onDetectionChange: (key: FuelGeDetectionFilter | null) => void;
+}) {
   if (!detection) return null;
+
+  const toggle = (key: FuelGeDetectionFilter) => onDetectionChange(activeDetection === key ? null : key);
+
   return (
     <Card style={{ padding: 16 }}>
-      <div style={{ fontSize: 12.5, fontWeight: 800, color: FT.text, marginBottom: 4 }}>
-        Détection GE — Snowflake / ENOC seuls (audit, avant correction Typo simple)
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 4, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 12.5, fontWeight: 800, color: FT.text }}>
+          Détection GE — Snowflake / ENOC seuls (audit, avant correction Typo simple)
+        </div>
+        {activeDetection && (
+          <button
+            onClick={() => onDetectionChange(null)}
+            style={{ border: "none", background: FT.slateL, color: FT.textMid, cursor: "pointer", fontSize: 11, fontWeight: 800, borderRadius: 999, padding: "4px 10px" }}
+          >
+            Réinitialiser le filtre ×
+          </button>
+        )}
       </div>
-      <div style={{ fontSize: 11, color: FT.textSub, marginBottom: 12 }}>
+      <div style={{ fontSize: 11, color: FT.textSub, marginBottom: 14 }}>
         Ces chiffres reflètent uniquement Snowflake/ENOC, sans la règle Typo simple appliquée ailleurs sur cette page
         (où tout site du fichier dont Typo simple mentionne GE compte Avec GE, même si Snowflake/ENOC disent le contraire).
-        Le total « Avec GE » réellement utilisé par les filtres/KPI de cette page est donc plus élevé que la ligne
-        « Avec GE (Snowflake OU ENOC) » ci-dessous.
+        Cliquez sur une part ou une légende pour voir ces sites dans le tableau ci-dessous.
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 14, marginBottom: 14 }}>
-        <DetectionStat label="Total sites (réseau)" value={detection.total_sites} />
-        <DetectionStat label="Avec GE (Snowflake OU ENOC)" value={detection.avec_ge} />
-        <DetectionStat label="Sans GE" value={detection.sans_ge} />
-        <DetectionStat label="Détectés par Snowflake (DG_COUNT>0)" value={detection.avec_ge_snowflake} />
-        <DetectionStat label="Détectés par ENOC" value={detection.avec_ge_enoc} />
-        <DetectionStat label="Vus seulement par ENOC" value={detection.vus_seulement_enoc} />
-        <DetectionStat label="Vus seulement par Snowflake" value={detection.vus_seulement_snowflake} />
-        <DetectionStat label="Vus par les deux" value={detection.vus_par_les_deux} />
+
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 10 }}>
+        <DetectionDonut
+          title={`Couverture GE — réseau (${fmt.format(detection.total_sites)} sites)`}
+          segments={[
+            { key: "avec_ge", label: DETECTION_LABELS.avec_ge, value: detection.avec_ge, color: FT.blue },
+            { key: "sans_ge", label: DETECTION_LABELS.sans_ge, value: detection.sans_ge, color: FT.slate },
+          ]}
+          activeDetection={activeDetection}
+          onToggle={toggle}
+        />
+        <DetectionDonut
+          title={`Avec GE, par source (${fmt.format(detection.avec_ge)} sites)`}
+          segments={[
+            { key: "vus_seulement_enoc", label: DETECTION_LABELS.vus_seulement_enoc, value: detection.vus_seulement_enoc, color: FT.gold },
+            { key: "vus_seulement_snowflake", label: DETECTION_LABELS.vus_seulement_snowflake, value: detection.vus_seulement_snowflake, color: FT.cyan },
+            { key: "vus_par_les_deux", label: DETECTION_LABELS.vus_par_les_deux, value: detection.vus_par_les_deux, color: FT.green },
+          ]}
+          activeDetection={activeDetection}
+          onToggle={toggle}
+        />
       </div>
-      <div style={{ borderTop: `1px solid ${FT.border}`, paddingTop: 12 }}>
-        <div style={{ fontSize: 11, fontWeight: 800, color: FT.textSub, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 10 }}>
-          Sites des fichiers (Base GE.xlsx / Base août 26 validée) vs avis Snowflake/ENOC
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 14 }}>
-          <DetectionStat label="Sites dans le(s) fichier(s)" value={detection.sites_dans_fichier} />
-          <DetectionStat label="Dans le fichier ET Snowflake/ENOC confirment GE" value={detection.dans_fichier_et_ge} />
-          <DetectionStat label="Dans le fichier mais Snowflake/ENOC ne voient pas de GE" value={detection.dans_fichier_sans_ge} />
-          <DetectionStat label="Snowflake/ENOC voient un GE, absent des fichiers" value={detection.ge_hors_fichier} />
-        </div>
-        <div style={{ fontSize: 11, color: FT.textSub, marginTop: 10 }}>
-          Les {fmt.format(detection.dans_fichier_sans_ge)} sites de la 3ᵉ case comptent quand même Avec GE partout ailleurs sur cette page (Typo simple mentionne GE pour les {fmt.format(detection.sites_dans_fichier)} sites du fichier).
+
+      <div style={{ borderTop: `1px solid ${FT.border}`, paddingTop: 14, display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start" }}>
+        <DetectionDonut
+          title={`Sites du fichier — vs avis Snowflake/ENOC (${fmt.format(detection.sites_dans_fichier)} sites)`}
+          segments={[
+            { key: "dans_fichier_et_ge", label: DETECTION_LABELS.dans_fichier_et_ge, value: detection.dans_fichier_et_ge, color: FT.green },
+            { key: "dans_fichier_sans_ge", label: DETECTION_LABELS.dans_fichier_sans_ge, value: detection.dans_fichier_sans_ge, color: FT.orange },
+          ]}
+          activeDetection={activeDetection}
+          onToggle={toggle}
+        />
+        <div style={{ flex: "1 1 260px", minWidth: 240 }}>
+          <DetectionBarChart
+            title="Totaux bruts (catégories non exclusives)"
+            bars={[
+              { key: "ge_hors_fichier", label: DETECTION_LABELS.ge_hors_fichier, value: detection.ge_hors_fichier, color: FT.red },
+              { key: "avec_ge_snowflake", label: DETECTION_LABELS.avec_ge_snowflake, value: detection.avec_ge_snowflake, color: FT.cyan },
+              { key: "avec_ge_enoc", label: DETECTION_LABELS.avec_ge_enoc, value: detection.avec_ge_enoc, color: FT.gold },
+            ]}
+            activeDetection={activeDetection}
+            onToggle={toggle}
+          />
+          <div style={{ fontSize: 10.5, color: FT.textSub, lineHeight: 1.5, marginTop: 6 }}>
+            Les {fmt.format(detection.dans_fichier_sans_ge)} sites « GE non confirmé » comptent quand même Avec GE partout ailleurs sur cette page (Typo simple mentionne GE pour les {fmt.format(detection.sites_dans_fichier)} sites du fichier).
+          </div>
         </div>
       </div>
     </Card>
@@ -231,6 +398,8 @@ export function ConsommationSheet({
   onSearchChange,
   geFilter,
   onGeFilterChange,
+  detectionFilter,
+  onDetectionFilterChange,
   page,
   onPageChange,
   stickyTop = 0,
@@ -241,6 +410,8 @@ export function ConsommationSheet({
   onSearchChange: (v: string) => void;
   geFilter: GeFilter;
   onGeFilterChange: (v: GeFilter) => void;
+  detectionFilter: FuelGeDetectionFilter | null;
+  onDetectionFilterChange: (v: FuelGeDetectionFilter | null) => void;
   page: number;
   onPageChange: (p: number) => void;
   stickyTop?: number;
@@ -256,7 +427,14 @@ export function ConsommationSheet({
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <ConsommationKpis data={data} stickyTop={stickyTop + 14} />
 
-      <GeDetectionPanel detection={data?.ge_detection} />
+      <GeDetectionPanel
+        detection={data?.ge_detection}
+        activeDetection={detectionFilter}
+        onDetectionChange={(v) => {
+          onDetectionFilterChange(v);
+          onGeFilterChange("all");
+        }}
+      />
 
       <Card padded={false} style={{ padding: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
@@ -270,11 +448,29 @@ export function ConsommationSheet({
                 Automatisé — Snowflake (conso mesurée par capteur + estimation CPH par télémétrie). Aucun upload nécessaire.
                 {data?.pagination && ` ${fmt.format(data.pagination.total)} site(s).`}
               </div>
+              {detectionFilter && (
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 7, background: FT.blueL, color: FT.blue, borderRadius: 999, padding: "4px 10px", fontSize: 11, fontWeight: 800 }}>
+                  Filtre détection : {DETECTION_LABELS[detectionFilter]}
+                  <button
+                    onClick={() => onDetectionFilterChange(null)}
+                    style={{ border: "none", background: "transparent", color: FT.blue, cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0, fontWeight: 900 }}
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <GeFilterButtons value={geFilter} onChange={onGeFilterChange} kpis={data?.kpis ?? null} />
+            <GeFilterButtons
+              value={geFilter}
+              onChange={(v) => {
+                onGeFilterChange(v);
+                onDetectionFilterChange(null);
+              }}
+              kpis={data?.kpis ?? null}
+            />
             <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px", minWidth: 220 }}>
               <Search size={14} color={FT.textSub} />
               <input

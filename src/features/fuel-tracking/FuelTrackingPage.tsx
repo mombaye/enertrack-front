@@ -15,14 +15,14 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, Calendar, Droplets, Fuel, LayoutGrid, RefreshCw, Warehouse } from "lucide-react";
 
-import { getFuelConsommation, getFuelConsommationDashboard, getFuelStock, type FuelSourceStatus } from "@/services/fuelTracking";
+import { getFuelCommandes, getFuelConsommation, getFuelConsommationDashboard, getFuelStock, type FuelGeDetectionFilter, type FuelSourceStatus } from "@/services/fuelTracking";
 
 import { FT } from "./theme";
 import { GLOBAL_STYLES, SegmentedTabs } from "./ui";
 import { ConsommationSheet } from "./sheets/ConsommationSheet";
 import { DashboardSheet } from "./sheets/DashboardSheet";
 import { StockSheet } from "./sheets/StockSheet";
-import { PlaceholderSheet } from "./sheets/PlaceholderSheet";
+import { CommandeSheet } from "./sheets/CommandeSheet";
 
 type MainTab = "DASHBOARD" | "CONSOMMATION" | "STOCK" | "COMMANDE";
 
@@ -69,10 +69,18 @@ export default function FuelTrackingPage() {
   const [toMonth, setToMonth] = useState<string | null>(null);
   const [consoSearch, setConsoSearch] = useState("");
   const [consoPage, setConsoPage] = useState(1);
-  const [consoGeFilter, setConsoGeFilter] = useState<"all" | "true" | "false" | "incomplete">("all");
+  // Par défaut, Suivis Consommations n'affiche que les sites Avec GE (seuls
+  // capables d'avoir une conso fuel) — demande explicite (2026-08), plutôt
+  // que "Tous" qui noie la table avec les ~2850 sites sans GE.
+  const [consoGeFilter, setConsoGeFilter] = useState<"all" | "true" | "false" | "incomplete">("true");
+  const [consoDetectionFilter, setConsoDetectionFilter] = useState<FuelGeDetectionFilter | null>(null);
   const [stockSearch, setStockSearch] = useState("");
   const [stockPage, setStockPage] = useState(1);
-  const [stockGeFilter, setStockGeFilter] = useState<"all" | "true" | "false">("all");
+  // Même défaut que Suivis Consommations — Avec GE (seuls capables d'avoir
+  // du stock fuel), pas "Tous".
+  const [stockGeFilter, setStockGeFilter] = useState<"all" | "true" | "false">("true");
+  const [commandeSearch, setCommandeSearch] = useState("");
+  const [commandePage, setCommandePage] = useState(1);
 
   // Hauteur réelle du header (fixe) — sert de décalage aux stats sticky
   // affichées juste en dessous, pour qu'elles restent visibles au défilement
@@ -93,13 +101,14 @@ export default function FuelTrackingPage() {
   // dashboardQ) : le statut des sources (badges du header) et la plage de
   // mois doivent rester à jour même hors de leurs onglets respectifs.
   const consommationQ = useQuery({
-    queryKey: ["fuel-consommation", toMonth, consoSearch, consoPage, consoGeFilter],
+    queryKey: ["fuel-consommation", toMonth, consoSearch, consoPage, consoGeFilter, consoDetectionFilter],
     queryFn: () => getFuelConsommation({
       month: toMonth ?? undefined,
       search: consoSearch,
       page: consoPage,
       limit: 50,
-      has_genset: consoGeFilter === "all" ? undefined : consoGeFilter,
+      has_genset: consoDetectionFilter ? undefined : (consoGeFilter === "all" ? undefined : consoGeFilter),
+      detection: consoDetectionFilter ?? undefined,
     }),
     staleTime: 60_000,
   });
@@ -124,6 +133,19 @@ export default function FuelTrackingPage() {
     // Aussi actif sur DASHBOARD : la section Stock du Dashboard réutilise
     // cette même requête (pas de duplication d'appel réseau).
     enabled: activeTab === "STOCK" || activeTab === "DASHBOARD",
+    staleTime: 60_000,
+  });
+
+  const commandeQ = useQuery({
+    queryKey: ["fuel-commandes", commandeSearch, commandePage],
+    queryFn: () => getFuelCommandes({
+      search: commandeSearch,
+      page: commandePage,
+      limit: 50,
+    }),
+    // Aussi actif sur DASHBOARD : la section Commandes du Dashboard
+    // réutilise cette même requête (pas de duplication d'appel réseau).
+    enabled: activeTab === "COMMANDE" || activeTab === "DASHBOARD",
     staleTime: 60_000,
   });
 
@@ -205,6 +227,8 @@ export default function FuelTrackingPage() {
               loading={dashboardQ.isLoading}
               stockData={stockQ.data}
               stockLoading={stockQ.isLoading}
+              commandeData={commandeQ.data}
+              commandeLoading={commandeQ.isLoading}
             />
           </div>
         )}
@@ -222,6 +246,11 @@ export default function FuelTrackingPage() {
               geFilter={consoGeFilter}
               onGeFilterChange={(v) => {
                 setConsoGeFilter(v);
+                setConsoPage(1);
+              }}
+              detectionFilter={consoDetectionFilter}
+              onDetectionFilterChange={(v) => {
+                setConsoDetectionFilter(v);
                 setConsoPage(1);
               }}
               page={consoPage}
@@ -255,12 +284,17 @@ export default function FuelTrackingPage() {
 
         {activeTab === "COMMANDE" && (
           <div className="ft-fade">
-            <PlaceholderSheet
-              icon={<Fuel size={17} />}
-              title="Commande"
-              subtitle="Suivi automatisé des commandes carburant."
-              emptyTitle="On va y travailler bientôt"
-              emptyMessage="Cette sous-partie sera automatisée sur le même principe que Consommation."
+            <CommandeSheet
+              data={commandeQ.data}
+              loading={commandeQ.isLoading}
+              search={commandeSearch}
+              onSearchChange={(v) => {
+                setCommandeSearch(v);
+                setCommandePage(1);
+              }}
+              page={commandePage}
+              onPageChange={setCommandePage}
+              stickyTop={headerHeight}
             />
           </div>
         )}

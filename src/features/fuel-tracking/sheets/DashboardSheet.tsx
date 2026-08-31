@@ -1,5 +1,5 @@
 // src/features/fuel-tracking/sheets/DashboardSheet.tsx
-// Onglet Dashboard — vue GLOBALE du module suivi-carburant, en 3 sections
+// Onglet Dashboard — vue GLOBALE du module suivi-carburant, en 4 sections
 // indépendantes :
 //   1. Consommation (mesurée Snowflake/ENOC + estimée CPH) — seule section
 //      pilotée par la plage "Du / à" du header (FuelTrackingPage), alimentée
@@ -8,25 +8,30 @@
 //      instantané par site, remplacé en totalité à chaque sync). Ne bouge
 //      donc PAS quand on change la période du header — présenté séparément
 //      pour ne pas laisser croire le contraire.
-//   3. Commandes — aucune donnée réelle n'existe encore (pas de backend) :
-//      un simple rappel, pas de chiffres inventés.
+//   3. Commandes — import mensuel brut (fichier Ops, voir
+//      import_commande_fuel), pas de notion de plage non plus (toujours le
+//      dernier mois importé) — même principe que Stock : présenté à part.
 // Les courbes Consommation s'affichent toujours, même avec un seul mois ou
 // des données vides (pas de graphique masqué conditionnellement).
 
 import {
+  Bar,
+  BarChart,
   Cell,
   Pie,
   PieChart,
   ResponsiveContainer,
   Tooltip,
+  XAxis,
+  YAxis,
 } from "recharts";
 import { AlertTriangle, Droplets, Fuel, Gauge, LayoutGrid, TrendingUp, Users, Warehouse } from "lucide-react";
 
-import type { FuelConsommationDashboard, FuelStockResponse } from "@/services/fuelTracking";
+import type { FuelCommandeResponse, FuelConsommationDashboard, FuelStockResponse } from "@/services/fuelTracking";
 import { Card, EmptyState, KpiCard, SheetTitle, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { fmt, monthLabel } from "../helpers";
-import { PlaceholderSheet } from "./PlaceholderSheet";
+import { DETECTION_LABELS } from "./ConsommationSheet";
 
 function ConsommationSection({ data }: { data: FuelConsommationDashboard }) {
   const multiMonth = data.months.length > 1;
@@ -202,7 +207,133 @@ function ConsommationSection({ data }: { data: FuelConsommationDashboard }) {
           </div>
         </Card>
       </div>
+
+      <GeDetectionSummary detection={data.ge_detection} />
     </>
+  );
+}
+
+function StaticDonut({ title, segments }: { title: string; segments: Array<{ label: string; value: number; color: string }> }) {
+  const total = segments.reduce((a, s) => a + s.value, 0);
+  return (
+    <div style={{ flex: "1 1 240px", minWidth: 220 }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: FT.textSub, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 10 }}>
+        {title}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+        <div style={{ width: 120, height: 120, flexShrink: 0 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie data={segments} dataKey="value" nameKey="label" innerRadius={34} outerRadius={56} paddingAngle={2} strokeWidth={0}>
+                {segments.map((s) => (
+                  <Cell key={s.label} fill={s.color} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(value: number, _name: string, entry: any) => [`${fmt.format(value)} site(s)`, entry?.payload?.label]} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div style={{ display: "grid", gap: 6, flex: 1, minWidth: 120 }}>
+          {segments.map((s) => (
+            <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <span style={{ width: 9, height: 9, borderRadius: 999, background: s.color, flexShrink: 0 }} />
+              <div>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: FT.text, fontFamily: "ui-monospace, Menlo, monospace" }}>
+                  {fmt.format(s.value)} <span style={{ fontSize: 10, fontWeight: 700, color: FT.textSub }}>({total > 0 ? Math.round((s.value / total) * 100) : 0}%)</span>
+                </div>
+                <div style={{ fontSize: 10.5, color: FT.textSub }}>{s.label}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StaticBarChart({
+  title,
+  bars,
+  height = 132,
+  unit = "site(s)",
+  minWidth = 240,
+}: {
+  title: string;
+  bars: Array<{ label: string; value: number; color: string }>;
+  height?: number;
+  unit?: string;
+  minWidth?: number;
+}) {
+  return (
+    <div style={{ flex: "1 1 260px", minWidth }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: FT.textSub, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 10 }}>
+        {title}
+      </div>
+      <div style={{ height }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={bars} layout="vertical" margin={{ top: 2, right: 16, bottom: 2, left: 0 }}>
+            <XAxis type="number" hide />
+            <YAxis type="category" dataKey="label" width={150} tick={{ fontSize: 10.5, fill: FT.textMid }} axisLine={false} tickLine={false} />
+            <Tooltip formatter={(value: number) => [`${fmt.format(value)} ${unit}`, ""]} cursor={{ fill: FT.slateL }} />
+            <Bar dataKey="value" radius={[0, 5, 5, 0]} barSize={18} label={{ position: "right", fontSize: 11, fontWeight: 800, fill: FT.text, formatter: (v: any) => fmt.format(Number(v)) }}>
+              {bars.map((b) => (
+                <Cell key={b.label} fill={b.color} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+const BAR_PALETTE = [FT.blue, FT.green, FT.gold, FT.cyan, FT.violet, FT.orange, FT.red, FT.slate];
+
+function GeDetectionSummary({ detection }: { detection: FuelConsommationDashboard["ge_detection"] }) {
+  if (!detection) return null;
+  return (
+    <Card style={{ padding: 16 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 800, color: FT.text, marginBottom: 4 }}>
+        Détection GE — Snowflake / ENOC seuls (audit, avant correction Typo simple)
+      </div>
+      <div style={{ fontSize: 11, color: FT.textSub, marginBottom: 14 }}>
+        Détail par site disponible sur l'onglet Suivis Consommations (mêmes graphes, cliquables pour filtrer le tableau).
+      </div>
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 14 }}>
+        <StaticDonut
+          title={`Couverture GE — réseau (${fmt.format(detection.total_sites)} sites)`}
+          segments={[
+            { label: DETECTION_LABELS.avec_ge, value: detection.avec_ge, color: FT.blue },
+            { label: DETECTION_LABELS.sans_ge, value: detection.sans_ge, color: FT.slate },
+          ]}
+        />
+        <StaticDonut
+          title={`Avec GE, par source (${fmt.format(detection.avec_ge)} sites)`}
+          segments={[
+            { label: DETECTION_LABELS.vus_seulement_enoc, value: detection.vus_seulement_enoc, color: FT.gold },
+            { label: DETECTION_LABELS.vus_seulement_snowflake, value: detection.vus_seulement_snowflake, color: FT.cyan },
+            { label: DETECTION_LABELS.vus_par_les_deux, value: detection.vus_par_les_deux, color: FT.green },
+          ]}
+        />
+      </div>
+      <div style={{ borderTop: `1px solid ${FT.border}`, paddingTop: 14, display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start" }}>
+        <StaticDonut
+          title={`Sites du fichier — vs avis Snowflake/ENOC (${fmt.format(detection.sites_dans_fichier)} sites)`}
+          segments={[
+            { label: DETECTION_LABELS.dans_fichier_et_ge, value: detection.dans_fichier_et_ge, color: FT.green },
+            { label: DETECTION_LABELS.dans_fichier_sans_ge, value: detection.dans_fichier_sans_ge, color: FT.orange },
+          ]}
+        />
+        <StaticBarChart
+          title="Totaux bruts (catégories non exclusives)"
+          bars={[
+            { label: DETECTION_LABELS.ge_hors_fichier, value: detection.ge_hors_fichier, color: FT.red },
+            { label: DETECTION_LABELS.avec_ge_snowflake, value: detection.avec_ge_snowflake, color: FT.cyan },
+            { label: DETECTION_LABELS.avec_ge_enoc, value: detection.avec_ge_enoc, color: FT.gold },
+          ]}
+        />
+      </div>
+    </Card>
   );
 }
 
@@ -254,16 +385,107 @@ function StockSection({ data, loading }: { data: FuelStockResponse | undefined; 
   );
 }
 
+function CommandeSection({ data, loading }: { data: FuelCommandeResponse | undefined; loading: boolean }) {
+  if (loading) {
+    return (
+      <Card>
+        <Skeleton h={160} />
+      </Card>
+    );
+  }
+
+  const kpis = data?.sites.kpis;
+  if (!data?.month_year || !kpis) {
+    return (
+      <Card padded={false} style={{ padding: 20 }}>
+        <SheetTitle icon={<Fuel size={16} />} title="Commandes" subtitle="Import mensuel du fichier de commande Ops — ne suit pas la période sélectionnée ci-dessus." />
+        <EmptyState icon={<Fuel size={20} />} title="Aucune donnée pour le moment" subtitle="Ce résumé s'alimente dès que le fichier de commande mensuel a été importé (voir onglet Commandes)." />
+      </Card>
+    );
+  }
+
+  const totalCategorie = data.synthese.categorie.find((r) => r.label.toUpperCase().includes("TOTAL COMMANDE")) ?? data.synthese.categorie.find((r) => r.is_total_row);
+
+  // Barres "Commande (L)" par catégorie/typologie — lignes hors TOTAL
+  // uniquement (sinon un TOTAL écraserait l'échelle des autres barres),
+  // triées décroissant pour repérer les plus grosses commandes d'un coup d'œil.
+  const categorieBars = data.synthese.categorie
+    .filter((r) => !r.is_total_row && r.total_l !== 0)
+    .sort((a, b) => b.total_l - a.total_l)
+    .map((r, i) => ({ label: r.label, value: r.total_l, color: BAR_PALETTE[i % BAR_PALETTE.length] }));
+  const typologieBars = data.synthese.typologie
+    .filter((r) => !r.is_total_row && r.total_l !== 0)
+    .sort((a, b) => b.total_l - a.total_l)
+    .map((r, i) => ({ label: r.label, value: r.total_l, color: BAR_PALETTE[i % BAR_PALETTE.length] }));
+
+  return (
+    <Card padded={false}>
+      <div style={{ padding: "16px 18px 4px" }}>
+        <SheetTitle
+          icon={<Fuel size={16} />}
+          title={`Commandes — ${monthLabel(data.month_year)}`}
+          subtitle="Import mensuel du fichier de commande Ops (pas de recalcul) — ne suit PAS la période sélectionnée ci-dessus, toujours le dernier mois importé."
+          tone="gold"
+        />
+      </div>
+      <div style={{ padding: "12px 18px 18px", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 12 }}>
+        <KpiCard label="Sites du fichier" value={fmt.format(kpis.total_sites)} tone="slate" icon={<Fuel size={14} />} />
+        <KpiCard label="Commande avec marge" value={`${fmt.format(kpis.total_commande_avec_marge_l)} L`} tone="blue" icon={<TrendingUp size={14} />} />
+        <KpiCard label="Commande sans marge" value={`${fmt.format(kpis.total_commande_sans_marge_l)} L`} tone="gold" icon={<TrendingUp size={14} />} />
+        <KpiCard label="Sites avec commande" value={fmt.format(kpis.nb_sites_commande_positive)} sub="Commande avec marge > 0 L" tone="green" icon={<Fuel size={14} />} />
+        <KpiCard
+          label="Rupture de stock prévue"
+          value={fmt.format(kpis.nb_sites_stock_negatif)}
+          sub="Stock final estimé négatif"
+          tone={kpis.nb_sites_stock_negatif > 0 ? "red" : "slate"}
+          icon={<AlertTriangle size={14} />}
+        />
+      </div>
+      {(categorieBars.length > 0 || typologieBars.length > 0) && (
+        <div style={{ borderTop: `1px solid ${FT.border}`, padding: "14px 18px 18px", display: "flex", gap: 24, flexWrap: "wrap" }}>
+          {categorieBars.length > 0 && (
+            <StaticBarChart
+              title={`Commande (L) par catégorie/batch — ${monthLabel(data.month_year)}`}
+              bars={categorieBars}
+              unit="L"
+              minWidth={280}
+              height={Math.max(132, categorieBars.length * 26)}
+            />
+          )}
+          {typologieBars.length > 0 && (
+            <StaticBarChart
+              title={`Commande (L) par typologie facturée — ${monthLabel(data.month_year)}`}
+              bars={typologieBars}
+              unit="L"
+              minWidth={280}
+              height={Math.max(132, typologieBars.length * 26)}
+            />
+          )}
+        </div>
+      )}
+      {totalCategorie && (
+        <div style={{ padding: "0 18px 16px", fontSize: 11.5, color: FT.textSub }}>
+          {totalCategorie.label} : {fmt.format(totalCategorie.total_l)} L (vs {fmt.format(totalCategorie.total_prev_l)} L le mois précédent, écart {totalCategorie.ecart_qte_l >= 0 ? "+" : ""}{fmt.format(totalCategorie.ecart_qte_l)} L) — détail complet sur l'onglet Commandes.
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export function DashboardSheet({
   data,
   loading,
   stockData,
   stockLoading = false,
+  commandeData,
+  commandeLoading = false,
 }: {
   data: FuelConsommationDashboard | undefined;
   loading: boolean;
   stockData?: FuelStockResponse;
   stockLoading?: boolean;
+  commandeData?: FuelCommandeResponse;
+  commandeLoading?: boolean;
 }) {
   if (loading) {
     return (
@@ -290,13 +512,7 @@ export function DashboardSheet({
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <ConsommationSection data={data} />
       <StockSection data={stockData} loading={stockLoading} />
-      <PlaceholderSheet
-        icon={<Fuel size={17} />}
-        title="Commandes"
-        subtitle="Suivi automatisé des commandes carburant."
-        emptyTitle="Pas encore automatisé"
-        emptyMessage="Cette sous-partie n'a pas encore de données réelles — rien n'est affiché ici tant qu'elle n'est pas construite, plutôt que d'inventer des chiffres."
-      />
+      <CommandeSection data={commandeData} loading={commandeLoading} />
     </div>
   );
 }
