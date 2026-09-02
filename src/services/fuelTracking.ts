@@ -119,6 +119,10 @@ export type FuelSourceStatus = {
   connected: boolean;
   last_status: "RUNNING" | "SUCCESS" | "FAILED" | null;
   last_run_at: string | null;
+  /** Date de la donnée la plus récente réellement disponible côté source
+   * (pas l'heure d'exécution de la synchro) — révèle une source en retard
+   * même quand la synchro elle-même tourne et "réussit" normalement. */
+  last_data_date: string | null;
   error: string | null;
 };
 

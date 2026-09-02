@@ -200,16 +200,18 @@ export default function FuelTrackingPage() {
     }
   }, [fromMonth, toMonth, dashboardQ.data?.months]);
 
-  // Date/heure de la dernière synchro réussie, par source — affichée au
-  // centre du header pour que l'écart entre "aujourd'hui" et "dernière
-  // donnée réellement récupérée" saute aux yeux (ex: coupure de la source
-  // Snowflake GFMS_DATA_TRACKER_NC repérée le 2026-09 : sans cette date,
-  // ça ressemble à un bug EnerTrack plutôt qu'à une source externe en retard).
+  // Date de la DONNÉE la plus récente réellement disponible côté source
+  // (pas l'heure d'exécution de la synchro, qui ne dit rien sur la
+  // fraîcheur réelle) — affichée au centre du header pour repérer une
+  // source en retard même quand la synchro elle-même tourne et "réussit"
+  // normalement (ex: coupure de Snowflake GFMS_DATA_TRACKER_NC repérée le
+  // 2026-09 : dernière ligne le 20/08 alors que la synchro tournait bien
+  // tous les jours — sans cette date, ça ressemble à un bug EnerTrack).
   const sources = consommationQ.data?.sources;
-  const formatLastRun = (iso: string | null | undefined) =>
-    iso ? new Date(iso).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" }) : "—";
-  const snowflakeLastRunLabel = formatLastRun(sources?.snowflake?.last_run_at);
-  const enocLastRunLabel = formatLastRun(sources?.enoc?.last_run_at);
+  const formatDataDate = (iso: string | null | undefined) =>
+    iso ? new Date(iso).toLocaleDateString("fr-FR", { dateStyle: "long" }) : "—";
+  const snowflakeLastDataLabel = formatDataDate(sources?.snowflake?.last_data_date);
+  const enocLastDataLabel = formatDataDate(sources?.enoc?.last_data_date);
 
   return (
     <>
@@ -238,10 +240,10 @@ export default function FuelTrackingPage() {
 
             <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: FT.textSub, textAlign: "center" }}>
               <div>
-                <strong style={{ color: FT.text }}>Snowflake</strong> — Dernières données : {snowflakeLastRunLabel}
+                <strong style={{ color: FT.text }}>Snowflake</strong> — Dernières données : {snowflakeLastDataLabel}
               </div>
               <div>
-                <strong style={{ color: FT.text }}>ENOC</strong> — Dernières données : {enocLastRunLabel}
+                <strong style={{ color: FT.text }}>ENOC</strong> — Dernières données : {enocLastDataLabel}
               </div>
             </div>
 
