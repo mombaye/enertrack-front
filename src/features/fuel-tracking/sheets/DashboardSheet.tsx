@@ -1,16 +1,18 @@
 // src/features/fuel-tracking/sheets/DashboardSheet.tsx
-// Onglet Dashboard — vue GLOBALE du module suivi-carburant, en 4 sections
-// indépendantes :
-//   1. Consommation (mesurée Snowflake/ENOC + estimée CPH) — seule section
-//      pilotée par la plage "Du / à" du header (FuelTrackingPage), alimentée
-//      par /fuel-tracking/consommation/dashboard/.
-//   2. Stock — état ACTUEL (pas de notion de mois : FuelStockSnapshot est un
-//      instantané par site, remplacé en totalité à chaque sync). Ne bouge
-//      donc PAS quand on change la période du header — présenté séparément
-//      pour ne pas laisser croire le contraire.
-//   3. Commandes — import mensuel brut (fichier Ops, voir
-//      import_commande_fuel), pas de notion de plage non plus (toujours le
-//      dernier mois importé) — même principe que Stock : présenté à part.
+// Onglet Dashboard — vue GLOBALE du module suivi-carburant :
+//   - OverviewCircles : 4 anneaux de synthèse (Consommation/Stock/Commandes/
+//     Estimation), un pourcentage porteur de sens par module + le volume
+//     total au centre. Cliquer sur un anneau bascule directement sur
+//     l'onglet correspondant (voir onNavigateTab). C'est la seule vue de
+//     Stock et d'Estimation sur ce Dashboard — leurs grilles de chiffres
+//     détaillées ont été retirées (redondantes avec l'anneau), le détail
+//     complet reste sur leurs onglets dédiés.
+//   - ConsommationSection : détail (donut couverture, top 10 sites,
+//     détection GE) — seule section pilotée par la plage "Du / à" du header
+//     (FuelTrackingPage), alimentée par /fuel-tracking/consommation/dashboard/.
+//   - CommandeSection : graphes commande par catégorie/typologie (fichier Ops,
+//     import mensuel brut) — pas de notion de plage, toujours le dernier
+//     mois importé.
 // Les courbes Consommation s'affichent toujours, même avec un seul mois ou
 // des données vides (pas de graphique masqué conditionnellement).
 
@@ -26,10 +28,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { AlertTriangle, Calculator, Droplets, Fuel, Gauge, LayoutGrid, TrendingUp, Users, Warehouse } from "lucide-react";
+import { Calculator, Droplets, Fuel, Gauge, LayoutGrid, TrendingUp, Warehouse } from "lucide-react";
 
 import type { FuelCommandeEstimationResponse, FuelCommandeResponse, FuelConsommationDashboard, FuelStockResponse } from "@/services/fuelTracking";
-import { Card, EmptyState, KpiCard, SheetTitle, Skeleton } from "../ui";
+import { Card, EmptyState, SheetTitle, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { fmt, monthLabel } from "../helpers";
 import { DETECTION_LABELS } from "./ConsommationSheet";
@@ -41,8 +43,6 @@ function ConsommationSection({ data }: { data: FuelConsommationDashboard }) {
   const lastStats = data.monthly[data.monthly.length - 1];
 
   const scopeLabel = multiMonth ? `${monthLabel(first)} → ${monthLabel(last)}` : monthLabel(first);
-
-  const cph = data.cph_parameters;
 
   // "Aucune donnée" = ni Conso estimée ni Conso mesurée vue renseignées
   // (Running Time n'entre plus dans ce critère, demande explicite 2026-08)
@@ -59,23 +59,6 @@ function ConsommationSection({ data }: { data: FuelConsommationDashboard }) {
 
   return (
     <>
-      <Card padded={false}>
-        <div style={{ padding: "16px 18px 4px" }}>
-          <SheetTitle
-            icon={<Gauge size={16} />}
-            title={`Consommation — ${scopeLabel}`}
-            subtitle="Sites avec GE uniquement (seuls capables de consommer du fuel). Plage pilotée par le sélecteur du header."
-            tone="gold"
-          />
-          <div style={{ marginTop: 8, fontSize: 11.5, color: FT.textSub }}>
-            Fichier de paramètres GE (CPH) : <strong style={{ color: FT.textMid }}>{fmt.format(cph.sites_configures)} site(s) configuré(s)</strong>
-            {cph.dernier_import
-              ? ` — dernier import le ${new Date(cph.dernier_import).toLocaleDateString("fr-FR")}.`
-              : " — aucun import effectué (conso estimée CPH vide tant qu'aucune fiche n'existe)."}
-          </div>
-        </div>
-      </Card>
-
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "stretch" }}>
         <Card padded={false} style={{ flex: "1 1 380px" }}>
           <div style={{ padding: "16px 18px 4px" }}>
@@ -286,54 +269,6 @@ function GeDetectionSummary({ detection }: { detection: FuelConsommationDashboar
   );
 }
 
-function StockSection({ data, loading }: { data: FuelStockResponse | undefined; loading: boolean }) {
-  if (loading) {
-    return (
-      <Card>
-        <Skeleton h={160} />
-      </Card>
-    );
-  }
-
-  const kpis = data?.kpis;
-  if (!kpis) {
-    return (
-      <Card padded={false} style={{ padding: 20 }}>
-        <SheetTitle icon={<Warehouse size={16} />} title="Stock — état actuel" subtitle="À la date du dernier relevé — ne suit pas la période sélectionnée ci-dessus (le stock est un instantané, pas une série mensuelle)." />
-        <EmptyState icon={<Warehouse size={20} />} title="Aucune donnée pour le moment" subtitle="Ce résumé s'alimente automatiquement dès que la synchro Stock (Snowflake + ENOC) a tourné." />
-      </Card>
-    );
-  }
-
-  const couverture = kpis.sites_avec_ge > 0 ? Math.round((kpis.sites_avec_stock_snowflake / kpis.sites_avec_ge) * 100) : 0;
-
-  return (
-    <Card padded={false}>
-      <div style={{ padding: "16px 18px 4px" }}>
-        <SheetTitle
-          icon={<Warehouse size={16} />}
-          title="Stock — état actuel"
-          subtitle="À la date du dernier relevé — ne suit PAS la période sélectionnée ci-dessus (le stock est un instantané par site, remplacé à chaque synchronisation, pas une série mensuelle)."
-          tone="navy"
-        />
-      </div>
-      <div style={{ padding: "12px 18px 18px", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 12 }}>
-        <KpiCard
-          label="Sites avec stock connu (Snowflake)"
-          value={`${fmt.format(kpis.sites_avec_stock_snowflake)} / ${fmt.format(kpis.sites_avec_ge)}`}
-          sub={`${couverture}% de couverture`}
-          tone="blue"
-          icon={<Users size={14} />}
-        />
-        <KpiCard label="Sites avec stock connu (ENOC)" value={fmt.format(kpis.sites_avec_stock_enoc)} sub="Relevés historiques" tone="green" icon={<Droplets size={14} />} />
-        <KpiCard label="Cuves critiques (<15%)" value={fmt.format(kpis.sites_stock_critique)} sub="Sur les sites avec GE" tone={kpis.sites_stock_critique > 0 ? "red" : "slate"} icon={<AlertTriangle size={14} />} />
-        <KpiCard label="Cuves en alerte (15-40%)" value={fmt.format(kpis.sites_stock_alerte)} sub="Sur les sites avec GE" tone={kpis.sites_stock_alerte > 0 ? "orange" : "slate"} icon={<AlertTriangle size={14} />} />
-        <KpiCard label="Sites sans aucun stock connu" value={fmt.format(kpis.sites_sans_aucun_stock)} sub="Ni Snowflake, ni ENOC" tone={kpis.sites_sans_aucun_stock > 0 ? "orange" : "slate"} icon={<Warehouse size={14} />} />
-      </div>
-    </Card>
-  );
-}
-
 function CommandeSection({ data, loading }: { data: FuelCommandeResponse | undefined; loading: boolean }) {
   if (loading) {
     return (
@@ -402,44 +337,6 @@ function CommandeSection({ data, loading }: { data: FuelCommandeResponse | undef
       {totalCategorie && (
         <div style={{ padding: "0 18px 16px", fontSize: 11.5, color: FT.textSub }}>
           {totalCategorie.label} : {fmt.format(totalCategorie.total_l)} L (vs {fmt.format(totalCategorie.total_prev_l)} L le mois précédent, écart {totalCategorie.ecart_qte_l >= 0 ? "+" : ""}{fmt.format(totalCategorie.ecart_qte_l)} L) — détail complet sur l'onglet Commandes.
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function EstimationSection({ data, loading }: { data: FuelCommandeEstimationResponse | undefined; loading: boolean }) {
-  if (loading) {
-    return (
-      <Card>
-        <Skeleton h={160} />
-      </Card>
-    );
-  }
-
-  const kpis = data?.kpis;
-  if (!data?.target_month || !kpis) {
-    return (
-      <Card padded={false} style={{ padding: 20 }}>
-        <SheetTitle icon={<Calculator size={16} />} title="Estimation commande" subtitle="Projection du mois suivant à partir de l'usage réel — indépendante du fichier Ops." />
-        <EmptyState icon={<Calculator size={20} />} title="Aucune donnée pour le moment" subtitle="Pas assez de mois de consommation en base pour projeter le mois suivant (voir onglet Estimation commande)." />
-      </Card>
-    );
-  }
-
-  return (
-    <Card padded={false}>
-      <div style={{ padding: "16px 18px 4px" }}>
-        <SheetTitle
-          icon={<Calculator size={16} />}
-          title={`Estimation commande — ${monthLabel(data.target_month)}`}
-          subtitle="Projection du mois suivant à partir de l'usage réel (conso + stock) — indépendante du fichier Ops, ne suit pas la période sélectionnée ci-dessus."
-          tone="navy"
-        />
-      </div>
-      {kpis.total_commande_ops_reference_l != null && (
-        <div style={{ padding: "0 18px 16px", fontSize: 11.5, color: FT.textSub }}>
-          Repère : Ops a décidé {fmt.format(kpis.total_commande_ops_reference_l)} L en {monthLabel(kpis.ops_reference_month)} (fichier manuel, mois précédent) — détail complet sur l'onglet Estimation commande.
         </div>
       )}
     </Card>
@@ -632,9 +529,7 @@ export function DashboardSheet({
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <OverviewCircles data={data} stockData={stockData} commandeData={commandeData} estimationData={estimationData} onNavigateTab={onNavigateTab} />
       <ConsommationSection data={data} />
-      <StockSection data={stockData} loading={stockLoading} />
       <CommandeSection data={commandeData} loading={commandeLoading} />
-      <EstimationSection data={estimationData} loading={estimationLoading} />
     </div>
   );
 }
