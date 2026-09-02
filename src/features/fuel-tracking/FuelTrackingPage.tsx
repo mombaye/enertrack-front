@@ -200,19 +200,16 @@ export default function FuelTrackingPage() {
     }
   }, [fromMonth, toMonth, dashboardQ.data?.months]);
 
-  // Date/heure de la dernière synchro réussie (Snowflake ou ENOC, la plus
-  // récente des deux) — affichée à côté du filtre de mois pour que l'écart
-  // entre "aujourd'hui" et "dernière donnée réellement récupérée" saute aux
-  // yeux (ex: coupure de la source Snowflake GFMS_DATA_TRACKER_NC repérée
-  // le 2026-09 : sans cette date, ça ressemble à un bug EnerTrack).
+  // Date/heure de la dernière synchro réussie, par source — affichée au
+  // centre du header pour que l'écart entre "aujourd'hui" et "dernière
+  // donnée réellement récupérée" saute aux yeux (ex: coupure de la source
+  // Snowflake GFMS_DATA_TRACKER_NC repérée le 2026-09 : sans cette date,
+  // ça ressemble à un bug EnerTrack plutôt qu'à une source externe en retard).
   const sources = consommationQ.data?.sources;
-  const lastRetrievedAt = [sources?.snowflake?.last_run_at, sources?.enoc?.last_run_at]
-    .filter((d): d is string => !!d)
-    .sort()
-    .pop();
-  const lastRetrievedLabel = lastRetrievedAt
-    ? new Date(lastRetrievedAt).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" })
-    : null;
+  const formatLastRun = (iso: string | null | undefined) =>
+    iso ? new Date(iso).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" }) : "—";
+  const snowflakeLastRunLabel = formatLastRun(sources?.snowflake?.last_run_at);
+  const enocLastRunLabel = formatLastRun(sources?.enoc?.last_run_at);
 
   return (
     <>
@@ -224,7 +221,7 @@ export default function FuelTrackingPage() {
           className="ft-fade"
           style={{ position: "sticky", top: 0, zIndex: 10, background: "#fff", border: `1px solid ${FT.border}`, borderRadius: FT.radius, boxShadow: FT.shadow, padding: "20px 24px" }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 18, alignItems: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ width: 34, height: 34, borderRadius: 10, background: FT.blueL, display: "grid", placeItems: "center", color: FT.gold }}>
                 <BarChart3 size={16} />
@@ -239,8 +236,16 @@ export default function FuelTrackingPage() {
               </div>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: FT.textSub, textAlign: "center" }}>
+              <div>
+                <strong style={{ color: FT.text }}>Snowflake</strong> — Dernières données : {snowflakeLastRunLabel}
+              </div>
+              <div>
+                <strong style={{ color: FT.text }}>ENOC</strong> — Dernières données : {enocLastRunLabel}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifySelf: "end" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px" }}>
                   <Calendar size={14} color={FT.textSub} />
                   <input
@@ -268,13 +273,6 @@ export default function FuelTrackingPage() {
                 >
                   <RefreshCw size={14} className={consommationQ.isFetching ? "ft-spin" : ""} />
                 </button>
-              </div>
-
-              {lastRetrievedLabel && (
-                <div style={{ fontSize: 11, color: FT.textSub }}>
-                  Dernières données récupérées le <strong style={{ color: FT.textMid }}>{lastRetrievedLabel}</strong>
-                </div>
-              )}
             </div>
           </div>
 
