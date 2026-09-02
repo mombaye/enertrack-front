@@ -102,14 +102,6 @@ export function EstimationSheet({
           border: `1px solid ${FT.border}`, boxShadow: FT.shadow, padding: 14,
         }}
       >
-        <div style={{ fontSize: 12, color: FT.textSub, marginBottom: 12 }}>
-          Estimation carburant pour <strong style={{ color: FT.text }}>{monthLabel(data.target_month)}</strong>, basée sur l'usage réel de{" "}
-          {data.source_months.map((m) => monthLabel(m)).join(", ")} — moyenne pondérée en L/jour (le mois le plus récent pèse le plus), marge de sécurité{" "}
-          {Math.round(data.marge_pct * 100)}%, plafonnée par la place disponible dans la cuve.
-          {kpis.total_commande_ops_reference_l != null && (
-            <> Repère : Ops a décidé {fmt.format(kpis.total_commande_ops_reference_l)} L en {monthLabel(kpis.ops_reference_month)} (fichier manuel, mois précédent).</>
-          )}
-        </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
           <KpiCard label="Commande estimée totale" value={`${fmt.format(kpis.total_commande_estimee_l)} L`} tone="blue" icon={<Calculator size={14} />} />
           <KpiCard label="Sites estimés" value={fmt.format(kpis.nb_sites)} tone="slate" icon={<Fuel size={14} />} />
