@@ -200,6 +200,20 @@ export default function FuelTrackingPage() {
     }
   }, [fromMonth, toMonth, dashboardQ.data?.months]);
 
+  // Date/heure de la dernière synchro réussie (Snowflake ou ENOC, la plus
+  // récente des deux) — affichée à côté du filtre de mois pour que l'écart
+  // entre "aujourd'hui" et "dernière donnée réellement récupérée" saute aux
+  // yeux (ex: coupure de la source Snowflake GFMS_DATA_TRACKER_NC repérée
+  // le 2026-09 : sans cette date, ça ressemble à un bug EnerTrack).
+  const sources = consommationQ.data?.sources;
+  const lastRetrievedAt = [sources?.snowflake?.last_run_at, sources?.enoc?.last_run_at]
+    .filter((d): d is string => !!d)
+    .sort()
+    .pop();
+  const lastRetrievedLabel = lastRetrievedAt
+    ? new Date(lastRetrievedAt).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" })
+    : null;
+
   return (
     <>
       <style>{GLOBAL_STYLES}</style>
@@ -225,34 +239,42 @@ export default function FuelTrackingPage() {
               </div>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px" }}>
-                <Calendar size={14} color={FT.textSub} />
-                <input
-                  type="month"
-                  value={fromMonth ?? ""}
-                  max={toMonth ?? undefined}
-                  onChange={(e) => setFromMonth(e.target.value)}
-                  style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, color: FT.text, fontWeight: 700 }}
-                />
-                <span style={{ color: FT.textSub, fontSize: 12 }}>à</span>
-                <input
-                  type="month"
-                  value={toMonth ?? ""}
-                  min={fromMonth ?? undefined}
-                  max={previousCalendarMonth()}
-                  onChange={(e) => setToMonth(e.target.value)}
-                  style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, color: FT.text, fontWeight: 700 }}
-                />
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px" }}>
+                  <Calendar size={14} color={FT.textSub} />
+                  <input
+                    type="month"
+                    value={fromMonth ?? ""}
+                    max={toMonth ?? undefined}
+                    onChange={(e) => setFromMonth(e.target.value)}
+                    style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, color: FT.text, fontWeight: 700 }}
+                  />
+                  <span style={{ color: FT.textSub, fontSize: 12 }}>à</span>
+                  <input
+                    type="month"
+                    value={toMonth ?? ""}
+                    min={fromMonth ?? undefined}
+                    max={previousCalendarMonth()}
+                    onChange={(e) => setToMonth(e.target.value)}
+                    style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, color: FT.text, fontWeight: 700 }}
+                  />
+                </div>
+
+                <button
+                  onClick={() => consommationQ.refetch()}
+                  title="Rafraîchir"
+                  style={{ width: 33, height: 33, borderRadius: 9, border: `1px solid ${FT.border}`, background: FT.slateL, display: "grid", placeItems: "center", cursor: "pointer", color: FT.textMid, flexShrink: 0 }}
+                >
+                  <RefreshCw size={14} className={consommationQ.isFetching ? "ft-spin" : ""} />
+                </button>
               </div>
 
-              <button
-                onClick={() => consommationQ.refetch()}
-                title="Rafraîchir"
-                style={{ width: 33, height: 33, borderRadius: 9, border: `1px solid ${FT.border}`, background: FT.slateL, display: "grid", placeItems: "center", cursor: "pointer", color: FT.textMid, flexShrink: 0 }}
-              >
-                <RefreshCw size={14} className={consommationQ.isFetching ? "ft-spin" : ""} />
-              </button>
+              {lastRetrievedLabel && (
+                <div style={{ fontSize: 11, color: FT.textSub }}>
+                  Dernières données récupérées le <strong style={{ color: FT.textMid }}>{lastRetrievedLabel}</strong>
+                </div>
+              )}
             </div>
           </div>
 
