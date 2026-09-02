@@ -25,9 +25,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { AlertTriangle, Droplets, Fuel, Gauge, LayoutGrid, TrendingUp, Users, Warehouse } from "lucide-react";
+import { AlertTriangle, Calculator, Droplets, Fuel, Gauge, LayoutGrid, TrendingUp, Users, Warehouse } from "lucide-react";
 
-import type { FuelCommandeResponse, FuelConsommationDashboard, FuelStockResponse } from "@/services/fuelTracking";
+import type { FuelCommandeEstimationResponse, FuelCommandeResponse, FuelConsommationDashboard, FuelStockResponse } from "@/services/fuelTracking";
 import { Card, EmptyState, KpiCard, SheetTitle, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { fmt, monthLabel } from "../helpers";
@@ -472,6 +472,57 @@ function CommandeSection({ data, loading }: { data: FuelCommandeResponse | undef
   );
 }
 
+function EstimationSection({ data, loading }: { data: FuelCommandeEstimationResponse | undefined; loading: boolean }) {
+  if (loading) {
+    return (
+      <Card>
+        <Skeleton h={160} />
+      </Card>
+    );
+  }
+
+  const kpis = data?.kpis;
+  if (!data?.target_month || !kpis) {
+    return (
+      <Card padded={false} style={{ padding: 20 }}>
+        <SheetTitle icon={<Calculator size={16} />} title="Estimation commande" subtitle="Projection du mois suivant à partir de l'usage réel — indépendante du fichier Ops." />
+        <EmptyState icon={<Calculator size={20} />} title="Aucune donnée pour le moment" subtitle="Pas assez de mois de consommation en base pour projeter le mois suivant (voir onglet Estimation commande)." />
+      </Card>
+    );
+  }
+
+  return (
+    <Card padded={false}>
+      <div style={{ padding: "16px 18px 4px" }}>
+        <SheetTitle
+          icon={<Calculator size={16} />}
+          title={`Estimation commande — ${monthLabel(data.target_month)}`}
+          subtitle="Projection du mois suivant à partir de l'usage réel (conso + stock) — indépendante du fichier Ops, ne suit pas la période sélectionnée ci-dessus."
+          tone="navy"
+        />
+      </div>
+      <div style={{ padding: "12px 18px 18px", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 12 }}>
+        <KpiCard label="Commande estimée totale" value={`${fmt.format(kpis.total_commande_estimee_l)} L`} tone="blue" icon={<Calculator size={14} />} />
+        <KpiCard label="Sites estimés" value={fmt.format(kpis.nb_sites)} tone="slate" icon={<Fuel size={14} />} />
+        <KpiCard
+          label="Rupture prévue"
+          value={fmt.format(kpis.nb_sites_rupture_prevue)}
+          sub="Stock final estimé négatif"
+          tone={kpis.nb_sites_rupture_prevue > 0 ? "red" : "slate"}
+          icon={<AlertTriangle size={14} />}
+        />
+        <KpiCard label="Confiance élevée" value={fmt.format(kpis.nb_sites_confiance_elevee)} tone="green" icon={<TrendingUp size={14} />} />
+        <KpiCard label="Confiance faible" value={fmt.format(kpis.nb_sites_confiance_faible)} sub="À vérifier avant validation" tone="orange" icon={<AlertTriangle size={14} />} />
+      </div>
+      {kpis.total_commande_ops_reference_l != null && (
+        <div style={{ padding: "0 18px 16px", fontSize: 11.5, color: FT.textSub }}>
+          Repère : Ops a décidé {fmt.format(kpis.total_commande_ops_reference_l)} L en {monthLabel(kpis.ops_reference_month)} (fichier manuel, mois précédent) — détail complet sur l'onglet Estimation commande.
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export function DashboardSheet({
   data,
   loading,
@@ -479,6 +530,8 @@ export function DashboardSheet({
   stockLoading = false,
   commandeData,
   commandeLoading = false,
+  estimationData,
+  estimationLoading = false,
 }: {
   data: FuelConsommationDashboard | undefined;
   loading: boolean;
@@ -486,6 +539,8 @@ export function DashboardSheet({
   stockLoading?: boolean;
   commandeData?: FuelCommandeResponse;
   commandeLoading?: boolean;
+  estimationData?: FuelCommandeEstimationResponse;
+  estimationLoading?: boolean;
 }) {
   if (loading) {
     return (
@@ -513,6 +568,7 @@ export function DashboardSheet({
       <ConsommationSection data={data} />
       <StockSection data={stockData} loading={stockLoading} />
       <CommandeSection data={commandeData} loading={commandeLoading} />
+      <EstimationSection data={estimationData} loading={estimationLoading} />
     </div>
   );
 }

@@ -174,7 +174,9 @@ export default function FuelTrackingPage() {
   const estimationQ = useQuery({
     queryKey: ["fuel-commande-estimation"],
     queryFn: () => getFuelCommandeEstimation(),
-    enabled: activeTab === "ESTIMATION",
+    // Aussi actif sur DASHBOARD : la section Estimation du Dashboard
+    // réutilise cette même requête (pas de duplication d'appel réseau).
+    enabled: activeTab === "ESTIMATION" || activeTab === "DASHBOARD",
     staleTime: 60_000,
   });
 
@@ -268,6 +270,8 @@ export default function FuelTrackingPage() {
               stockLoading={stockQ.isLoading}
               commandeData={commandeQ.data}
               commandeLoading={commandeQ.isLoading}
+              estimationData={estimationQ.data}
+              estimationLoading={estimationQ.isLoading}
             />
           </div>
         )}
