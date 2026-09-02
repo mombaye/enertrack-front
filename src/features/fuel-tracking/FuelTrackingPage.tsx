@@ -13,9 +13,17 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Calendar, Droplets, Fuel, LayoutGrid, RefreshCw, Warehouse } from "lucide-react";
+import { BarChart3, Calculator, Calendar, Droplets, Fuel, LayoutGrid, RefreshCw, Warehouse } from "lucide-react";
 
-import { getFuelCommandes, getFuelConsommation, getFuelConsommationDashboard, getFuelStock, type FuelGeDetectionFilter, type FuelSourceStatus } from "@/services/fuelTracking";
+import {
+  getFuelCommandeEstimation,
+  getFuelCommandes,
+  getFuelConsommation,
+  getFuelConsommationDashboard,
+  getFuelStock,
+  type FuelGeDetectionFilter,
+  type FuelSourceStatus,
+} from "@/services/fuelTracking";
 
 import { FT } from "./theme";
 import { GLOBAL_STYLES, SegmentedTabs } from "./ui";
@@ -23,15 +31,28 @@ import { ConsommationSheet } from "./sheets/ConsommationSheet";
 import { DashboardSheet } from "./sheets/DashboardSheet";
 import { StockSheet } from "./sheets/StockSheet";
 import { CommandeSheet } from "./sheets/CommandeSheet";
+import { EstimationSheet } from "./sheets/EstimationSheet";
 
-type MainTab = "DASHBOARD" | "CONSOMMATION" | "STOCK" | "COMMANDE";
+type MainTab = "DASHBOARD" | "CONSOMMATION" | "STOCK" | "COMMANDE" | "ESTIMATION";
 
 const MAIN_TABS: Array<{ key: MainTab; label: string; icon: ReactNode }> = [
   { key: "DASHBOARD", label: "Dashboard", icon: <LayoutGrid size={14} /> },
   { key: "CONSOMMATION", label: "Suivis Consommations", icon: <Droplets size={14} /> },
   { key: "STOCK", label: "Suivis Stock", icon: <Warehouse size={14} /> },
   { key: "COMMANDE", label: "Commandes", icon: <Fuel size={14} /> },
+  { key: "ESTIMATION", label: "Estimation commande", icon: <Calculator size={14} /> },
 ];
+
+/** Mois calendaire précédent le mois courant réel (pas lié aux données),
+ * ex: le 2026-09-02 → "2026-08" — la plage de dates du header ne doit
+ * jamais proposer le mois en cours par défaut : il vient tout juste de
+ * commencer et n'a donc quasiment aucune donnée (couverture ~0%), ce qui
+ * donnait l'impression trompeuse d'une régression/absence de données. */
+function previousCalendarMonth(): string {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
 
 /** Pastille de statut d'une source de données (connectée/non connectée),
  * avec le détail (dernière synchro, erreur) en info-bulle. */
@@ -81,6 +102,7 @@ export default function FuelTrackingPage() {
   const [stockGeFilter, setStockGeFilter] = useState<"all" | "true" | "false">("true");
   const [commandeSearch, setCommandeSearch] = useState("");
   const [commandePage, setCommandePage] = useState(1);
+  const [estimationSearch, setEstimationSearch] = useState("");
 
   // Hauteur réelle du header (fixe) — sert de décalage aux stats sticky
   // affichées juste en dessous, pour qu'elles restent visibles au défilement
@@ -149,14 +171,30 @@ export default function FuelTrackingPage() {
     staleTime: 60_000,
   });
 
-  // Premier chargement (plage encore vide) : sans from_month/to_month, le
-  // backend retourne déjà les 3 derniers mois disponibles par défaut — on
-  // adopte cette plage résolue pour que les 2 champs du header l'affichent.
+  const estimationQ = useQuery({
+    queryKey: ["fuel-commande-estimation"],
+    queryFn: () => getFuelCommandeEstimation(),
+    enabled: activeTab === "ESTIMATION",
+    staleTime: 60_000,
+  });
+
+  // Premier chargement (plage encore vide) : le backend retourne les
+  // derniers mois disponibles, mais on plafonne toujours à M-1 (mois
+  // calendaire précédent) — le mois en cours est alimenté en continu par la
+  // synchro Celery et n'a donc quasiment aucune donnée à son tout début
+  // (couverture ~0%), ce qui donnait l'impression trompeuse d'une panne.
+  // L'estimation (mois M+1 par rapport aux données) a son propre onglet.
   useEffect(() => {
     if (fromMonth === null && toMonth === null && dashboardQ.data?.months?.length) {
-      const months = dashboardQ.data.months;
-      setFromMonth(months[0]);
-      setToMonth(months[months.length - 1]);
+      const cap = previousCalendarMonth();
+      const months = dashboardQ.data.months.filter((m) => m <= cap);
+      if (months.length) {
+        setFromMonth(months[0]);
+        setToMonth(months[months.length - 1]);
+      } else {
+        setFromMonth(cap);
+        setToMonth(cap);
+      }
     }
   }, [fromMonth, toMonth, dashboardQ.data?.months]);
 
@@ -200,6 +238,7 @@ export default function FuelTrackingPage() {
                   type="month"
                   value={toMonth ?? ""}
                   min={fromMonth ?? undefined}
+                  max={previousCalendarMonth()}
                   onChange={(e) => setToMonth(e.target.value)}
                   style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, color: FT.text, fontWeight: 700 }}
                 />
@@ -294,6 +333,18 @@ export default function FuelTrackingPage() {
               }}
               page={commandePage}
               onPageChange={setCommandePage}
+              stickyTop={headerHeight}
+            />
+          </div>
+        )}
+
+        {activeTab === "ESTIMATION" && (
+          <div className="ft-fade">
+            <EstimationSheet
+              data={estimationQ.data}
+              loading={estimationQ.isLoading}
+              search={estimationSearch}
+              onSearchChange={setEstimationSearch}
               stickyTop={headerHeight}
             />
           </div>

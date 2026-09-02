@@ -288,7 +288,7 @@ export function GroupToggleBar({
   );
 }
 
-export function Modal({ title, onClose, children }: { title?: string; onClose: () => void; children: ReactNode }) {
+export function Modal({ title, onClose, children, maxWidth = 480 }: { title?: string; onClose: () => void; children: ReactNode; maxWidth?: number }) {
   return (
     <div
       onClick={onClose}
@@ -296,7 +296,7 @@ export function Modal({ title, onClose, children }: { title?: string; onClose: (
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{ background: FT.card, borderRadius: FT.radius, boxShadow: FT.shadow, maxWidth: 480, width: "100%", maxHeight: "80vh", overflow: "auto", padding: 22 }}
+        style={{ background: FT.card, borderRadius: FT.radius, boxShadow: FT.shadow, maxWidth, width: "100%", maxHeight: "80vh", overflow: "auto", padding: 22 }}
       >
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
           {title && <div style={{ fontSize: 14.5, fontWeight: 800, color: FT.text }}>{title}</div>}

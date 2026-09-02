@@ -5,9 +5,11 @@
 // fuel_tracking/management/commands/import_commande_fuel.py — le fichier
 // est commité dans data_imports/ et l'import rejoué à chaque déploiement,
 // même principe que Base GE.xlsx). Cette page est donc en lecture seule :
-// aucune commande n'est décidée ici, on affiche celle déjà prise.
+// aucune commande n'est décidée ici, on affiche celle déjà prise par Ops.
+// Voir EstimationSheet.tsx (onglet séparé) pour l'estimation du mois
+// SUIVANT calculée à partir de la conso/du stock, indépendante de ce fichier.
 
-import { useState, type CSSProperties } from "react";
+import type { CSSProperties } from "react";
 import { AlertTriangle, Fuel, Search, TrendingUp, Warehouse } from "lucide-react";
 import type { FuelCommandeResponse, FuelCommandeSyntheseRow } from "@/services/fuelTracking";
 import { Card, EmptyState, KpiCard, Pager, Skeleton } from "../ui";
@@ -151,10 +153,6 @@ export function CommandeSheet({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <CommandeKpis data={data} stickyTop={stickyTop + 14} />
-
-      <div style={{ fontSize: 12, color: FT.textSub, padding: "0 2px" }}>
-        Import mensuel brut — commande décidée en {prevLabel} pour la consommation de {currentLabel}, valeurs reprises telles quelles du fichier source (pas de recalcul).
-      </div>
 
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 480px", minWidth: 420 }}>

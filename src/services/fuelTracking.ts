@@ -349,3 +349,53 @@ export async function getFuelCommandes(params?: { month?: string; search?: strin
   });
   return data;
 }
+
+export type FuelCommandeConfiance = "Élevée" | "Moyenne" | "Faible";
+
+export type FuelCommandeEstimationSite = {
+  site_id: string;
+  site_name: string | null;
+  nb_mois_historique: number;
+  sources_historique: string[];
+  conso_jour_ponderee_l: number;
+  conso_projetee_l: number;
+  stock_actuel_l: number | null;
+  stock_connu: boolean;
+  capacite_cuve_l: number | null;
+  commande_sans_marge_l: number;
+  commande_avec_marge_l: number;
+  plafonnee_par_capacite: boolean;
+  stock_final_estime_l: number;
+  confiance: FuelCommandeConfiance;
+  commande_ops_reference_l: number | null;
+};
+
+export type FuelCommandeEstimationKpis = {
+  nb_sites: number;
+  total_commande_estimee_l: number;
+  nb_sites_rupture_prevue: number;
+  nb_sites_confiance_faible: number;
+  nb_sites_confiance_elevee: number;
+  total_commande_ops_reference_l: number | null;
+  ops_reference_month: string | null;
+};
+
+export type FuelCommandeEstimationResponse = {
+  target_month: string | null;
+  source_months: string[];
+  marge_pct: number;
+  kpis: FuelCommandeEstimationKpis | null;
+  sites: FuelCommandeEstimationSite[];
+};
+
+/**
+ * Estimation carburant du mois suivant — calculée à partir des données
+ * automatisées (Consommation + Stock), indépendante de l'import manuel Ops.
+ * Voir FuelCommandeEstimationView côté backend pour la méthodologie.
+ */
+export async function getFuelCommandeEstimation(params?: { marge?: number; search?: string }) {
+  const { data } = await api.get<FuelCommandeEstimationResponse>(`${BASE}/commandes/estimation/`, {
+    params: cleanParams(params ?? {}),
+  });
+  return data;
+}
