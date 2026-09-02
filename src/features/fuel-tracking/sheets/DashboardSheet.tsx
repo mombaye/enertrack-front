@@ -459,6 +459,7 @@ function RingStat({
   caption,
   color,
   icon,
+  onClick,
 }: {
   title: string;
   pct: number;
@@ -467,6 +468,7 @@ function RingStat({
   caption: string;
   color: string;
   icon: ReactNode;
+  onClick?: () => void;
 }) {
   const clamped = Math.max(0, Math.min(100, pct));
   const ringData = [
@@ -474,7 +476,17 @@ function RingStat({
     { name: "rest", value: 100 - clamped },
   ];
   return (
-    <div style={{ flex: "1 1 220px", minWidth: 210, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+    <button
+      onClick={onClick}
+      title={onClick ? "Voir le détail" : undefined}
+      style={{
+        flex: "1 1 220px", minWidth: 210, display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+        background: "none", border: "none", padding: 6, borderRadius: 12, cursor: onClick ? "pointer" : "default",
+        transition: "background .15s",
+      }}
+      onMouseEnter={(e) => { if (onClick) e.currentTarget.style.background = FT.slateL; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
+    >
       <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 800, color: FT.text }}>
         {icon} {title}
       </div>
@@ -495,23 +507,30 @@ function RingStat({
         </div>
       </div>
       <div style={{ fontSize: 11, color: FT.textSub, textAlign: "center" }}>{caption}</div>
-    </div>
+    </button>
   );
 }
 
 function OverviewCircles({
   data,
+  stockData,
   commandeData,
   estimationData,
+  onNavigateTab,
 }: {
   data: FuelConsommationDashboard;
+  stockData: FuelStockResponse | undefined;
   commandeData: FuelCommandeResponse | undefined;
   estimationData: FuelCommandeEstimationResponse | undefined;
+  onNavigateTab?: (tab: "CONSOMMATION" | "STOCK" | "COMMANDE" | "ESTIMATION") => void;
 }) {
   const last = data.months[data.months.length - 1];
   const lastStats = data.monthly[data.monthly.length - 1];
   const totalConso = data.monthly.reduce((a, m) => a + m.total_conso_snowflake_l, 0);
   const couverture = lastStats && lastStats.nb_sites_ge > 0 ? Math.round((lastStats.nb_sites_avec_conso / lastStats.nb_sites_ge) * 100) : 0;
+
+  const stockKpis = stockData?.kpis;
+  const pctStockConnu = stockKpis && stockKpis.sites_avec_ge > 0 ? Math.round((stockKpis.sites_avec_stock_snowflake / stockKpis.sites_avec_ge) * 100) : 0;
 
   const commandeKpis = commandeData?.sites.kpis;
   const pctSitesCommande = commandeKpis && commandeKpis.total_sites > 0 ? Math.round((commandeKpis.nb_sites_commande_positive / commandeKpis.total_sites) * 100) : 0;
@@ -521,7 +540,7 @@ function OverviewCircles({
 
   return (
     <Card padded={false} style={{ padding: "20px 18px" }}>
-      <div style={{ display: "flex", gap: 20, flexWrap: "wrap", justifyContent: "space-around" }}>
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "space-around" }}>
         <RingStat
           title={`Consommation — ${monthLabel(last)}`}
           pct={couverture}
@@ -530,6 +549,17 @@ function OverviewCircles({
           caption={`${fmt.format(lastStats?.nb_sites_avec_conso ?? 0)} / ${fmt.format(lastStats?.nb_sites_ge ?? 0)} sites GE avec donnée`}
           color={FT.green}
           icon={<Droplets size={15} />}
+          onClick={onNavigateTab ? () => onNavigateTab("CONSOMMATION") : undefined}
+        />
+        <RingStat
+          title="Stock — état actuel"
+          pct={pctStockConnu}
+          centerValue={`${fmt.format(stockKpis?.sites_avec_stock_snowflake ?? 0)} / ${fmt.format(stockKpis?.sites_avec_ge ?? 0)}`}
+          centerSub={`${pctStockConnu}% stock connu`}
+          caption={`${fmt.format(stockKpis?.sites_stock_critique ?? 0)} cuve(s) critique(s) (<15%)`}
+          color={FT.cyan}
+          icon={<Warehouse size={15} />}
+          onClick={onNavigateTab ? () => onNavigateTab("STOCK") : undefined}
         />
         <RingStat
           title={commandeData?.month_year ? `Commandes — ${monthLabel(commandeData.month_year)}` : "Commandes"}
@@ -539,6 +569,7 @@ function OverviewCircles({
           caption={`${fmt.format(commandeKpis?.nb_sites_commande_positive ?? 0)} / ${fmt.format(commandeKpis?.total_sites ?? 0)} sites avec commande`}
           color={FT.gold}
           icon={<Fuel size={15} />}
+          onClick={onNavigateTab ? () => onNavigateTab("COMMANDE") : undefined}
         />
         <RingStat
           title={estimationData?.target_month ? `Estimation commande — ${monthLabel(estimationData.target_month)}` : "Estimation commande"}
@@ -548,6 +579,7 @@ function OverviewCircles({
           caption={`${fmt.format(estimKpis?.nb_sites_confiance_elevee ?? 0)} / ${fmt.format(estimKpis?.nb_sites ?? 0)} sites en confiance élevée`}
           color={FT.navy}
           icon={<Calculator size={15} />}
+          onClick={onNavigateTab ? () => onNavigateTab("ESTIMATION") : undefined}
         />
       </div>
     </Card>
@@ -563,6 +595,7 @@ export function DashboardSheet({
   commandeLoading = false,
   estimationData,
   estimationLoading = false,
+  onNavigateTab,
 }: {
   data: FuelConsommationDashboard | undefined;
   loading: boolean;
@@ -572,6 +605,7 @@ export function DashboardSheet({
   commandeLoading?: boolean;
   estimationData?: FuelCommandeEstimationResponse;
   estimationLoading?: boolean;
+  onNavigateTab?: (tab: "CONSOMMATION" | "STOCK" | "COMMANDE" | "ESTIMATION") => void;
 }) {
   if (loading) {
     return (
@@ -596,7 +630,7 @@ export function DashboardSheet({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <OverviewCircles data={data} commandeData={commandeData} estimationData={estimationData} />
+      <OverviewCircles data={data} stockData={stockData} commandeData={commandeData} estimationData={estimationData} onNavigateTab={onNavigateTab} />
       <ConsommationSection data={data} />
       <StockSection data={stockData} loading={stockLoading} />
       <CommandeSection data={commandeData} loading={commandeLoading} />

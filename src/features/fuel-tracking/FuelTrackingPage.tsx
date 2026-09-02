@@ -33,7 +33,7 @@ import { StockSheet } from "./sheets/StockSheet";
 import { CommandeSheet } from "./sheets/CommandeSheet";
 import { EstimationSheet } from "./sheets/EstimationSheet";
 
-type MainTab = "DASHBOARD" | "CONSOMMATION" | "STOCK" | "COMMANDE" | "ESTIMATION";
+export type MainTab = "DASHBOARD" | "CONSOMMATION" | "STOCK" | "COMMANDE" | "ESTIMATION";
 
 const MAIN_TABS: Array<{ key: MainTab; label: string; icon: ReactNode }> = [
   { key: "DASHBOARD", label: "Dashboard", icon: <LayoutGrid size={14} /> },
@@ -272,6 +272,7 @@ export default function FuelTrackingPage() {
               commandeLoading={commandeQ.isLoading}
               estimationData={estimationQ.data}
               estimationLoading={estimationQ.isLoading}
+              onNavigateTab={setActiveTab}
             />
           </div>
         )}
