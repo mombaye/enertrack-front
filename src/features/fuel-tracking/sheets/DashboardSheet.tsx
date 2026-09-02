@@ -40,14 +40,6 @@ function ConsommationSection({ data }: { data: FuelConsommationDashboard }) {
   const last = data.months[data.months.length - 1];
   const lastStats = data.monthly[data.monthly.length - 1];
 
-  const totalConso = data.monthly.reduce((a, m) => a + m.total_conso_snowflake_l, 0);
-  const totalEnoc = data.monthly.reduce((a, m) => a + m.total_enoc_qte_ajoutee_l, 0);
-  const totalEnocDemandes = data.monthly.reduce((a, m) => a + m.total_enoc_nb_demandes, 0);
-  const totalEnocSites = data.monthly.reduce((a, m) => a + m.nb_sites_enoc_ajoutee, 0);
-  const totalCph = data.monthly.reduce((a, m) => a + m.total_conso_estimee_cph_l, 0);
-  const couverture = lastStats && lastStats.nb_sites_ge > 0 ? Math.round((lastStats.nb_sites_avec_conso / lastStats.nb_sites_ge) * 100) : 0;
-  const couvertureCph = lastStats && lastStats.nb_sites_ge > 0 ? Math.round((lastStats.nb_sites_avec_cph / lastStats.nb_sites_ge) * 100) : 0;
-
   const scopeLabel = multiMonth ? `${monthLabel(first)} → ${monthLabel(last)}` : monthLabel(first);
 
   const cph = data.cph_parameters;
@@ -81,50 +73,6 @@ function ConsommationSection({ data }: { data: FuelConsommationDashboard }) {
               ? ` — dernier import le ${new Date(cph.dernier_import).toLocaleDateString("fr-FR")}.`
               : " — aucun import effectué (conso estimée CPH vide tant qu'aucune fiche n'existe)."}
           </div>
-        </div>
-        <div style={{ padding: "12px 18px 18px", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 12 }}>
-          <KpiCard
-            label="Conso mesurée"
-            value={`${fmt.format(totalConso)} L`}
-            sub={multiMonth ? `Cumulé sur ${data.months.length} mois` : `${fmt.format(lastStats.nb_sites_avec_conso)} site(s) concerné(s)`}
-            tone="green"
-            icon={<Droplets size={14} />}
-          />
-          <KpiCard
-            label="Conso estimée (CPH)"
-            value={`${fmt.format(totalCph)} L`}
-            sub={multiMonth ? `Cumulé sur ${data.months.length} mois` : `${fmt.format(lastStats.nb_sites_avec_cph)} site(s) concerné(s)`}
-            tone="violet"
-            icon={<Gauge size={14} />}
-          />
-          <KpiCard
-            label="ENOC ajouté"
-            value={`${fmt.format(totalEnoc)} L`}
-            sub={`${fmt.format(totalEnocDemandes)} demande(s), ${fmt.format(totalEnocSites)} site(s)${multiMonth ? " (cumulé)" : ""}`}
-            tone="gold"
-            icon={<Gauge size={14} />}
-          />
-          <KpiCard
-            label={multiMonth ? `Couverture (${monthLabel(last)})` : "Couverture"}
-            value={`${couverture}%`}
-            sub={`${fmt.format(lastStats.nb_sites_avec_conso)} / ${fmt.format(lastStats.nb_sites_ge)} sites GE`}
-            tone={couverture > 0 ? "cyan" : "slate"}
-            icon={<TrendingUp size={14} />}
-          />
-          <KpiCard
-            label={multiMonth ? `Couverture CPH (${monthLabel(last)})` : "Couverture CPH"}
-            value={`${couvertureCph}%`}
-            sub={`${fmt.format(lastStats.nb_sites_avec_cph)} / ${fmt.format(lastStats.nb_sites_ge)} sites GE`}
-            tone={couvertureCph > 0 ? "cyan" : "slate"}
-            icon={<TrendingUp size={14} />}
-          />
-          <KpiCard
-            label={multiMonth ? `Sites MONITORED (${monthLabel(last)})` : "Sites MONITORED"}
-            value={fmt.format(lastStats.nb_sites_monitored)}
-            sub={`sur ${fmt.format(lastStats.nb_sites_ge)} sites GE`}
-            tone="blue"
-            icon={<Fuel size={14} />}
-          />
         </div>
       </Card>
 
@@ -429,19 +377,6 @@ function CommandeSection({ data, loading }: { data: FuelCommandeResponse | undef
           tone="gold"
         />
       </div>
-      <div style={{ padding: "12px 18px 18px", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 12 }}>
-        <KpiCard label="Sites du fichier" value={fmt.format(kpis.total_sites)} tone="slate" icon={<Fuel size={14} />} />
-        <KpiCard label="Commande avec marge" value={`${fmt.format(kpis.total_commande_avec_marge_l)} L`} tone="blue" icon={<TrendingUp size={14} />} />
-        <KpiCard label="Commande sans marge" value={`${fmt.format(kpis.total_commande_sans_marge_l)} L`} tone="gold" icon={<TrendingUp size={14} />} />
-        <KpiCard label="Sites avec commande" value={fmt.format(kpis.nb_sites_commande_positive)} sub="Commande avec marge > 0 L" tone="green" icon={<Fuel size={14} />} />
-        <KpiCard
-          label="Rupture de stock prévue"
-          value={fmt.format(kpis.nb_sites_stock_negatif)}
-          sub="Stock final estimé négatif"
-          tone={kpis.nb_sites_stock_negatif > 0 ? "red" : "slate"}
-          icon={<AlertTriangle size={14} />}
-        />
-      </div>
       {(categorieBars.length > 0 || typologieBars.length > 0) && (
         <div style={{ borderTop: `1px solid ${FT.border}`, padding: "14px 18px 18px", display: "flex", gap: 24, flexWrap: "wrap" }}>
           {categorieBars.length > 0 && (
@@ -501,19 +436,6 @@ function EstimationSection({ data, loading }: { data: FuelCommandeEstimationResp
           subtitle="Projection du mois suivant à partir de l'usage réel (conso + stock) — indépendante du fichier Ops, ne suit pas la période sélectionnée ci-dessus."
           tone="navy"
         />
-      </div>
-      <div style={{ padding: "12px 18px 18px", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 12 }}>
-        <KpiCard label="Commande estimée totale" value={`${fmt.format(kpis.total_commande_estimee_l)} L`} tone="blue" icon={<Calculator size={14} />} />
-        <KpiCard label="Sites estimés" value={fmt.format(kpis.nb_sites)} tone="slate" icon={<Fuel size={14} />} />
-        <KpiCard
-          label="Rupture prévue"
-          value={fmt.format(kpis.nb_sites_rupture_prevue)}
-          sub="Stock final estimé négatif"
-          tone={kpis.nb_sites_rupture_prevue > 0 ? "red" : "slate"}
-          icon={<AlertTriangle size={14} />}
-        />
-        <KpiCard label="Confiance élevée" value={fmt.format(kpis.nb_sites_confiance_elevee)} tone="green" icon={<TrendingUp size={14} />} />
-        <KpiCard label="Confiance faible" value={fmt.format(kpis.nb_sites_confiance_faible)} sub="À vérifier avant validation" tone="orange" icon={<AlertTriangle size={14} />} />
       </div>
       {kpis.total_commande_ops_reference_l != null && (
         <div style={{ padding: "0 18px 16px", fontSize: 11.5, color: FT.textSub }}>
