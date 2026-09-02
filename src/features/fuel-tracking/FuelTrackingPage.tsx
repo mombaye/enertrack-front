@@ -208,10 +208,15 @@ export default function FuelTrackingPage() {
   // 2026-09 : dernière ligne le 20/08 alors que la synchro tournait bien
   // tous les jours — sans cette date, ça ressemble à un bug EnerTrack).
   const sources = consommationQ.data?.sources;
-  const formatDataDate = (iso: string | null | undefined) =>
+  // CPH (Snowflake) est agrégé au jour — pas d'heure dans la source elle-même,
+  // afficher une heure inventée (00:00) serait trompeur sur la précision réelle.
+  const formatDataDateOnly = (iso: string | null | undefined) =>
     iso ? new Date(iso).toLocaleDateString("fr-FR", { dateStyle: "long" }) : "—";
-  const snowflakeLastDataLabel = formatDataDate(sources?.snowflake?.last_data_date);
-  const enocLastDataLabel = formatDataDate(sources?.enoc?.last_data_date);
+  // ENOC (mouvement de ravitaillement) a une vraie date ET heure d'opération.
+  const formatDataDateTime = (iso: string | null | undefined) =>
+    iso ? new Date(iso).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "medium" }) : "—";
+  const snowflakeLastDataLabel = formatDataDateOnly(sources?.snowflake?.last_data_date);
+  const enocLastDataLabel = formatDataDateTime(sources?.enoc?.last_data_date);
 
   return (
     <>
