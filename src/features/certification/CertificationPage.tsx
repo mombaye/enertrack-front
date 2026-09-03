@@ -1149,26 +1149,30 @@ export default function CertificationPage() {
                     <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2.5">
                       <div className="text-[17px] font-extrabold text-emerald-700">{importResult.rowsCreated}</div>
                       <div className="text-[10.5px] text-emerald-700/80 font-semibold">Factures créées</div>
+                      <div className="text-[10px] text-emerald-700/60 mt-0.5">Nouvelles, absentes avant cet import</div>
                     </div>
                     <div className="rounded-lg bg-sky-50 border border-sky-200 px-3 py-2.5">
                       <div className="text-[17px] font-extrabold text-sky-700">{importResult.rowsUpdated}</div>
                       <div className="text-[10.5px] text-sky-700/80 font-semibold">Factures mises à jour</div>
+                      <div className="text-[10px] text-sky-700/60 mt-0.5">Existaient déjà, juste actualisées</div>
                     </div>
                     <div className={`rounded-lg px-3 py-2.5 border ${importResult.missingSites > 0 ? "bg-amber-50 border-amber-200" : "bg-slate-50 border-slate-200"}`}>
                       <div className={`text-[17px] font-extrabold ${importResult.missingSites > 0 ? "text-amber-700" : "text-slate-500"}`}>{importResult.missingSites}</div>
                       <div className={`text-[10.5px] font-semibold ${importResult.missingSites > 0 ? "text-amber-700/80" : "text-slate-500"}`}>Sans site rattaché</div>
+                      <div className={`text-[10px] mt-0.5 ${importResult.missingSites > 0 ? "text-amber-700/60" : "text-slate-400"}`}>Contrat non reconnu — importée quand même, à relier plus tard</div>
                     </div>
                     <div className={`rounded-lg px-3 py-2.5 border ${importResult.issuesLogged > 0 ? "bg-amber-50 border-amber-200" : "bg-slate-50 border-slate-200"}`}>
                       <div className={`text-[17px] font-extrabold ${importResult.issuesLogged > 0 ? "text-amber-700" : "text-slate-500"}`}>{importResult.issuesLogged}</div>
                       <div className={`text-[10.5px] font-semibold ${importResult.issuesLogged > 0 ? "text-amber-700/80" : "text-slate-500"}`}>Issues (voir détail)</div>
+                      <div className={`text-[10px] mt-0.5 ${importResult.issuesLogged > 0 ? "text-amber-700/60" : "text-slate-400"}`}>Points à vérifier — pas des erreurs bloquantes</div>
                     </div>
                   </div>
                   <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-slate-500">
-                    <div><strong className="text-slate-700">{importResult.rowsCreated + importResult.rowsUpdated}</strong> facture(s) au total dans ce batch</div>
+                    <div><strong className="text-slate-700">{importResult.rowsCreated + importResult.rowsUpdated}</strong> facture(s) au total dans ce batch <span className="text-slate-400">(= le même nombre que dans le fichier)</span></div>
                     <div><strong className="text-slate-700">{importResult.monthlyRowsCreated}</strong> ligne(s) mensuelles générées</div>
-                    {importResult.skippedMissingRequired > 0 && <div className="text-red-600"><strong>{importResult.skippedMissingRequired}</strong> ignorée(s) — champ requis manquant</div>}
-                    {importResult.skippedInvalidPeriod > 0 && <div className="text-red-600"><strong>{importResult.skippedInvalidPeriod}</strong> ignorée(s) — période invalide</div>}
-                    {importResult.skippedDuplicateInFile > 0 && <div className="text-slate-500"><strong>{importResult.skippedDuplicateInFile}</strong> doublon(s) dans le fichier</div>}
+                    {importResult.skippedMissingRequired > 0 && <div className="text-red-600"><strong>{importResult.skippedMissingRequired}</strong> vraiment ignorée(s) — il manque un champ obligatoire (contrat, n° facture ou dates)</div>}
+                    {importResult.skippedInvalidPeriod > 0 && <div className="text-red-600"><strong>{importResult.skippedInvalidPeriod}</strong> vraiment ignorée(s) — la date de fin est avant la date de début</div>}
+                    {importResult.skippedDuplicateInFile > 0 && <div className="text-slate-500"><strong>{importResult.skippedDuplicateInFile}</strong> doublon(s) dans le fichier — même facture présente 2 fois, une seule gardée</div>}
                   </div>
                 </div>
 
