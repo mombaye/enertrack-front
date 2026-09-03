@@ -755,7 +755,7 @@ export default function CertificationPage() {
       taskMessage:  billingPoll.task_message ?? null,
       rowsCreated:  billingPoll.task_meta?.rows_created ?? 0,
       rowsUpdated:  billingPoll.task_meta?.rows_updated ?? 0,
-      missingSites: billingPoll.task_meta?.invoices_missing_site_count ?? 0,
+      missingSites: billingPoll.task_meta?.invoices_without_site_count ?? 0,
     });
     if (billingPoll.task_status === "SUCCESS") {
       toast.success(`Import terminé — ${(billingPoll.task_meta?.rows_created ?? 0) + (billingPoll.task_meta?.rows_updated ?? 0)} factures`);

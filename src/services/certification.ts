@@ -205,8 +205,8 @@ export type BillingBatchTaskStatus = {
     skipped_invalid_period?: number;
     skipped_duplicate_in_file?: number;
     issues_logged?: number;
-    invoices_missing_site_count?: number;
-    invoices_missing_site_sample?: string[];
+    invoices_without_site_count?: number;
+    invoices_without_site_sample?: string[];
   } | null;
   task_updated_at: string | null;
   source_filename: string;
