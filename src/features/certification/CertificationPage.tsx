@@ -697,6 +697,8 @@ export default function CertificationPage() {
     taskStatus: "PENDING"|"RUNNING"|"SUCCESS"|"FAILURE"|null;
     taskProgress: number; taskMessage: string | null;
     rowsCreated: number; rowsUpdated: number; missingSites: number;
+    monthlyRowsCreated: number; issuesLogged: number;
+    skippedMissingRequired: number; skippedInvalidPeriod: number; skippedDuplicateInFile: number;
   } | null>(null);
   const [echeance, setEcheance]           = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -756,6 +758,11 @@ export default function CertificationPage() {
       rowsCreated:  billingPoll.task_meta?.rows_created ?? 0,
       rowsUpdated:  billingPoll.task_meta?.rows_updated ?? 0,
       missingSites: billingPoll.task_meta?.invoices_without_site_count ?? 0,
+      monthlyRowsCreated:     billingPoll.task_meta?.monthly_rows_created ?? 0,
+      issuesLogged:           billingPoll.task_meta?.issues_logged ?? 0,
+      skippedMissingRequired: billingPoll.task_meta?.skipped_missing_required ?? 0,
+      skippedInvalidPeriod:   billingPoll.task_meta?.skipped_invalid_period ?? 0,
+      skippedDuplicateInFile: billingPoll.task_meta?.skipped_duplicate_in_file ?? 0,
     });
     if (billingPoll.task_status === "SUCCESS") {
       toast.success(`Import terminé — ${(billingPoll.task_meta?.rows_created ?? 0) + (billingPoll.task_meta?.rows_updated ?? 0)} factures`);
@@ -817,7 +824,13 @@ export default function CertificationPage() {
       catch (e) { clearInterval(iv); setUploadProgress(0); throw e; }
     },
     onSuccess: (data) => {
-      setImportResult({ batchId: data.batch.id, filename: data.batch.source_filename, taskId: data.task_id ?? null, taskStatus: "PENDING", taskProgress: 0, taskMessage: "En file d'attente…", rowsCreated: 0, rowsUpdated: 0, missingSites: 0 });
+      setImportResult({
+        batchId: data.batch.id, filename: data.batch.source_filename, taskId: data.task_id ?? null,
+        taskStatus: "PENDING", taskProgress: 0, taskMessage: "En file d'attente…",
+        rowsCreated: 0, rowsUpdated: 0, missingSites: 0,
+        monthlyRowsCreated: 0, issuesLogged: 0,
+        skippedMissingRequired: 0, skippedInvalidPeriod: 0, skippedDuplicateInFile: 0,
+      });
       toast.info("Fichier reçu — import en cours…");
     },
     onError: (err: any) => toast.error(err?.response?.data?.detail ?? "Erreur import"),
@@ -1125,6 +1138,38 @@ export default function CertificationPage() {
                     <button onClick={() => { setStep("upload"); setImportResult(null); setUploadedFile(null); setUploadProgress(0); uploadMut.reset(); setEcheance(""); }}
                       className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 transition"><X className="w-3.5 h-3.5" /></button>
                   )}
+                </div>
+
+                {/* Détail de l'import, avant de lancer quoi que ce soit — pour
+                    vérifier que le fichier a bien été traité comme attendu
+                    (nombre de lignes, doublons, factures sans site, etc.) */}
+                <div className="bg-white rounded-xl border border-slate-200 p-4">
+                  <div className="text-[12px] font-bold text-slate-800 mb-3">Détail de l'import — à vérifier avant certification</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2.5">
+                      <div className="text-[17px] font-extrabold text-emerald-700">{importResult.rowsCreated}</div>
+                      <div className="text-[10.5px] text-emerald-700/80 font-semibold">Factures créées</div>
+                    </div>
+                    <div className="rounded-lg bg-sky-50 border border-sky-200 px-3 py-2.5">
+                      <div className="text-[17px] font-extrabold text-sky-700">{importResult.rowsUpdated}</div>
+                      <div className="text-[10.5px] text-sky-700/80 font-semibold">Factures mises à jour</div>
+                    </div>
+                    <div className={`rounded-lg px-3 py-2.5 border ${importResult.missingSites > 0 ? "bg-amber-50 border-amber-200" : "bg-slate-50 border-slate-200"}`}>
+                      <div className={`text-[17px] font-extrabold ${importResult.missingSites > 0 ? "text-amber-700" : "text-slate-500"}`}>{importResult.missingSites}</div>
+                      <div className={`text-[10.5px] font-semibold ${importResult.missingSites > 0 ? "text-amber-700/80" : "text-slate-500"}`}>Sans site rattaché</div>
+                    </div>
+                    <div className={`rounded-lg px-3 py-2.5 border ${importResult.issuesLogged > 0 ? "bg-amber-50 border-amber-200" : "bg-slate-50 border-slate-200"}`}>
+                      <div className={`text-[17px] font-extrabold ${importResult.issuesLogged > 0 ? "text-amber-700" : "text-slate-500"}`}>{importResult.issuesLogged}</div>
+                      <div className={`text-[10.5px] font-semibold ${importResult.issuesLogged > 0 ? "text-amber-700/80" : "text-slate-500"}`}>Issues (voir détail)</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-slate-500">
+                    <div><strong className="text-slate-700">{importResult.rowsCreated + importResult.rowsUpdated}</strong> facture(s) au total dans ce batch</div>
+                    <div><strong className="text-slate-700">{importResult.monthlyRowsCreated}</strong> ligne(s) mensuelles générées</div>
+                    {importResult.skippedMissingRequired > 0 && <div className="text-red-600"><strong>{importResult.skippedMissingRequired}</strong> ignorée(s) — champ requis manquant</div>}
+                    {importResult.skippedInvalidPeriod > 0 && <div className="text-red-600"><strong>{importResult.skippedInvalidPeriod}</strong> ignorée(s) — période invalide</div>}
+                    {importResult.skippedDuplicateInFile > 0 && <div className="text-slate-500"><strong>{importResult.skippedDuplicateInFile}</strong> doublon(s) dans le fichier</div>}
+                  </div>
                 </div>
 
                 {!efmsLoading && !efms?.efms_reachable && (
