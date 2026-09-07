@@ -113,7 +113,15 @@ export type FuelConsommationKpis = {
   total_conso_snowflake_l: number;
   total_enoc_qte_ajoutee_l: number;
   total_enoc_nb_demandes: number;
+  runtime_source_counts: {
+    tracker_5min: number;
+    dse_controller: number;
+    dg_on_calculated: number;
+    none: number;
+  };
 };
+
+export type FuelRuntimeSourceFilter = "tracker_5min" | "dse_controller" | "dg_on_calculated" | "none";
 
 export type FuelSourceStatus = {
   connected: boolean;
@@ -183,7 +191,7 @@ export type FuelGeDetectionFilter =
   | "dans_fichier_sans_ge"
   | "ge_hors_fichier";
 
-export async function getFuelConsommation(params?: { month?: string; search?: string; country?: string; has_genset?: "true" | "false" | "incomplete"; detection?: FuelGeDetectionFilter; page?: number; limit?: number }) {
+export async function getFuelConsommation(params?: { month?: string; search?: string; country?: string; has_genset?: "true" | "false" | "incomplete"; detection?: FuelGeDetectionFilter; runtime_source?: FuelRuntimeSourceFilter; page?: number; limit?: number }) {
   const { data } = await api.get<FuelConsommationResponse>(`${BASE}/consommation/`, {
     params: cleanParams(params ?? {}),
   });
