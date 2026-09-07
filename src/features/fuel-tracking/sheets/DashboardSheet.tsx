@@ -101,7 +101,7 @@ function ConsommationSection({ data }: { data: FuelConsommationDashboard }) {
           <div style={{ padding: "16px 18px 4px" }}>
             <SheetTitle
               icon={<TrendingUp size={16} />}
-              title="Top 10 sites — conso mesurée cumulée"
+              title="Top 20 sites — conso mesurée cumulée"
               subtitle={`Somme de la conso mesurée — ${scopeLabel}.`}
             />
           </div>

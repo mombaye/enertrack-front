@@ -95,9 +95,37 @@ const SOURCE_LABELS: Record<string, string> = {
   gardiennage: "relevé manuel de gardiennage (jauge physique) — repli, pas de capteur Snowflake fiable",
 };
 
+// Étiquette courte affichée directement dans la cellule (pas seulement au
+// survol) — pour voir d'un coup d'œil d'où vient chaque Running Time sans
+// avoir à passer la souris sur chaque ligne.
+const SOURCE_SHORT: Record<string, string> = {
+  cph_snowflake: "CPH",
+  snowflake_tracker_5min: "5 min",
+  snowflake_dse_controller: "DSE",
+  snowflake_dg_on_calculated: "DG-On",
+  snowflake: "Auto",
+  gardiennage: "Gardien.",
+};
+
 function sourceTitle(source: string | null): string | undefined {
   if (!source) return "Aucune source disponible (pipeline CPH Snowflake sans résultat) pour ce site ce mois-ci.";
   return `Source : ${SOURCE_LABELS[source] || source}.`;
+}
+
+function SourceBadge({ source }: { source: string | null }) {
+  if (!source) return null;
+  return (
+    <span
+      title={sourceTitle(source)}
+      style={{
+        marginLeft: 5, fontSize: 9.5, fontWeight: 800, color: FT.textSub,
+        background: FT.slateL, border: `1px solid ${FT.border}`, borderRadius: 5,
+        padding: "1px 4px", verticalAlign: "middle", cursor: "help",
+      }}
+    >
+      {SOURCE_SHORT[source] || source}
+    </span>
+  );
 }
 
 
@@ -521,12 +549,13 @@ export function ConsommationSheet({
                       <td style={td}>{r.typologie_simple || "—"}</td>
                       <td style={td}>{r.site_type || "—"}</td>
                       <td style={td}>{r.type_ge || <EmptyCell reason="Type de GE non trouvé (Base GE.xlsx ni Snowflake SITE_DG) pour ce site." />}</td>
-                      <td style={td} title={r.ge_runtime_fichier_h !== null ? sourceTitle(r.ge_runtime_source) : undefined}>
+                      <td style={td}>
                         <NumCell
                           value={r.ge_runtime_fichier_h}
                           digits={1}
                           emptyReason={sourceTitle(r.ge_runtime_source)}
                         />
+                        {r.ge_runtime_fichier_h !== null && <SourceBadge source={r.ge_runtime_source} />}
                       </td>
                       <td style={td}>
                         <NumCell
