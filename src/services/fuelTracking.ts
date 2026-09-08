@@ -65,7 +65,9 @@ export type FuelConsommationSite = {
   cph_calculation_status: string | null;
   cph_status_breakdown: Record<string, number> | null;
   cph_runtime_h_total: number | null;
-  cph_runtime_source: "TRACKER_5MIN" | "DSE_CONTROLLER" | "DG_ON_CALCULATED" | null;
+  cph_runtime_source: "TRACKER_5MIN" | "DSE_CONTROLLER" | "DG_ON_CALCULATED" | "RECTIFIER_STATUS_5MIN" | null;
+  /** Heures cumulées par source sur le mois, ex. {"DSE_CONTROLLER": 45.2, "TRACKER_5MIN": 3.1} — cph_runtime_source est la clé au plus d'heures. */
+  cph_runtime_source_breakdown: Record<string, number> | null;
   cph_ge_type: string | null;
   cph_pge_kva: number | null;
   cph_power_factor: number | null;
@@ -122,6 +124,7 @@ export type FuelConsommationKpis = {
     tracker_5min: number;
     dse_controller: number;
     dg_on_calculated: number;
+    rectifier_status_5min: number;
     none: number;
   };
   configuration_counts: {
@@ -131,7 +134,7 @@ export type FuelConsommationKpis = {
   };
 };
 
-export type FuelRuntimeSourceFilter = "tracker_5min" | "dse_controller" | "dg_on_calculated" | "none";
+export type FuelRuntimeSourceFilter = "tracker_5min" | "dse_controller" | "dg_on_calculated" | "rectifier_status_5min" | "none";
 export type FuelConfigurationFilter = "indoor" | "outdoor" | "none";
 
 export type FuelSourceStatus = {

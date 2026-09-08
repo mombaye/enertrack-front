@@ -99,7 +99,8 @@ const SOURCE_LABELS: Record<string, string> = {
   cph_snowflake: "pipeline CPH Snowflake (télémétrie GFMS_DATA_TRACKER_NC)",
   snowflake_tracker_5min: "compteur télémétrie 5 min (GFMS_DATA_TRACKER_NC)",
   snowflake_dse_controller: "contrôleur DSE (GENSET_REPORT) — repli",
-  snowflake_dg_on_calculated: "DG-On calculé (GENSET_REPORT) — dernier repli",
+  snowflake_dg_on_calculated: "DG-On calculé (GENSET_REPORT) — repli sites non-hybrides",
+  snowflake_rectifier_status_5min: "redresseur 5 min (RECTIFIER_EFFICIENCY_STATUS) — repli sites hybrides solaire+GE",
   snowflake: "capteur automatisé Snowflake (VW_FUEL_REPORT)",
   gardiennage: "relevé manuel de gardiennage (jauge physique) — repli, pas de capteur Snowflake fiable",
 };
@@ -429,9 +430,10 @@ function GeDetectionPanel({
 }
 
 const RUNTIME_SOURCE_OPTIONS: Array<{ key: FuelRuntimeSourceFilter; label: string }> = [
-  { key: "tracker_5min", label: "5 min" },
   { key: "dse_controller", label: "DSE" },
   { key: "dg_on_calculated", label: "DG-On" },
+  { key: "rectifier_status_5min", label: "Redresseur" },
+  { key: "tracker_5min", label: "5 min" },
   { key: "none", label: "Sans source" },
 ];
 
