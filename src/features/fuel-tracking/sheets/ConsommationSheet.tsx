@@ -8,7 +8,7 @@
 
 import { useState, type CSSProperties } from "react";
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Droplets, Fuel, Gauge, Search, Users } from "lucide-react";
+import { Droplets, Fuel, Gauge, PieChart as PieChartIcon, Search, Users } from "lucide-react";
 import type { FuelConfigurationFilter, FuelConsommationResponse, FuelGeDetectionFilter, FuelRuntimeSourceFilter } from "@/services/fuelTracking";
 import { Card, EmptyState, KpiCard, Modal, Pager, Skeleton } from "../ui";
 import { FT } from "../theme";
@@ -356,7 +356,7 @@ function GeDetectionPanel({
   const toggle = (key: FuelGeDetectionFilter) => onDetectionChange(activeDetection === key ? null : key);
 
   return (
-    <Card style={{ padding: 16 }}>
+    <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 4, flexWrap: "wrap" }}>
         <div style={{ fontSize: 12.5, fontWeight: 800, color: FT.text }}>
           Détection GE — Snowflake / ENOC seuls (audit, avant correction Typo simple)
@@ -424,7 +424,7 @@ function GeDetectionPanel({
           </div>
         </div>
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -475,6 +475,7 @@ export function ConsommationSheet({
   stickyTop?: number;
 }) {
   const [activeComment, setActiveComment] = useState<{ siteId: string; siteName: string | null; text: string } | null>(null);
+  const [showDetectionModal, setShowDetectionModal] = useState(false);
 
   if (loading) return <Skeleton h={520} />;
 
@@ -485,14 +486,31 @@ export function ConsommationSheet({
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <ConsommationKpis data={data} stickyTop={stickyTop + 14} />
 
-      <GeDetectionPanel
-        detection={data?.ge_detection}
-        activeDetection={detectionFilter}
-        onDetectionChange={(v) => {
-          onDetectionFilterChange(v);
-          onGeFilterChange("all");
-        }}
-      />
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <button
+          onClick={() => setShowDetectionModal(true)}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`,
+            background: FT.card, color: FT.text, cursor: "pointer", fontSize: 12.5, fontWeight: 800,
+            borderRadius: 10, padding: "9px 14px", boxShadow: FT.shadow,
+          }}
+        >
+          <PieChartIcon size={14} color={FT.blue} /> Voir informations Détection GE
+        </button>
+      </div>
+
+      {showDetectionModal && (
+        <Modal title="Détection GE — Snowflake / ENOC seuls" onClose={() => setShowDetectionModal(false)} maxWidth={900}>
+          <GeDetectionPanel
+            detection={data?.ge_detection}
+            activeDetection={detectionFilter}
+            onDetectionChange={(v) => {
+              onDetectionFilterChange(v);
+              onGeFilterChange("all");
+            }}
+          />
+        </Modal>
+      )}
 
       <Card padded={false} style={{ padding: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
