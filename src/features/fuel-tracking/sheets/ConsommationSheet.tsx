@@ -44,6 +44,15 @@ function EmptyCell({ reason }: { reason?: string }) {
   );
 }
 
+function OuiNonCell({ value, title }: { value: boolean | null; title?: string }) {
+  if (value === null || value === undefined) return <EmptyCell reason={title} />;
+  return (
+    <span style={{ fontWeight: 800, color: value ? FT.green : FT.textSub }} title={title}>
+      {value ? "Oui" : "Non"}
+    </span>
+  );
+}
+
 function NumCell({ value, digits = 0, suffix, emptyReason }: { value: number | null; digits?: number; suffix?: string; emptyReason?: string }) {
   if (value === null || value === undefined) return <EmptyCell reason={emptyReason} />;
   if (value === 0) return <EmptyCell reason={emptyReason} />;
@@ -551,6 +560,8 @@ export function ConsommationSheet({
                     <th style={th}>Typologie réelle</th>
                     <th style={th}>Typologie simple</th>
                     <th style={th}>Type de site</th>
+                    <th style={th}>Facturé avec GE</th>
+                    <th style={th}>Facturé (mois en cours)</th>
                     <th style={th}>Type de GE</th>
                     <th style={th}>Running Time (h)</th>
                     <th style={th}>Énergie site (kWh)</th>
@@ -575,6 +586,18 @@ export function ConsommationSheet({
                       <td style={td}>{r.typology || "—"}</td>
                       <td style={td}>{r.typologie_simple || "—"}</td>
                       <td style={td}>{r.site_type || "—"}</td>
+                      <td style={td}>
+                        <OuiNonCell
+                          value={r.facturation_avec_ge_fichier}
+                          title={r.facturation_avec_ge_fichier === null ? "Site absent du dernier fichier ESCO SN Facturation par site." : "Facturation avec GE — fichier ESCO SN Facturation par site (déjà calculé par Ops)."}
+                        />
+                      </td>
+                      <td style={td}>
+                        <OuiNonCell
+                          value={r.facturation_active_fichier}
+                          title={r.facturation_active_fichier === null ? "Site absent du dernier fichier ESCO SN Facturation par site." : "Statut Facturation du mois en cours — fichier ESCO SN Facturation par site."}
+                        />
+                      </td>
                       <td style={td}>{r.type_ge || <EmptyCell reason="Type de GE non trouvé (Base GE.xlsx ni Snowflake SITE_DG) pour ce site." />}</td>
                       <td style={td}>
                         <NumCell

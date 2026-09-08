@@ -100,6 +100,11 @@ export type FuelConsommationSite = {
   // Conso estimée, Conso mesurée vue), pourquoi aucune source disponible
   // ne les a fournies. null si tout est renseigné.
   commentaire: string | null;
+  // Facturation (ESCO SN — Facturation par site, mensuel) — null si le
+  // site n'apparaît pas dans le dernier fichier importé.
+  facturation_active_fichier: boolean | null;
+  facturation_avec_ge_fichier: boolean | null;
+  configuration_fichier: string | null;
 };
 
 export type FuelConsommationKpis = {
