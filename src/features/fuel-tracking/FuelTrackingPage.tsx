@@ -55,6 +55,16 @@ function previousCalendarMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+/** Mois calendaire courant (ex: "2026-09") — plafond du sélecteur "à" :
+ * le mois en cours reste sélectionnable manuellement (utile dès que des
+ * données commencent à y apparaître), seul le DÉFAUT au premier chargement
+ * reste plafonné à M-1 (voir previousCalendarMonth) pour ne pas donner
+ * l'impression trompeuse d'une panne sur un mois qui vient de commencer. */
+function currentCalendarMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
 /** Pastille de statut d'une source de données (connectée/non connectée),
  * avec le détail (dernière synchro, erreur) en info-bulle. */
 function SourceBadge({ label, status }: { label: string; status: FuelSourceStatus | undefined }) {
@@ -270,7 +280,7 @@ export default function FuelTrackingPage() {
                     type="month"
                     value={toMonth ?? ""}
                     min={fromMonth ?? undefined}
-                    max={previousCalendarMonth()}
+                    max={currentCalendarMonth()}
                     onChange={(e) => setToMonth(e.target.value)}
                     style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, color: FT.text, fontWeight: 700 }}
                   />

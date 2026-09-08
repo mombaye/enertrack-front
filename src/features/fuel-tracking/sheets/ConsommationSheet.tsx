@@ -560,6 +560,7 @@ export function ConsommationSheet({
                     <th style={th}>Typologie réelle</th>
                     <th style={th}>Typologie simple</th>
                     <th style={th}>Type de site</th>
+                    <th style={th}>Configuration</th>
                     <th style={th}>Facturé avec GE</th>
                     <th style={th}>Facturé (mois en cours)</th>
                     <th style={th}>Type de GE</th>
@@ -586,6 +587,9 @@ export function ConsommationSheet({
                       <td style={td}>{r.typology || "—"}</td>
                       <td style={td}>{r.typologie_simple || "—"}</td>
                       <td style={td}>{r.site_type || "—"}</td>
+                      <td style={td}>
+                        {r.configuration_fichier || <EmptyCell reason="Configuration (Indoor/Outdoor) non trouvée — site absent du dernier fichier ESCO SN Facturation par site." />}
+                      </td>
                       <td style={td}>
                         <OuiNonCell
                           value={r.facturation_avec_ge_fichier}
