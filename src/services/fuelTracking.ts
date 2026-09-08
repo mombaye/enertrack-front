@@ -124,9 +124,15 @@ export type FuelConsommationKpis = {
     dg_on_calculated: number;
     none: number;
   };
+  configuration_counts: {
+    indoor: number;
+    outdoor: number;
+    none: number;
+  };
 };
 
 export type FuelRuntimeSourceFilter = "tracker_5min" | "dse_controller" | "dg_on_calculated" | "none";
+export type FuelConfigurationFilter = "indoor" | "outdoor" | "none";
 
 export type FuelSourceStatus = {
   connected: boolean;
@@ -196,7 +202,7 @@ export type FuelGeDetectionFilter =
   | "dans_fichier_sans_ge"
   | "ge_hors_fichier";
 
-export async function getFuelConsommation(params?: { month?: string; search?: string; country?: string; has_genset?: "true" | "false" | "incomplete"; detection?: FuelGeDetectionFilter; runtime_source?: FuelRuntimeSourceFilter; page?: number; limit?: number }) {
+export async function getFuelConsommation(params?: { month?: string; search?: string; country?: string; has_genset?: "true" | "false" | "incomplete"; detection?: FuelGeDetectionFilter; runtime_source?: FuelRuntimeSourceFilter; configuration?: FuelConfigurationFilter; page?: number; limit?: number }) {
   const { data } = await api.get<FuelConsommationResponse>(`${BASE}/consommation/`, {
     params: cleanParams(params ?? {}),
   });

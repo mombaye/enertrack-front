@@ -9,7 +9,7 @@
 import { useState, type CSSProperties } from "react";
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Droplets, Fuel, Gauge, Search, Users } from "lucide-react";
-import type { FuelConsommationResponse, FuelGeDetectionFilter, FuelRuntimeSourceFilter } from "@/services/fuelTracking";
+import type { FuelConfigurationFilter, FuelConsommationResponse, FuelGeDetectionFilter, FuelRuntimeSourceFilter } from "@/services/fuelTracking";
 import { Card, EmptyState, KpiCard, Modal, Pager, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { fmt, monthLabel } from "../helpers";
@@ -435,6 +435,12 @@ const RUNTIME_SOURCE_OPTIONS: Array<{ key: FuelRuntimeSourceFilter; label: strin
   { key: "none", label: "Sans source" },
 ];
 
+const CONFIGURATION_OPTIONS: Array<{ key: FuelConfigurationFilter; label: string }> = [
+  { key: "indoor", label: "Indoor" },
+  { key: "outdoor", label: "Outdoor" },
+  { key: "none", label: "Sans configuration" },
+];
+
 export function ConsommationSheet({
   data,
   loading,
@@ -446,6 +452,8 @@ export function ConsommationSheet({
   onDetectionFilterChange,
   runtimeSourceFilter,
   onRuntimeSourceFilterChange,
+  configurationFilter,
+  onConfigurationFilterChange,
   page,
   onPageChange,
   stickyTop = 0,
@@ -460,6 +468,8 @@ export function ConsommationSheet({
   onDetectionFilterChange: (v: FuelGeDetectionFilter | null) => void;
   runtimeSourceFilter: FuelRuntimeSourceFilter | null;
   onRuntimeSourceFilterChange: (v: FuelRuntimeSourceFilter | null) => void;
+  configurationFilter: FuelConfigurationFilter | null;
+  onConfigurationFilterChange: (v: FuelConfigurationFilter | null) => void;
   page: number;
   onPageChange: (p: number) => void;
   stickyTop?: number;
@@ -532,6 +542,22 @@ export function ConsommationSheet({
               {RUNTIME_SOURCE_OPTIONS.map((o) => (
                 <option key={o.key} value={o.key}>
                   {o.label}{data?.kpis ? ` (${fmt.format(data.kpis.runtime_source_counts[o.key])})` : ""}
+                </option>
+              ))}
+            </select>
+            <select
+              value={configurationFilter ?? ""}
+              onChange={(e) => onConfigurationFilterChange((e.target.value || null) as FuelConfigurationFilter | null)}
+              title="Filtrer par Configuration (Indoor/Outdoor)"
+              style={{
+                border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px",
+                fontSize: 12.5, color: FT.text, fontWeight: 700, cursor: "pointer",
+              }}
+            >
+              <option value="">Configuration : toutes</option>
+              {CONFIGURATION_OPTIONS.map((o) => (
+                <option key={o.key} value={o.key}>
+                  {o.label}{data?.kpis ? ` (${fmt.format(data.kpis.configuration_counts[o.key])})` : ""}
                 </option>
               ))}
             </select>

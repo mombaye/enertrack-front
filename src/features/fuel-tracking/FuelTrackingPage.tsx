@@ -21,6 +21,7 @@ import {
   getFuelConsommation,
   getFuelConsommationDashboard,
   getFuelStock,
+  type FuelConfigurationFilter,
   type FuelGeDetectionFilter,
   type FuelRuntimeSourceFilter,
   type FuelSourceStatus,
@@ -107,6 +108,7 @@ export default function FuelTrackingPage() {
   const [consoGeFilter, setConsoGeFilter] = useState<"all" | "true" | "false" | "incomplete">("true");
   const [consoDetectionFilter, setConsoDetectionFilter] = useState<FuelGeDetectionFilter | null>(null);
   const [consoRuntimeSourceFilter, setConsoRuntimeSourceFilter] = useState<FuelRuntimeSourceFilter | null>(null);
+  const [consoConfigurationFilter, setConsoConfigurationFilter] = useState<FuelConfigurationFilter | null>(null);
   const [stockSearch, setStockSearch] = useState("");
   const [stockPage, setStockPage] = useState(1);
   // Même défaut que Suivis Consommations — Avec GE (seuls capables d'avoir
@@ -135,7 +137,7 @@ export default function FuelTrackingPage() {
   // dashboardQ) : le statut des sources (badges du header) et la plage de
   // mois doivent rester à jour même hors de leurs onglets respectifs.
   const consommationQ = useQuery({
-    queryKey: ["fuel-consommation", toMonth, consoSearch, consoPage, consoGeFilter, consoDetectionFilter, consoRuntimeSourceFilter],
+    queryKey: ["fuel-consommation", toMonth, consoSearch, consoPage, consoGeFilter, consoDetectionFilter, consoRuntimeSourceFilter, consoConfigurationFilter],
     queryFn: () => getFuelConsommation({
       month: toMonth ?? undefined,
       search: consoSearch,
@@ -144,6 +146,7 @@ export default function FuelTrackingPage() {
       has_genset: consoDetectionFilter ? undefined : (consoGeFilter === "all" ? undefined : consoGeFilter),
       detection: consoDetectionFilter ?? undefined,
       runtime_source: consoRuntimeSourceFilter ?? undefined,
+      configuration: consoConfigurationFilter ?? undefined,
     }),
     staleTime: 60_000,
   });
@@ -340,6 +343,11 @@ export default function FuelTrackingPage() {
               runtimeSourceFilter={consoRuntimeSourceFilter}
               onRuntimeSourceFilterChange={(v) => {
                 setConsoRuntimeSourceFilter(v);
+                setConsoPage(1);
+              }}
+              configurationFilter={consoConfigurationFilter}
+              onConfigurationFilterChange={(v) => {
+                setConsoConfigurationFilter(v);
                 setConsoPage(1);
               }}
               page={consoPage}
