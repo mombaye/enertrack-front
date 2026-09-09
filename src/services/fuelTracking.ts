@@ -132,12 +132,22 @@ export type FuelConsommationKpis = {
     outdoor: number;
     none: number;
   };
+  /** Partition à 4 catégories mutuellement exclusives (spec 2026-09) — le
+   * compteur "Sans source" seul mélangeait les sites sans GE (runtime non
+   * applicable) avec les sites GE sans runtime résolu. */
+  runtime_availability_counts: {
+    sans_ge: number;
+    avec_ge_avec_runtime: number;
+    avec_ge_sans_runtime: number;
+    avec_runtime_sans_cph: number;
+  };
   factures_payees: number;
   factures_impayees: number;
   factures_total: number;
 };
 
 export type FuelRuntimeSourceFilter = "tracker_5min" | "dse_controller" | "dg_on_calculated" | "rectifier_status_5min" | "none";
+export type FuelRuntimeAvailabilityFilter = "sans_ge" | "avec_ge_avec_runtime" | "avec_ge_sans_runtime" | "avec_runtime_sans_cph";
 export type FuelConfigurationFilter = "indoor" | "outdoor" | "none";
 
 export type FuelSourceStatus = {
@@ -208,7 +218,7 @@ export type FuelGeDetectionFilter =
   | "dans_fichier_sans_ge"
   | "ge_hors_fichier";
 
-export async function getFuelConsommation(params?: { month?: string; search?: string; country?: string; has_genset?: "true" | "false" | "incomplete"; detection?: FuelGeDetectionFilter; runtime_source?: FuelRuntimeSourceFilter; configuration?: FuelConfigurationFilter; page?: number; limit?: number }) {
+export async function getFuelConsommation(params?: { month?: string; search?: string; country?: string; has_genset?: "true" | "false" | "incomplete"; detection?: FuelGeDetectionFilter; runtime_source?: FuelRuntimeSourceFilter; runtime_availability?: FuelRuntimeAvailabilityFilter; configuration?: FuelConfigurationFilter; page?: number; limit?: number }) {
   const { data } = await api.get<FuelConsommationResponse>(`${BASE}/consommation/`, {
     params: cleanParams(params ?? {}),
   });
