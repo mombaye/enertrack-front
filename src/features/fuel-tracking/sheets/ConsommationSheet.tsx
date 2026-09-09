@@ -207,7 +207,13 @@ function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse 
         <KpiCard label="Conso mesurée (Snowflake)" value={formatL(kpis.total_conso_snowflake_l)} tone="cyan" icon={<Droplets size={14} />} />
         <KpiCard label="Sites avec estimation" value={fmt.format(kpis.sites_avec_estimation)} sub="delta de niveau de cuve" tone="gold" icon={<Droplets size={14} />} />
         <KpiCard label="Qté ajoutée (ENOC validé)" value={formatL(kpis.total_enoc_qte_ajoutee_l)} tone="green" icon={<Fuel size={14} />} />
-        <KpiCard label="Demandes ENOC" value={fmt.format(kpis.total_enoc_nb_demandes)} tone="blue" icon={<Gauge size={14} />} />
+        <KpiCard
+          label="Factures Sonatel"
+          value={`${fmt.format(kpis.factures_payees)} payées / ${fmt.format(kpis.factures_total)}`}
+          sub={`${fmt.format(kpis.factures_impayees)} non payées / ${fmt.format(kpis.factures_total)}`}
+          tone="blue"
+          icon={<Gauge size={14} />}
+        />
       </div>
     </div>
   );

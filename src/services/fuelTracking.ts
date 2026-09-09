@@ -132,6 +132,9 @@ export type FuelConsommationKpis = {
     outdoor: number;
     none: number;
   };
+  factures_payees: number;
+  factures_impayees: number;
+  factures_total: number;
 };
 
 export type FuelRuntimeSourceFilter = "tracker_5min" | "dse_controller" | "dg_on_calculated" | "rectifier_status_5min" | "none";
