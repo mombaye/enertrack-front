@@ -435,13 +435,17 @@ function GeDetectionPanel({
   );
 }
 
-// "tracker_5min" (dernier palier de repli, compteur télémétrie seul) n'a
-// plus aucun site en source dominante depuis la correction de la priorité
-// DSE > DG-On > Redresseur (2026-09, vérifié sur plusieurs mois) — retiré du
-// sélecteur pour ne pas afficher une option toujours à 0. La valeur reste
-// gérée côté backend (RUNTIME_SOURCE_FILTERS) si elle redevenait pertinente.
+// "tracker_5min" avait été retiré du sélecteur (2026-09, il paraissait
+// toujours à 0) puis réintégré : c'est en fait le DSE qui est prioritaire
+// sur le tracker (règle métier voulue), pas le tracker qui était cassé —
+// une fois cette priorité correctement respectée, le tracker ne gagne que
+// sur les (rares) jours où le DSE est absent ET le tracker actif. Confirmé
+// non nul sur données réelles (1 à 11 jours-site selon le mois). Retiré à
+// nouveau reviendrait à cacher une source légitime au lieu d'expliquer sa
+// rareté — demande explicite de le "conserver"/"exposer" (2026-09).
 const RUNTIME_SOURCE_OPTIONS: Array<{ key: FuelRuntimeSourceFilter; label: string }> = [
   { key: "dse_controller", label: "DSE" },
+  { key: "tracker_5min", label: "5 min" },
   { key: "dg_on_calculated", label: "DG-On" },
   { key: "rectifier_status_5min", label: "Redresseur" },
   { key: "none", label: "Sans source" },
