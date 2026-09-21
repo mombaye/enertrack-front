@@ -805,8 +805,30 @@ const outScopeCountQ = useQuery({
 
             {active?.isFetching && <RefreshCw size={16} style={{ color: COLORS.blue }} />}
           </div>
-          
-          
+
+          <DataTable
+            bare
+            cols={
+              tab === "INVOICES"
+                ? (invoiceCols as Col<any>[])
+                : tab === "MONTHLY"
+                ? (monthlyCols as Col<any>[])
+                : (contractCols as Col<any>[])
+            }
+            rows={rows}
+            loading={active?.isLoading}
+            emptyText={
+              tab === "INVOICES"
+                ? "Aucune facture pour les filtres sélectionnés."
+                : tab === "MONTHLY"
+                ? "Aucune synthèse mensuelle pour les filtres sélectionnés."
+                : "Aucun agrégat contrat × mois pour les filtres sélectionnés."
+            }
+          />
+
+          {total > pageSize && (
+            <Pagination page={page} total={total} pageSize={pageSize} onPage={setPage} />
+          )}
         </div>
       </div>
     </div>

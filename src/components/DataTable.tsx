@@ -14,16 +14,17 @@ export function DataTable<T>({
   rows,
   loading,
   emptyText = "Aucune donnée",
+  bare = false,
 }: {
   cols: Col<T>[];
   rows: T[];
   loading?: boolean;
   emptyText?: string;
+  bare?: boolean;
 }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-[0_18px_60px_rgba(2,6,23,0.06)] overflow-hidden">
-      <div className="overflow-auto">
-        <table className="w-full text-sm">
+  const inner = (
+    <div className="overflow-auto">
+      <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-300">
             <tr>
               {cols.map((c) => (
@@ -63,7 +64,13 @@ export function DataTable<T>({
             )}
           </tbody>
         </table>
-      </div>
+    </div>
+  );
+
+  if (bare) return inner;
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-[0_18px_60px_rgba(2,6,23,0.06)] overflow-hidden">
+      {inner}
     </div>
   );
 }
