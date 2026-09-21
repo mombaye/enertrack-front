@@ -23,6 +23,7 @@ import {
   getFuelStock,
   type FuelConfigurationFilter,
   type FuelGeDetectionFilter,
+  type FuelRapprochementStatutFilter,
   type FuelRuntimeAvailabilityFilter,
   type FuelRuntimeSourceFilter,
   type FuelSourceStatus,
@@ -111,6 +112,7 @@ export default function FuelTrackingPage() {
   const [consoRuntimeSourceFilter, setConsoRuntimeSourceFilter] = useState<FuelRuntimeSourceFilter | null>(null);
   const [consoConfigurationFilter, setConsoConfigurationFilter] = useState<FuelConfigurationFilter | null>(null);
   const [consoRuntimeAvailabilityFilter, setConsoRuntimeAvailabilityFilter] = useState<FuelRuntimeAvailabilityFilter | null>(null);
+  const [consoRapprochementStatutFilter, setConsoRapprochementStatutFilter] = useState<FuelRapprochementStatutFilter | null>(null);
   const [stockSearch, setStockSearch] = useState("");
   const [stockPage, setStockPage] = useState(1);
   // Même défaut que Suivis Consommations — Avec GE (seuls capables d'avoir
@@ -139,7 +141,7 @@ export default function FuelTrackingPage() {
   // dashboardQ) : le statut des sources (badges du header) et la plage de
   // mois doivent rester à jour même hors de leurs onglets respectifs.
   const consommationQ = useQuery({
-    queryKey: ["fuel-consommation", toMonth, consoSearch, consoPage, consoGeFilter, consoDetectionFilter, consoRuntimeSourceFilter, consoConfigurationFilter, consoRuntimeAvailabilityFilter],
+    queryKey: ["fuel-consommation", toMonth, consoSearch, consoPage, consoGeFilter, consoDetectionFilter, consoRuntimeSourceFilter, consoConfigurationFilter, consoRuntimeAvailabilityFilter, consoRapprochementStatutFilter],
     queryFn: () => getFuelConsommation({
       month: toMonth ?? undefined,
       search: consoSearch,
@@ -150,6 +152,7 @@ export default function FuelTrackingPage() {
       runtime_source: consoRuntimeSourceFilter ?? undefined,
       configuration: consoConfigurationFilter ?? undefined,
       runtime_availability: consoRuntimeAvailabilityFilter ?? undefined,
+      rapprochement_statut: consoRapprochementStatutFilter ?? undefined,
     }),
     staleTime: 60_000,
   });
@@ -328,6 +331,7 @@ export default function FuelTrackingPage() {
             <ConsommationSheet
               data={consommationQ.data}
               loading={consommationQ.isLoading}
+              month={toMonth}
               search={consoSearch}
               onSearchChange={(v) => {
                 setConsoSearch(v);
@@ -356,6 +360,11 @@ export default function FuelTrackingPage() {
               runtimeAvailabilityFilter={consoRuntimeAvailabilityFilter}
               onRuntimeAvailabilityFilterChange={(v) => {
                 setConsoRuntimeAvailabilityFilter(v);
+                setConsoPage(1);
+              }}
+              rapprochementStatutFilter={consoRapprochementStatutFilter}
+              onRapprochementStatutFilterChange={(v) => {
+                setConsoRapprochementStatutFilter(v);
                 setConsoPage(1);
               }}
               page={consoPage}

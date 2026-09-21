@@ -107,6 +107,23 @@ export type FuelConsommationSite = {
   facturation_active_fichier: boolean | null;
   facturation_avec_ge_fichier: boolean | null;
   configuration_fichier: string | null;
+  // Disponibilité runtime CPH (spec B 2026-09)
+  cph_runtime_availability_pct: number | null;
+  cph_runtime_source_availability: Record<string, number> | null;
+  // Rapprochement stock mensuel (spec C 2026-09)
+  rapprochement_stock_initial_l: number | null;
+  rapprochement_livraisons_l: number | null;
+  rapprochement_rajouts_l: number | null;
+  rapprochement_retraits_l: number | null;
+  rapprochement_vols_l: number | null;
+  rapprochement_vidanges_l: number | null;
+  rapprochement_stock_final_l: number | null;
+  rapprochement_conso_stock_l: number | null;
+  rapprochement_ecart_l: number | null;
+  rapprochement_ecart_pct: number | null;
+  rapprochement_statut: "OK" | "A_JUSTIFIER" | "A_INVESTIGUER" | "DONNEES_INCOMPLETES" | "CPH_NON_CALCULE" | null;
+  rapprochement_motif: string | null;
+  livraisons_source: "ENOC_REEL" | "LIVRAISONS_ENOC_A_CONTROLER" | null;
 };
 
 export type FuelConsommationKpis = {
@@ -144,11 +161,20 @@ export type FuelConsommationKpis = {
   factures_payees: number;
   factures_impayees: number;
   factures_total: number;
+  rapprochement_counts: {
+    ok: number;
+    a_justifier: number;
+    a_investiguer: number;
+    donnees_incompletes: number;
+    cph_non_calcule: number;
+    livraisons_a_controler: number;
+  };
 };
 
 export type FuelRuntimeSourceFilter = "tracker_5min" | "dse_controller" | "dg_on_calculated" | "rectifier_status_5min" | "none";
 export type FuelRuntimeAvailabilityFilter = "sans_ge" | "avec_ge_avec_runtime" | "avec_ge_sans_runtime" | "avec_runtime_sans_cph";
 export type FuelConfigurationFilter = "indoor" | "outdoor" | "none";
+export type FuelRapprochementStatutFilter = "ok" | "a_justifier" | "a_investiguer" | "donnees_incompletes" | "cph_non_calcule" | "livraisons_a_controler";
 
 export type FuelSourceStatus = {
   connected: boolean;
@@ -218,11 +244,27 @@ export type FuelGeDetectionFilter =
   | "dans_fichier_sans_ge"
   | "ge_hors_fichier";
 
-export async function getFuelConsommation(params?: { month?: string; search?: string; country?: string; has_genset?: "true" | "false" | "incomplete"; detection?: FuelGeDetectionFilter; runtime_source?: FuelRuntimeSourceFilter; runtime_availability?: FuelRuntimeAvailabilityFilter; configuration?: FuelConfigurationFilter; page?: number; limit?: number }) {
+export async function getFuelConsommation(params?: { month?: string; search?: string; country?: string; has_genset?: "true" | "false" | "incomplete"; detection?: FuelGeDetectionFilter; runtime_source?: FuelRuntimeSourceFilter; runtime_availability?: FuelRuntimeAvailabilityFilter; configuration?: FuelConfigurationFilter; rapprochement_statut?: FuelRapprochementStatutFilter; page?: number; limit?: number }) {
   const { data } = await api.get<FuelConsommationResponse>(`${BASE}/consommation/`, {
     params: cleanParams(params ?? {}),
   });
   return data;
+}
+
+export async function exportFuelConsommationControle(params?: { month?: string; search?: string; country?: string; rapprochement_statut?: FuelRapprochementStatutFilter }) {
+  const { data } = await api.get(`${BASE}/consommation/export/controle/`, {
+    params: cleanParams(params ?? {}),
+    responseType: "blob",
+  });
+  return data as Blob;
+}
+
+export async function exportFuelConsommationAnomalies(params?: { month?: string }) {
+  const { data } = await api.get(`${BASE}/consommation/export/anomalies/`, {
+    params: cleanParams(params ?? {}),
+    responseType: "blob",
+  });
+  return data as Blob;
 }
 
 export type FuelConsommationMonthlyPoint = {
