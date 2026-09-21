@@ -1,0 +1,13 @@
+version: "3.9"
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+        VITE_FINANCIAL_ACCESS_CODE: ${VITE_FINANCIAL_ACCESS_CODE:-}
+    restart: unless-stopped
+    ports:
+      - "80:80"
