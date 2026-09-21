@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ShieldCheck, Wifi, WifiOff, Upload, FileSpreadsheet,
-  X, ChevronDown, ChevronRight, Loader2, CheckCircle2,
+  X, ChevronRight, Loader2, CheckCircle2,
   AlertTriangle, RefreshCw, BarChart3, Filter,
   Zap, Check, Database, Calendar, FileDown,
   Cpu, Receipt, Activity, TrendingUp,
@@ -163,13 +163,13 @@ function StepBar({ current }: { current: Step }) {
     <div className="flex items-center gap-1">
       {steps.map((s, i) => (
         <div key={s.key} className="flex items-center gap-1">
-          <div className={`flex items-center gap-1.5 px-3 py-1 rounded text-[11px] font-semibold tracking-wide transition-all ${i === idx ? "bg-white/10 text-white" : i < idx ? "text-emerald-400" : "text-slate-500"}`}>
-            <span className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold shrink-0 ${i < idx ? "bg-emerald-500 text-white" : i === idx ? "bg-white text-slate-900" : "bg-slate-700 text-slate-500"}`}>
+          <div className={`flex items-center gap-1.5 px-3 py-1 rounded text-[11px] font-semibold tracking-wide transition-all ${i === idx ? "bg-white/15 text-white" : i < idx ? "text-emerald-300" : "text-blue-200/70"}`}>
+            <span className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold shrink-0 ${i < idx ? "bg-emerald-500 text-white" : i === idx ? "bg-white text-blue-900" : "bg-white/15 text-blue-200/70"}`}>
               {i < idx ? <Check className="w-2.5 h-2.5" /> : i + 1}
             </span>
             {s.label}
           </div>
-          {i < steps.length - 1 && <div className={`h-px w-4 ${i < idx ? "bg-emerald-700" : "bg-slate-700"}`} />}
+          {i < steps.length - 1 && <div className={`h-px w-4 ${i < idx ? "bg-emerald-500/50" : "bg-white/20"}`} />}
         </div>
       ))}
     </div>
@@ -178,12 +178,12 @@ function StepBar({ current }: { current: Step }) {
 
 function EfmsDot({ reachable, loading }: { reachable: boolean | undefined; loading: boolean }) {
   if (loading) return (
-    <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+    <div className="flex items-center gap-1.5 text-[11px] text-blue-200/70">
       <Loader2 className="w-3 h-3 animate-spin" /> eFMS…
     </div>
   );
   return (
-    <div className={`flex items-center gap-1.5 text-[11px] font-medium ${reachable ? "text-emerald-400" : "text-red-400"}`}>
+    <div className={`flex items-center gap-1.5 text-[11px] font-medium ${reachable ? "text-emerald-300" : "text-red-300"}`}>
       {reachable ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
       {reachable ? "eFMS connecté" : "eFMS hors ligne"}
     </div>
@@ -381,12 +381,12 @@ function ResultRow({ result }: { result: CertificationResult }) {
   return (
     <>
       <tr
-        onClick={() => setOpen(o => !o)}
+        onClick={() => setOpen(true)}
         className={`group border-b border-slate-100 cursor-pointer transition-all hover:bg-slate-50/80 ${isAlert ? "bg-orange-50/30" : ""}`}
       >
         <td className="pl-4 pr-2 py-2.5 w-6">
           <span className="text-slate-300 group-hover:text-slate-500 transition-colors">
-            {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+            <ChevronRight className="w-3.5 h-3.5" />
           </span>
         </td>
 
@@ -434,10 +434,37 @@ function ResultRow({ result }: { result: CertificationResult }) {
         </td>
       </tr>
 
-      {/* ── Detail panel ── */}
-      {open && (
-        <tr className="border-b border-blue-50 bg-slate-50/40">
-          <td colSpan={8} className="px-5 py-4">
+      {/* ── Detail modal ── */}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent
+          className="p-0 gap-0 border-0"
+          style={{
+            background: "white",
+            borderRadius: 20,
+            width: "100%",
+            maxWidth: 980,
+            maxHeight: "calc(100vh - 48px)",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+          }}
+        >
+          <div className="px-6 pt-5 pb-4 border-b border-slate-100 shrink-0">
+            <div className="flex items-center gap-2.5 mb-1">
+              {isAlert && <AlertTriangle className="w-4 h-4 text-orange-500 shrink-0" />}
+              <DialogTitle asChild>
+                <div className="font-mono text-[15px] font-bold text-slate-900">{result.numero_facture}</div>
+              </DialogTitle>
+              <StatusBadge status={result.status} hasAlert={isAlert} />
+            </div>
+            <div className="text-[11px] text-slate-500">
+              {result.site_id ?? "—"}{result.site_name ? ` · ${result.site_name}` : ""}
+              {" · "}{fmtDate(result.date_debut_periode)} → {fmtDate(result.date_fin_periode)}
+              {" · "}<span className="font-mono">{result.numero_compte_contrat}</span>
+            </div>
+          </div>
+
+          <div className="px-6 py-4 overflow-y-auto">
 
             {/* Alerte mesure v4 */}
             {/* ✅ v5 — Bandeau adaptatif : message différent selon certification */}
@@ -627,9 +654,9 @@ function ResultRow({ result }: { result: CertificationResult }) {
                 </span>
               </div>
             )}
-          </td>
-        </tr>
-      )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -670,6 +697,8 @@ export default function CertificationPage() {
     taskStatus: "PENDING"|"RUNNING"|"SUCCESS"|"FAILURE"|null;
     taskProgress: number; taskMessage: string | null;
     rowsCreated: number; rowsUpdated: number; missingSites: number;
+    monthlyRowsCreated: number; issuesLogged: number;
+    skippedMissingRequired: number; skippedInvalidPeriod: number; skippedDuplicateInFile: number;
   } | null>(null);
   const [echeance, setEcheance]           = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -702,7 +731,10 @@ export default function CertificationPage() {
     queryKey: ["cert-batch-status", pollingBatchId],
     queryFn: () => pollBatchStatus(pollingBatchId!),
     enabled: pollingBatchId !== null,
-    refetchInterval: (d: any) => (!d || d.status === "RUNNING" || d.status === "PENDING") ? 2500 : false,
+    refetchInterval: (q) => {
+      const d = q.state.data;
+      return (!d || d.status === "RUNNING" || d.status === "PENDING") ? 2500 : false;
+    },
   });
 
   const billingBatchId = importResult?.batchId ?? null;
@@ -710,7 +742,10 @@ export default function CertificationPage() {
     queryKey: ["billing-task-status", billingBatchId],
     queryFn: () => pollBillingImportStatus(billingBatchId!),
     enabled: billingBatchId !== null && step === "upload",
-    refetchInterval: (d: any) => (!d || d.task_status === "PENDING" || d.task_status === "RUNNING") ? 2000 : false,
+    refetchInterval: (q) => {
+      const d = q.state.data;
+      return (!d || d.task_status === "PENDING" || d.task_status === "RUNNING") ? 2000 : false;
+    },
   });
 
   useEffect(() => {
@@ -722,7 +757,12 @@ export default function CertificationPage() {
       taskMessage:  billingPoll.task_message ?? null,
       rowsCreated:  billingPoll.task_meta?.rows_created ?? 0,
       rowsUpdated:  billingPoll.task_meta?.rows_updated ?? 0,
-      missingSites: billingPoll.task_meta?.invoices_missing_site_count ?? 0,
+      missingSites: billingPoll.task_meta?.invoices_without_site_count ?? 0,
+      monthlyRowsCreated:     billingPoll.task_meta?.monthly_rows_created ?? 0,
+      issuesLogged:           billingPoll.task_meta?.issues_logged ?? 0,
+      skippedMissingRequired: billingPoll.task_meta?.skipped_missing_required ?? 0,
+      skippedInvalidPeriod:   billingPoll.task_meta?.skipped_invalid_period ?? 0,
+      skippedDuplicateInFile: billingPoll.task_meta?.skipped_duplicate_in_file ?? 0,
     });
     if (billingPoll.task_status === "SUCCESS") {
       toast.success(`Import terminé — ${(billingPoll.task_meta?.rows_created ?? 0) + (billingPoll.task_meta?.rows_updated ?? 0)} factures`);
@@ -784,7 +824,13 @@ export default function CertificationPage() {
       catch (e) { clearInterval(iv); setUploadProgress(0); throw e; }
     },
     onSuccess: (data) => {
-      setImportResult({ batchId: data.batch.id, filename: data.batch.source_filename, taskId: data.task_id ?? null, taskStatus: "PENDING", taskProgress: 0, taskMessage: "En file d'attente…", rowsCreated: 0, rowsUpdated: 0, missingSites: 0 });
+      setImportResult({
+        batchId: data.batch.id, filename: data.batch.source_filename, taskId: data.task_id ?? null,
+        taskStatus: "PENDING", taskProgress: 0, taskMessage: "En file d'attente…",
+        rowsCreated: 0, rowsUpdated: 0, missingSites: 0,
+        monthlyRowsCreated: 0, issuesLogged: 0,
+        skippedMissingRequired: 0, skippedInvalidPeriod: 0, skippedDuplicateInFile: 0,
+      });
       toast.info("Fichier reçu — import en cours…");
     },
     onError: (err: any) => toast.error(err?.response?.data?.detail ?? "Erreur import"),
@@ -1092,6 +1138,42 @@ export default function CertificationPage() {
                     <button onClick={() => { setStep("upload"); setImportResult(null); setUploadedFile(null); setUploadProgress(0); uploadMut.reset(); setEcheance(""); }}
                       className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 transition"><X className="w-3.5 h-3.5" /></button>
                   )}
+                </div>
+
+                {/* Détail de l'import, avant de lancer quoi que ce soit — pour
+                    vérifier que le fichier a bien été traité comme attendu
+                    (nombre de lignes, doublons, factures sans site, etc.) */}
+                <div className="bg-white rounded-xl border border-slate-200 p-4">
+                  <div className="text-[12px] font-bold text-slate-800 mb-3">Détail de l'import — à vérifier avant certification</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2.5">
+                      <div className="text-[17px] font-extrabold text-emerald-700">{importResult.rowsCreated}</div>
+                      <div className="text-[10.5px] text-emerald-700/80 font-semibold">Factures créées</div>
+                      <div className="text-[10px] text-emerald-700/60 mt-0.5">Nouvelles, absentes avant cet import</div>
+                    </div>
+                    <div className="rounded-lg bg-sky-50 border border-sky-200 px-3 py-2.5">
+                      <div className="text-[17px] font-extrabold text-sky-700">{importResult.rowsUpdated}</div>
+                      <div className="text-[10.5px] text-sky-700/80 font-semibold">Factures mises à jour</div>
+                      <div className="text-[10px] text-sky-700/60 mt-0.5">Existaient déjà, juste actualisées</div>
+                    </div>
+                    <div className={`rounded-lg px-3 py-2.5 border ${importResult.missingSites > 0 ? "bg-amber-50 border-amber-200" : "bg-slate-50 border-slate-200"}`}>
+                      <div className={`text-[17px] font-extrabold ${importResult.missingSites > 0 ? "text-amber-700" : "text-slate-500"}`}>{importResult.missingSites}</div>
+                      <div className={`text-[10.5px] font-semibold ${importResult.missingSites > 0 ? "text-amber-700/80" : "text-slate-500"}`}>Sans site rattaché</div>
+                      <div className={`text-[10px] mt-0.5 ${importResult.missingSites > 0 ? "text-amber-700/60" : "text-slate-400"}`}>Contrat non reconnu — importée quand même, à relier plus tard</div>
+                    </div>
+                    <div className={`rounded-lg px-3 py-2.5 border ${importResult.issuesLogged > 0 ? "bg-amber-50 border-amber-200" : "bg-slate-50 border-slate-200"}`}>
+                      <div className={`text-[17px] font-extrabold ${importResult.issuesLogged > 0 ? "text-amber-700" : "text-slate-500"}`}>{importResult.issuesLogged}</div>
+                      <div className={`text-[10.5px] font-semibold ${importResult.issuesLogged > 0 ? "text-amber-700/80" : "text-slate-500"}`}>Issues (voir détail)</div>
+                      <div className={`text-[10px] mt-0.5 ${importResult.issuesLogged > 0 ? "text-amber-700/60" : "text-slate-400"}`}>Points à vérifier — pas des erreurs bloquantes</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-slate-500">
+                    <div><strong className="text-slate-700">{importResult.rowsCreated + importResult.rowsUpdated}</strong> facture(s) au total dans ce batch <span className="text-slate-400">(= le même nombre que dans le fichier)</span></div>
+                    <div><strong className="text-slate-700">{importResult.monthlyRowsCreated}</strong> ligne(s) mensuelles générées</div>
+                    {importResult.skippedMissingRequired > 0 && <div className="text-red-600"><strong>{importResult.skippedMissingRequired}</strong> vraiment ignorée(s) — il manque un champ obligatoire (contrat, n° facture ou dates)</div>}
+                    {importResult.skippedInvalidPeriod > 0 && <div className="text-red-600"><strong>{importResult.skippedInvalidPeriod}</strong> vraiment ignorée(s) — la date de fin est avant la date de début</div>}
+                    {importResult.skippedDuplicateInFile > 0 && <div className="text-slate-500"><strong>{importResult.skippedDuplicateInFile}</strong> doublon(s) dans le fichier — même facture présente 2 fois, une seule gardée</div>}
+                  </div>
                 </div>
 
                 {!efmsLoading && !efms?.efms_reachable && (

@@ -172,8 +172,8 @@ function ActiveImportPanel({
           <Stat label="Créées" value={meta.created ?? meta.rows_created ?? 0} accent="#10b981"/>
           <Stat label="Mises à jour" value={meta.updated ?? meta.rows_updated ?? 0} accent="#0891b2"/>
           <Stat label="Issues" value={meta.issues ?? meta.issues_logged ?? 0} accent={meta.issues_logged ? "#f59e0b" : "#94a3b8"}/>
-          {(meta.invoices_missing_site_count ?? meta.missing_site ?? 0) > 0 && (
-            <Stat label="Sans site" value={meta.invoices_missing_site_count ?? meta.missing_site ?? 0} accent="#ef4444"/>
+          {(meta.invoices_without_site_count ?? meta.missing_site ?? 0) > 0 && (
+            <Stat label="Sans site" value={meta.invoices_without_site_count ?? meta.missing_site ?? 0} accent="#ef4444"/>
           )}
         </div>
       )}
@@ -483,14 +483,14 @@ export default function InvoicesImportPage() {
                           <Stat label="Mises à jour" value={m.rows_updated}              accent="#0891b2"/>
                           <Stat label="Monthly"     value={m.monthly_rows_created}       accent="#1e3a8a"/>
                           <Stat label="Issues"      value={m.issues_logged}              accent={m.issues_logged ? "#f59e0b" : "#94a3b8"}/>
-                          <Stat label="Sans site"   value={m.invoices_missing_site_count} accent={m.invoices_missing_site_count ? "#ef4444" : "#94a3b8"}/>
+                          <Stat label="Sans site"   value={m.invoices_without_site_count} accent={m.invoices_without_site_count ? "#ef4444" : "#94a3b8"}/>
                           <Stat label="CM upsert"   value={m.contract_months_upserted}   accent="#7c3aed"/>
                         </div>
                       );
                     })()}
                     {(() => {
                       const m = doneBatch.task_meta as ImportResult | null;
-                      if (!m?.invoices_missing_site_count) return null;
+                      if (!m?.invoices_without_site_count) return null;
                       return (
                         <div style={{
                           marginTop: 10, padding: "8px 12px", borderRadius: 8,
@@ -498,8 +498,8 @@ export default function InvoicesImportPage() {
                           fontSize: 12,
                         }}>
                           <strong>Contrats sans site:</strong>{" "}
-                          {m.invoices_missing_site_sample?.join(", ")}
-                          {(m.invoices_missing_site_count ?? 0) > 20 && ` …et ${m.invoices_missing_site_count - 20} autres`}
+                          {m.invoices_without_site_sample?.join(", ")}
+                          {(m.invoices_without_site_count ?? 0) > 20 && ` …et ${m.invoices_without_site_count - 20} autres`}
                         </div>
                       );
                     })()}

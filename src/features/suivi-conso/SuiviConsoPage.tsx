@@ -3,7 +3,7 @@
 // Focus : Facturée · eFMS · Solaire · Estimation · Target
 // Statut affiché : statut TARGET, pas statut marge.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from "react";
 import {
   Activity,
@@ -50,6 +50,8 @@ import {
   YAxis,
 } from "recharts";
 import { api } from "@/services/api";
+import { fetchBORequests, fetchBOSnapshots, type BOAnalysisRequest, type BOMarginSnapshot } from "@/features/bo-analysis/api";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 const C = {
   blue: { 950: "#010E2A", 900: "#021A40", 800: "#032566", 700: "#0A3D96", 600: "#1A56C4", 500: "#3272E0", 400: "#5B91F0", 300: "#91B9F8", 200: "#C0D8FB", 100: "#E4EFFE", 50: "#F2F6FE" },
@@ -62,8 +64,8 @@ const C = {
   estim: { main: "#8B5CF6", light: "#EDE9FE", dark: "#5B21B6" },
 };
 
-const HDR = "linear-gradient(135deg,#010E2A 0%,#032566 52%,#0A3D96 100%)";
-const PAGE_BG = "linear-gradient(180deg,#F8FAFC 0%,#EEF4FF 100%)";
+const CARD_BORDER_CLR = "#E4E9F0";
+const CARD_SHADOW = "0 1px 2px rgba(15,23,42,.04), 0 1px 1px rgba(15,23,42,.03)";
 const MONTHS_FR = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
 
 const SITE_PALETTE = [
@@ -132,12 +134,19 @@ type ConsoRow = {
   hors_catalogue?: boolean;
 };
 
+type SourceStatus = {
+  connected: boolean;
+  last_run_at: string | null;
+  error: string | null;
+};
+
 type ApiListResponse<T> = {
   count: number;
   page?: number;
   page_size?: number;
   pages?: number;
   results: T[];
+  sources?: { snowflake: SourceStatus; solar: SourceStatus };
 };
 
 type ChartPoint = {
@@ -311,6 +320,31 @@ function SourceBadge({ source }: { source?: string | null }) {
   );
 }
 
+/** Pastille de statut de connexion d'une source Snowflake (Grid/ACM, Solaire),
+ * avec le message d'erreur exact en info-bulle en cas de déconnexion. */
+function ConnStatusBadge({ label, status }: { label: string; status: SourceStatus | undefined }) {
+  const connected = !!status?.connected;
+  const title = status?.error
+    ? `${label} : ${status.error}`
+    : status?.last_run_at
+      ? `${label} : dernière synchro ${new Date(status.last_run_at).toLocaleString("fr-FR")}`
+      : `${label} : jamais synchronisé`;
+
+  return (
+    <span
+      title={title}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 999,
+        fontSize: 11, fontWeight: 800, border: `1px solid ${connected ? C.ok.mid : C.nok.mid}`,
+        background: connected ? C.ok.light : C.nok.light, color: connected ? C.ok.dark : C.nok.dark, cursor: "help",
+      }}
+    >
+      <span style={{ width: 6, height: 6, borderRadius: 999, background: "currentColor", flexShrink: 0 }} />
+      {label}
+    </span>
+  );
+}
+
 function DeltaBadge({ value }: { value: number | null }) {
   if (value === null) return <span style={{ color: C.slate[400], fontSize: 11 }}>—</span>;
   const abs = Math.abs(value);
@@ -331,26 +365,22 @@ function TypoBadge({ typo }: { typo: string | null }) {
 
 function KpiCard({ label, value, sub, icon, accent, help }: { label: string; value: string; sub?: string; icon: ReactNode; accent: string; help?: string }) {
   return (
-    <div style={{ position: "relative", overflow: "hidden", borderRadius: 18, background: "rgba(255,255,255,.09)", border: "1px solid rgba(255,255,255,.14)", padding: "15px 16px", minHeight: 92, boxShadow: "inset 0 1px 0 rgba(255,255,255,.12)" }}>
-      <div style={{ position: "absolute", inset: 0, background: `radial-gradient(circle at 90% 12%,${accent}30,transparent 32%)` }} />
-      <div style={{ position: "relative", display: "flex", justifyContent: "space-between", gap: 12 }}>
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <div style={{ fontSize: 10, fontWeight: 900, color: "rgba(255,255,255,.52)", letterSpacing: ".08em", textTransform: "uppercase" }}>{label}</div>
-            {help ? <HelpTip text={help} /> : null}
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 900, color: "#fff", marginTop: 8, letterSpacing: "-.03em", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{value}</div>
-          {sub ? <div style={{ fontSize: 11, color: "rgba(255,255,255,.48)", marginTop: 4 }}>{sub}</div> : null}
+    <div style={{ background: "#fff", borderRadius: 16, border: `1px solid ${CARD_BORDER_CLR}`, boxShadow: CARD_SHADOW, padding: "18px 20px", minHeight: 104, display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: C.slate[400], letterSpacing: ".06em", textTransform: "uppercase" }}>{label}</span>
+          {help ? <HelpTip text={help} light={false} /> : null}
         </div>
-        <div style={{ width: 38, height: 38, borderRadius: 14, background: "rgba(255,255,255,.10)", display: "flex", alignItems: "center", justifyContent: "center", color: accent, flexShrink: 0 }}>{icon}</div>
+        <div style={{ width: 32, height: 32, borderRadius: 9, background: `${accent}15`, color: accent, display: "grid", placeItems: "center", flexShrink: 0 }}>{icon}</div>
       </div>
-      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 3, background: `linear-gradient(90deg,${accent},transparent)` }} />
+      <div style={{ fontSize: 21, fontWeight: 800, color: C.slate[900], letterSpacing: "-.02em", fontFamily: "ui-monospace, Menlo, monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</div>
+      {sub ? <div style={{ fontSize: 11, color: C.slate[400] }}>{sub}</div> : null}
     </div>
   );
 }
 
 function Card({ children, style }: { children: ReactNode; style?: CSSProperties }) {
-  return <div style={{ background: "rgba(255,255,255,.94)", border: `1px solid ${C.slate[200]}`, borderRadius: 20, boxShadow: "0 18px 45px rgba(15,23,42,.07)", overflow: "hidden", ...style }}>{children}</div>;
+  return <div style={{ background: "#fff", border: "1px solid #E4E9F0", borderRadius: 10, boxShadow: "0 1px 2px rgba(15,23,42,.04), 0 1px 1px rgba(15,23,42,.03)", overflow: "hidden", ...style }}>{children}</div>;
 }
 
 function SectionTitle({ icon, title, subtitle, right }: { icon: ReactNode; title: string; subtitle?: string; right?: ReactNode }) {
@@ -387,6 +417,83 @@ function FilterChip({ label, value, onClear }: { label: string; value: string; o
   );
 }
 
+type ExportColumnDef = { key: string; label: string };
+type ExportColumnGroup = { title: string; columns: ExportColumnDef[] };
+
+const EXPORT_COLUMN_GROUPS: ExportColumnGroup[] = [
+  {
+    title: "Identification",
+    columns: [
+      { key: "site_id", label: "Site ID" },
+      { key: "site_name", label: "Nom" },
+      { key: "zone", label: "Zone" },
+      { key: "year", label: "Année" },
+      { key: "month", label: "Mois" },
+      { key: "nb_jours", label: "Nb jours" },
+      { key: "typology", label: "Typologie" },
+      { key: "load_w", label: "Load (W)" },
+    ],
+  },
+  {
+    title: "Facturée (Sénélec)",
+    columns: [
+      { key: "conso_facturee_kwh", label: "Conso facturée kWh" },
+      { key: "montant_ht", label: "Montant HT" },
+      { key: "montant_energie", label: "Montant énergie" },
+      { key: "cout_moyen_kwh", label: "Coût moyen kWh" },
+    ],
+  },
+  {
+    title: "Estimation",
+    columns: [
+      { key: "conso_estimee_kwh", label: "Conso estimée kWh" },
+      { key: "montant_estime", label: "Montant estimé" },
+      { key: "source_estimation", label: "Source estimation" },
+      { key: "est_acm_kwh", label: "Estim. ACM kWh" },
+      { key: "est_grid_kwh", label: "Estim. Grid kWh" },
+      { key: "est_histo_kwh", label: "Estim. Historique 30j kWh" },
+      { key: "est_target_kwh", label: "Estim. Target kWh" },
+      { key: "est_theorique_kwh", label: "Estim. Théorique kWh" },
+    ],
+  },
+  {
+    title: "eFMS",
+    columns: [
+      { key: "fms_grid_kwh", label: "eFMS Grid kWh" },
+      { key: "fms_acm_kwh", label: "eFMS ACM kWh" },
+    ],
+  },
+  {
+    title: "Solaire",
+    columns: [
+      { key: "solar_kwh", label: "Solaire kWh" },
+      { key: "solar_target", label: "Solaire Target kWh" },
+      { key: "unavail_hours", label: "Heures indisponibilité" },
+    ],
+  },
+  {
+    title: "Target & marge",
+    columns: [
+      { key: "conso_target", label: "Conso Target kWh" },
+      { key: "redevance", label: "Redevance" },
+      { key: "marge", label: "Marge" },
+      { key: "marge_statut", label: "Statut marge" },
+      { key: "recurrence_type", label: "Type récurrence" },
+      { key: "hors_catalogue", label: "Hors catalogue" },
+    ],
+  },
+];
+
+// Reproduit exactement l'ancien export CSV figé (mêmes colonnes, même ordre)
+// pour que la sélection par défaut du modal ne surprenne pas les habitués.
+const DEFAULT_EXPORT_COLUMNS = [
+  "site_id", "site_name", "zone", "year", "month", "nb_jours",
+  "conso_facturee_kwh", "conso_estimee_kwh", "source_estimation",
+  "fms_grid_kwh", "fms_acm_kwh", "solar_kwh", "solar_target",
+  "montant_ht", "montant_estime", "marge_statut", "recurrence_type",
+  "hors_catalogue", "typology", "load_w",
+];
+
 const PRESETS = [
   { label: "Année 2026", range: [periodKey(2026, 1), periodKey(2026, 12)] },
   { label: "Année 2025", range: [periodKey(2025, 1), periodKey(2025, 12)] },
@@ -397,6 +504,12 @@ const PRESETS = [
 
 function DateRangePicker({ startKey, endKey, onChange }: { startKey: number; endKey: number; onChange: (s: number, e: number) => void }) {
   const [open, setOpen] = useState(false);
+  // "single" : un clic = un mois, appliqué immédiatement (pas de 2e clic requis).
+  // "range"  : 1er clic = juste mémoriser le début (aucune requête tant que
+  // la fin n'est pas choisie — avant ce correctif, le 1er clic appliquait déjà
+  // un filtre "mois unique" pour rien, avant même que l'utilisateur ait fini
+  // de choisir son intervalle).
+  const [mode, setMode] = useState<"single" | "range">(() => (startKey === endKey ? "single" : "range"));
   const [sel, setSel] = useState<number | null>(null);
   const [hov, setHov] = useState<number | null>(null);
   const [ly, setLy] = useState(() => keyToYM(startKey).year);
@@ -415,6 +528,9 @@ function DateRangePicker({ startKey, endKey, onChange }: { startKey: number; end
   }, []);
 
   function getCls(k: number) {
+    if (mode === "single") {
+      return k === startKey && k === endKey ? "start" : "";
+    }
     const lo = Math.min(startKey, endKey);
     const hi = Math.max(startKey, endKey);
     if (sel !== null) {
@@ -434,9 +550,13 @@ function DateRangePicker({ startKey, endKey, onChange }: { startKey: number; end
 
   function pick(y: number, mi: number) {
     const k = periodKey(y, mi + 1);
-    if (!sel) {
-      setSel(k);
+    if (mode === "single") {
       onChange(k, k);
+      setOpen(false);
+      return;
+    }
+    if (sel === null) {
+      setSel(k); // mémorise juste le début, aucune requête tant que la fin n'est pas choisie
     } else {
       onChange(Math.min(sel, k), Math.max(sel, k));
       setSel(null);
@@ -474,17 +594,41 @@ function DateRangePicker({ startKey, endKey, onChange }: { startKey: number; end
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      <button onClick={() => { setOpen((v) => !v); setSel(null); }} type="button" style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", border: `1px solid ${open ? "rgba(255,255,255,.50)" : "rgba(255,255,255,.20)"}`, borderRadius: 12, background: "rgba(255,255,255,.10)", cursor: "pointer", whiteSpace: "nowrap", color: "#fff", boxShadow: open ? "0 0 0 3px rgba(255,255,255,.10)" : "none" }}>
-        <Calendar size={14} style={{ color: "rgba(255,255,255,.72)" }} />
-        <span style={{ fontFamily: "monospace", fontWeight: 900, fontSize: 12 }}>{label}</span>
-        <ChevronDown size={13} style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .18s" }} />
+      <button
+        onClick={() => {
+          setOpen((v) => !v);
+          setSel(null);
+          setMode(startKey === endKey ? "single" : "range");
+        }}
+        type="button"
+        style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", border: `1px solid ${open ? C.blue[500] : C.slate[200]}`, borderRadius: 12, background: open ? C.blue[50] : "#fff", cursor: "pointer", whiteSpace: "nowrap", color: C.slate[700], boxShadow: open ? `0 0 0 3px ${C.blue[100]}` : "0 1px 2px rgba(0,0,0,.04)" }}
+      >
+        <Calendar size={14} style={{ color: C.slate[400] }} />
+        <span style={{ fontFamily: "monospace", fontWeight: 900, fontSize: 12, color: C.blue[700] }}>{label}</span>
+        <ChevronDown size={13} style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .18s", color: C.slate[400] }} />
       </button>
 
       {open ? (
-        <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 300, background: "#fff", border: `1px solid ${C.slate[200]}`, borderRadius: 16, boxShadow: "0 24px 60px rgba(15,23,42,.22)", padding: "16px 16px 62px", width: 500, display: "flex", gap: 16 }}>
-          {cal(ly, setLy)}
-          <div style={{ width: 1, background: C.slate[200] }} />
-          {cal(ry, setRy)}
+        <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 300, background: "#fff", border: `1px solid ${C.slate[200]}`, borderRadius: 16, boxShadow: "0 24px 60px rgba(15,23,42,.22)", padding: "16px 16px 62px", width: 500, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", border: `1px solid ${C.slate[200]}`, borderRadius: 10, overflow: "hidden", alignSelf: "flex-start" }}>
+            {(["single", "range"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => { setMode(m); setSel(null); }}
+                style={{ border: "none", padding: "7px 14px", fontSize: 12, fontWeight: 900, cursor: "pointer", background: mode === m ? C.blue[700] : "#fff", color: mode === m ? "#fff" : C.slate[600] }}
+              >
+                {m === "single" ? "Un mois" : "Intervalle"}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 16 }}>
+            {cal(ly, setLy)}
+            <div style={{ width: 1, background: C.slate[200] }} />
+            {cal(ry, setRy)}
+          </div>
+
           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, borderTop: `1px solid ${C.slate[200]}`, padding: "9px 12px", background: C.slate[50], borderRadius: "0 0 16px 16px", display: "flex", flexWrap: "wrap", gap: 6 }}>
             {PRESETS.map((p) => (
               <button key={p.label} onClick={() => { onChange(p.range[0], p.range[1]); setSel(null); setOpen(false); }} type="button" style={{ padding: "5px 9px", borderRadius: 999, border: `1px solid ${C.slate[200]}`, background: "#fff", fontSize: 11, color: C.slate[700], cursor: "pointer", fontWeight: 700 }}>{p.label}</button>
@@ -587,6 +731,9 @@ export default function SuiviConsoPage() {
   const [rows, setRows] = useState<ConsoRow[]>([]);
   const [chartRows, setChartRows] = useState<ConsoRow[]>([]);
   const [chartLimited, setChartLimited] = useState(false);
+  const [sources, setSources] = useState<{ snowflake: SourceStatus; solar: SourceStatus } | undefined>(undefined);
+  const [boBySite, setBoBySite] = useState<Record<string, BOAnalysisRequest>>({});
+  const [boSnapshotBySite, setBoSnapshotBySite] = useState<Record<string, BOMarginSnapshot>>({});
 
   const [loading, setLoading] = useState(false);
   const [chartLoading, setChartLoading] = useState(false);
@@ -600,7 +747,22 @@ export default function SuiviConsoPage() {
   const [search, setSearch] = useState("");
   const [typoFilter, setTypoFilter] = useState("");
   const [targetStatusFilter, setTargetStatusFilter] = useState("");
-  const [showHelp, setShowHelp] = useState(true);
+  const [helpModalOpen, setHelpModalOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportColumns, setExportColumns] = useState<string[]>(DEFAULT_EXPORT_COLUMNS);
+  const [exporting, setExporting] = useState(false);
+
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
+
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    setHeaderHeight(el.getBoundingClientRect().height);
+    const ro = new ResizeObserver(() => setHeaderHeight(el.getBoundingClientRect().height));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const minKey = Math.min(startKey, endKey);
   const maxKey = Math.max(startKey, endKey);
@@ -623,6 +785,7 @@ export default function SuiviConsoPage() {
       setRows(res.data.results || []);
       setTotal(res.data.count || 0);
       setPages(res.data.pages || Math.max(1, Math.ceil((res.data.count || 0) / pageSize)));
+      if (res.data.sources) setSources(res.data.sources);
     } catch (e: any) {
       setError(e?.response?.data?.detail || e?.message || "Erreur lors du chargement du suivi conso.");
       setRows([]);
@@ -637,18 +800,15 @@ export default function SuiviConsoPage() {
     setChartLoading(true);
     setChartLimited(false);
     try {
-      const chartPageSize = 500;
-      const first = await api.get<ApiListResponse<ConsoRow>>("/financial/suivi-conso/", { params: { ...baseParams, page: 1, page_size: chartPageSize } });
-      const all: ConsoRow[] = [...(first.data.results || [])];
-      const totalPages = first.data.pages || Math.max(1, Math.ceil((first.data.count || 0) / chartPageSize));
-      const maxPages = Math.min(totalPages, 60);
-      if (totalPages > maxPages) setChartLimited(true);
-      const pageNumbers = Array.from({ length: Math.max(0, maxPages - 1) }, (_, i) => i + 2);
-      const chunkSize = 6;
-      for (let i = 0; i < pageNumbers.length; i += chunkSize) {
-        const responses = await Promise.all(pageNumbers.slice(i, i + chunkSize).map((p) => api.get<ApiListResponse<ConsoRow>>("/financial/suivi-conso/", { params: { ...baseParams, page: p, page_size: chartPageSize } })));
-        for (const res of responses) all.push(...(res.data.results || []));
-      }
+      // Un seul appel avec un grand page_size — le backend recalcule tout
+      // result_rows à chaque requête (coûteux), donc paginer par petits lots
+      // pour tout récupérer forçait des dizaines d'appels qui refaisaient
+      // chacun tout le calcul depuis zéro (jusqu'à ~60 requêtes séquentielles
+      // avant ce correctif). Le serveur plafonne à 20000 lignes par appel.
+      const chartPageSize = 20000;
+      const res = await api.get<ApiListResponse<ConsoRow>>("/financial/suivi-conso/", { params: { ...baseParams, page: 1, page_size: chartPageSize } });
+      const all = res.data.results || [];
+      if ((res.data.count || 0) > chartPageSize) setChartLimited(true);
       setChartRows(all);
     } catch {
       setChartRows([]);
@@ -659,6 +819,29 @@ export default function SuiviConsoPage() {
 
   useEffect(() => { fetchRows(); }, [fetchRows]);
   useEffect(() => { fetchChartRows(); }, [fetchChartRows]);
+
+  useEffect(() => {
+    fetchBORequests({ status: "done", page_size: 200 })
+      .then((data) => {
+        const map: Record<string, BOAnalysisRequest> = {};
+        for (const r of data.results) {
+          if (!map[r.site_id]) map[r.site_id] = r; // déjà trié -requested_at côté API : 1ère occurrence = la plus récente
+        }
+        setBoBySite(map);
+      })
+      .catch(() => setBoBySite({}));
+
+    // Historique BO importé depuis Analyse Marge.xlsx (~3300 sites, déjà rempli
+    // à l'import) — c'est la vraie donnée disponible aujourd'hui, avant même
+    // qu'une seule analyse ne soit passée par le nouveau workflow in-app.
+    fetchBOSnapshots({ page_size: 5000 })
+      .then((data) => {
+        const map: Record<string, BOMarginSnapshot> = {};
+        for (const s of data.results) map[s.site_id] = s;
+        setBoSnapshotBySite(map);
+      })
+      .catch(() => setBoSnapshotBySite({}));
+  }, []);
 
   const onPeriodChange = (s: number, e: number) => {
     setStartKey(s);
@@ -675,18 +858,30 @@ export default function SuiviConsoPage() {
     setPage(1);
   };
 
-  const exportUrl = useMemo(() => {
-    const p = new URLSearchParams();
-    p.set("year_start", String(ys));
-    p.set("month_start", String(ms));
-    p.set("year_end", String(ye));
-    p.set("month_end", String(me));
-    p.set("export", "csv");
-    if (zone) p.set("zone", zone);
-    if (search.trim()) p.set("search", search.trim());
-    if (typoFilter) p.set("typology", typoFilter);
-    return `/api/financial/suivi-conso/?${p.toString()}`;
-  }, [ys, ms, ye, me, zone, search, typoFilter]);
+  const handleExportConfirm = useCallback(async () => {
+    setExporting(true);
+    setError(null);
+    try {
+      const res = await api.get("/financial/suivi-conso/", {
+        params: { ...baseParams, export: "csv", columns: exportColumns.join(",") },
+        responseType: "blob",
+      });
+      const blob = new Blob([res.data], { type: "text/csv;charset=utf-8" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `suivi_conso_${ys}${String(ms).padStart(2, "0")}-${ye}${String(me).padStart(2, "0")}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setExportModalOpen(false);
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || e?.message || "Erreur lors de l'export CSV.");
+    } finally {
+      setExporting(false);
+    }
+  }, [baseParams, exportColumns, ys, ms, ye, me]);
 
   const tableRows = useMemo(() => rows.filter((r) => matchesTargetFilter(r, targetStatusFilter)), [rows, targetStatusFilter]);
   const chartFilteredRows = useMemo(() => chartRows.filter((r) => matchesTargetFilter(r, targetStatusFilter)), [chartRows, targetStatusFilter]);
@@ -752,65 +947,67 @@ export default function SuiviConsoPage() {
 
   const topTargetNok = useMemo(() => statRows.map((r) => ({ row: r, st: getTargetStatus(r) })).filter((x) => x.st.status === "NOK").sort((a, b) => (b.st.gapPct || 0) - (a.st.gapPct || 0)).slice(0, 10), [statRows]);
 
+  // Un seul badge "Snowflake" : toutes les sources (Grid/ACM, Solaire) viennent
+  // de Snowflake depuis le 2026-08, distinguer les 2 n'apporte plus rien à
+  // l'utilisateur — connecté seulement si les 2 le sont, erreur = celle(s) en échec.
+  const combinedSnowflakeStatus = useMemo<SourceStatus | undefined>(() => {
+    if (!sources) return undefined;
+    const { snowflake, solar } = sources;
+    const errors = [snowflake.error, solar.error].filter(Boolean);
+    return {
+      connected: snowflake.connected && solar.connected,
+      last_run_at: snowflake.last_run_at || solar.last_run_at,
+      error: errors.length ? errors.join(" | ") : null,
+    };
+  }, [sources]);
+
   const inputStyle: CSSProperties = { padding: "9px 12px", borderRadius: 12, border: `1px solid ${C.slate[200]}`, background: "#fff", fontSize: 12, color: C.slate[700], outline: "none", boxShadow: "0 1px 2px rgba(0,0,0,.04)" };
   const buttonStyle: CSSProperties = { border: "none", borderRadius: 12, padding: "9px 12px", fontSize: 12, fontWeight: 900, display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer" };
-  const periodLabel = `${fmtPeriod(ys, ms)} → ${fmtPeriod(ye, me)}`;
 
   return (
-    <div style={{ minHeight: "100vh", background: PAGE_BG, color: C.slate[800] }}>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } } @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } } .suivi-row:hover { background: #EFF6FF !important; } .suivi-table th { position: sticky; top: 0; z-index: 20; } .sticky-site { position: sticky; left: 0; z-index: 12; box-shadow: 12px 0 18px rgba(15,23,42,.04); } .sticky-site-head { position: sticky !important; left: 0; z-index: 30 !important; }`}</style>
+    <div style={{ display: "flex", flexDirection: "column", color: C.slate[800] }}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } } .suivi-row:hover { background: #EFF6FF !important; } .suivi-table th { position: sticky; top: 0; z-index: 20; } .sticky-site { position: sticky; left: 0; z-index: 12; box-shadow: 12px 0 18px rgba(15,23,42,.04); } .sticky-site-head { position: sticky !important; left: 0; z-index: 30 !important; }`}</style>
 
-      <div style={{ background: HDR, color: "#fff", padding: "22px 24px 18px", boxShadow: "0 16px 38px rgba(1,14,42,.22)" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
-          <div>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 9px", background: "rgba(255,255,255,.10)", border: "1px solid rgba(255,255,255,.14)", borderRadius: 999, fontSize: 11, fontWeight: 900, color: "rgba(255,255,255,.72)" }}><ShieldCheck size={13} /> Module financier · Suivi conso</div>
-            <h1 style={{ margin: "12px 0 4px", fontSize: 27, lineHeight: 1.1, letterSpacing: "-.04em", fontWeight: 950 }}>Suivi consommation facturée, eFMS, solaire & estimations</h1>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,.62)", maxWidth: 900 }}>Analyse comparative par site et par mois. Aucun montant financier n’est affiché ici ; cette page se concentre uniquement sur les consommations et les targets.</div>
-          </div>
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <DateRangePicker startKey={startKey} endKey={endKey} onChange={onPeriodChange} />
-            <button onClick={() => { fetchRows(); fetchChartRows(); }} type="button" style={{ ...buttonStyle, background: "rgba(255,255,255,.12)", color: "#fff", border: "1px solid rgba(255,255,255,.18)" }}><RefreshCw size={14} /> Actualiser</button>
-            <a href={exportUrl} style={{ ...buttonStyle, background: "#fff", color: C.blue[800], textDecoration: "none" }}><Download size={14} /> Export CSV</a>
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(150px,1fr))", gap: 12, marginTop: 18 }}>
-          <KpiCard label="Facturée" value={fmtKwh(stats.fact)} sub="Conso Sénélec" accent={C.blue[300]} icon={<Zap size={22} />} help="Consommation issue des factures Sénélec." />
-          <KpiCard label="eFMS" value={fmtKwh(stats.fms)} sub={`${stats.withFms} lignes avec données`} accent={C.teal.main} icon={<Activity size={22} />} help="Valeur eFMS principale : Grid si disponible, sinon ACM." />
-          <KpiCard label="Solaire" value={fmtKwh(stats.solar)} sub={stats.solarTarget ? `Cible ${fmtKwh(stats.solarTarget)}` : "Donnée solaire"} accent={C.solar.main} icon={<Sun size={22} />} help="Données solaires récupérées pour la période." />
-          <KpiCard label="Estimée" value={fmtKwh(stats.estim)} sub={`${stats.withEstim} lignes estimées`} accent={C.estim.main} icon={<Target size={22} />} help="Consommation provenant du modèle EstimationResult." />
-          <KpiCard label="Target NOK" value={`${stats.nok}`} sub={`${stats.ok} OK · ${stats.noTarget} sans target`} accent={stats.nok ? C.nok.main : C.ok.main} icon={stats.nok ? <XCircle size={22} /> : <CheckCircle2 size={22} />} help="Nombre de lignes dont la consommation de référence dépasse la target." />
-          <KpiCard label="Écart target" value={fmtPct(stats.avgGapTarget)} sub="Moyenne des écarts" accent={stats.avgGapTarget === null ? C.slate[300] : Math.abs(stats.avgGapTarget) > 20 ? C.nok.main : C.ok.main} icon={<TrendingUp size={22} />} help="Écart moyen entre la consommation de référence et la target." />
-        </div>
-      </div>
-
-      <div style={{ padding: 22, display: "grid", gap: 16 }}>
-        {showHelp ? (
-          <Card style={{ animation: "fadeUp .22s ease-out" }}>
-            <div style={{ padding: "14px 16px", display: "flex", alignItems: "flex-start", gap: 13 }}>
-              <div style={{ width: 38, height: 38, borderRadius: 14, background: C.blue[50], color: C.blue[700], display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Info size={19} /></div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 950, color: C.blue[950] }}>Comprendre le statut target</div>
-                    <div style={{ fontSize: 12.5, color: C.slate[600], marginTop: 4, lineHeight: 1.55 }}>Le statut <strong>Target OK / Target NOK</strong> compare une consommation de référence à la target. La référence utilisée suit cet ordre : <strong>Facturée</strong>, sinon <strong>eFMS</strong>, sinon <strong>Estimation</strong>.</div>
-                  </div>
-                  <button onClick={() => setShowHelp(false)} type="button" style={{ border: "none", background: C.slate[100], color: C.slate[500], width: 28, height: 28, borderRadius: 9, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><X size={14} /></button>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginTop: 12 }}>
-                  <InfoBox tone="ok" icon={<CheckCircle2 size={14} />} title="Target OK" text="La consommation de référence est inférieure ou égale à la target." />
-                  <InfoBox tone="nok" icon={<XCircle size={14} />} title="Target NOK" text="La consommation de référence dépasse la target." />
-                  <InfoBox tone="slate" icon={<Target size={14} />} title="Sans target" text="Aucune cible de consommation n’est disponible." />
-                  <InfoBox tone="warn" icon={<AlertCircle size={14} />} title="Sans donnée" text="Aucune consommation exploitable pour comparer à la target." />
-                </div>
+      <div ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 10, display: "flex", flexDirection: "column", gap: 16, background: "#f6f8fa", paddingBottom: 2 }}>
+        <header style={{ background: "#fff", borderRadius: 20, padding: "22px 24px 20px", boxShadow: CARD_SHADOW, border: `1px solid ${CARD_BORDER_CLR}` }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 9px", background: C.blue[50], border: `1px solid ${C.blue[100]}`, borderRadius: 999, fontSize: 11, fontWeight: 900, color: C.blue[700] }}><ShieldCheck size={13} /> Module financier · Suivi conso</div>
+                <ConnStatusBadge label="Snowflake" status={combinedSnowflakeStatus} />
               </div>
+              <h1 style={{ margin: "12px 0 4px", fontSize: 22, lineHeight: 1.2, letterSpacing: "-.03em", fontWeight: 900, color: "#0f172a" }}>Suivi consommation facturée, eFMS, solaire & estimations</h1>
+              <div style={{ fontSize: 13, color: "#64748b", maxWidth: 900 }}>Analyse comparative par site et par mois. Aucun montant financier n’est affiché ici ; cette page se concentre uniquement sur les consommations et les targets.</div>
             </div>
-          </Card>
-        ) : null}
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {([["table", "Tableau", <BarChart3 size={14} />],
+                ["chart", "Graphiques", <LineIcon size={14} />],  ["synthese", "Synthèse", <ShieldCheck size={14} />]] as const).map(([key, label, icon]) => (
+                  <button key={key} type="button" onClick={() => setActiveTab(key)} style={{ border: `1px solid ${activeTab === key ? C.blue[600] : C.slate[200]}`, background: activeTab === key ? C.blue[700] : "#fff", color: activeTab === key ? "#fff" : C.slate[600], borderRadius: 999, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 900, cursor: "pointer", boxShadow: activeTab === key ? "0 10px 24px rgba(10,61,150,.22)" : "0 1px 2px rgba(0,0,0,.04)" }}>{icon} {label}</button>
+                ))}
+                {chartLoading ? <span style={{ marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, color: C.slate[500], fontWeight: 800 }}><span style={{ width: 13, height: 13, border: `2px solid ${C.blue[100]}`, borderTopColor: C.blue[600], borderRadius: "50%", animation: "spin .8s linear infinite" }} /> Préparation des courbes…</span> : null}
+                {chartLimited ? <span style={{ marginLeft: 8 }}><Badge tone="warn">Graphes limités aux premières pages</Badge></span> : null}
+              </div>
+              <DateRangePicker startKey={startKey} endKey={endKey} onChange={onPeriodChange} />
+              <button onClick={() => setHelpModalOpen(true)} type="button" style={{ ...buttonStyle, background: C.blue[50], color: C.blue[700], border: `1px solid ${C.blue[100]}` }}><Info size={14} /> Comprendre le statut</button>
+              <button onClick={() => { fetchRows(); fetchChartRows(); }} type="button" style={{ ...buttonStyle, background: C.slate[50], color: C.slate[700], border: `1px solid ${C.slate[200]}` }}><RefreshCw size={14} /> Actualiser</button>
+              <button onClick={() => setExportModalOpen(true)} type="button" style={{ ...buttonStyle, background: C.blue[700], color: "#fff" }}><Download size={14} /> Export CSV</button>
+            </div>
+          </div>
+        </header>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(150px,1fr))", gap: 14 }}>
+          <KpiCard label="Facturée" value={fmtKwh(stats.fact)} sub="Conso Sénélec" accent={C.blue[600]} icon={<Zap size={17} />} help="Consommation issue des factures Sénélec." />
+          <KpiCard label="eFMS" value={fmtKwh(stats.fms)} sub={`${stats.withFms} lignes avec données`} accent={C.teal.main} icon={<Activity size={17} />} help="Valeur eFMS principale : Grid si disponible, sinon ACM." />
+          <KpiCard label="Solaire" value={fmtKwh(stats.solar)} sub={stats.solarTarget ? `Cible ${fmtKwh(stats.solarTarget)}` : "Donnée solaire"} accent={C.solar.main} icon={<Sun size={17} />} help="Données solaires récupérées pour la période." />
+          <KpiCard label="Estimée" value={fmtKwh(stats.estim)} sub={`${stats.withEstim} lignes estimées`} accent={C.estim.main} icon={<Target size={17} />} help="Consommation provenant du modèle EstimationResult." />
+          <KpiCard label="Target NOK" value={`${stats.nok}`} sub={`${stats.ok} OK · ${stats.noTarget} sans target`} accent={stats.nok ? C.nok.main : C.ok.main} icon={stats.nok ? <XCircle size={17} /> : <CheckCircle2 size={17} />} help="Nombre de lignes dont la consommation de référence dépasse la target." />
+          <KpiCard label="Écart target" value={fmtPct(stats.avgGapTarget)} sub="Moyenne des écarts" accent={stats.avgGapTarget === null ? C.slate[400] : Math.abs(stats.avgGapTarget) > 20 ? C.nok.main : C.ok.main} icon={<TrendingUp size={17} />} help="Écart moyen entre la consommation de référence et la target." />
+        </div>
 
         <Card>
           <div style={{ padding: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ position: "relative", minWidth: 260 }}>
+            <div style={{ position: "relative", flex: "1 1 420px", minWidth: 320 }}>
               <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: C.slate[400] }} />
               <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Rechercher site, nom…" style={{ ...inputStyle, paddingLeft: 34, width: "100%" }} />
             </div>
@@ -833,30 +1030,34 @@ export default function SuiviConsoPage() {
             <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, color: C.slate[500], fontSize: 12, fontWeight: 800 }}><SlidersHorizontal size={14} /> {total.toLocaleString("fr-FR")} lignes</div>
           </div>
           <div style={{ padding: "0 14px 14px", display: "flex", flexWrap: "wrap", gap: 8 }}>
-            <FilterChip label="Période" value={periodLabel} />
             {zone ? <FilterChip label="Zone" value={zone} onClear={() => { setZone(""); setPage(1); }} /> : null}
             {typoFilter ? <FilterChip label="Typologie" value={typoFilter} onClear={() => { setTypoFilter(""); setPage(1); }} /> : null}
             {search ? <FilterChip label="Recherche" value={search} onClear={() => { setSearch(""); setPage(1); }} /> : null}
             {targetStatusFilter ? <FilterChip label="Statut target" value={targetStatusFilter} onClear={() => setTargetStatusFilter("")} /> : null}
           </div>
         </Card>
+      </div>
 
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          
-          {([["table", "Tableau", <BarChart3 size={14} />],
-          ["chart", "Graphiques", <LineIcon size={14} />],  ["synthese", "Synthèse", <ShieldCheck size={14} />]] as const).map(([key, label, icon]) => (
-            <button key={key} type="button" onClick={() => setActiveTab(key)} style={{ border: `1px solid ${activeTab === key ? C.blue[600] : C.slate[200]}`, background: activeTab === key ? C.blue[700] : "#fff", color: activeTab === key ? "#fff" : C.slate[600], borderRadius: 999, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 900, cursor: "pointer", boxShadow: activeTab === key ? "0 10px 24px rgba(10,61,150,.22)" : "0 1px 2px rgba(0,0,0,.04)" }}>{icon} {label}</button>
-          ))}
-          {chartLoading ? <span style={{ marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, color: C.slate[500], fontWeight: 800 }}><span style={{ width: 13, height: 13, border: `2px solid ${C.blue[100]}`, borderTopColor: C.blue[600], borderRadius: "50%", animation: "spin .8s linear infinite" }} /> Préparation des courbes…</span> : null}
-          {chartLimited ? <span style={{ marginLeft: 8 }}><Badge tone="warn">Graphes limités aux premières pages</Badge></span> : null}
-        </div>
+      {helpModalOpen ? <TargetStatusHelpModal onClose={() => setHelpModalOpen(false)} /> : null}
+      {exportModalOpen ? (
+        <ExportCsvModal
+          onClose={() => { if (!exporting) setExportModalOpen(false); }}
+          selected={exportColumns}
+          onChangeSelected={setExportColumns}
+          onConfirm={handleExportConfirm}
+          exporting={exporting}
+          periodLabel={ys === ye && ms === me ? fmtPeriod(ys, ms) : `${fmtPeriod(ys, ms)} → ${fmtPeriod(ye, me)}`}
+          rowsCount={total}
+        />
+      ) : null}
 
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 16 }}>
         {error ? <div style={{ padding: "14px 16px", borderRadius: 16, background: C.nok.light, border: `1px solid ${C.nok.mid}`, color: C.nok.dark, display: "flex", alignItems: "center", gap: 10 }}><AlertCircle size={18} /> {error}</div> : null}
         {loading ? <Card><div style={{ padding: 64, display: "flex", alignItems: "center", justifyContent: "center", gap: 12, color: C.slate[500], fontWeight: 800 }}><div style={{ width: 20, height: 20, border: `3px solid ${C.blue[100]}`, borderTopColor: C.blue[600], borderRadius: "50%", animation: "spin .8s linear infinite" }} />Chargement du suivi conso…</div></Card> : null}
 
         {!loading && !error && activeTab === "synthese" ? <SyntheseView chartData={chartData} statusPie={statusPie} topTargetNok={topTargetNok} /> : null}
         {!loading && !error && activeTab === "chart" ? <ChartView chartData={chartData} chartMode={chartMode} setChartMode={setChartMode} selectedSites={selectedSites} setSelectedSites={setSelectedSites} allSites={allSites} /> : null}
-        {!loading && !error && activeTab === "table" ? <TableView tableRows={tableRows} pages={pages} page={page} setPage={setPage} buttonStyle={buttonStyle} /> : null}
+        {!loading && !error && activeTab === "table" ? <TableView tableRows={tableRows} pages={pages} page={page} setPage={setPage} buttonStyle={buttonStyle} boBySite={boBySite} boSnapshotBySite={boSnapshotBySite} stickyTop={headerHeight} /> : null}
       </div>
     </div>
   );
@@ -870,6 +1071,124 @@ function InfoBox({ tone, icon, title, text }: { tone: "ok" | "nok" | "warn" | "s
     slate: { bg: C.slate[50], border: C.slate[200], color: C.slate[700] },
   }[tone];
   return <div style={{ padding: 12, borderRadius: 14, background: map.bg, border: `1px solid ${map.border}` }}><div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 950, color: map.color }}>{icon} {title}</div><div style={{ fontSize: 11.5, color: map.color, marginTop: 5, lineHeight: 1.45 }}>{text}</div></div>;
+}
+
+function TargetStatusHelpModal({ onClose }: { onClose: () => void }) {
+  return (
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent
+        className="p-0 gap-0 border-0"
+        style={{ width: "100%", maxWidth: 640, borderRadius: 20, overflow: "hidden", boxShadow: "0 24px 80px rgba(2,6,23,.28)" }}
+      >
+        <div style={{ padding: "20px 22px", borderBottom: `1px solid ${C.slate[100]}`, display: "flex", alignItems: "flex-start", gap: 13 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 14, background: C.blue[50], color: C.blue[700], display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Info size={19} /></div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <DialogTitle asChild>
+              <div style={{ fontSize: 15, fontWeight: 950, color: C.blue[950] }}>Comprendre le statut target</div>
+            </DialogTitle>
+            <div style={{ fontSize: 12.5, color: C.slate[600], marginTop: 4, lineHeight: 1.55 }}>Le statut <strong>Target OK / Target NOK</strong> compare une consommation de référence à la target. La référence utilisée suit cet ordre : <strong>Facturée</strong>, sinon <strong>eFMS</strong>, sinon <strong>Estimation</strong>.</div>
+          </div>
+          <button onClick={onClose} type="button" style={{ border: "none", background: C.slate[100], color: C.slate[500], width: 28, height: 28, borderRadius: 9, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><X size={14} /></button>
+        </div>
+        <div style={{ padding: 18, display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10 }}>
+          <InfoBox tone="ok" icon={<CheckCircle2 size={14} />} title="Target OK" text="La consommation de référence est inférieure ou égale à la target." />
+          <InfoBox tone="nok" icon={<XCircle size={14} />} title="Target NOK" text="La consommation de référence dépasse la target." />
+          <InfoBox tone="slate" icon={<Target size={14} />} title="Sans target" text="Aucune cible de consommation n’est disponible." />
+          <InfoBox tone="warn" icon={<AlertCircle size={14} />} title="Sans donnée" text="Aucune consommation exploitable pour comparer à la target." />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ExportCsvModal({
+  onClose,
+  selected,
+  onChangeSelected,
+  onConfirm,
+  exporting,
+  periodLabel,
+  rowsCount,
+}: {
+  onClose: () => void;
+  selected: string[];
+  onChangeSelected: (keys: string[]) => void;
+  onConfirm: () => void;
+  exporting: boolean;
+  periodLabel: string;
+  rowsCount: number;
+}) {
+  const allKeys = useMemo(() => EXPORT_COLUMN_GROUPS.flatMap((g) => g.columns.map((c) => c.key)), []);
+  const toggle = (key: string) => onChangeSelected(selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key]);
+  const toggleGroup = (group: ExportColumnGroup) => {
+    const groupKeys = group.columns.map((c) => c.key);
+    const allSelected = groupKeys.every((k) => selected.includes(k));
+    onChangeSelected(allSelected ? selected.filter((k) => !groupKeys.includes(k)) : Array.from(new Set([...selected, ...groupKeys])));
+  };
+
+  return (
+    <Dialog open onOpenChange={(next) => { if (!next && !exporting) onClose(); }}>
+      <DialogContent
+        className="p-0 gap-0 border-0"
+        style={{ width: "100%", maxWidth: 620, borderRadius: 20, overflow: "hidden", boxShadow: "0 24px 80px rgba(2,6,23,.28)" }}
+      >
+        <div style={{ padding: "20px 22px", borderBottom: `1px solid ${C.slate[100]}`, display: "flex", alignItems: "flex-start", gap: 13 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 14, background: C.blue[50], color: C.blue[700], display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Download size={18} /></div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <DialogTitle asChild>
+              <div style={{ fontSize: 15, fontWeight: 950, color: C.blue[950] }}>Exporter en CSV</div>
+            </DialogTitle>
+            <div style={{ fontSize: 12.5, color: C.slate[600], marginTop: 4, lineHeight: 1.55 }}>
+              Choisissez les colonnes à inclure dans l’export. La période et les filtres actifs (<strong>{periodLabel}</strong>) s’appliquent — {rowsCount.toLocaleString("fr-FR")} ligne(s) concernée(s).
+            </div>
+          </div>
+          <button onClick={() => { if (!exporting) onClose(); }} type="button" style={{ border: "none", background: C.slate[100], color: C.slate[500], width: 28, height: 28, borderRadius: 9, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><X size={14} /></button>
+        </div>
+
+        <div style={{ padding: "14px 22px 4px", display: "flex", gap: 8 }}>
+          <button type="button" onClick={() => onChangeSelected(allKeys)} style={{ border: `1px solid ${C.blue[200]}`, background: C.blue[50], color: C.blue[700], borderRadius: 999, padding: "6px 12px", fontSize: 11.5, fontWeight: 900, cursor: "pointer" }}>Tout sélectionner</button>
+          <button type="button" onClick={() => onChangeSelected([])} style={{ border: `1px solid ${C.slate[200]}`, background: "#fff", color: C.slate[600], borderRadius: 999, padding: "6px 12px", fontSize: 11.5, fontWeight: 900, cursor: "pointer" }}>Tout désélectionner</button>
+        </div>
+
+        <div style={{ padding: "10px 22px 6px", maxHeight: 380, overflow: "auto", display: "grid", gap: 14 }}>
+          {EXPORT_COLUMN_GROUPS.map((group) => {
+            const groupKeys = group.columns.map((c) => c.key);
+            const allSelected = groupKeys.every((k) => selected.includes(k));
+            const someSelected = !allSelected && groupKeys.some((k) => selected.includes(k));
+            return (
+              <div key={group.title}>
+                <button type="button" onClick={() => toggleGroup(group)} style={{ display: "flex", alignItems: "center", gap: 8, border: "none", background: "transparent", padding: 0, marginBottom: 8, cursor: "pointer" }}>
+                  <span style={{ width: 15, height: 15, borderRadius: 4, border: `1.5px solid ${allSelected ? C.blue[600] : someSelected ? C.blue[400] : C.slate[300]}`, background: allSelected ? C.blue[600] : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    {allSelected ? <CheckCircle2 size={11} color="#fff" /> : someSelected ? <span style={{ width: 7, height: 2, background: C.blue[400], borderRadius: 2 }} /> : null}
+                  </span>
+                  <span style={{ fontSize: 12, fontWeight: 900, color: C.blue[900] }}>{group.title}</span>
+                </button>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 6, paddingLeft: 23 }}>
+                  {group.columns.map((col) => {
+                    const checked = selected.includes(col.key);
+                    return (
+                      <label key={col.key} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: C.slate[700], cursor: "pointer" }}>
+                        <input type="checkbox" checked={checked} onChange={() => toggle(col.key)} style={{ width: 13, height: 13, accentColor: C.blue[600] }} />
+                        {col.label}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ padding: "16px 22px 20px", borderTop: `1px solid ${C.slate[100]}`, display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <button type="button" onClick={onClose} disabled={exporting} style={{ border: `1px solid ${C.slate[200]}`, background: "#fff", color: C.slate[600], borderRadius: 12, padding: "9px 16px", fontSize: 12.5, fontWeight: 900, cursor: exporting ? "not-allowed" : "pointer" }}>Annuler</button>
+          <button type="button" onClick={onConfirm} disabled={exporting || selected.length === 0} style={{ border: "none", background: exporting || selected.length === 0 ? C.slate[300] : C.blue[700], color: "#fff", borderRadius: 12, padding: "9px 18px", fontSize: 12.5, fontWeight: 900, cursor: exporting || selected.length === 0 ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}>
+            {exporting ? <span style={{ width: 13, height: 13, border: "2px solid rgba(255,255,255,.4)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin .8s linear infinite" }} /> : <Download size={14} />}
+            {exporting ? "Export en cours…" : "Valider et exporter"}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function SyntheseView({ chartData, statusPie, topTargetNok }: { chartData: ChartPoint[]; statusPie: { name: string; value: number; color: string }[]; topTargetNok: { row: ConsoRow; st: ReturnType<typeof getTargetStatus> }[] }) {
@@ -917,14 +1236,14 @@ function ChartView({ chartData, chartMode, setChartMode, selectedSites, setSelec
   );
 }
 
-function TableView({ tableRows, pages, page, setPage, buttonStyle }: { tableRows: ConsoRow[]; pages: number; page: number; setPage: Dispatch<SetStateAction<number>>; buttonStyle: CSSProperties }) {
+function TableView({ tableRows, pages, page, setPage, buttonStyle, boBySite, boSnapshotBySite, stickyTop = 0 }: { tableRows: ConsoRow[]; pages: number; page: number; setPage: Dispatch<SetStateAction<number>>; buttonStyle: CSSProperties; boBySite: Record<string, BOAnalysisRequest>; boSnapshotBySite: Record<string, BOMarginSnapshot>; stickyTop?: number }) {
   return (
     <Card style={{ overflow: "hidden" }}>
       <SectionTitle icon={<BarChart3 size={18} />} title="Tableau détaillé" subtitle="Consommations uniquement : facturée, eFMS, solaire, estimation et target. Aucun montant financier." right={<Badge tone="blue">{tableRows.length.toLocaleString("fr-FR")} lignes affichées</Badge>} />
-      <div style={{ overflow: "auto", maxHeight: "calc(100vh - 260px)" }}>
+      <div style={{ overflow: "auto", maxHeight: `calc(100vh - ${Math.round(stickyTop + 150)}px)` }}>
         <table className="suivi-table" style={{ width: "100%", minWidth: 1480, borderCollapse: "separate", borderSpacing: 0, fontSize: 11.5 }}>
           <thead>
-            <tr style={{ background: C.blue[900] }}><th className="sticky-site-head" colSpan={3} style={groupTh(C.blue[900])}>Site</th><th colSpan={3} style={groupTh(C.blue[800])}>Facturée</th><th colSpan={4} style={groupTh(C.teal.dark)}>eFMS / ACM</th><th colSpan={3} style={groupTh(C.solar.dark)}>Solaire</th><th colSpan={2} style={groupTh(C.estim.dark)}>Estimation</th><th colSpan={4} style={groupTh(C.blue[800])}>Target</th></tr>
+            <tr style={{ background: C.blue[900] }}><th className="sticky-site-head" colSpan={3} style={groupTh(C.blue[900])}>Site</th><th colSpan={3} style={groupTh(C.blue[800])}>Facturée</th><th colSpan={4} style={groupTh(C.teal.dark)}>eFMS / ACM</th><th colSpan={3} style={groupTh(C.solar.dark)}>Solaire</th><th colSpan={2} style={groupTh(C.estim.dark)}>Estimation</th><th colSpan={4} style={groupTh(C.blue[800])}>Target</th><th colSpan={1} style={groupTh(C.slate[700])}>BO</th></tr>
             <tr style={{ background: C.blue[700] }}>
               <TH sticky><THLabel label="Site" help="Identifiant et nom du site." /></TH><TH><THLabel label="Zone" help="Zone opérationnelle du site." /></TH><TH><THLabel label="Période" help="Mois de consolidation de la ligne." /></TH>
               <TH right><THLabel label="Jours" help="Nombre de jours couverts par le mois ou la facture." /></TH><TH right><THLabel label="Conso facturée" help="Consommation issue des factures Sénélec." /></TH><TH center><THLabel label="Réf." help="La facturée est prioritaire pour le statut target si elle existe." /></TH>
@@ -932,9 +1251,10 @@ function TableView({ tableRows, pages, page, setPage, buttonStyle }: { tableRows
               <TH right><THLabel label="Solar kWh" help="Donnée solaire réelle sur la période." /></TH><TH right><THLabel label="Solar Target" help="Cible solaire calculée selon typologie, load et jours." /></TH><TH center><THLabel label="Δ Sol/Cible" help="Écart entre le solaire réel et la cible solaire." /></TH>
               <TH right><THLabel label="Conso estimée" help="Consommation estimée depuis EstimationResult." /></TH><TH center><THLabel label="Source estim." help="Source utilisée pour l’estimation : ACM, GRID, HISTO, TARGET, etc." /></TH>
               <TH><THLabel label="Typologie" help="Typologie utilisée pour les règles de target." /></TH><TH right><THLabel label="Conso Target" help="Cible de consommation utilisée pour le statut target." /></TH><TH center><THLabel label="Statut target" help="OK si la consommation de référence est <= target. NOK si elle dépasse la target." /></TH><TH center><THLabel label="Δ vs Target" help="Écart entre la consommation de référence et la target." /></TH>
+              <TH center><THLabel label="Analyse BO" help="Analyse BO du site (catégorie, owner, commentaire) : la plus récente soumise via le workflow in-app, sinon celle importée depuis l'historique Analyse Marge.xlsx." /></TH>
             </tr>
           </thead>
-          <tbody>{!tableRows.length ? <tr><td colSpan={19}><EmptyState title="Aucune donnée" subtitle="Aucune ligne ne correspond aux filtres sélectionnés." /></td></tr> : tableRows.map((r, i) => <ConsoTableRow key={`${r.site_id}-${r.year}-${r.month}-${i}`} r={r} i={i} />)}</tbody>
+          <tbody>{!tableRows.length ? <tr><td colSpan={20}><EmptyState title="Aucune donnée" subtitle="Aucune ligne ne correspond aux filtres sélectionnés." /></td></tr> : tableRows.map((r, i) => <ConsoTableRow key={`${r.site_id}-${r.year}-${r.month}-${i}`} r={r} i={i} bo={boBySite[r.site_id]} snapshot={boSnapshotBySite[r.site_id]} />)}</tbody>
         </table>
       </div>
       {pages > 1 ? <div style={{ padding: "12px 16px", borderTop: `1px solid ${C.slate[200]}`, background: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between" }}><div style={{ fontSize: 12, color: C.slate[500] }}>Page {page} / {pages}</div><div style={{ display: "flex", gap: 8 }}><button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} style={{ ...buttonStyle, background: page <= 1 ? C.slate[100] : C.blue[50], color: page <= 1 ? C.slate[400] : C.blue[700], border: `1px solid ${C.slate[200]}` }}><ChevronLeft size={14} /> Précédent</button><button type="button" disabled={page >= pages} onClick={() => setPage((p) => Math.min(pages, p + 1))} style={{ ...buttonStyle, background: page >= pages ? C.slate[100] : C.blue[700], color: page >= pages ? C.slate[400] : "#fff" }}>Suivant <ChevronRight size={14} /></button></div></div> : null}
@@ -942,7 +1262,7 @@ function TableView({ tableRows, pages, page, setPage, buttonStyle }: { tableRows
   );
 }
 
-function ConsoTableRow({ r, i }: { r: ConsoRow; i: number }) {
+function ConsoTableRow({ r, i, bo, snapshot }: { r: ConsoRow; i: number; bo?: BOAnalysisRequest; snapshot?: BOMarginSnapshot }) {
   const st = getTargetStatus(r);
   const fmsMain = r.fms_grid_kwh || r.fms_acm_kwh;
   const dFms = deltaPct(fmsMain, r.conso_facturee_kwh ?? r.conso_kwh);
@@ -969,6 +1289,22 @@ function ConsoTableRow({ r, i }: { r: ConsoRow; i: number }) {
       <TD right>{fmtKwh(r.conso_target)}</TD>
       <TD center><TargetStatusBadge row={r} /></TD>
       <TD center><DeltaBadge value={st.gapPct} /></TD>
+      <TD>
+        {bo?.analysis ? (
+          <div title={bo.analysis.commentaire || bo.analysis.commentaire_bo || undefined}>
+            <Badge tone="slate">{bo.analysis.categorie_bo_display}</Badge>
+            <div style={{ fontSize: 10, color: C.slate[500], marginTop: 3 }}>{bo.analysis.action_owner_display}</div>
+          </div>
+        ) : snapshot?.categorie_bo_display ? (
+          <div title={snapshot.commentaire || snapshot.commentaire_bo || undefined}>
+            <Badge tone="slate">{snapshot.categorie_bo_display}</Badge>
+            <div style={{ fontSize: 10, color: C.slate[500], marginTop: 3 }}>{snapshot.action_owner_display}</div>
+            <div style={{ fontSize: 9.5, color: C.slate[400], marginTop: 1, fontStyle: "italic" }}>Historique (import)</div>
+          </div>
+        ) : (
+          <span style={{ color: C.slate[400] }}>—</span>
+        )}
+      </TD>
     </tr>
   );
 }

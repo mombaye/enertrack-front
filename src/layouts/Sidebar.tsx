@@ -8,6 +8,8 @@ import {
   Building2,TrendingUp, DollarSign,
   BrainCircuit,
   Fuel,
+  ClipboardList,
+  TrendingDown,
   LogOut,
 
 } from "lucide-react";
@@ -32,6 +34,7 @@ const LINKS: LinkItem[] = [
   { to: "/certification",          icon: <ShieldCheck />,  label: "Certification",              section: "FACTURATION",    end: true },
   // Sidebar.tsx — dans LINKS
   { to: "/modules/evaluation-financiere", icon: <DollarSign />, label: "Évaluation Financière", section: "FACTURATION" },
+  { to: "/modules/dashboard-marge", icon: <TrendingDown />, label: "Dashboard Marge", section: "FACTURATION" },
   { to: "/billing/sonatel",        icon: <Receipt />,      label: "Base Factures",            section: "FACTURATION",    end: true },
 
 
@@ -71,6 +74,11 @@ const LINKS: LinkItem[] = [
   { to: "/users",                  icon: <User />,         label: "Utilisateurs",               section: "ADMINISTRATION", adminOnly: true },
   { to: "/billing/sonatel/config", icon: <Settings2 />,    label: "Config Sonatel",             section: "ADMINISTRATION", adminOnly: true },
   { to: "/admin/sites", icon: <Building2 />, label: "Gestion des sites", section: "ADMINISTRATION", adminOnly: true },
+];
+
+// Menu minimal pour le rôle Back Office — pas d'accès aux modules financiers/certification/etc.
+const BO_LINKS: LinkItem[] = [
+  { to: "/bo/workspace", icon: <ClipboardList />, label: "Analyses BO", section: "MODULES", end: true },
 ];
 
 const W  = 272;
@@ -237,7 +245,7 @@ function Inner({
   const isCol = mode === "desktop" ? collapsed : false;
 
   const visible = useMemo(
-    () => LINKS.filter(l => !l.adminOnly || role === "admin"),
+    () => role === "bo" ? BO_LINKS : LINKS.filter(l => !l.adminOnly || role === "admin"),
     [role]
   );
 
@@ -439,7 +447,7 @@ function Inner({
                 {user?.username || "Utilisateur"}
               </div>
               <div style={{ fontSize: 11, color: "#94a3b8" }}>
-                {role === "admin" ? "Administrateur" : "Analyste"}
+                {role === "admin" ? "Administrateur" : role === "bo" ? "Back Office" : role === "manager" ? "Manager" : "Analyste"}
               </div>
             </div>
             <DropdownMenuItem

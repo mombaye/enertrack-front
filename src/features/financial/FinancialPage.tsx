@@ -15,6 +15,8 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
+  Clock,
   Database,
   Download,
   Eye,
@@ -77,6 +79,12 @@ import {
   type SiteMargeRow,
   type SiteRecurrentRow,
 } from "./api";
+import {
+  fetchBORequests,
+  fetchBOSnapshots,
+  type BOAnalysisRequest,
+} from "@/features/bo-analysis/api";
+import BOBulkActivationModal, { type BOBulkItem } from "@/features/bo-analysis/BOBulkActivationModal";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Design tokens
@@ -116,7 +124,7 @@ const C = {
 };
 
 const PAGE_BG = "linear-gradient(180deg,#F8FAFC 0%,#EEF4FF 100%)";
-const HDR = "linear-gradient(135deg,#010E2A 0%,#032566 55%,#0A3D96 100%)";
+const HDR = "linear-gradient(135deg, #0B1F4D 0%, #123C8C 45%, #1A56C4 75%, #3272E0 100%)";
 const MONTHS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
 const ZONES = ["DKR", "THIES", "DIOURBEL", "LOUGA", "KAOLACK", "ZIGUINCHOR", "SAINT-LOUIS", "TAMBACOUNDA", "KOLDA", "FATICK", "MATAM", "KAFFRINE", "SEDHIOU", "KEDOUGOU"];
 
@@ -364,7 +372,7 @@ function DeltaBadge({ value }: { value: number | null }) {
 }
 
 function Card({ children, style }: { children: ReactNode; style?: CSSProperties }) {
-  return <div style={{ background: "rgba(255,255,255,.94)", border: `1px solid ${C.slate[200]}`, borderRadius: 20, boxShadow: "0 18px 45px rgba(15,23,42,.07)", overflow: "hidden", ...style }}>{children}</div>;
+  return <div style={{ background: "#fff", border: "1px solid #E4E9F0", borderRadius: 10, boxShadow: "0 1px 2px rgba(15,23,42,.04), 0 1px 1px rgba(15,23,42,.03)", overflow: "hidden", ...style }}>{children}</div>;
 }
 
 function SectionTitle({ icon, title, subtitle, right }: { icon: ReactNode; title: string; subtitle?: string; right?: ReactNode }) {
@@ -384,7 +392,7 @@ function SectionTitle({ icon, title, subtitle, right }: { icon: ReactNode; title
 
 function KpiCard({ label, value, sub, icon, accent, help, negative }: { label: string; value: string; sub?: string; icon: ReactNode; accent: string; help?: string; negative?: boolean }) {
   return (
-    <div style={{ position: "relative", overflow: "hidden", borderRadius: 18, background: "rgba(255,255,255,.09)", border: "1px solid rgba(255,255,255,.14)", padding: "15px 16px", minHeight: 94, boxShadow: "inset 0 1px 0 rgba(255,255,255,.12)" }}>
+    <div style={{ position: "relative", overflow: "hidden", borderRadius: 10, background: "rgba(255,255,255,.09)", border: "1px solid rgba(255,255,255,.14)", padding: "14px 15px", minHeight: 94, boxShadow: "inset 0 1px 0 rgba(255,255,255,.12)" }}>
       <div style={{ position: "absolute", inset: 0, background: `radial-gradient(circle at 90% 12%,${accent}33,transparent 32%)` }} />
       <div style={{ position: "relative", display: "flex", justifyContent: "space-between", gap: 12 }}>
         <div style={{ minWidth: 0 }}>
@@ -585,6 +593,8 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
   const [showUploadFee, setShowUploadFee] = useState(false);
   const [showUploadLoad, setShowUploadLoad] = useState(false);
   const [modalSite, setModalSite] = useState<ModalSite>(null);
+  const [selectedEvalIds, setSelectedEvalIds] = useState<Set<number>>(new Set());
+  const [showBulkBO, setShowBulkBO] = useState(false);
 
   const baseParams = useMemo(() => ({ year_start: yearStart, month_start: monthStart, year_end: yearEnd, month_end: monthEnd }), [yearStart, monthStart, yearEnd, monthEnd]);
 
@@ -704,6 +714,10 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
     });
   }
 
+  function openDetailFor(siteId: string, siteName: string | null | undefined, year: number, month: number) {
+    setModalSite({ siteId, siteName: siteName || siteId, year, monthStart: month, monthEnd: month });
+  }
+
   const stats = useMemo(() => {
     const totalRedevance = n((evalStats as any)?.total_redevance);
     const totalFacture = n((evalStats as any)?.total_facture);
@@ -751,7 +765,8 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
         .fin-sticky-head { position: sticky !important; left: 0; z-index: 30 !important; }
       `}</style>
 
-      <div style={{ background: HDR, color: "#fff", padding: "22px 24px 18px", boxShadow: "0 18px 45px rgba(1,14,42,.24)" }}>
+      <div style={{ maxWidth: 1600, margin: "0 auto", padding: "22px 24px 70px" }}>
+      <div style={{ background: HDR, color: "#fff", borderRadius: 10, padding: "22px 24px 18px", boxShadow: "0 4px 20px -8px rgba(11,31,77,.35)", marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
           <div>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 9px", background: "rgba(255,255,255,.10)", border: "1px solid rgba(255,255,255,.14)", borderRadius: 999, fontSize: 11, fontWeight: 950, color: "rgba(255,255,255,.72)" }}>
@@ -778,7 +793,7 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
         </div>
       </div>
 
-      <div style={{ padding: 22, display: "grid", gap: 16 }}>
+      <div style={{ display: "grid", gap: 16 }}>
         <Card>
           <div style={{ padding: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <div style={{ position: "relative", minWidth: 260 }}>
@@ -827,7 +842,31 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
         </div>
 
         {activeTab === "evaluations" ? (
-          <EvaluationsView rows={evaluations} loading={loadingEval} total={evalTotal} page={evalPage} pages={evalPages} setPage={setEvalPage} onOpenDetail={openDetail} />
+          <EvaluationsView
+            rows={evaluations}
+            loading={loadingEval}
+            total={evalTotal}
+            page={evalPage}
+            pages={evalPages}
+            setPage={setEvalPage}
+            onOpenDetail={openDetail}
+            selectedIds={selectedEvalIds}
+            onToggleSelect={(id) =>
+              setSelectedEvalIds((prev) => {
+                const next = new Set(prev);
+                if (next.has(id)) next.delete(id); else next.add(id);
+                return next;
+              })
+            }
+            onToggleSelectAll={(ids, checked) =>
+              setSelectedEvalIds((prev) => {
+                const next = new Set(prev);
+                ids.forEach((id) => (checked ? next.add(id) : next.delete(id)));
+                return next;
+              })
+            }
+            onBulkActivateBO={() => setShowBulkBO(true)}
+          />
         ) : null}
 
         {activeTab === "dashboard" ? (
@@ -839,15 +878,29 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
         ) : null}
 
         {activeTab === "analyse" ? (
-          <AnalyticsView loading={loadingAnalytics} analytics={analytics} />
+          <AnalyticsView loading={loadingAnalytics} analytics={analytics} onOpenDetail={openDetailFor} />
         ) : null}
 
         {activeTab === "donnees" ? (
           <Card style={{ padding: 18 }}><FinancialDataPage /></Card>
         ) : null}
       </div>
+      </div>
 
       {modalSite ? <FinancialSiteDetailModal siteId={modalSite.siteId} siteName={modalSite.siteName} year={modalSite.year} monthStart={modalSite.monthStart} monthEnd={modalSite.monthEnd} onClose={() => setModalSite(null)} /> : null}
+
+      {showBulkBO ? (
+        <BOBulkActivationModal
+          items={evaluations
+            .filter((ev) => selectedEvalIds.has(ev.id))
+            .map((ev): BOBulkItem => ({ site_id: ev.site_id, site_name: ev.site_name, year: ev.year, month: ev.month }))}
+          onClose={() => setShowBulkBO(false)}
+          onSuccess={() => {
+            setShowBulkBO(false);
+            setSelectedEvalIds(new Set());
+          }}
+        />
+      ) : null}
 
       {showUploadFee ? <UploadModal title="Catalogue redevances" description="Fichier Redevance_et_Cible_Akt.xlsx — Typologie | Load | Config | Redevance | Cible" accept=".xlsx,.xls" onClose={() => setShowUploadFee(false)} onUpload={async (file) => importFeeRules(file)} /> : null}
       {showUploadLoad ? <UploadModal title="Loads mensuels" description="CSV/XLSX : Site_ID | Site_Name | Année | Mois | Load | Source" accept=".csv,.xlsx,.xls" onClose={() => setShowUploadLoad(false)} onUpload={async (file) => importMonthlyLoads(file)} /> : null}
@@ -855,24 +908,59 @@ function FinancialModuleContent({ onLock }: { onLock: () => void }) {
   );
 }
 
-function EvaluationsView({ rows, loading, total, page, pages, setPage, onOpenDetail }: { rows: EvalRow[]; loading: boolean; total: number; page: number; pages: number; setPage: React.Dispatch<React.SetStateAction<number>>; onOpenDetail: (ev: EvalRow) => void }) {
+function EvaluationsView({
+  rows, loading, total, page, pages, setPage, onOpenDetail,
+  selectedIds, onToggleSelect, onToggleSelectAll, onBulkActivateBO,
+}: {
+  rows: EvalRow[]; loading: boolean; total: number; page: number; pages: number; setPage: React.Dispatch<React.SetStateAction<number>>; onOpenDetail: (ev: EvalRow) => void;
+  selectedIds: Set<number>; onToggleSelect: (id: number) => void; onToggleSelectAll: (ids: number[], checked: boolean) => void; onBulkActivateBO: () => void;
+}) {
+  const selectedOnPage = rows.filter((r) => selectedIds.has(r.id)).length;
+
   return (
     <Card>
       <SectionTitle icon={<ShieldCheck size={18} />} title="Évaluations financières" subtitle="Redevance, montant HTVA, marge et statut par site × mois" right={<Badge tone="blue">{total.toLocaleString("fr-FR")} lignes</Badge>} />
+
+      {selectedIds.size > 0 ? (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 18px", background: C.blue[50], borderBottom: `1px solid ${C.blue[100]}`, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12.5, fontWeight: 900, color: C.blue[800] }}>
+            {selectedIds.size} site{selectedIds.size > 1 ? "s" : ""} sélectionné{selectedIds.size > 1 ? "s" : ""}
+          </span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" onClick={() => onToggleSelectAll(rows.map((r) => r.id), false)} style={{ height: 32, padding: "0 12px", borderRadius: 10, border: `1px solid ${C.slate[200]}`, background: "#fff", color: C.slate[600], fontSize: 12, fontWeight: 900, cursor: "pointer" }}>
+              Désélectionner
+            </button>
+            <button type="button" onClick={onBulkActivateBO} style={{ height: 32, padding: "0 14px", borderRadius: 10, border: "none", background: `linear-gradient(135deg, ${C.blue[800]}, ${C.blue[600]})`, color: "#fff", fontSize: 12, fontWeight: 950, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <ClipboardList size={13} /> Activer analyse BO
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {loading && !rows.length ? <EmptyState title="Chargement…" text="Récupération des évaluations financières." icon={<Loader2 size={22} style={{ animation: "spin 1s linear infinite" }} />} /> : null}
       {!loading && !rows.length ? <EmptyState title="Aucune évaluation" text="Aucune donnée ne correspond aux filtres sélectionnés." /> : null}
-      {rows.length ? <EvaluationTable rows={rows} onOpenDetail={onOpenDetail} /> : null}
+      {rows.length ? (
+        <EvaluationTable
+          rows={rows}
+          onOpenDetail={onOpenDetail}
+          selectedIds={selectedIds}
+          onToggleSelect={onToggleSelect}
+          allOnPageSelected={selectedOnPage === rows.length}
+          onToggleSelectAll={onToggleSelectAll}
+        />
+      ) : null}
       {pages > 1 ? <Pagination page={page} pages={pages} total={total} setPage={setPage} /> : null}
     </Card>
   );
 }
 
-function EvaluationTable({ rows, onOpenDetail }: { rows: EvalRow[]; onOpenDetail: (ev: EvalRow) => void }) {
+function EvaluationTable({ rows, onOpenDetail, selectedIds, onToggleSelect, allOnPageSelected, onToggleSelectAll }: { rows: EvalRow[]; onOpenDetail: (ev: EvalRow) => void; selectedIds: Set<number>; onToggleSelect: (id: number) => void; allOnPageSelected: boolean; onToggleSelectAll: (ids: number[], checked: boolean) => void }) {
   return (
     <div style={{ overflow: "auto", maxHeight: "calc(100vh - 320px)" }}>
       <table className="fin-table" style={{ width: "100%", minWidth: 1360, borderCollapse: "separate", borderSpacing: 0, fontSize: 11.5 }}>
         <thead>
           <tr>
+            <Th center><input type="checkbox" checked={allOnPageSelected} onChange={(e) => onToggleSelectAll(rows.map((r) => r.id), e.target.checked)} /></Th>
             <Th sticky>Site</Th>
             <Th>Zone</Th>
             <Th>Période</Th>
@@ -895,6 +983,7 @@ function EvaluationTable({ rows, onOpenDetail }: { rows: EvalRow[]; onOpenDetail
             const bg = isNok ? "#FFF7F7" : i % 2 ? C.slate[50] : "#fff";
             return (
               <tr key={ev.id} className="fin-row" style={{ background: bg }}>
+                <Td center><input type="checkbox" checked={selectedIds.has(ev.id)} onChange={() => onToggleSelect(ev.id)} /></Td>
                 <Td sticky><button type="button" onClick={() => onOpenDetail(ev)} style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", textAlign: "left" }}><div style={{ display: "flex", alignItems: "center", gap: 5, color: C.blue[700], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontWeight: 950 }}>{ev.site_id}<Eye size={12} /></div><div style={{ maxWidth: 170, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: 10.5, color: C.slate[500], marginTop: 2 }}>{ev.site_name || "—"}</div></button></Td>
                 <Td><Badge tone="blue">{ev.zone || "—"}</Badge></Td>
                 <Td><strong style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", color: C.blue[800] }}>{ev.year}-{String(ev.month).padStart(2, "0")}</strong><div style={{ fontSize: 10, color: C.slate[400] }}>{periodLabel(ev.year, ev.month)}</div></Td>
@@ -1023,7 +1112,7 @@ function RecurrentsView({ loading, rows, onOpenDetail }: { loading: boolean; row
   );
 }
 
-function AnalyticsView({ loading, analytics }: { loading: boolean; analytics: AnalyticsFullReport | null }) {
+function AnalyticsView({ loading, analytics, onOpenDetail }: { loading: boolean; analytics: AnalyticsFullReport | null; onOpenDetail: (siteId: string, siteName: string | null | undefined, year: number, month: number) => void }) {
   if (loading) return <Card><EmptyState title="Chargement de l’analyse globale…" text="Consolidation des indicateurs avancés." icon={<Loader2 size={22} style={{ animation: "spin 1s linear infinite" }} />} /></Card>;
   if (!analytics) return <Card><EmptyState title="Aucune analyse disponible" text="L’endpoint d’analyse globale n’a retourné aucune donnée." icon={<LineIcon size={22} />} /></Card>;
 
@@ -1039,11 +1128,87 @@ function AnalyticsView({ loading, analytics }: { loading: boolean; analytics: An
           {entries.length ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 10 }}>{entries.map(([k, v]) => <div key={k} style={{ padding: 14, borderRadius: 16, background: C.slate[50], border: `1px solid ${C.slate[200]}` }}><div style={{ fontSize: 10, color: C.slate[500], fontWeight: 950, textTransform: "uppercase", letterSpacing: ".08em" }}>{k.replaceAll("_", " ")}</div><div style={{ marginTop: 7, fontSize: 17, fontWeight: 950, color: C.blue[800], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{typeof v === "number" ? fmtInt(v) : String(v ?? "—")}</div></div>)}</div> : <EmptyState title="Résumé vide" text="Le rapport existe mais ne contient pas de bloc summary exploitable." />}
         </div>
       </Card>
+
+      <BOHistorySection onOpenDetail={onOpenDetail} />
+
       <Card>
         <SectionTitle icon={<Database size={18} />} title="Données brutes" subtitle="Aide au diagnostic technique" />
         <pre style={{ margin: 0, padding: 16, maxHeight: 420, overflow: "auto", fontSize: 11.5, color: C.slate[700], background: C.slate[50] }}>{JSON.stringify(analytics, null, 2)}</pre>
       </Card>
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Suivi BO — historique de référence (import Analyse Marge.xlsx) + demandes récentes
+// ─────────────────────────────────────────────────────────────────────────────
+
+function BOHistorySection({ onOpenDetail }: { onOpenDetail: (siteId: string, siteName: string | null | undefined, year: number, month: number) => void }) {
+  const [snapshotCount, setSnapshotCount] = useState<number | null>(null);
+  const [recentRequests, setRecentRequests] = useState<BOAnalysisRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([
+      fetchBOSnapshots({ page_size: 1 }),
+      fetchBORequests({ page_size: 8 }),
+    ])
+      .then(([snapshots, requests]) => {
+        if (cancelled) return;
+        setSnapshotCount(snapshots.count);
+        setRecentRequests(requests.results);
+      })
+      .catch(() => { if (!cancelled) { setSnapshotCount(null); setRecentRequests([]); } })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  return (
+    <Card>
+      <SectionTitle
+        icon={<ClipboardList size={18} />}
+        title="Suivi BO — Analyses & historique"
+        subtitle="Historique de référence (Analyse Marge.xlsx) et demandes d'analyse Back Office récentes"
+        right={snapshotCount !== null ? <Badge tone="purple">{snapshotCount.toLocaleString("fr-FR")} lignes historiques</Badge> : undefined}
+      />
+
+      <div style={{ padding: 16 }}>
+        {loading ? (
+          <div style={{ padding: 24, textAlign: "center", color: C.slate[500] }}><Loader2 size={20} style={{ animation: "spin 1s linear infinite" }} /></div>
+        ) : recentRequests.length === 0 ? (
+          <EmptyState title="Aucune demande d'analyse BO" text="Activez une analyse BO depuis la fiche d'un site (onglet « Analyse BO »)." icon={<ClipboardList size={22} />} />
+        ) : (
+          <div style={{ overflow: "auto", border: `1px solid ${C.slate[200]}`, borderRadius: 16 }}>
+            <table style={{ width: "100%", minWidth: 720, borderCollapse: "separate", borderSpacing: 0, fontSize: 12 }}>
+              <thead><tr><Th>Site</Th><Th>Période</Th><Th center>Statut</Th><Th>BO assigné</Th><Th>Catégorie</Th><Th center>Analyse</Th></tr></thead>
+              <tbody>
+                {recentRequests.map((r, i) => (
+                  <tr key={r.id} style={{ background: i % 2 ? C.slate[50] : "#fff" }}>
+                    <Td><strong style={{ color: C.blue[800], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{r.site_id}</strong><div style={{ fontSize: 11, color: C.slate[500] }}>{r.site_name || "—"}</div></Td>
+                    <Td>{MONTHS[r.month - 1]} {r.year}</Td>
+                    <Td center>
+                      <Badge tone={r.status === "done" ? "ok" : r.status === "in_progress" ? "warn" : "blue"}>
+                        {r.status === "done" ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                        {r.status === "done" ? "Terminée" : r.status === "in_progress" ? "En cours" : "En attente"}
+                      </Badge>
+                    </Td>
+                    <Td>{r.assigned_bo_username || "—"}</Td>
+                    <Td>{r.analysis?.categorie_bo_display || "—"}</Td>
+                    <Td center>
+                      <button type="button" onClick={() => onOpenDetail(r.site_id, r.site_name, r.year, r.month)} style={{ height: 30, padding: "0 10px", borderRadius: 10, border: "none", background: C.blue[700], color: "#fff", fontSize: 11.5, fontWeight: 950, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }}>
+                        <Eye size={13} /> Voir
+                      </button>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }
 

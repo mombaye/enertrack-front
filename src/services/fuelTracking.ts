@@ -2,47 +2,13 @@ import { api } from "@/services/api";
 
 const BASE = "/fuel-tracking";
 
-export type FuelAnomalyCode =
-  | "DELIVERY_GT_ORDER"
-  | "CONSO_WITHOUT_GE_HOURS"
-  | "GE_HOURS_WITHOUT_CONSO"
-  | "ABNORMAL_GE_HOURS"
-  | "HIGH_MONITORING_UNAVAILABILITY";
-
-export type FuelStatusCode =
-  | "ALL"
-  | "OK"
-  | "WARNING"
-  | "NOK"
-  | "EFMS_ONLY"
-  | "ENOC_ONLY"
-  | "NO_BASE"
-  | "NO_DATA";
-
-export type FuelEfmsMonthly = {
-  id: number;
-  month_year: string;
-  year: number;
-  month: number;
-  country: string;
-  site_id: string;
-  site_name: string | null;
-
-  fuel_order_l: string | number;
-  fuel_deli_l: string | number;
-  fuel_conso_l: string | number;
-
-  ge_working_hours: string | number;
-  abnormal_ge_working_hours: string | number;
-  monitoring_unavailability_hours: string | number;
-  monitoring_unavailability_percent: string | number;
-
-  cph_l_per_hour: string | number | null;
-  anomaly_flags: FuelAnomalyCode[];
-
-  synced_at: string;
-  updated_at: string;
-};
+function cleanParams(params: Record<string, any>) {
+  return Object.fromEntries(
+    Object.entries(params).filter(
+      ([, value]) => value !== undefined && value !== null && value !== ""
+    )
+  );
+}
 
 export type Pagination = {
   page: number;
@@ -53,466 +19,422 @@ export type Pagination = {
   hasPrev: boolean;
 };
 
-export type FuelEfmsMonthlyResponse = {
-  data: FuelEfmsMonthly[];
-  pagination: Pagination;
-};
-
-export type FuelDashboard = {
-  filters: {
-    country: string;
-    year?: string | null;
-    month?: string | null;
-    month_year?: string | null;
-    site?: string | null;
-    anomaly?: string | null;
-  };
-  kpis: {
-    total_rows: number;
-    active_sites: number;
-    sites_with_conso: number;
-    sites_with_ge_hours: number;
-    total_order_l: number;
-    total_deli_l: number;
-    total_conso_l: number;
-    total_ge_hours: number;
-    total_abnormal_ge_hours: number;
-    total_monitoring_unavailability_hours: number;
-    cph_global: number | null;
-  };
-  anomalies: Record<FuelAnomalyCode, number>;
-  top_conso: FuelEfmsMonthly[];
-  top_cph: FuelEfmsMonthly[];
-  top_ge_hours: FuelEfmsMonthly[];
-  monthly_evolution: {
-    month_year: string;
-    year: number;
-    month: number;
-    fuel_order_l: number;
-    fuel_deli_l: number;
-    fuel_conso_l: number;
-    ge_working_hours: number;
-    cph_global: number | null;
-  }[];
-};
-
-export type FuelMonthlyParams = {
-  country?: string;
-  month_year?: string;
-  year?: number;
-  month?: number;
-  site?: string;
-  anomaly?: FuelAnomalyCode | "";
-  only_active?: boolean;
-  page?: number;
-  limit?: number;
-};
-
-export type FuelSyncRun = {
-  id: number;
-  country: string;
-  month_from: string | null;
-  month_to: string | null;
-  status: "RUNNING" | "SUCCESS" | "FAILED";
-  rows_fetched: number;
-  rows_created: number;
-  rows_updated: number;
-  started_at: string;
-  finished_at: string | null;
-  error_message: string | null;
-};
-
-export type FuelEnocSyncRun = {
-  id: number;
-  start_date: string | null;
-  end_date: string | null;
-  updated_since: string | null;
-  status: "RUNNING" | "SUCCESS" | "FAILED";
-  rows_fetched: number;
-  rows_created: number;
-  rows_updated: number;
-  started_at: string;
-  finished_at: string | null;
-  error_message: string | null;
-};
-
-
-export type FuelEnocSiteContext = {
-  source?: "ENOC_SITE";
-  site_id?: string | null;
-  site_name?: string | null;
-  zone?: string | null;
-  ville?: string | null;
-  region?: string | null;
-
-  batch_operational?: string | null;
-  batch?: string | null;
-  scope_initial?: string | null;
-
-  typo_simple?: string | null;
-  new_typo?: string | null;
-  typology_contractual?: string | null;
-  priority?: string | null;
-  category?: string | null;
-
-  load?: number | null;
-  new_load?: number | null;
-  new_load_contract_v2?: number | null;
-
-  modernised_date?: string | null;
-  ongrid_offgrid?: string | null;
-  indoor_outdoor_after_passive?: string | null;
-
-  installation_new_ge?: string | null;
-  nb_ge?: number | string | null;
-  ge1_power_kva?: number | null;
-  ge2_power_kva?: number | null;
-  fuel_tank_capacity_liters?: number | null;
-  generator_change?: string | null;
-
-  rms_installed?: string | null;
-
-  solar_power_kw?: number | null;
-  solar_nominal_power_wc?: number | null;
-  pv_count?: number | string | null;
-
-  battery_capacity_ah?: number | null;
-  battery_manufacturer?: string | null;
-  battery_status?: string | null;
-
-  latitude?: number | null;
-  longitude?: number | null;
-};
-
-
-
-export type FuelMonthlyRow = {
-  key: string;
-  month_year: string;
-  site_id: string | null;
-  site_name: string | null;
-  zone: string | null;
-  zone_label: string | null;
-  ville: string | null;
-
-  site_ref: FuelSiteRef | null;
-  enoc_site_ref: FuelEnocSiteContext | null;
-  ge_ref: FuelGeContext | null;
-  ge_snapshot: Record<string, any> | null;
-
-  source: "EFMS_ENOC" | "EFMS_ONLY" | "ENOC_ONLY" | "NONE";
-  
-  efms: {
-    fuel_order_l: number;
-    fuel_deli_l: number;
-    fuel_conso_l: number;
-    ge_working_hours: number;
-    abnormal_ge_working_hours: number;
-    monitoring_unavailability_hours: number;
-    monitoring_unavailability_percent: number;
-    cph_l_per_hour: number;
-    anomaly_flags: string[];
-    synced_at: string | null;
-  };
-  enoc: {
-    movements_count: number;
-    quantity_added_liters: number;
-    operation_types: string[];
-    last_operation_date: string | null;
-    last_request_code: string | null;
-    target_status: string | null;
-    
-    site_context: FuelEnocSiteContext | null;
-    ge_context: FuelGeContext | null;
-    ge_snapshot: Record<string, any> | null;
-  };
-  gaps: {
-    deli_vs_enoc_l: number | null;
-    deli_vs_enoc_pct: number | null;
-    conso_vs_enoc_l: number | null;
-    conso_vs_enoc_pct: number | null;
-    status: {
-      code: Exclude<FuelStatusCode, "ALL">;
-      label: string;
-      tone: "green" | "orange" | "red" | "blue" | "violet" | "slate";
-    };
-  };
-};
-
-export type FuelMonthlyResponse = {
-  filters: {
-    month: string;
-    country: string;
-    site: string | null;
-    zone: string | null;
-    status: FuelStatusCode;
-  };
-  kpis: {
-    total_sites: number;
-    efms_sites: number;
-    enoc_sites: number;
-    fuel_order_l: number;
-    fuel_deli_l: number;
-    fuel_conso_l: number;
-    enoc_quantity_added_liters: number;
-    movements_count: number;
-    ok: number;
-    warning: number;
-    nok: number;
-    efms_only: number;
-    enoc_only: number;
-    gap_deli_vs_enoc_l: number;
-    gap_conso_vs_enoc_l: number;
-  };
-  data: FuelMonthlyRow[];
-  pagination: Pagination;
-};
-
-export type FuelEnocMovement = {
-  id: number;
-  source_system: string;
-  source_id: string;
-  request_id: string | null;
-  request_code: string | null;
-  status: string;
-
-  site_id: string | null;
-  site_name: string | null;
-  zone: string | null;
-  ville: string | null;
-
-  operation_type: string | null;
-  operation_date: string | null;
-
-  requested_quantity_liters: string | number;
-  approved_quantity_liters: string | number;
-  quantity_added_liters: string | number;
-
-  level_before: string | number | null;
-  level_before_unit: string | null;
-  level_after: string | number | null;
-  level_after_unit: string | null;
-
-  hour_meter_before: string | number | null;
-  hour_meter_after: string | number | null;
-
-  monthly_target_liters: string | number;
-  monthly_total_after_liters: string | number;
-  target_percent_after: string | number;
-  target_status: string | null;
-  is_target_exceeded: boolean;
-  raw_payload: Record<string, any>;
-  ge_snapshot: Record<string, any>;
-  ponction: Record<string, any> | null;
-
-  technician_name: string | null;
-  technician_phone: string | null;
-  team: string | null;
-  teammate: string | null;
-  rm: string | null;
-
-  created_by: string | null;
-  validated_by: string | null;
-  done_by: string | null;
-
-  created_at_source: string | null;
-  validated_at_source: string | null;
-  done_at_source: string | null;
-  source_created_at: string | null;
-  source_updated_at: string | null;
-
-  import_source: string | null;
-  import_key: string | null;
-
-  delivery_note_number: string | null;
-  delivery_note_quantity_liters: string | number | null;
-  supplier: string | null;
-  gauging_method: string | null;
-  rms_level_before: string | number | null;
-  rms_level_after: string | number | null;
-
-  comment: string | null;
-  synced_at: string | null;
-  updated_at: string;
-};
-
-export type FuelJournalResponse = {
-  summary: {
-    total_movements: number;
-    total_quantity_added_liters: number;
-  };
-  data: FuelEnocMovement[];
-  pagination: Pagination;
-};
-
-export type FuelSyncRunsResponse = {
-  efms: FuelSyncRun[];
-  enoc: FuelEnocSyncRun[];
-};
-
-export type FuelSourceStatusResponse = {
-  country: string;
-  efms: {
-    available: boolean;
-    latest_month: string | null;
-    latest_month_rows: number;
-    latest_month_sites: number;
-    total_rows: number;
-    total_sites: number;
-  };
-  enoc: {
-    available: boolean;
-    latest_operation_date: string | null;
-    total_movements: number;
-    total_sites: number;
-  };
-  requested_month: {
-    month: string;
-    has_efms: boolean;
-    has_enoc: boolean;
-    efms_rows: number;
-    enoc_movements: number;
-    status: "EFMS_ENOC" | "EFMS_ONLY" | "ENOC_ONLY" | "NO_DATA";
-  } | null;
-};
-
-
-export type FuelSiteRef = {
+export type FuelConsommationSite = {
   site_id: string;
-  name: string | null;
-
-  zone: string | null;
-  zone_label: string | null;
-
-  country: string | null;
-  country_label: string | null;
-
-  modernized: boolean | null;
-  ordered_typology: string | null;
-  installed_typology: string | null;
-  billing_typology: string | null;
-
-  contract_number: string | null;
-  meter_number: string | null;
-
-  analysis_load: number | null;
-  load_band: string | null;
-
+  site_name: string | null;
+  typology: string | null;
+  typologie_simple: string | null;
   site_type: string | null;
-  ordered_site_type: string | null;
-  installed_site_type: string | null;
-
-  configuration: string | null;
-  target_mapping_key: string | null;
-  transformer_capacity: number | null;
-
-  indoor_billed_outdoor: boolean | null;
-  not_yet_solarized: boolean | null;
-  solarization_date: string | null;
-
-  energy_desk_comment: string | null;
-  load_comment_category: string | null;
-
-  invoice_payment: string | null;
-  grid_fee: boolean | null;
-  batch_operational: string | null;
-
-  scope_status: string | null;
-  meter_status: string | null;
+  type_ge: string | null;
+  dg_count: string | null;
+  power_supply: string | null;
+  has_genset: boolean;
+  has_genset_snowflake: boolean;
+  has_genset_enoc: boolean;
+  nb_ge_enoc: number | null;
+  conso_snowflake_l: number | null;
+  nb_jours_data: number;
+  conso_estimee_snowflake_l: number | null;
+  conso_estimee_snowflake_nb_releves: number | null;
+  conso_estimee_enoc_l: number | null;
+  conso_estimee_nb_releves: number | null;
+  conso_specifique_moy_l_kwh: number | null;
+  ge_prod_kwh: number | null;
+  sensor_status: string | null;
+  // Colonnes qualité VW_FUEL_REPORT — audit (spec 2026-08).
+  quality_status: string | null;
+  raw_point_count: number | null;
+  valid_point_count: number | null;
+  isolated_spike_count: number | null;
+  over_capacity_point_count: number | null;
+  refill_detected: boolean;
+  estimated_refill_volume_l: number | null;
+  enoc_qte_demandee_l: number;
+  enoc_qte_validee_l: number;
+  enoc_qte_ajoutee_l: number;
+  enoc_nb_demandes: number;
+  ecart_conso_vs_enoc_l: number | null;
+  // Estimation CPH (télémétrie GFMS_DATA_TRACKER_NC) — 3e source, indépendante
+  // des 2 ci-dessus, pour les GE sans capteur de cuve fiable. "Sans litre
+  // inventé" : conso_estimee_cph_l ne compte que les jours au statut OK ;
+  // cph_status_breakdown explique pourquoi les autres jours sont vides.
+  conso_estimee_cph_l: number | null;
+  cph_l_per_h_moy: number | null;
+  cph_nb_jours_ok: number | null;
+  cph_nb_jours_calcules: number | null;
+  cph_calculation_status: string | null;
+  cph_status_breakdown: Record<string, number> | null;
+  cph_runtime_h_total: number | null;
+  cph_runtime_source: "TRACKER_5MIN" | "DSE_CONTROLLER" | "DG_ON_CALCULATED" | "RECTIFIER_STATUS_5MIN" | null;
+  /** Heures cumulées par source sur le mois, ex. {"DSE_CONTROLLER": 45.2, "TRACKER_5MIN": 3.1} — cph_runtime_source est la clé au plus d'heures. */
+  cph_runtime_source_breakdown: Record<string, number> | null;
+  cph_ge_type: string | null;
+  cph_pge_kva: number | null;
+  cph_power_factor: number | null;
+  cph_spc_l_per_kwh: number | null;
+  conso_fichier_l: number | null;
+  fichier_source: string | null;
+  // Colonnes Suivis Consommation (2026-08) — sourcées de Base GE.xlsx
+  // (identité, running time, CPH L/h, conso estimée/mesurée, charge GE) +
+  // détail énergie du pipeline CPH Snowflake (absent du fichier).
+  pge_kva_fichier: number | null;
+  ge_load_pct_fichier: number | null;
+  cph_lph_fichier: number | null;
+  // Valeurs résolues — Running Time/Conso estimée : pipeline CPH Snowflake
+  // (télémétrie) exclusivement ; _source indique l'origine précise (ex.
+  // "snowflake_dse_controller", "cph_snowflake"). Conso mesurée vue :
+  // Snowflake (capteur) en priorité, relevé de gardiennage (jauge manuelle)
+  // en repli quand Snowflake n'a rien — voir import_gardien_conso.
+  ge_runtime_fichier_h: number | null;
+  ge_runtime_source: string | null;
+  conso_estimee_fichier_l: number | null;
+  conso_estimee_source: string | null;
+  conso_mesuree_fichier_l: number | null;
+  conso_mesuree_source: "snowflake" | "gardiennage" | null;
+  gardien_statut: string | null;
+  ecart_fichier_l: number | null;
+  ecart_fichier_pct: number | null;
+  cph_site_load_energy_kwh: number | null;
+  cph_battery_dc_energy_kwh: number | null;
+  cph_battery_ac_energy_kwh: number | null;
+  cph_total_ge_energy_kwh: number | null;
+  // Explique, pour les valeurs manquantes de cette ligne (Running Time,
+  // Conso estimée, Conso mesurée vue), pourquoi aucune source disponible
+  // ne les a fournies. null si tout est renseigné.
+  commentaire: string | null;
+  // Facturation (ESCO SN — Facturation par site, mensuel) — null si le
+  // site n'apparaît pas dans le dernier fichier importé.
+  facturation_active_fichier: boolean | null;
+  facturation_avec_ge_fichier: boolean | null;
+  configuration_fichier: string | null;
 };
 
-
-
-
-export type FuelGeAsset = {
-  source?: "ENOC_GE_ASSET";
-  ge_id?: string | null;
-  serial?: string | null;
-  brand?: string | null;
-  model?: string | null;
-  type?: string | null;
-  status?: string | null;
-  fixed_mobile?: string | boolean | null;
-  location_type?: string | null;
-  site_id?: string | null;
-  site_name?: string | null;
-  region?: string | null;
-  power_kva?: number | null;
-  tank_capacity_liters?: number | null;
-  tank_connected?: boolean | string | null;
-  updated_at?: string | null;
+export type FuelConsommationKpis = {
+  total_sites: number;
+  sites_avec_ge: number;
+  sites_sans_ge: number;
+  sites_ge_enoc_only: number;
+  sites_avec_ge_incomplet: number;
+  sites_avec_conso: number;
+  sites_avec_estimation: number;
+  total_conso_snowflake_l: number;
+  total_enoc_qte_ajoutee_l: number;
+  total_enoc_nb_demandes: number;
+  runtime_source_counts: {
+    tracker_5min: number;
+    dse_controller: number;
+    dg_on_calculated: number;
+    rectifier_status_5min: number;
+    none: number;
+  };
+  configuration_counts: {
+    indoor: number;
+    outdoor: number;
+    none: number;
+  };
+  /** Partition à 4 catégories mutuellement exclusives (spec 2026-09) — le
+   * compteur "Sans source" seul mélangeait les sites sans GE (runtime non
+   * applicable) avec les sites GE sans runtime résolu. */
+  runtime_availability_counts: {
+    sans_ge: number;
+    avec_ge_avec_runtime: number;
+    avec_ge_sans_runtime: number;
+    avec_runtime_sans_cph: number;
+  };
+  factures_payees: number;
+  factures_impayees: number;
+  factures_total: number;
 };
 
-export type FuelGeContext = {
-  source?: "ENOC_GE_ASSETS";
-  assets_count?: number;
-  assets?: FuelGeAsset[];
-  primary_asset?: FuelGeAsset | null;
+export type FuelRuntimeSourceFilter = "tracker_5min" | "dse_controller" | "dg_on_calculated" | "rectifier_status_5min" | "none";
+export type FuelRuntimeAvailabilityFilter = "sans_ge" | "avec_ge_avec_runtime" | "avec_ge_sans_runtime" | "avec_runtime_sans_cph";
+export type FuelConfigurationFilter = "indoor" | "outdoor" | "none";
+
+export type FuelSourceStatus = {
+  connected: boolean;
+  last_status: "RUNNING" | "SUCCESS" | "FAILED" | null;
+  last_run_at: string | null;
+  /** Date de la donnée la plus récente réellement disponible côté source
+   * (pas l'heure d'exécution de la synchro) — révèle une source en retard
+   * même quand la synchro elle-même tourne et "réussit" normalement. */
+  last_data_date: string | null;
+  error: string | null;
 };
 
+export type FuelConsommationSources = {
+  snowflake: FuelSourceStatus;
+  enoc: FuelSourceStatus;
+};
 
-function cleanParams(params: Record<string, any>) {
-  return Object.fromEntries(
-    Object.entries(params).filter(
-      ([, value]) => value !== undefined && value !== null && value !== ""
-    )
-  );
-}
+export type FuelCphParametersStatus = {
+  sites_configures: number;
+  dernier_import: string | null;
+};
 
-export async function getFuelDashboard(params: FuelMonthlyParams) {
-  const { data } = await api.get<FuelDashboard>(`${BASE}/efms/dashboard/`, {
-    params: cleanParams(params),
-  });
-  return data;
-}
+// Recoupement Snowflake/ENOC/fichiers de référence — explique d'où viennent
+// les effectifs Avec GE/Sans GE et où se situent les sites des fichiers
+// (Base GE.xlsx / Base août 26 validée) par rapport aux sites GE réseau.
+export type FuelGeDetection = {
+  total_sites: number;
+  avec_ge: number;
+  sans_ge: number;
+  avec_ge_snowflake: number;
+  avec_ge_enoc: number;
+  vus_seulement_enoc: number;
+  vus_seulement_snowflake: number;
+  vus_par_les_deux: number;
+  sites_dans_fichier: number;
+  dans_fichier_et_ge: number;
+  dans_fichier_sans_ge: number;
+  ge_hors_fichier: number;
+};
 
-export async function getFuelMonthlyRows(params: FuelMonthlyParams) {
-  const { data } = await api.get<FuelEfmsMonthlyResponse>(`${BASE}/efms/monthly/`, {
-    params: cleanParams(params),
-  });
-  return data;
-}
+export type FuelConsommationResponse = {
+  month_year: string | null;
+  data: FuelConsommationSite[];
+  pagination: Pagination | null;
+  available_months: string[];
+  kpis: FuelConsommationKpis | null;
+  sources?: FuelConsommationSources;
+  cph_parameters?: FuelCphParametersStatus;
+  ge_detection?: FuelGeDetection | null;
+};
 
-export async function getFuelMonthlyTracking(params: {
-  month: string;
-  country?: string;
-  site?: string;
-  zone?: string;
-  status?: FuelStatusCode;
-  page?: number;
-  limit?: number;
-}) {
-  const { data } = await api.get<FuelMonthlyResponse>(`${BASE}/tracking/monthly/`, {
-    params: cleanParams(params),
-  });
-  return data;
-}
+/**
+ * Consommation carburant mensuelle par site — automatisée (Snowflake +
+ * ENOC), voir sync_fuel_consommation côté backend. Pas d'upload : alimentée
+ * par une synchronisation planifiée.
+ */
+export type FuelGeDetectionFilter =
+  | "avec_ge"
+  | "sans_ge"
+  | "avec_ge_snowflake"
+  | "avec_ge_enoc"
+  | "vus_seulement_enoc"
+  | "vus_seulement_snowflake"
+  | "vus_par_les_deux"
+  | "sites_dans_fichier"
+  | "dans_fichier_et_ge"
+  | "dans_fichier_sans_ge"
+  | "ge_hors_fichier";
 
-export async function getFuelEnocJournal(params: {
-  month?: string;
-  site?: string;
-  zone?: string;
-  operation_type?: string;
-  page?: number;
-  limit?: number;
-}) {
-  const { data } = await api.get<FuelJournalResponse>(`${BASE}/journal/enoc/`, {
-    params: cleanParams(params),
-  });
-  return data;
-}
-
-export async function getFuelSourceStatus(params?: {
-  country?: string;
-  month?: string;
-}) {
-  const { data } = await api.get<FuelSourceStatusResponse>(`${BASE}/source-status/`, {
+export async function getFuelConsommation(params?: { month?: string; search?: string; country?: string; has_genset?: "true" | "false" | "incomplete"; detection?: FuelGeDetectionFilter; runtime_source?: FuelRuntimeSourceFilter; runtime_availability?: FuelRuntimeAvailabilityFilter; configuration?: FuelConfigurationFilter; page?: number; limit?: number }) {
+  const { data } = await api.get<FuelConsommationResponse>(`${BASE}/consommation/`, {
     params: cleanParams(params ?? {}),
   });
   return data;
 }
 
-export async function getFuelSyncRuns() {
-  const { data } = await api.get<FuelSyncRunsResponse>(`${BASE}/sync-runs/`);
+export type FuelConsommationMonthlyPoint = {
+  month_year: string;
+  nb_sites_ge: number;
+  nb_sites_avec_conso: number;
+  nb_sites_monitored: number;
+  total_conso_snowflake_l: number;
+  total_enoc_qte_ajoutee_l: number;
+  total_enoc_nb_demandes: number;
+  nb_sites_enoc_ajoutee: number;
+  conso_specifique_moy_l_kwh: number | null;
+  total_conso_estimee_cph_l: number;
+  nb_sites_avec_cph: number;
+  nb_sites_incomplet: number;
+};
+
+export type FuelConsommationTopSite = {
+  site_id: string;
+  site_name: string | null;
+  total_conso_l: number;
+  nb_mois_avec_conso: number;
+};
+
+export type FuelConsommationDashboard = {
+  months: string[];
+  monthly: FuelConsommationMonthlyPoint[];
+  top_sites: FuelConsommationTopSite[];
+  total_ge_sites: number;
+  available_months: string[];
+  cph_parameters: FuelCphParametersStatus;
+  ge_detection: FuelGeDetection | null;
+};
+
+/**
+ * Vue d'ensemble pour l'onglet Dashboard. Portée de months/monthly/top_sites,
+ * par ordre de priorité : from_month+to_month (plage explicite) > month seul
+ * (mois choisi dans le header) > par défaut, les 3 derniers mois disponibles
+ * (jamais tout l'historique).
+ */
+export async function getFuelConsommationDashboard(params?: { month?: string; from_month?: string; to_month?: string }) {
+  const { data } = await api.get<FuelConsommationDashboard>(`${BASE}/consommation/dashboard/`, {
+    params: cleanParams(params ?? {}),
+  });
+  return data;
+}
+
+export type FuelStockSite = {
+  site_id: string;
+  site_name: string | null;
+  typology: string | null;
+  site_type: string | null;
+  dg_count: string | null;
+  power_supply: string | null;
+  has_genset: boolean;
+  has_genset_snowflake: boolean;
+  has_genset_enoc: boolean;
+  nb_ge_enoc: number | null;
+  stock_snowflake_l: number | null;
+  capacity_snowflake_l: number | null;
+  stock_snowflake_pct: number | null;
+  stock_snowflake_date: string | null;
+  quality_status: string | null;
+  stock_enoc_l: number | null;
+  stock_enoc_date: string | null;
+  commentaire: string | null;
+};
+
+export type FuelStockKpis = {
+  total_sites: number;
+  sites_avec_ge: number;
+  sites_sans_ge: number;
+  sites_avec_stock_snowflake: number;
+  sites_avec_stock_enoc: number;
+  sites_stock_critique: number;
+  sites_stock_alerte: number;
+  sites_sans_aucun_stock: number;
+};
+
+export type FuelStockResponse = {
+  data: FuelStockSite[];
+  pagination: Pagination;
+  kpis: FuelStockKpis;
+  sources: FuelConsommationSources;
+};
+
+/**
+ * Stock carburant ACTUEL par site — pas de notion de mois (contrairement à
+ * getFuelConsommation), une seule ligne par site remplacée à chaque sync
+ * (sync_fuel_stock). Jointure Snowflake (VW_FUEL_REPORT) + ENOC
+ * (fuel_level_readings), 2 sources distinctes jamais fusionnées.
+ */
+export async function getFuelStock(params?: { search?: string; has_genset?: "true" | "false"; page?: number; limit?: number }) {
+  const { data } = await api.get<FuelStockResponse>(`${BASE}/stock/`, {
+    params: cleanParams(params ?? {}),
+  });
+  return data;
+}
+
+export type FuelCommandeSyntheseRow = {
+  label: string;
+  is_total_row: boolean;
+  nb_sites: number;
+  commande_normale_l: number;
+  commande_hivernale_l: number;
+  total_l: number;
+  nb_sites_prev: number;
+  commande_normale_prev_l: number;
+  commande_hivernale_prev_l: number;
+  total_prev_l: number;
+  ecart_sites: number;
+  ecart_qte_l: number;
+  commentaires: string | null;
+};
+
+export type FuelCommandeSite = {
+  site_id: string;
+  site_name: string | null;
+  typologie_contractuelle: string | null;
+  load_commande: number;
+  indoor_outdoor: string | null;
+  batch: string | null;
+  typologie_facturee: string | null;
+  typo_operations: string | null;
+  conso_moy_jour_l: number;
+  commande_sans_marge_l: number;
+  commande_avec_marge_l: number;
+  estimation_stock_final_l: number;
+};
+
+export type FuelCommandeKpis = {
+  total_sites: number;
+  total_commande_avec_marge_l: number;
+  total_commande_sans_marge_l: number;
+  nb_sites_commande_positive: number;
+  nb_sites_stock_negatif: number;
+};
+
+export type FuelCommandeResponse = {
+  month_year: string | null;
+  prev_month_year: string | null;
+  available_months: string[];
+  synthese: {
+    categorie: FuelCommandeSyntheseRow[];
+    typologie: FuelCommandeSyntheseRow[];
+  };
+  sites: {
+    data: FuelCommandeSite[];
+    pagination: Pagination | null;
+    kpis: FuelCommandeKpis | null;
+  };
+};
+
+/**
+ * Commande carburant mensuelle — import mensuel brut (pas de synchro
+ * automatisée : commande décidée par l'équipe Ops dans un fichier Excel,
+ * voir import_commande_fuel côté backend), lecture seule, aucun upload sur
+ * cette page.
+ */
+export async function getFuelCommandes(params?: { month?: string; search?: string; page?: number; limit?: number }) {
+  const { data } = await api.get<FuelCommandeResponse>(`${BASE}/commandes/`, {
+    params: cleanParams(params ?? {}),
+  });
+  return data;
+}
+
+export type FuelCommandeConfiance = "Élevée" | "Moyenne" | "Faible";
+
+export type FuelCommandeEstimationSite = {
+  site_id: string;
+  site_name: string | null;
+  nb_mois_historique: number;
+  sources_historique: string[];
+  conso_jour_ponderee_l: number;
+  conso_projetee_l: number;
+  stock_actuel_l: number | null;
+  stock_connu: boolean;
+  capacite_cuve_l: number | null;
+  commande_sans_marge_l: number;
+  commande_avec_marge_l: number;
+  plafonnee_par_capacite: boolean;
+  stock_final_estime_l: number;
+  confiance: FuelCommandeConfiance;
+  commande_ops_reference_l: number | null;
+};
+
+export type FuelCommandeEstimationKpis = {
+  nb_sites: number;
+  total_commande_estimee_l: number;
+  nb_sites_rupture_prevue: number;
+  nb_sites_confiance_faible: number;
+  nb_sites_confiance_elevee: number;
+  total_commande_ops_reference_l: number | null;
+  ops_reference_month: string | null;
+};
+
+export type FuelCommandeEstimationResponse = {
+  target_month: string | null;
+  source_months: string[];
+  marge_pct: number;
+  kpis: FuelCommandeEstimationKpis | null;
+  sites: FuelCommandeEstimationSite[];
+};
+
+/**
+ * Estimation carburant du mois suivant — calculée à partir des données
+ * automatisées (Consommation + Stock), indépendante de l'import manuel Ops.
+ * Voir FuelCommandeEstimationView côté backend pour la méthodologie.
+ */
+export async function getFuelCommandeEstimation(params?: { marge?: number; search?: string }) {
+  const { data } = await api.get<FuelCommandeEstimationResponse>(`${BASE}/commandes/estimation/`, {
+    params: cleanParams(params ?? {}),
+  });
   return data;
 }

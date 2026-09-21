@@ -197,6 +197,8 @@ export default function FNPModal({
           overflow: "hidden",
         }}
       >
+        <div style={{ height: 3, flexShrink: 0, background: "linear-gradient(90deg, #0B1F4D 0%, #123C8C 45%, #1A56C4 75%, #3272E0 100%)" }} />
+
         {/* ── Header ─────────────────────────────────────────────────────── */}
         <div
           style={{

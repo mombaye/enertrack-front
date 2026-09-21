@@ -29,8 +29,8 @@ export type ImportResult = {
   issues_logged: number;
   contract_months_upserted: number;
   contract_months_deleted: number;
-  invoices_missing_site_count: number;
-  invoices_missing_site_sample: string[];
+  invoices_without_site_count: number;
+  invoices_without_site_sample: string[];
   // champs de progression intermédiaire
   rows_processed?: number;
   total_rows?: number;

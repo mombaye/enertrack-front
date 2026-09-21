@@ -32,17 +32,17 @@ import {
   X,
   Building2,
   Globe,
+  TrendingUp,
   CheckCircle2,
-  PackageX, 
-  Clock, 
-  TrendingDown
+  PackageX,
+  Clock,
+  TrendingDown,
+  Loader2,
 } from "lucide-react";
 import { api } from "@/services/api";
 import * as XLSX from "xlsx";
 import { getFNPSites, type FNPResponse } from "@/features/sonatelBilling/api";
 import FNPModal from "./FNPModal";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type GlobalScope =
@@ -178,7 +178,6 @@ interface SiteOption {
   site_pk: number;
 }
 
-// Ajouter avec les autres interfaces
 interface FNPStats {
   fnp_count: number;
   sites_count: number;
@@ -189,8 +188,7 @@ interface FNPStats {
   no_history_count: number;
 }
 
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers (logique métier — inchangée) ─────────────────────────────────────
 const fmt = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 
 const fmtM = (v: string | number) => {
@@ -242,97 +240,67 @@ async function searchSites(q: string): Promise<SiteOption[]> {
   });
 }
 
-type ExportSectionKey =
-  | "evolution"
-  | "top"
-  | "distribution"
-  | "payment"
-  | "certifBilling"
-  | "certifTech";
-
-const EXPORT_SECTIONS: { key: ExportSectionKey; label: string; isAvailable: (d: StatsResponse) => boolean }[] = [
-  { key: "evolution", label: "Évolution mensuelle", isAvailable: (d) => d.evolution.length > 0 },
-  { key: "top", label: "Top Sites (Cos φ / Montant)", isAvailable: (d) => d.top.conso_vs_montant.length > 0 },
-  { key: "distribution", label: "Distribution HT", isAvailable: (d) => d.distribution_ht.parts.length > 0 },
-  { key: "payment", label: "Statuts de paiement (résumé)", isAvailable: (d) => !!d.payment_statuses },
-  { key: "certifBilling", label: "Certification billing (résumé)", isAvailable: (d) => !!d.invoice_certification },
-  { key: "certifTech", label: "Certification technique (résumé)", isAvailable: (d) => !!d.certification },
-];
-
-function exportToExcel(
-  data: StatsResponse,
-  siteCode: string | undefined,
-  scope: GlobalScope,
-  sections: Record<ExportSectionKey, boolean>
-) {
+function exportToExcel(data: StatsResponse, siteCode?: string, scope: GlobalScope = "ALL") {
   const wb = XLSX.utils.book_new();
 
-  if (sections.evolution) {
-    const evoRows = data.evolution.map((r) => ({
-      "Période": r.period,
-      "Nb Factures": r.invoices,
-      "Montant HT (FCFA)": Number(r.montant_ht),
-      "Montant TTC (FCFA)": Number(r.montant_ttc),
-      "NRJ (FCFA)": Number(r.nrj),
-      "Abonnement (FCFA)": Number(r.abonnement),
-      "Pénalité Prime (FCFA)": Number(r.penalite_prime),
-      "Cos φ (FCFA)": Number(r.cosphi),
-    }));
-    const ws1 = XLSX.utils.json_to_sheet(evoRows);
-    ws1["!cols"] = [
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 20 },
-      { wch: 20 },
-      { wch: 16 },
-      { wch: 18 },
-      { wch: 22 },
-      { wch: 14 },
-    ];
-    XLSX.utils.book_append_sheet(wb, ws1, "Évolution mensuelle");
-  }
+  const evoRows = data.evolution.map((r) => ({
+    "Période": r.period,
+    "Nb Factures": r.invoices,
+    "Montant HT (FCFA)": Number(r.montant_ht),
+    "Montant TTC (FCFA)": Number(r.montant_ttc),
+    "NRJ (FCFA)": Number(r.nrj),
+    "Abonnement (FCFA)": Number(r.abonnement),
+    "Pénalité Prime (FCFA)": Number(r.penalite_prime),
+    "Cos φ (FCFA)": Number(r.cosphi),
+  }));
+  const ws1 = XLSX.utils.json_to_sheet(evoRows);
+  ws1["!cols"] = [
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 20 },
+    { wch: 20 },
+    { wch: 16 },
+    { wch: 18 },
+    { wch: 22 },
+    { wch: 14 },
+  ];
+  XLSX.utils.book_append_sheet(wb, ws1, "Évolution mensuelle");
 
-  if (sections.top) {
-    const topRows = data.top.conso_vs_montant.map((r) => ({
-      "Site ID": r.site_id,
-      "Site Nom": r.site_name,
-      "Montant HT (FCFA)": Number(r.montant_ht),
-      "Cos φ (FCFA)": Number(r.montant_cosphi),
-      "Pénalité (FCFA)": Number(r.penalite_prime),
-      "Abonnement (FCFA)": Number(r.abonnement),
-    }));
-    const ws2 = XLSX.utils.json_to_sheet(topRows);
-    ws2["!cols"] = [{ wch: 14 }, { wch: 28 }, { wch: 20 }, { wch: 14 }, { wch: 16 }, { wch: 18 }];
-    XLSX.utils.book_append_sheet(wb, ws2, "Top Sites");
-  }
+  const topRows = data.top.conso_vs_montant.map((r) => ({
+    "Site ID": r.site_id,
+    "Site Nom": r.site_name,
+    "Montant HT (FCFA)": Number(r.montant_ht),
+    "Cos φ (FCFA)": Number(r.montant_cosphi),
+    "Pénalité (FCFA)": Number(r.penalite_prime),
+    "Abonnement (FCFA)": Number(r.abonnement),
+  }));
+  const ws2 = XLSX.utils.json_to_sheet(topRows);
+  ws2["!cols"] = [{ wch: 14 }, { wch: 28 }, { wch: 20 }, { wch: 14 }, { wch: 16 }, { wch: 18 }];
+  XLSX.utils.book_append_sheet(wb, ws2, "Top Sites");
 
-  if (sections.distribution) {
-    const distRows = data.distribution_ht.parts.map((p) => ({
-      "Composante": p.label,
-      "Montant (FCFA)": Number(p.value),
-      "% du HT": p.percent,
-    }));
-    const ws3 = XLSX.utils.json_to_sheet(distRows);
-    ws3["!cols"] = [{ wch: 20 }, { wch: 20 }, { wch: 10 }];
-    XLSX.utils.book_append_sheet(wb, ws3, "Distribution HT");
-  }
+  const distRows = data.distribution_ht.parts.map((p) => ({
+    "Composante": p.label,
+    "Montant (FCFA)": Number(p.value),
+    "% du HT": p.percent,
+  }));
+  const ws3 = XLSX.utils.json_to_sheet(distRows);
+  ws3["!cols"] = [{ wch: 20 }, { wch: 20 }, { wch: 10 }];
+  XLSX.utils.book_append_sheet(wb, ws3, "Distribution HT");
 
-  if (sections.payment && data.payment_statuses) {
+  if (data.payment_statuses) {
     const ws4 = XLSX.utils.json_to_sheet([data.payment_statuses.summary]);
     XLSX.utils.book_append_sheet(wb, ws4, "Paiement résumé");
   }
 
-  if (sections.certifBilling && data.invoice_certification) {
+  if (data.invoice_certification) {
     const ws5 = XLSX.utils.json_to_sheet([data.invoice_certification.summary]);
     XLSX.utils.book_append_sheet(wb, ws5, "Certif billing résumé");
   }
 
-  if (sections.certifTech && data.certification) {
+  if (data.certification) {
     const ws6 = XLSX.utils.json_to_sheet([data.certification.summary]);
     XLSX.utils.book_append_sheet(wb, ws6, "Certification tech résumé");
   }
-
-  if (wb.SheetNames.length === 0) return;
 
   const start = data.range.start.replace(/-/g, "");
   const end = data.range.end.replace(/-/g, "");
@@ -340,179 +308,19 @@ function exportToExcel(
   XLSX.writeFile(wb, `suivi_facturation_${scope}${suffix}_${start}_${end}.xlsx`);
 }
 
-// ─── Export modal ───────────────────────────────────────────────────────────────
-function ExportModal({
-  data,
-  siteCode,
-  scope,
-  scopeLabel,
-  onClose,
-}: {
-  data: StatsResponse;
-  siteCode?: string;
-  scope: GlobalScope;
-  scopeLabel: string;
-  onClose: () => void;
-}) {
-  const availableSections = EXPORT_SECTIONS.filter((s) => s.isAvailable(data));
-  const [selected, setSelected] = useState<Record<ExportSectionKey, boolean>>(() => {
-    const init = {} as Record<ExportSectionKey, boolean>;
-    EXPORT_SECTIONS.forEach((s) => { init[s.key] = s.isAvailable(data); });
-    return init;
-  });
-
-  const selectedCount = availableSections.filter((s) => selected[s.key]).length;
-
-  return (
-    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent
-        className="p-0 gap-0 border-0"
-        style={{
-          background: "white",
-          borderRadius: 20,
-          border: `1px solid ${T.border}`,
-          boxShadow: "0 24px 80px rgba(15,23,42,0.22)",
-          width: "100%",
-          maxWidth: 460,
-        }}
-      >
-        <div style={{ padding: "20px 24px 0" }}>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              background: T.blueL,
-              borderRadius: 100,
-              padding: "3px 10px",
-              marginBottom: 8,
-            }}
-          >
-            <Download size={10} color={T.blue} />
-            <span style={{ fontSize: 10, fontWeight: 700, color: T.blue, letterSpacing: ".08em", textTransform: "uppercase" }}>
-              Exporter
-            </span>
-          </div>
-          <DialogTitle asChild>
-            <div style={{ fontSize: 17, fontWeight: 800, color: T.text }}>
-              Choisir les données à exporter
-            </div>
-          </DialogTitle>
-          <div style={{ fontSize: 12, color: T.textSub, marginTop: 3, marginBottom: 16 }}>
-            {scopeLabel} · {data.range.start} → {data.range.end}
-            {siteCode ? ` · ${siteCode}` : ""}
-          </div>
-        </div>
-
-        <div style={{ padding: "0 24px", display: "flex", flexDirection: "column", gap: 8, maxHeight: 320, overflowY: "auto" }}>
-          {availableSections.map((s) => (
-            <label
-              key={s.key}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: `1px solid ${selected[s.key] ? "rgba(27,63,160,.25)" : T.border}`,
-                background: selected[s.key] ? T.blueL : "white",
-                cursor: "pointer",
-                transition: "all .15s",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={selected[s.key]}
-                onChange={(e) => setSelected((prev) => ({ ...prev, [s.key]: e.target.checked }))}
-                style={{ width: 16, height: 16, accentColor: T.blue, cursor: "pointer" }}
-              />
-              <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{s.label}</span>
-            </label>
-          ))}
-
-          {availableSections.length === 0 && (
-            <div style={{ fontSize: 13, color: T.textSub, padding: "12px 0" }}>
-              Aucune donnée disponible à exporter pour la période sélectionnée.
-            </div>
-          )}
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: 8,
-            padding: "16px 24px 20px",
-            marginTop: 16,
-          }}
-        >
-          <button
-            onClick={onClose}
-            style={{
-              padding: "9px 16px",
-              borderRadius: 9,
-              border: `1px solid ${T.border}`,
-              background: "white",
-              color: T.textMid,
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            Annuler
-          </button>
-          <button
-            disabled={selectedCount === 0}
-            onClick={() => {
-              exportToExcel(data, siteCode, scope, selected);
-              onClose();
-            }}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "9px 18px",
-              borderRadius: 9,
-              background: selectedCount > 0 ? T.blue : "#CBD5E1",
-              color: "white",
-              border: "none",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: selectedCount > 0 ? "pointer" : "not-allowed",
-              boxShadow: selectedCount > 0 ? `0 4px 12px ${T.blue}33` : "none",
-              transition: "all .15s",
-            }}
-          >
-            <Download size={13} />
-            Exporter ({selectedCount})
-          </button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ─── Design tokens ────────────────────────────────────────────────────────────
-const T = {
-  blue: "#1B3FA0",
-  blueL: "#EEF2FF",
-  orange: "#D94F1E",
-  orangeL: "#FFF1EC",
-  red: "#C8202E",
-  redL: "#FFF0F0",
-  violet: "#6D28D9",
-  violetL: "#F5F0FF",
-  cyan: "#0E7490",
-  cyanL: "#E0F7FA",
-  green: "#10B981",
-  greenL: "#ECFDF5",
-  slate: "#64748B",
-  slateL: "#F8FAFC",
-  border: "rgba(15,23,42,.08)",
-  text: "#0F172A",
-  textMid: "#475569",
-  textSub: "#94A3B8",
+// ─── Design tokens — harmonisés avec le module financier ──────────────────────
+const C = {
+  blue: { 950: "#0B1F4D", 900: "#0F235A", 800: "#123C8C", 700: "#1A56C4", 600: "#2464D6", 500: "#3272E0", 300: "#91B9F8", 100: "#E4EFFE", 50: "#F2F6FE" },
+  slate: { 900: "#0F172A", 800: "#1E293B", 700: "#334155", 600: "#475569", 500: "#64748B", 400: "#94A3B8", 300: "#CBD5E1", 200: "#E2E8F0", 100: "#F1F5F9", 50: "#F8FAFC" },
+  ok: { main: "#059669", light: "#D1FAE5", mid: "#A7F3D0", dark: "#065F46" },
+  nok: { main: "#DC2626", light: "#FEE2E2", mid: "#FECACA", dark: "#991B1B" },
+  warn: { main: "#D97706", light: "#FEF3C7", mid: "#FDE68A", dark: "#92400E" },
+  cyan: { main: "#0891B2", light: "#CFFAFE", dark: "#0E7490" },
+  purple: { main: "#7C3AED", light: "#EDE9FE", dark: "#5B21B6" },
 };
+
+const HDR = "linear-gradient(135deg, #0B1F4D 0%, #123C8C 45%, #1A56C4 75%, #3272E0 100%)";
+const PAGE_BG = "linear-gradient(180deg,#F8FAFC 0%,#EEF4FF 100%)";
 
 // ─── Trend indicator ──────────────────────────────────────────────────────────
 function Trend({ current, previous }: { current: number; previous: number }) {
@@ -520,173 +328,90 @@ function Trend({ current, previous }: { current: number; previous: number }) {
   const pct = ((current - previous) / previous) * 100;
   const up = pct > 0;
   const same = Math.abs(pct) < 0.5;
-  const color = same ? T.slate : up ? T.red : T.green;
+  const color = same ? C.slate[400] : up ? C.nok.dark : C.ok.dark;
+  const bg = same ? C.slate[100] : up ? C.nok.light : C.ok.light;
   const Icon = same ? Minus : up ? ChevronUp : ChevronDown;
 
   return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 3,
-        fontSize: 11,
-        fontWeight: 700,
-        color,
-        background: same ? "#F1F5F9" : up ? "#FFF0F0" : "#F0FDF4",
-        borderRadius: 6,
-        padding: "2px 7px",
-      }}
-    >
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 700, color, background: bg, borderRadius: 6, padding: "2px 7px" }}>
       <Icon size={10} />
       {same ? "stable" : `${Math.abs(pct).toFixed(1)}%`}
     </span>
   );
 }
 
-// ─── KPI Card ─────────────────────────────────────────────────────────────────
+// ─── KPI Card (tuile colorée sur fond blanc) ──────────────────────────────────
 function KpiCard({
-  label,
-  value,
-  sub,
-  icon,
-  accent,
-  accentLight,
-  trend,
-  trendPrev,
+  label, value, sub, icon, accent, trend, trendPrev,
 }: {
-  label: string;
-  value: string;
-  sub?: string;
-  icon: ReactNode;
-  accent: string;
-  accentLight: string;
-  trend?: number;
-  trendPrev?: number;
+  label: string; value: string; sub?: string; icon: ReactNode; accent: string; trend?: number; trendPrev?: number;
 }) {
   return (
-    <div
-      style={{
-        background: "white",
-        borderRadius: 16,
-        padding: "20px",
-        border: `1px solid ${T.border}`,
-        boxShadow: "0 1px 3px rgba(15,23,42,.05)",
-        display: "flex",
-        flexDirection: "column",
-        gap: 14,
-        transition: "box-shadow .2s, transform .2s",
-      }}
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLDivElement).style.boxShadow = "0 8px 24px rgba(15,23,42,.1)";
-        (e.currentTarget as HTMLDivElement).style.transform = "translateY(-2px)";
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLDivElement).style.boxShadow = "0 1px 3px rgba(15,23,42,.05)";
-        (e.currentTarget as HTMLDivElement).style.transform = "translateY(0)";
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: 10,
-            background: accentLight,
-            display: "grid",
-            placeItems: "center",
-            color: accent,
-          }}
-        >
+    <div style={{ background: "#fff", borderRadius: 16, border: `1px solid ${C.slate[200]}`, boxShadow: "0 1px 3px rgba(15,23,42,.04), 0 8px 28px rgba(15,23,42,.06)", padding: "18px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: C.slate[400], letterSpacing: ".06em", textTransform: "uppercase" }}>{label}</span>
+          {trend !== undefined && trendPrev !== undefined ? <Trend current={trend} previous={trendPrev} /> : null}
+        </div>
+        <div style={{ width: 32, height: 32, borderRadius: 9, background: `${accent}15`, display: "grid", placeItems: "center", color: accent, flexShrink: 0 }}>
           {icon}
         </div>
-        {trend !== undefined && trendPrev !== undefined && <Trend current={trend} previous={trendPrev} />}
       </div>
-
-      <div>
-        <div
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            color: T.textSub,
-            letterSpacing: ".1em",
-            textTransform: "uppercase",
-            marginBottom: 5,
-          }}
-        >
-          {label}
-        </div>
-        <div
-          style={{
-            fontFamily: "'Clash Display', 'Syne', sans-serif",
-            fontSize: 24,
-            fontWeight: 700,
-            color: T.text,
-            lineHeight: 1,
-          }}
-        >
-          {value}
-        </div>
-        {sub && <div style={{ fontSize: 11, color: T.textSub, marginTop: 4 }}>{sub}</div>}
+      <div style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", letterSpacing: "-.025em", lineHeight: 1, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {value}
       </div>
+      {sub ? <div style={{ fontSize: 11, color: C.slate[400] }}>{sub}</div> : null}
     </div>
   );
 }
 
 // ─── Section title ────────────────────────────────────────────────────────────
-function SectionTitle({ children, icon }: { children: ReactNode; icon?: ReactNode }) {
+function SectionTitle({ children, icon, right }: { children: ReactNode; icon?: ReactNode; right?: ReactNode }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
-      {icon && (
-        <div
-          style={{
-            width: 26,
-            height: 26,
-            borderRadius: 7,
-            background: T.blueL,
-            display: "grid",
-            placeItems: "center",
-            color: T.blue,
-          }}
-        >
-          {icon}
-        </div>
-      )}
-      <span
-        style={{
-          fontFamily: "'Clash Display', 'Syne', sans-serif",
-          fontSize: 14,
-          fontWeight: 700,
-          color: T.text,
-          letterSpacing: "-.01em",
-        }}
-      >
-        {children}
-      </span>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        {icon ? (
+          <div style={{ width: 30, height: 30, borderRadius: 10, background: C.blue[50], display: "grid", placeItems: "center", color: C.blue[700] }}>
+            {icon}
+          </div>
+        ) : null}
+        <span style={{ fontSize: 14.5, fontWeight: 900, color: C.blue[950], letterSpacing: "-.01em" }}>{children}</span>
+      </div>
+      {right}
     </div>
   );
 }
 
-// ─── Chart card ───────────────────────────────────────────────────────────────
+// ─── Card ─────────────────────────────────────────────────────────────────────
 function Card({ children, style }: { children: ReactNode; style?: CSSProperties }) {
   return (
-    <div
-      style={{
-        background: "white",
-        borderRadius: 16,
-        border: `1px solid ${T.border}`,
-        boxShadow: "0 1px 3px rgba(15,23,42,.05)",
-        padding: "22px",
-        ...style,
-      }}
-    >
+    <div style={{ background: "rgba(255,255,255,.96)", borderRadius: 20, border: `1px solid ${C.slate[200]}`, boxShadow: "0 18px 45px rgba(15,23,42,.06)", padding: 22, ...style }}>
       {children}
     </div>
   );
 }
 
+// ─── Badge ────────────────────────────────────────────────────────────────────
+function Badge({ children, tone = "slate" }: { children: ReactNode; tone?: "slate" | "blue" | "ok" | "nok" | "warn" | "cyan" | "purple" }) {
+  const map = {
+    slate: { bg: C.slate[100], color: C.slate[700], border: C.slate[200] },
+    blue: { bg: C.blue[100], color: C.blue[700], border: "#BFDBFE" },
+    ok: { bg: C.ok.light, color: C.ok.dark, border: C.ok.mid },
+    nok: { bg: C.nok.light, color: C.nok.dark, border: C.nok.mid },
+    warn: { bg: C.warn.light, color: C.warn.dark, border: C.warn.mid },
+    cyan: { bg: C.cyan.light, color: C.cyan.dark, border: "#A5F3FC" },
+    purple: { bg: C.purple.light, color: C.purple.dark, border: "#DDD6FE" },
+  }[tone];
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 9px", borderRadius: 999, border: `1px solid ${map.border}`, background: map.bg, color: map.color, fontSize: 10.5, fontWeight: 900, whiteSpace: "nowrap" }}>
+      {children}
+    </span>
+  );
+}
+
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 function Skeleton({ h }: { h: number }) {
-  return <div className="btp-skel" style={{ height: h, borderRadius: 10 }} />;
+  return <div className="btp-skel" style={{ height: h, borderRadius: 12 }} />;
 }
 
 // ─── Custom Tooltip ───────────────────────────────────────────────────────────
@@ -694,44 +419,15 @@ function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
 
   return (
-    <div
-      style={{
-        background: "white",
-        borderRadius: 12,
-        border: `1px solid ${T.border}`,
-        boxShadow: "0 8px 24px rgba(15,23,42,.12)",
-        padding: "12px 16px",
-        minWidth: 180,
-      }}
-    >
-      <div
-        style={{
-          fontFamily: "'Clash Display', 'Syne', sans-serif",
-          fontWeight: 700,
-          fontSize: 12,
-          color: T.text,
-          marginBottom: 8,
-        }}
-      >
-        {label}
-      </div>
-
+    <div style={{ background: "#fff", borderRadius: 14, border: `1px solid ${C.slate[200]}`, boxShadow: "0 16px 40px rgba(15,23,42,.14)", padding: "10px 14px", minWidth: 180 }}>
+      <div style={{ fontWeight: 900, fontSize: 12, color: C.blue[950], marginBottom: 8 }}>{label}</div>
       {payload.map((p: any, i: number) => (
-        <div
-          key={i}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 16,
-            marginBottom: 3,
-          }}
-        >
-          <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: T.textMid }}>
+        <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 3 }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.slate[600] }}>
             <span style={{ width: 7, height: 7, borderRadius: "50%", background: p.color, display: "inline-block" }} />
             {p.name}
           </span>
-          <span style={{ fontWeight: 700, fontSize: 12, color: T.text }}>{fmtM(p.value)}</span>
+          <span style={{ fontWeight: 800, fontSize: 12, color: C.slate[900] }}>{fmtM(p.value)}</span>
         </div>
       ))}
     </div>
@@ -740,33 +436,18 @@ function CustomTooltip({ active, payload, label }: any) {
 
 // ─── Top table ────────────────────────────────────────────────────────────────
 function TopTable({
-  rows,
-  valueKey,
-  color,
-  filterPositive = false,
+  rows, valueKey, color, filterPositive = false,
 }: {
-  rows: TopSite[];
-  valueKey: keyof TopSite;
-  color: string;
-  filterPositive?: boolean;
+  rows: TopSite[]; valueKey: keyof TopSite; color: string; filterPositive?: boolean;
 }) {
   const filtered = filterPositive ? rows.filter((r) => Number(r[valueKey]) > 0) : rows;
   const max = Math.max(...filtered.map((r) => Math.abs(Number(r[valueKey]) || 0)), 1);
 
   if (filtered.length === 0) {
     return (
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "24px 0",
-          gap: 6,
-        }}
-      >
-        <div style={{ fontSize: 20 }}>✓</div>
-        <div style={{ fontSize: 12, color: T.textSub, fontWeight: 600 }}>Aucune donnée sur la période</div>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 0", gap: 6 }}>
+        <CheckCircle2 size={20} color={C.slate[300]} />
+        <div style={{ fontSize: 12, color: C.slate[400], fontWeight: 700 }}>Aucune donnée sur la période</div>
       </div>
     );
   }
@@ -779,48 +460,18 @@ function TopTable({
 
         return (
           <div key={`${r.site_id}-${i}`} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span
-              style={{
-                fontFamily: "'Clash Display', 'Syne', sans-serif",
-                fontSize: 10,
-                fontWeight: 700,
-                color: T.textSub,
-                width: 18,
-                textAlign: "right",
-                flexShrink: 0,
-              }}
-            >
-              {i + 1}
-            </span>
+            <span style={{ fontSize: 10, fontWeight: 900, color: C.slate[400], width: 18, textAlign: "right", flexShrink: 0 }}>{i + 1}</span>
 
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: T.textMid,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    maxWidth: "58%",
-                  }}
-                >
+                <span style={{ fontSize: 12, fontWeight: 700, color: C.slate[600], overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "58%" }}>
                   {r.site_id}
                 </span>
-                <span style={{ fontSize: 12, fontWeight: 700, color }}>{fmtM(val)}</span>
+                <span style={{ fontSize: 12, fontWeight: 900, color }}>{fmtM(val)}</span>
               </div>
 
-              <div style={{ height: 4, background: "#F1F5F9", borderRadius: 99, overflow: "hidden" }}>
-                <div
-                  style={{
-                    height: "100%",
-                    width: `${pct}%`,
-                    background: color,
-                    borderRadius: 99,
-                    transition: "width .4s ease",
-                  }}
-                />
+              <div style={{ height: 4, background: C.slate[100], borderRadius: 99, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${pct}%`, background: color, borderRadius: 99, transition: "width .4s ease" }} />
               </div>
             </div>
           </div>
@@ -832,13 +483,9 @@ function TopTable({
 
 // ─── Site Search ──────────────────────────────────────────────────────────────
 function SiteSearchBar({
-  selectedSite,
-  onSelect,
-  onClear,
+  selectedSite, onSelect, onClear,
 }: {
-  selectedSite: SiteOption | null;
-  onSelect: (site: SiteOption) => void;
-  onClear: () => void;
+  selectedSite: SiteOption | null; onSelect: (site: SiteOption) => void; onClear: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -877,56 +524,18 @@ function SiteSearchBar({
   const showDropdown = open && (results.length > 0 || isFetching || query.length >= 1);
 
   return (
-    <div ref={wrapperRef} style={{ position: "relative", minWidth: 280 }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          background: selectedSite ? T.blueL : "white",
-          border: `1.5px solid ${focused ? T.blue : selectedSite ? "rgba(27,63,160,.25)" : T.border}`,
-          borderRadius: 10,
-          padding: "8px 12px",
-          transition: "border-color .15s, box-shadow .15s",
-          boxShadow: focused ? `0 0 0 3px ${T.blueL}` : "none",
-        }}
-      >
-        {selectedSite ? (
-          <Building2 size={13} color={T.blue} style={{ flexShrink: 0 }} />
-        ) : (
-          <Search size={13} color={focused ? T.blue : T.textSub} style={{ flexShrink: 0 }} />
-        )}
+    <div ref={wrapperRef} style={{ position: "relative", minWidth: 260, flex: 1 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, background: selectedSite ? C.blue[50] : "#fff", border: `1.5px solid ${focused ? C.blue[300] : C.slate[200]}`, borderRadius: 12, padding: "8px 12px", transition: "border-color .15s" }}>
+        {selectedSite ? <Building2 size={13} color={C.blue[700]} style={{ flexShrink: 0 }} /> : <Search size={13} color={C.slate[400]} style={{ flexShrink: 0 }} />}
 
         {selectedSite ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
-            <span
-              style={{
-                fontFamily: "'Clash Display', 'Syne', sans-serif",
-                fontSize: 12,
-                fontWeight: 700,
-                color: T.blue,
-                background: "rgba(27,63,160,.12)",
-                borderRadius: 6,
-                padding: "1px 8px",
-              }}
-            >
+            <span style={{ fontSize: 12, fontWeight: 900, color: C.blue[800], background: C.blue[100], borderRadius: 6, padding: "1px 8px" }}>
               {selectedSite.site_id}
             </span>
             <button
               onClick={handleClear}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: T.textSub,
-                display: "grid",
-                placeItems: "center",
-                padding: 2,
-                borderRadius: 4,
-                transition: "color .1s",
-              }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.color = T.red)}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.color = T.textSub)}
+              style={{ background: "none", border: "none", cursor: "pointer", color: C.slate[400], display: "grid", placeItems: "center", padding: 2, borderRadius: 4 }}
               title="Vue globale"
             >
               <X size={12} />
@@ -936,155 +545,69 @@ function SiteSearchBar({
           <input
             ref={inputRef}
             value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setOpen(true);
-            }}
-            onFocus={() => {
-              setFocused(true);
-              setOpen(true);
-            }}
+            onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+            onFocus={() => { setFocused(true); setOpen(true); }}
             onBlur={() => setFocused(false)}
-            placeholder="Rechercher un site..."
-            style={{
-              background: "none",
-              border: "none",
-              outline: "none",
-              flex: 1,
-              fontSize: 13,
-              color: T.text,
-              fontFamily: "'DM Sans', sans-serif",
-            }}
+            placeholder="Rechercher un site…"
+            style={{ background: "none", border: "none", outline: "none", flex: 1, fontSize: 13, color: C.slate[800] }}
           />
         )}
 
-        {isFetching && !selectedSite && (
-          <div
-            className="btp-spin"
-            style={{
-              width: 13,
-              height: 13,
-              borderRadius: "50%",
-              border: `2px solid ${T.blueL}`,
-              borderTopColor: T.blue,
-              flexShrink: 0,
-            }}
-          />
-        )}
+        {isFetching && !selectedSite ? (
+          <Loader2 size={13} style={{ animation: "spin 1s linear infinite", color: C.slate[400], flexShrink: 0 }} />
+        ) : null}
       </div>
 
-      {showDropdown && !selectedSite && (
-        <div
-          style={{
-            position: "absolute",
-            top: "calc(100% + 6px)",
-            left: 0,
-            right: 0,
-            background: "white",
-            borderRadius: 12,
-            border: `1px solid ${T.border}`,
-            boxShadow: "0 12px 40px rgba(15,23,42,.14)",
-            zIndex: 1000,
-            overflow: "hidden",
-          }}
-        >
-          {isFetching && results.length === 0 && (
-            <div style={{ padding: "12px 16px", fontSize: 12, color: T.textSub, textAlign: "center" }}>
-              Recherche en cours...
-            </div>
-          )}
+      {showDropdown && !selectedSite ? (
+        <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, background: "#fff", borderRadius: 14, border: `1px solid ${C.slate[200]}`, boxShadow: "0 16px 44px rgba(15,23,42,.18)", zIndex: 1000, overflow: "hidden" }}>
+          {isFetching && results.length === 0 ? (
+            <div style={{ padding: "12px 16px", fontSize: 12, color: C.slate[400], textAlign: "center" }}>Recherche en cours…</div>
+          ) : null}
 
-          {!isFetching && query.length >= 1 && results.length === 0 && (
-            <div style={{ padding: "12px 16px", fontSize: 12, color: T.textSub, textAlign: "center" }}>
-              Aucun site trouvé pour « {query} »
-            </div>
-          )}
+          {!isFetching && query.length >= 1 && results.length === 0 ? (
+            <div style={{ padding: "12px 16px", fontSize: 12, color: C.slate[400], textAlign: "center" }}>Aucun site trouvé pour « {query} »</div>
+          ) : null}
 
           {results.map((site, i) => (
             <button
               key={site.id}
               onMouseDown={() => handleSelect(site)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                width: "100%",
-                padding: "10px 14px",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                textAlign: "left",
-                borderBottom: i < results.length - 1 ? "1px solid #F8FAFC" : "none",
-                transition: "background .1s",
-              }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = T.slateL)}
+              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left", borderBottom: i < results.length - 1 ? `1px solid ${C.slate[100]}` : "none" }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = C.slate[50])}
               onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "none")}
             >
-              <div
-                style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 7,
-                  flexShrink: 0,
-                  background: T.blueL,
-                  display: "grid",
-                  placeItems: "center",
-                }}
-              >
-                <Building2 size={13} color={T.blue} />
+              <div style={{ width: 28, height: 28, borderRadius: 9, flexShrink: 0, background: C.blue[50], display: "grid", placeItems: "center" }}>
+                <Building2 size={13} color={C.blue[700]} />
               </div>
-
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div
-                  style={{
-                    fontFamily: "'Clash Display', 'Syne', sans-serif",
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: T.text,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
+                <div style={{ fontSize: 12, fontWeight: 900, color: C.blue[950], overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {site.site_id}
                 </div>
-                <div style={{ fontSize: 11, color: T.textSub, marginTop: 1 }}>{site.numero_compte_contrat}</div>
+                <div style={{ fontSize: 11, color: C.slate[400], marginTop: 1 }}>{site.numero_compte_contrat}</div>
               </div>
             </button>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
 
-// ─── Metric pill button ───────────────────────────────────────────────────────
+// ─── Metric / scope pill button ───────────────────────────────────────────────
 function MetricBtn({
-  active,
-  color,
-  label,
-  onClick,
+  active, color, label, onClick,
 }: {
-  active: boolean;
-  color: string;
-  label: string;
-  onClick: () => void;
+  active: boolean; color: string; label: string; onClick: () => void;
 }) {
   return (
     <button
       onClick={onClick}
       style={{
-        padding: "6px 14px",
-        borderRadius: 8,
-        fontSize: 12,
-        fontWeight: 600,
-        cursor: "pointer",
-        transition: "all .15s",
-        border: `1px solid ${active ? color : T.border}`,
-        background: active ? color : "white",
-        color: active ? "white" : T.textMid,
-        boxShadow: active ? `0 3px 10px ${color}33` : "none",
-        fontFamily: "'DM Sans', sans-serif",
+        padding: "7px 14px", borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: "pointer", transition: "all .15s",
+        border: `1px solid ${active ? color : C.slate[200]}`,
+        background: active ? color : "#fff",
+        color: active ? "#fff" : C.slate[600],
+        boxShadow: active ? `0 4px 12px ${color}40` : "none",
       }}
     >
       {label}
@@ -1103,7 +626,6 @@ export default function BillingTrackingPage() {
 
   const siteCode = selectedSite?.site_id ?? undefined;
   const [showFNPModal, setShowFNPModal] = useState(false);
-  const [showExportModal, setShowExportModal] = useState(false);
   const q = useQuery({
     queryKey: ["billing-tracking", dateStart, dateEnd, siteCode, globalScope],
     queryFn: () => fetchStats(dateStart, dateEnd, siteCode, globalScope),
@@ -1119,7 +641,6 @@ export default function BillingTrackingPage() {
   const fnpData = fnpQ.data;
   const fnpStats = fnpData?.summary;
 
-  // Chart data FNP par mois
   const fnpChartData = useMemo(() => {
     if (!fnpData?.rows) return [];
     const byMonth: Record<string, { period: string; fnp_count: number; est_ht: number; sites: Set<string> }> = {};
@@ -1140,49 +661,35 @@ export default function BillingTrackingPage() {
   const isLoading = q.isLoading;
 
   const scopeMeta: Record<GlobalScope, { label: string; color: string }> = {
-    ALL: { label: "Brut", color: T.blue },
-    PAID: { label: "Payées", color: T.green },
-    UNPAID: { label: "Impayées", color: T.red },
-    OUT_OF_SCOPE: { label: "Hors scope", color: T.orange },
-    UNDEFINED: { label: "Non défini", color: T.slate },
-    CERTIFIED: { label: "Certifiées", color: T.green },
-    CONTESTED: { label: "Contestées", color: T.red },
-    CREATED: { label: "Brutes à traiter", color: T.orange },
+    ALL: { label: "Brut", color: C.blue[700] },
+    PAID: { label: "Payées", color: C.ok.main },
+    UNPAID: { label: "Impayées", color: C.nok.main },
+    OUT_OF_SCOPE: { label: "Hors scope", color: C.warn.main },
+    UNDEFINED: { label: "Non défini", color: C.slate[500] },
+    CERTIFIED: { label: "Certifiées", color: C.ok.main },
+    CONTESTED: { label: "Contestées", color: C.nok.main },
+    CREATED: { label: "Brutes à traiter", color: C.warn.main },
   };
 
   const paymentChartKey =
-    globalScope === "PAID"
-      ? "paid"
-      : globalScope === "UNPAID"
-      ? "unpaid"
-      : globalScope === "OUT_OF_SCOPE"
-      ? "out_of_scope"
-      : globalScope === "UNDEFINED"
-      ? "undefined"
-      : "total";
+    globalScope === "PAID" ? "paid" : globalScope === "UNPAID" ? "unpaid" : globalScope === "OUT_OF_SCOPE" ? "out_of_scope" : globalScope === "UNDEFINED" ? "undefined" : "total";
 
   const billingCertChartKey =
-    globalScope === "CERTIFIED"
-      ? "certified"
-      : globalScope === "CONTESTED"
-      ? "contested"
-      : globalScope === "CREATED"
-      ? "created"
-      : "total";
+    globalScope === "CERTIFIED" ? "certified" : globalScope === "CONTESTED" ? "contested" : globalScope === "CREATED" ? "created" : "total";
 
   const paymentChartMeta = {
-    total: { label: "Brut", color: T.blue },
-    paid: { label: "Payées", color: T.green },
-    unpaid: { label: "Impayées", color: T.red },
-    out_of_scope: { label: "Hors scope", color: T.orange },
-    undefined: { label: "Non défini", color: T.slate },
+    total: { label: "Brut", color: C.blue[700] },
+    paid: { label: "Payées", color: C.ok.main },
+    unpaid: { label: "Impayées", color: C.nok.main },
+    out_of_scope: { label: "Hors scope", color: C.warn.main },
+    undefined: { label: "Non défini", color: C.slate[500] },
   } as const;
 
   const billingCertChartMeta = {
-    total: { label: "Brut", color: T.blue },
-    certified: { label: "Certifiées", color: T.green },
-    contested: { label: "Contestées", color: T.red },
-    created: { label: "Brutes à traiter", color: T.orange },
+    total: { label: "Brut", color: C.blue[700] },
+    certified: { label: "Certifiées", color: C.ok.main },
+    contested: { label: "Contestées", color: C.nok.main },
+    created: { label: "Brutes à traiter", color: C.warn.main },
   } as const;
 
   const chartData = useMemo(() => {
@@ -1202,12 +709,9 @@ export default function BillingTrackingPage() {
 
   const kpis = useMemo(() => {
     if (!chartData.length) return null;
-
     const sum = (k: keyof (typeof chartData)[number]) => chartData.reduce((a, r) => a + (Number(r[k]) || 0), 0);
-
     const last = chartData[chartData.length - 1];
     const prev = chartData[chartData.length - 2];
-
     return {
       totalHT: sum("ht"),
       totalNrj: sum("nrj"),
@@ -1225,1064 +729,522 @@ export default function BillingTrackingPage() {
 
   const distribData = useMemo(() => {
     if (!data?.distribution_ht) return [];
-    return data.distribution_ht.parts.map((p) => ({
-      name: p.label,
-      value: n(p.value),
-      percent: p.percent,
-    }));
+    return data.distribution_ht.parts.map((p) => ({ name: p.label, value: n(p.value), percent: p.percent }));
   }, [data]);
 
   const paymentData = useMemo(() => {
     if (!data?.payment_statuses?.evolution) return [];
     return data.payment_statuses.evolution.map((r) => ({
-      period: r.period,
-      label: r.period.slice(0, 7),
-      total: r.total,
-      paid: r.paid,
-      unpaid: r.unpaid,
-      out_of_scope: r.out_of_scope,
-      undefined: r.undefined,
+      period: r.period, label: r.period.slice(0, 7), total: r.total, paid: r.paid, unpaid: r.unpaid, out_of_scope: r.out_of_scope, undefined: r.undefined,
     }));
   }, [data]);
 
   const billingCertData = useMemo(() => {
     if (!data?.invoice_certification?.evolution) return [];
     return data.invoice_certification.evolution.map((r) => ({
-      period: r.period,
-      label: r.period.slice(0, 7),
-      total: r.total,
-      certified: r.certified,
-      contested: r.contested,
-      created: r.created,
+      period: r.period, label: r.period.slice(0, 7), total: r.total, certified: r.certified, contested: r.contested, created: r.created,
     }));
   }, [data]);
 
   const metrics = {
-    ht: { key: "ht", label: "Montant HT", color: T.blue },
-    nrj: { key: "nrj", label: "NRJ", color: T.orange },
-    abonnement: { key: "abonnement", label: "Abonnement", color: T.cyan },
-    penalite: { key: "penalite", label: "Pénalité Prime", color: T.red },
-    cosphi: { key: "cosphi", label: "Cos φ", color: T.violet },
+    ht: { key: "ht", label: "Montant HT", color: C.blue[700] },
+    nrj: { key: "nrj", label: "NRJ", color: C.warn.main },
+    abonnement: { key: "abonnement", label: "Abonnement", color: C.cyan.main },
+    penalite: { key: "penalite", label: "Pénalité Prime", color: C.nok.main },
+    cosphi: { key: "cosphi", label: "Cos φ", color: C.purple.main },
   } as const;
 
-  const DISTRIB_COLORS = [T.blue, T.violet, T.red, T.orange];
+  const DISTRIB_COLORS = [C.blue[700], C.purple.main, C.nok.main, C.warn.main];
   const mc = metrics[activeMetric];
 
+  const inputStyle: CSSProperties = { height: 38, borderRadius: 12, border: `1px solid ${C.slate[200]}`, background: "#fff", padding: "0 12px", fontSize: 12, color: C.slate[700], outline: "none" };
+  const iconButtonStyle: CSSProperties = { height: 38, borderRadius: 12, border: "none", display: "inline-flex", alignItems: "center", gap: 7, padding: "0 12px", fontSize: 12, fontWeight: 950, cursor: "pointer" };
+
   return (
-    <>
+    <div style={{ minHeight: "100vh", background: PAGE_BG, color: C.slate[800] }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800;900&family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap');
-
-        .btp * { font-family: 'DM Sans', sans-serif; box-sizing: border-box; }
-        .btp .display { font-family: 'Outfit', sans-serif; }
-
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(10px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
         @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes shimmer {
-          0%   { background-position: 200% 0; }
-          100% { background-position: -200% 0; }
-        }
-
-        .btp-fade { animation: fadeUp .4s cubic-bezier(.22,1,.36,1) both; }
-        .btp-fade:nth-child(1) { animation-delay: .03s; }
-        .btp-fade:nth-child(2) { animation-delay: .06s; }
-        .btp-fade:nth-child(3) { animation-delay: .09s; }
-        .btp-fade:nth-child(4) { animation-delay: .12s; }
-        .btp-fade:nth-child(5) { animation-delay: .15s; }
-        .btp-fade:nth-child(6) { animation-delay: .18s; }
-
-        .btp-skel {
-          background: linear-gradient(90deg, #F1F5F9 25%, #E8EFF6 50%, #F1F5F9 75%);
-          background-size: 200% 100%;
-          animation: shimmer 1.4s infinite;
-        }
-        .btp-spin { animation: spin 0.7s linear infinite; }
-
-        .btp input { font-style: normal !important; }
-        .btp * { font-style: normal !important; }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .btp-skel { background: linear-gradient(90deg, #F1F5F9 25%, #E8EFF6 50%, #F1F5F9 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
+        .btp-row:hover { background: ${C.blue[50]} !important; }
       `}</style>
 
-      <div className="btp" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <div style={{ position: "sticky", top: 0, zIndex: 10, display: "flex", flexDirection: "column", gap: 16, background: "#f6f8fa", paddingBottom: 2 }}>
-        <div
-          className="btp-fade"
-          style={{
-            background: "white",
-            borderRadius: 18,
-            border: `1px solid ${T.border}`,
-            boxShadow: "0 1px 3px rgba(15,23,42,.05)",
-            overflow: "hidden",
-          }}
-        >
-          <div style={{ padding: "20px 24px 0" }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                flexWrap: "wrap",
-                gap: 14,
-                marginBottom: 18,
-              }}
-            >
-              <div>
-                <h1
-                  className="display"
-                  style={{
-                    fontSize: 22,
-                    fontWeight: 900,
-                    color: "#0f172a",
-                    letterSpacing: "-.03em",
-                    margin: 0,
-                    lineHeight: 1.2,
-                  }}
-                >
-                  Suivi Facturation
-                </h1>
-
-                <p
-                  style={{
-                    fontSize: 13,
-                    color: "#64748b",
-                    marginTop: 4,
-                    fontWeight: 400,
-                  }}
-                >
-                  Évolution de la facturation · Montants, NRJ, abonnement, pénalités, cos φ et certification.
-                </p>
-              </div>
-
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    background: selectedSite ? T.blueL : T.slateL,
-                    border: `1px solid ${selectedSite ? "rgba(27,63,160,.18)" : T.border}`,
-                    borderRadius: 10,
-                    padding: "8px 12px",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 26,
-                      height: 26,
-                      borderRadius: 7,
-                      background: selectedSite ? "rgba(27,63,160,.14)" : "#E2E8F0",
-                      display: "grid",
-                      placeItems: "center",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {selectedSite ? <Building2 size={12} color={T.blue} /> : <Globe size={12} color={T.textSub} />}
-                  </div>
-                  <div>
-                    <div
-                      style={{
-                        fontSize: 8,
-                        fontWeight: 700,
-                        color: T.textSub,
-                        textTransform: "uppercase",
-                        letterSpacing: ".1em",
-                      }}
-                    >
-                      Vue active
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 12,
-                        fontWeight: 700,
-                        color: selectedSite ? T.blue : T.textMid,
-                      }}
-                    >
-                      {selectedSite ? selectedSite.site_id : "Tous les sites"}
-                    </div>
-                  </div>
-                  {selectedSite && (
-                    <button
-                      onClick={() => setSelectedSite(null)}
-                      aria-label="Effacer la sélection de site"
-                      style={{
-                        display: "grid",
-                        placeItems: "center",
-                        width: 20,
-                        height: 20,
-                        borderRadius: 6,
-                        border: `1px solid ${T.border}`,
-                        background: "white",
-                        color: T.textMid,
-                        cursor: "pointer",
-                        flexShrink: 0,
-                        marginLeft: 2,
-                      }}
-                    >
-                      <X size={11} />
-                    </button>
-                  )}
-                </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    background: T.slateL,
-                    border: `1px solid ${T.border}`,
-                    borderRadius: 10,
-                    padding: "8px 12px",
-                  }}
-                >
-                  <Calendar size={12} color={T.textSub} />
-                  <input
-                    type="date"
-                    value={dateStart}
-                    onChange={(e) => setDateStart(e.target.value)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      outline: "none",
-                      fontSize: 13,
-                      color: T.text,
-                    }}
-                  />
-                  <span style={{ color: T.textSub, fontSize: 11 }}>→</span>
-                  <input
-                    type="date"
-                    value={dateEnd}
-                    onChange={(e) => setDateEnd(e.target.value)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      outline: "none",
-                      fontSize: 13,
-                      color: T.text,
-                    }}
-                  />
-                </div>
-
-                <button
-                  onClick={() => q.refetch()}
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 9,
-                    border: `1px solid ${T.border}`,
-                    background: "white",
-                    cursor: "pointer",
-                    display: "grid",
-                    placeItems: "center",
-                    color: T.textSub,
-                    transition: "all .15s",
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.background = T.blueL;
-                    (e.currentTarget as HTMLButtonElement).style.color = T.blue;
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.background = "white";
-                    (e.currentTarget as HTMLButtonElement).style.color = T.textSub;
-                  }}
-                >
-                  <RefreshCw size={13} style={{ animation: isLoading ? "spin 1s linear infinite" : "none" }} />
-                </button>
-
-                <button
-                  disabled={!data}
-                  onClick={() => data && setShowExportModal(true)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    padding: "8px 16px",
-                    borderRadius: 9,
-                    background: data ? T.blue : "#CBD5E1",
-                    color: "white",
-                    border: "none",
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: data ? "pointer" : "not-allowed",
-                    boxShadow: data ? `0 4px 12px ${T.blue}33` : "none",
-                    transition: "all .15s",
-                  }}
-                >
-                  <Download size={13} />
-                  Exporter
-                </button>
+      {/* ─── En-tête (fond blanc, compact, fixe) ────────────────────────────── */}
+      <div style={{ position: "sticky", top: 0, zIndex: 10, background: "#fff", borderBottom: `1px solid ${C.slate[200]}`, padding: "16px 24px 14px", boxShadow: "0 1px 3px rgba(15,23,42,.04)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 11, background: C.blue[700], display: "grid", placeItems: "center", flexShrink: 0 }}>
+              <TrendingUp size={17} color="#fff" />
+            </div>
+            <div>
+              <h1 style={{ margin: 0, fontSize: 18, lineHeight: 1.15, letterSpacing: "-.02em", fontWeight: 950, color: C.blue[950] }}>Suivi Facturation</h1>
+              <div style={{ fontSize: 11.5, color: C.slate[500] }}>
+                Montants, NRJ, abonnement, pénalités, cos φ et certification, mois par mois.
               </div>
             </div>
           </div>
 
-          <div style={{ padding: "0 24px 20px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "nowrap", justifyContent: "space-between" }}>
-              <div style={{ flex: "0 0 520px" }}>
-                <SiteSearchBar selectedSite={selectedSite} onSelect={setSelectedSite} onClear={() => setSelectedSite(null)} />
-              </div>
-
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "nowrap", overflowX: "auto", flex: "1 1 auto", minWidth: 0, paddingBottom: 2 }}>
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: T.textSub,
-                    textTransform: "uppercase",
-                    letterSpacing: ".08em",
-                    flexShrink: 0,
-                  }}
-                >
-                  Filtre global
-                </span>
-
-                {(
-                  ["ALL", "PAID", "UNPAID", "OUT_OF_SCOPE", "UNDEFINED", "CERTIFIED", "CONTESTED", "CREATED"] as GlobalScope[]
-                ).map((scope) => (
-                  <span key={scope} style={{ flexShrink: 0 }}>
-                    <MetricBtn
-                      active={globalScope === scope}
-                      color={scopeMeta[scope].color}
-                      label={scopeMeta[scope].label}
-                      onClick={() => setGlobalScope(scope)}
-                    />
-                  </span>
-                ))}
-              </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#fff", border: `1px solid ${C.slate[200]}`, borderRadius: 12, padding: "0 12px", height: 36 }}>
+              <Calendar size={13} color={C.slate[400]} />
+              <input type="date" value={dateStart} onChange={(e) => setDateStart(e.target.value)} style={{ background: "none", border: "none", outline: "none", fontSize: 12.5, color: C.slate[700] }} />
+              <span style={{ color: C.slate[300], fontSize: 11 }}>→</span>
+              <input type="date" value={dateEnd} onChange={(e) => setDateEnd(e.target.value)} style={{ background: "none", border: "none", outline: "none", fontSize: 12.5, color: C.slate[700] }} />
             </div>
+
+            <button type="button" onClick={() => q.refetch()} style={{ ...iconButtonStyle, height: 36, background: C.slate[100], color: C.slate[700], border: `1px solid ${C.slate[200]}` }}>
+              <RefreshCw size={14} style={{ animation: isLoading ? "spin 1s linear infinite" : "none" }} /> Actualiser
+            </button>
+
+            <button
+              type="button"
+              disabled={!data}
+              onClick={() => data && exportToExcel(data, siteCode, globalScope)}
+              style={{ ...iconButtonStyle, height: 36, background: data ? C.blue[700] : C.slate[100], color: data ? "#fff" : C.slate[400], border: "none", cursor: data ? "pointer" : "not-allowed" }}
+            >
+              <Download size={14} /> Exporter
+            </button>
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 220px))", gap: 12, justifyContent: "center" }}>
+        {/* Vue active : recherche site */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 9, background: C.slate[100], display: "grid", placeItems: "center" }}>
+              {selectedSite ? <Building2 size={13} color={C.blue[700]} /> : <Globe size={13} color={C.slate[500]} />}
+            </div>
+            <div>
+              <div style={{ fontSize: 9, fontWeight: 900, color: C.slate[400], textTransform: "uppercase", letterSpacing: ".1em" }}>Vue active</div>
+              <div style={{ fontSize: 12, fontWeight: 900, color: C.blue[950] }}>{selectedSite ? selectedSite.site_id : "Tous les sites"}</div>
+            </div>
+          </div>
+
+          <SiteSearchBar selectedSite={selectedSite} onSelect={setSelectedSite} onClear={() => setSelectedSite(null)} />
+
+          {selectedSite ? (
+            <button onClick={() => setSelectedSite(null)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 12px", borderRadius: 10, background: C.slate[100], border: `1px solid ${C.slate[200]}`, cursor: "pointer", fontSize: 11.5, fontWeight: 900, color: C.slate[600], flexShrink: 0 }}>
+              <Globe size={11} /> Vue globale
+            </button>
+          ) : null}
+        </div>
+
+        {/* Filtre global */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 900, color: C.slate[400], textTransform: "uppercase", letterSpacing: ".08em" }}>Filtre global</span>
+          {(["ALL", "PAID", "UNPAID", "OUT_OF_SCOPE", "UNDEFINED", "CERTIFIED", "CONTESTED", "CREATED"] as GlobalScope[]).map((scope) => (
+            <button
+              key={scope}
+              onClick={() => setGlobalScope(scope)}
+              style={{
+                padding: "6px 12px", borderRadius: 999, fontSize: 11.5, fontWeight: 800, cursor: "pointer",
+                border: `1px solid ${globalScope === scope ? C.blue[700] : C.slate[200]}`,
+                background: globalScope === scope ? C.blue[700] : "#fff",
+                color: globalScope === scope ? "#fff" : C.slate[600],
+              }}
+            >
+              {scopeMeta[scope].label}
+            </button>
+          ))}
+        </div>
+
+        {/* Bande KPI */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px,220px))", gap: 12, marginTop: 16, justifyContent: "center" }}>
           {isLoading ? (
-            Array(5)
-              .fill(0)
-              .map((_, i) => <div key={i} className="btp-fade btp-skel" style={{ height: 118, borderRadius: 16 }} />)
+            Array(5).fill(0).map((_, i) => <div key={i} className="btp-skel" style={{ height: 92, borderRadius: 16 }} />)
           ) : kpis ? (
             <>
-              <div className="btp-fade">
-                <KpiCard
-                  label="Total HT"
-                  value={fmtM(kpis.totalHT)}
-                  sub={`${scopeMeta[globalScope].label} · sur ${kpis.moisCount} mois`}
-                  icon={<DollarSign size={17} />}
-                  accent={T.blue}
-                  accentLight={T.blueL}
-                  trend={kpis.lastHT}
-                  trendPrev={kpis.prevHT}
-                />
-              </div>
-
-              <div className="btp-fade">
-                <KpiCard
-                  label="Total NRJ"
-                  value={fmtM(kpis.totalNrj)}
-                  sub={scopeMeta[globalScope].label}
-                  icon={<Zap size={17} />}
-                  accent={T.orange}
-                  accentLight={T.orangeL}
-                />
-              </div>
-
-              <div className="btp-fade">
-                <KpiCard
-                  label="Total Pénalités"
-                  value={fmtM(kpis.totalPenalite)}
-                  sub={scopeMeta[globalScope].label}
-                  icon={<AlertTriangle size={17} />}
-                  accent={T.red}
-                  accentLight={T.redL}
-                  trend={kpis.lastPenalite}
-                  trendPrev={kpis.prevPenalite}
-                />
-              </div>
-
-              <div className="btp-fade">
-                <KpiCard
-                  label="Total Cos φ"
-                  value={fmtM(kpis.totalCosphi)}
-                  sub={kpis.totalCosphi >= 0 ? "Pénalité facteur puissance" : "Minoration facteur puissance"}
-                  icon={<Activity size={17} />}
-                  accent={kpis.totalCosphi >= 0 ? T.violet : T.green}
-                  accentLight={kpis.totalCosphi >= 0 ? T.violetL : T.greenL}
-                />
-              </div>
-
-              <div className="btp-fade">
-                <KpiCard
-                  label="Total Abonnement"
-                  value={fmtM(kpis.totalAbonnement)}
-                  sub={scopeMeta[globalScope].label}
-                  icon={<BarChart2 size={17} />}
-                  accent={T.cyan}
-                  accentLight={T.cyanL}
-                />
-              </div>
-              {/* ✅ 2 cartes FNP supplémentaires dans la grille de KPIs */}
-              {!fnpQ.isLoading && fnpStats && (
+              <KpiCard label="Total HT" value={fmtM(kpis.totalHT)} sub={`${scopeMeta[globalScope].label} · ${kpis.moisCount} mois`} icon={<DollarSign size={17} />} accent={C.blue[700]} trend={kpis.lastHT} trendPrev={kpis.prevHT} />
+              <KpiCard label="Total NRJ" value={fmtM(kpis.totalNrj)} sub={scopeMeta[globalScope].label} icon={<Zap size={17} />} accent={C.warn.main} />
+              <KpiCard label="Total Pénalités" value={fmtM(kpis.totalPenalite)} sub={scopeMeta[globalScope].label} icon={<AlertTriangle size={17} />} accent={C.nok.main} trend={kpis.lastPenalite} trendPrev={kpis.prevPenalite} />
+              <KpiCard label="Total Cos φ" value={fmtM(kpis.totalCosphi)} sub={kpis.totalCosphi >= 0 ? "Pénalité facteur puissance" : "Minoration facteur puissance"} icon={<Activity size={17} />} accent={C.purple.main} />
+              <KpiCard label="Total Abonnement" value={fmtM(kpis.totalAbonnement)} sub={scopeMeta[globalScope].label} icon={<BarChart2 size={17} />} accent={C.cyan.main} />
+              {!fnpQ.isLoading && fnpStats ? (
                 <>
-                  <div className="btp-fade">
-                    <KpiCard
-                      label="Factures Non Parvenues"
-                      value={String(fnpStats.fnp_count)}
-                      sub={`${fnpStats.sites_count} site(s) · ${fnpStats.months_with_fnp} mois concerné(s)`}
-                      icon={<PackageX size={17} />}
-                      accent={fnpStats.fnp_count > 0 ? T.red : T.green}
-                      accentLight={fnpStats.fnp_count > 0 ? T.redL : T.greenL}
-                    />
-                  </div>
-                  <div className="btp-fade">
-                    <KpiCard
-                      label="HT estimé (FNP)"
-                      value={fmtM(fnpStats.estimated_total_ht)}
-                      sub={`Moy. ${fnpData?.horizon ?? 3} derniers mois · ${fnpStats.no_history_count} sans historique`}
-                      icon={<TrendingDown size={17} />}
-                      accent={T.orange}
-                      accentLight={T.orangeL}
-                    />
-                  </div>
+                  <KpiCard label="Factures Non Parvenues" value={String(fnpStats.fnp_count)} sub={`${fnpStats.sites_count} site(s) · ${fnpStats.months_with_fnp} mois`} icon={<PackageX size={17} />} accent={fnpStats.fnp_count > 0 ? C.nok.main : C.ok.main} />
+                  <KpiCard label="HT estimé (FNP)" value={fmtM(fnpStats.estimated_total_ht)} sub={`Moy. ${fnpData?.horizon ?? 3} derniers mois`} icon={<TrendingDown size={17} />} accent={C.warn.main} />
                 </>
-              )}
+              ) : null}
             </>
           ) : null}
         </div>
-        </div>
-        {/* ══ end sticky wrapper ══ */}
+      </div>
 
-        <div className="btp-fade" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <Card>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: 18,
-                flexWrap: "wrap",
-                gap: 10,
-              }}
-            >
-              <SectionTitle icon={<CheckCircle2 size={13} />}>Statuts de paiement</SectionTitle>
-
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <MetricBtn active={globalScope === "ALL"} color={T.blue} label="Brut" onClick={() => setGlobalScope("ALL")} />
-                <MetricBtn active={globalScope === "PAID"} color={T.green} label="Payées" onClick={() => setGlobalScope("PAID")} />
-                <MetricBtn active={globalScope === "UNPAID"} color={T.red} label="Impayées" onClick={() => setGlobalScope("UNPAID")} />
-                <MetricBtn
-                  active={globalScope === "OUT_OF_SCOPE"}
-                  color={T.orange}
-                  label="Hors scope"
-                  onClick={() => setGlobalScope("OUT_OF_SCOPE")}
-                />
-                <MetricBtn
-                  active={globalScope === "UNDEFINED"}
-                  color={T.slate}
-                  label="Non défini"
-                  onClick={() => setGlobalScope("UNDEFINED")}
-                />
-              </div>
-            </div>
-
-            {isLoading ? (
-              <Skeleton h={240} />
-            ) : data?.payment_statuses ? (
-              <>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0,1fr))", gap: 10, marginBottom: 16 }}>
-                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.blueL, border: `1px solid ${T.border}` }}>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: T.blue }}>{fmt.format(data.payment_statuses.summary.total)}</div>
-                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Brut</div>
-                  </div>
-                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.greenL, border: `1px solid ${T.border}` }}>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: T.green }}>{fmt.format(data.payment_statuses.summary.paid)}</div>
-                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Payées</div>
-                  </div>
-                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.redL, border: `1px solid ${T.border}` }}>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: T.red }}>{fmt.format(data.payment_statuses.summary.unpaid)}</div>
-                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Impayées</div>
-                  </div>
-                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.orangeL, border: `1px solid ${T.border}` }}>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: T.orange }}>{fmt.format(data.payment_statuses.summary.out_of_scope)}</div>
-                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Hors scope</div>
-                  </div>
-                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.slateL, border: `1px solid ${T.border}` }}>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: T.slate }}>{fmt.format(data.payment_statuses.summary.undefined)}</div>
-                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Non défini</div>
-                  </div>
-                </div>
-
-                <div style={{ fontSize: 12, color: T.textMid, fontWeight: 600, marginBottom: 10 }}>
-                  Taux payé : <span style={{ color: T.green, fontWeight: 800 }}>{data.payment_statuses.summary.paid_pct}%</span>
-                </div>
-
-                <ResponsiveContainer width="100%" height={170}>
-                  <BarChart data={paymentData} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} width={38} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar
-                      dataKey={paymentChartKey}
-                      name={paymentChartMeta[paymentChartKey].label}
-                      fill={paymentChartMeta[paymentChartKey].color}
-                      radius={[6, 6, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </>
-            ) : (
-              <div style={{ color: T.textSub, fontSize: 12.5, textAlign: "center", padding: "24px 0" }}>
-                Aucune donnée de paiement disponible
-              </div>
-            )}
-          </Card>
-
-          <Card>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: 18,
-                flexWrap: "wrap",
-                gap: 10,
-              }}
-            >
-              <SectionTitle icon={<CheckCircle2 size={13} />}>Statuts de certification billing</SectionTitle>
-
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <MetricBtn active={globalScope === "ALL"} color={T.blue} label="Brut" onClick={() => setGlobalScope("ALL")} />
-                <MetricBtn
-                  active={globalScope === "CERTIFIED"}
-                  color={T.green}
-                  label="Certifiées"
-                  onClick={() => setGlobalScope("CERTIFIED")}
-                />
-                <MetricBtn
-                  active={globalScope === "CONTESTED"}
-                  color={T.red}
-                  label="Contestées"
-                  onClick={() => setGlobalScope("CONTESTED")}
-                />
-                <MetricBtn
-                  active={globalScope === "CREATED"}
-                  color={T.orange}
-                  label="Brutes à traiter"
-                  onClick={() => setGlobalScope("CREATED")}
-                />
-              </div>
-            </div>
-
-            {isLoading ? (
-              <Skeleton h={240} />
-            ) : data?.invoice_certification ? (
-              <>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 10, marginBottom: 16 }}>
-                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.blueL, border: `1px solid ${T.border}` }}>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: T.blue }}>{fmt.format(data.invoice_certification.summary.total)}</div>
-                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Brut</div>
-                  </div>
-                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.greenL, border: `1px solid ${T.border}` }}>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: T.green }}>{fmt.format(data.invoice_certification.summary.certified)}</div>
-                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Certifiées</div>
-                  </div>
-                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.redL, border: `1px solid ${T.border}` }}>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: T.red }}>{fmt.format(data.invoice_certification.summary.contested)}</div>
-                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Contestées</div>
-                  </div>
-                  <div style={{ padding: "12px 14px", borderRadius: 12, background: T.orangeL, border: `1px solid ${T.border}` }}>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: T.orange }}>{fmt.format(data.invoice_certification.summary.created)}</div>
-                    <div style={{ fontSize: 11, color: T.textMid, fontWeight: 600 }}>Brutes à traiter</div>
-                  </div>
-                </div>
-
-                <div style={{ fontSize: 12, color: T.textMid, fontWeight: 600, marginBottom: 10 }}>
-                  Règle : <span style={{ color: T.green, fontWeight: 800 }}>Payée = Certifiée</span> · Taux de certification :
-                  <span style={{ color: T.blue, fontWeight: 800 }}> {data.invoice_certification.summary.taux_certification}%</span>
-                </div>
-
-                <ResponsiveContainer width="100%" height={170}>
-                  <BarChart data={billingCertData} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} width={38} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar
-                      dataKey={billingCertChartKey}
-                      name={billingCertChartMeta[billingCertChartKey].label}
-                      fill={billingCertChartMeta[billingCertChartKey].color}
-                      radius={[6, 6, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </>
-            ) : (
-              <div style={{ color: T.textSub, fontSize: 12.5, textAlign: "center", padding: "24px 0" }}>
-                Aucune donnée de certification billing disponible
-              </div>
-            )}
-          </Card>
-        </div>
-
-        <div className="btp-fade" style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 12 }}>
-          <Card>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: 18,
-                flexWrap: "wrap",
-                gap: 10,
-              }}
-            >
-              <SectionTitle icon={<BarChart2 size={13} />}>Évolution mensuelle</SectionTitle>
-
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {(Object.keys(metrics) as Array<keyof typeof metrics>).map((k) => (
-                  <MetricBtn
-                    key={k}
-                    active={activeMetric === k}
-                    color={metrics[k].color}
-                    label={metrics[k].label}
-                    onClick={() => setActiveMetric(k)}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {isLoading ? (
-              <Skeleton h={260} />
-            ) : (
-              <ResponsiveContainer width="100%" height={260}>
-                <AreaChart data={chartData} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="mainGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={mc.color} stopOpacity={0.12} />
-                      <stop offset="95%" stopColor={mc.color} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} />
-                  <YAxis
-                    tick={{ fontSize: 11, fill: T.textSub }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v) => fmtM(v)}
-                    width={52}
-                  />
-                  <ReferenceLine y={0} stroke="#CBD5E1" strokeDasharray="4 4" />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Area
-                    type="monotone"
-                    dataKey={mc.key}
-                    name={mc.label}
-                    stroke={mc.color}
-                    strokeWidth={2.5}
-                    fill="url(#mainGrad)"
-                    dot={{ fill: mc.color, r: 3, strokeWidth: 0 }}
-                    activeDot={{ r: 5, strokeWidth: 0 }}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-
-          <Card>
-            <SectionTitle icon={<BarChart2 size={13} />}>Répartition HT</SectionTitle>
-
-            {isLoading ? (
-              <Skeleton h={260} />
-            ) : (
-              <div>
-                <div style={{ marginBottom: 20 }}>
-                  <div
-                    style={{
-                      fontFamily: "'Syne', sans-serif",
-                      fontSize: 22,
-                      fontWeight: 800,
-                      color: T.text,
-                      lineHeight: 1,
-                    }}
-                  >
-                    {fmtM(data?.distribution_ht.total_ht ?? "0")}
-                  </div>
-                  <div style={{ fontSize: 11, color: T.textSub, fontWeight: 500, marginTop: 3 }}>
-                    FCFA total HT · {scopeMeta[globalScope].label}
-                  </div>
-                </div>
-
-                {distribData.map((d, i) => (
-                  <div key={d.name} style={{ marginBottom: 14 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5, alignItems: "baseline" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <div style={{ width: 8, height: 8, borderRadius: 2, background: DISTRIB_COLORS[i] }} />
-                        <span style={{ fontSize: 12, fontWeight: 600, color: T.textMid }}>{d.name}</span>
-                      </div>
-                      <div>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: T.text }}>{fmtM(d.value)}</span>
-                        <span style={{ fontSize: 10, color: T.textSub, marginLeft: 5, fontWeight: 500 }}>
-                          {d.percent.toFixed(1)}%
-                        </span>
-                      </div>
+      {/* ─── Corps ──────────────────────────────────────────────────────────── */}
+      <div style={{ padding: 22, display: "grid", gap: 16 }}>
+        <div style={{ display: "grid", gap: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 16 }}>
+              <Card>
+                <SectionTitle
+                  icon={<BarChart2 size={15} />}
+                  right={
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {(Object.keys(metrics) as Array<keyof typeof metrics>).map((k) => (
+                        <MetricBtn key={k} active={activeMetric === k} color={metrics[k].color} label={metrics[k].label} onClick={() => setActiveMetric(k)} />
+                      ))}
                     </div>
+                  }
+                >
+                  Évolution mensuelle
+                </SectionTitle>
 
-                    <div style={{ height: 5, background: "#F1F5F9", borderRadius: 99, overflow: "hidden" }}>
-                      <div
-                        style={{
-                          height: "100%",
-                          width: `${Math.min(d.percent, 100)}%`,
-                          background: DISTRIB_COLORS[i],
-                          borderRadius: 99,
-                          transition: "width .5s ease",
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        </div>
-
-        <div className="btp-fade" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <Card>
-            <SectionTitle icon={<Activity size={13} />}>Nombre de factures par mois</SectionTitle>
-
-            {isLoading ? (
-              <Skeleton h={150} />
-            ) : (
-              <ResponsiveContainer width="100%" height={150}>
-                <LineChart data={chartData} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} width={38} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Line
-                    type="monotone"
-                    dataKey="invoices"
-                    name="Factures"
-                    stroke={T.cyan}
-                    strokeWidth={2}
-                    dot={{ fill: T.cyan, r: 3, strokeWidth: 0 }}
-                    activeDot={{ r: 5, strokeWidth: 0 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-
-          <Card>
-            <SectionTitle icon={<CheckCircle2 size={13} />}>Vue appliquée</SectionTitle>
-
-            <div
-              style={{
-                minHeight: 150,
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "center",
-                gap: 10,
-              }}
-            >
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  width: "fit-content",
-                  padding: "8px 14px",
-                  borderRadius: 999,
-                  background: scopeMeta[globalScope].color,
-                  color: "white",
-                  fontWeight: 700,
-                  fontSize: 13,
-                }}
-              >
-                {scopeMeta[globalScope].label}
-              </div>
-
-              <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>
-                Toutes les statistiques principales du dashboard sont recalculées sur ce filtre global.
-              </div>
-            </div>
-          </Card>
-        </div>
-
-
-        {/* ─── Section FNP ──────────────────────────────────────────────────────────── */}
-        <div className="btp-fade" style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 12 }}>
-          <Card>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
-              <SectionTitle icon={<PackageX size={13} />}>
-                Factures Non Parvenues — évolution mensuelle
-              </SectionTitle>
-              {fnpStats && fnpStats.fnp_count > 0 && (
-                  <button
-                    onClick={() => setShowFNPModal(true)}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: 7,
-                      padding: "7px 16px", borderRadius: 10,
-                      background: T.red, border: "none", color: "white",
-                      fontSize: 12, fontWeight: 600, cursor: "pointer",
-                      boxShadow: `0 4px 12px ${T.red}33`,
-                    }}
-                  >
-                    <PackageX size={12} />
-                    {fnpStats.fnp_count} FNP · Voir détail
-                  </button>
+                {isLoading ? (
+                  <Skeleton h={260} />
+                ) : (
+                  <ResponsiveContainer width="100%" height={260}>
+                    <AreaChart data={chartData} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="mainGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={mc.color} stopOpacity={0.15} />
+                          <stop offset="95%" stopColor={mc.color} stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke={C.slate[100]} vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.slate[400] }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: C.slate[400] }} axisLine={false} tickLine={false} tickFormatter={(v) => fmtM(v)} width={52} />
+                      <ReferenceLine y={0} stroke={C.slate[300]} strokeDasharray="4 4" />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Area type="monotone" dataKey={mc.key} name={mc.label} stroke={mc.color} strokeWidth={2.5} fill="url(#mainGrad)" dot={{ fill: mc.color, r: 3, strokeWidth: 0 }} activeDot={{ r: 5, strokeWidth: 0 }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
                 )}
-            </div>
+              </Card>
 
-            {fnpQ.isLoading ? (
-              <Skeleton h={200} />
-            ) : fnpChartData.length === 0 ? (
-              <div style={{
-                display: "flex", flexDirection: "column", alignItems: "center",
-                justifyContent: "center", padding: "40px 0", gap: 8,
-              }}>
-                <div style={{ fontSize: 28 }}>✓</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: T.green }}>Aucune FNP sur la période</div>
-                <div style={{ fontSize: 12, color: T.textSub }}>Toutes les factures attendues ont été reçues.</div>
-              </div>
-            ) : (
-              <>
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={fnpChartData} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} />
-                    <YAxis yAxisId="left" tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} width={32} />
-                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: T.textSub }} axisLine={false} tickLine={false} width={52} tickFormatter={(v) => fmtM(v)} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar yAxisId="left" dataKey="fnp_count" name="Nb FNP" fill={T.red} radius={[5, 5, 0, 0]} opacity={0.85} />
-                    <Bar yAxisId="right" dataKey="est_ht" name="HT estimé" fill={T.orange} radius={[5, 5, 0, 0]} opacity={0.6} />
-                  </BarChart>
-                </ResponsiveContainer>
-
-                {/* Tableau détail FNP par mois */}
-                <div style={{
-                  marginTop: 16,
-                  borderRadius: 10,
-                  border: `1px solid ${T.border}`,
-                  overflow: "hidden",
-                }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                    <thead>
-                      <tr style={{ background: T.slateL }}>
-                        {["Mois", "Nb FNP", "Sites", "HT estimé", "TTC estimé"].map((h) => (
-                          <th key={h} style={{
-                            padding: "8px 12px", textAlign: "left",
-                            fontWeight: 700, color: T.textSub, fontSize: 10,
-                            textTransform: "uppercase", letterSpacing: ".08em",
-                            borderBottom: `1px solid ${T.border}`,
-                          }}>
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {fnpChartData.map((r, i) => {
-                        const monthRows = fnpData?.rows.filter((row) => row.period === r.period) ?? [];
-                        const estTtc = monthRows.reduce((s, row) => s + (row.est_montant_ttc ? Number(row.est_montant_ttc) : 0), 0);
-                        return (
-                          <tr key={r.period} style={{ borderBottom: `1px solid ${T.border}`, background: i % 2 === 0 ? "white" : T.slateL }}>
-                            <td style={{ padding: "8px 12px", fontWeight: 700, color: T.red, fontFamily: "monospace" }}>{r.label}</td>
-                            <td style={{ padding: "8px 12px" }}>
-                              <span style={{
-                                display: "inline-block", padding: "2px 8px", borderRadius: 999,
-                                background: T.redL, color: T.red, fontWeight: 700, fontSize: 11,
-                              }}>
-                                {r.fnp_count}
-                              </span>
-                            </td>
-                            <td style={{ padding: "8px 12px", color: T.textMid }}>{r.sites_count}</td>
-                            <td style={{ padding: "8px 12px", fontWeight: 700, color: T.text, fontFamily: "monospace" }}>
-                              {fmtM(r.est_ht)}
-                              <span style={{
-                                display: "inline-block", marginLeft: 5, padding: "1px 4px",
-                                borderRadius: 4, fontSize: 9, fontWeight: 700,
-                                background: T.orangeL, color: T.orange, verticalAlign: "middle",
-                              }}>EST</span>
-                            </td>
-                            <td style={{ padding: "8px 12px", fontWeight: 600, color: T.blue, fontFamily: "monospace" }}>
-                              {fmtM(estTtc)}
-                              <span style={{
-                                display: "inline-block", marginLeft: 5, padding: "1px 4px",
-                                borderRadius: 4, fontSize: 9, fontWeight: 700,
-                                background: T.orangeL, color: T.orange, verticalAlign: "middle",
-                              }}>EST</span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
-          </Card>
-
-          {/* ─── Panneau résumé estimation FNP ─────────────────────────────────────── */}
-          <Card>
-            <SectionTitle icon={<Clock size={13} />}>Résumé estimation FNP</SectionTitle>
-
-            {fnpQ.isLoading ? (
-              <Skeleton h={300} />
-            ) : !fnpStats ? (
-              <div style={{ color: T.textSub, fontSize: 12, textAlign: "center", padding: "24px 0" }}>
-                Aucune donnée
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {/* Taux de couverture mois */}
-                <div style={{
-                  padding: "14px 16px", borderRadius: 12,
-                  background: fnpStats.months_with_fnp === 0 ? T.greenL : T.redL,
-                  border: `1px solid ${fnpStats.months_with_fnp === 0 ? T.green : T.red}33`,
-                }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: T.textSub, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>
-                    Couverture mois
-                  </div>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-                    <span style={{
-                      fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800,
-                      color: fnpStats.months_with_fnp === 0 ? T.green : T.red,
-                    }}>
-                      {fnpStats.months_with_fnp}
-                    </span>
-                    <span style={{ fontSize: 14, color: T.textMid, fontWeight: 600 }}>
-                      / {fnpStats.months_covered} mois avec FNP
-                    </span>
-                  </div>
-                  <div style={{ marginTop: 8, height: 6, background: "rgba(0,0,0,.06)", borderRadius: 99, overflow: "hidden" }}>
-                    <div style={{
-                      height: "100%",
-                      width: `${fnpStats.months_covered > 0 ? (fnpStats.months_with_fnp / fnpStats.months_covered) * 100 : 0}%`,
-                      background: fnpStats.months_with_fnp === 0 ? T.green : T.red,
-                      borderRadius: 99, transition: "width .5s ease",
-                    }} />
-                  </div>
-                </div>
-
-                {/* Montants estimés */}
-                {[
-                  { label: "Total HT estimé", value: fnpStats.estimated_total_ht, color: T.blue, light: T.blueL },
-                  { label: "Total TTC estimé", value: fnpStats.estimated_total_ttc ?? "0", color: T.cyan, light: T.cyanL },
-                ].map((item) => (
-                  <div key={item.label} style={{
-                    padding: "12px 14px", borderRadius: 12,
-                    background: item.light, border: `1px solid ${T.border}`,
-                  }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: T.textSub, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 4 }}>
-                      {item.label}
+              <Card>
+                <SectionTitle icon={<BarChart2 size={15} />}>Répartition HT</SectionTitle>
+                {isLoading ? (
+                  <Skeleton h={260} />
+                ) : (
+                  <div>
+                    <div style={{ marginBottom: 20 }}>
+                      <div style={{ fontSize: 22, fontWeight: 950, color: C.blue[950], lineHeight: 1 }}>{fmtM(data?.distribution_ht.total_ht ?? "0")}</div>
+                      <div style={{ fontSize: 11, color: C.slate[400], fontWeight: 700, marginTop: 3 }}>FCFA total HT · {scopeMeta[globalScope].label}</div>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, color: item.color }}>
-                        {fmtM(item.value)}
-                      </span>
-                      <span style={{
-                        padding: "1px 6px", borderRadius: 4,
-                        background: T.orangeL, color: T.orange,
-                        fontSize: 9, fontWeight: 700,
-                      }}>EST</span>
-                    </div>
-                  </div>
-                ))}
-
-                {/* Méta */}
-                <div style={{ padding: "10px 14px", borderRadius: 12, background: T.slateL, border: `1px solid ${T.border}` }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                    {[
-                      { label: "Sites concernés", value: String(fnpStats.sites_count), color: T.text },
-                      { label: "Horizon estimation", value: `${fnpData?.horizon ?? 3} mois`, color: T.textMid },
-                      { label: "Sans historique", value: String(fnpStats.no_history_count), color: fnpStats.no_history_count > 0 ? T.red : T.green },
-                    ].map((item) => (
-                      <div key={item.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={{ fontSize: 11, color: T.textSub, fontWeight: 500 }}>{item.label}</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: item.color }}>{item.value}</span>
+                    {distribData.map((d, i) => (
+                      <div key={d.name} style={{ marginBottom: 14 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5, alignItems: "baseline" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <div style={{ width: 8, height: 8, borderRadius: 2, background: DISTRIB_COLORS[i] }} />
+                            <span style={{ fontSize: 12, fontWeight: 700, color: C.slate[600] }}>{d.name}</span>
+                          </div>
+                          <div>
+                            <span style={{ fontSize: 12, fontWeight: 900, color: C.slate[900] }}>{fmtM(d.value)}</span>
+                            <span style={{ fontSize: 10, color: C.slate[400], marginLeft: 5, fontWeight: 700 }}>{d.percent.toFixed(1)}%</span>
+                          </div>
+                        </div>
+                        <div style={{ height: 5, background: C.slate[100], borderRadius: 99, overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${Math.min(d.percent, 100)}%`, background: DISTRIB_COLORS[i], borderRadius: 99, transition: "width .5s ease" }} />
+                        </div>
                       </div>
                     ))}
                   </div>
-                </div>
+                )}
+              </Card>
+            </div>
 
-                {/* Note */}
-                <div style={{
-                  padding: "10px 12px", borderRadius: 10,
-                  background: T.orangeL, border: `1px solid ${T.orange}33`,
-                  fontSize: 11, color: T.orange, lineHeight: 1.5,
-                }}>
-                  <strong>Estimation</strong> basée sur la moyenne glissante des {fnpData?.horizon ?? 3} derniers mois de factures reçues par contrat.
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <Card>
+                <SectionTitle icon={<Activity size={15} />}>Nombre de factures par mois</SectionTitle>
+                {isLoading ? (
+                  <Skeleton h={150} />
+                ) : (
+                  <ResponsiveContainer width="100%" height={150}>
+                    <LineChart data={chartData} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={C.slate[100]} vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.slate[400] }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: C.slate[400] }} axisLine={false} tickLine={false} width={38} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Line type="monotone" dataKey="invoices" name="Factures" stroke={C.cyan.main} strokeWidth={2} dot={{ fill: C.cyan.main, r: 3, strokeWidth: 0 }} activeDot={{ r: 5, strokeWidth: 0 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </Card>
+
+              <Card>
+                <SectionTitle icon={<CheckCircle2 size={15} />}>Vue appliquée</SectionTitle>
+                <div style={{ minHeight: 150, display: "flex", flexDirection: "column", justifyContent: "center", gap: 10 }}>
+                  <div>
+                    <Badge tone={globalScope === "ALL" ? "blue" : globalScope === "PAID" || globalScope === "CERTIFIED" ? "ok" : globalScope === "UNPAID" || globalScope === "CONTESTED" ? "nok" : "warn"}>
+                      {scopeMeta[globalScope].label}
+                    </Badge>
+                  </div>
+                  <div style={{ fontSize: 13, color: C.slate[600], lineHeight: 1.6 }}>
+                    Toutes les statistiques principales du dashboard sont recalculées sur ce filtre global.
+                  </div>
                 </div>
-              </div>
-            )}
-          </Card>
+              </Card>
+            </div>
+          </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <Card>
+              <SectionTitle
+                icon={<CheckCircle2 size={15} />}
+                right={
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <MetricBtn active={globalScope === "ALL"} color={C.blue[700]} label="Brut" onClick={() => setGlobalScope("ALL")} />
+                    <MetricBtn active={globalScope === "PAID"} color={C.blue[700]} label="Payées" onClick={() => setGlobalScope("PAID")} />
+                    <MetricBtn active={globalScope === "UNPAID"} color={C.blue[700]} label="Impayées" onClick={() => setGlobalScope("UNPAID")} />
+                    <MetricBtn active={globalScope === "OUT_OF_SCOPE"} color={C.blue[700]} label="Hors scope" onClick={() => setGlobalScope("OUT_OF_SCOPE")} />
+                    <MetricBtn active={globalScope === "UNDEFINED"} color={C.blue[700]} label="Non défini" onClick={() => setGlobalScope("UNDEFINED")} />
+                  </div>
+                }
+              >
+                Statuts de paiement
+              </SectionTitle>
+
+              {isLoading ? (
+                <Skeleton h={240} />
+              ) : data?.payment_statuses ? (
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0,1fr))", gap: 10, marginBottom: 16 }}>
+                    {[
+                      { label: "Brut", value: data.payment_statuses.summary.total, color: C.blue[700], bg: C.blue[50] },
+                      { label: "Payées", value: data.payment_statuses.summary.paid, color: C.ok.main, bg: C.ok.light },
+                      { label: "Impayées", value: data.payment_statuses.summary.unpaid, color: C.nok.main, bg: C.nok.light },
+                      { label: "Hors scope", value: data.payment_statuses.summary.out_of_scope, color: C.warn.main, bg: C.warn.light },
+                      { label: "Non défini", value: data.payment_statuses.summary.undefined, color: C.slate[500], bg: C.slate[100] },
+                    ].map((tile) => (
+                      <div key={tile.label} style={{ padding: "12px 14px", borderRadius: 14, background: tile.bg, border: `1px solid ${C.slate[200]}` }}>
+                        <div style={{ fontSize: 18, fontWeight: 950, color: tile.color }}>{fmt.format(tile.value)}</div>
+                        <div style={{ fontSize: 11, color: C.slate[600], fontWeight: 700 }}>{tile.label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ fontSize: 12, color: C.slate[600], fontWeight: 700, marginBottom: 10 }}>
+                    Taux payé : <span style={{ color: C.ok.main, fontWeight: 900 }}>{data.payment_statuses.summary.paid_pct}%</span>
+                  </div>
+
+                  <ResponsiveContainer width="100%" height={170}>
+                    <BarChart data={paymentData} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={C.slate[100]} vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.slate[400] }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: C.slate[400] }} axisLine={false} tickLine={false} width={38} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Bar dataKey={paymentChartKey} name={paymentChartMeta[paymentChartKey].label} fill={paymentChartMeta[paymentChartKey].color} radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </>
+              ) : (
+                <div style={{ color: C.slate[400], fontSize: 12.5, textAlign: "center", padding: "24px 0" }}>Aucune donnée de paiement disponible</div>
+              )}
+            </Card>
+
+            <Card>
+              <SectionTitle
+                icon={<CheckCircle2 size={15} />}
+                right={
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <MetricBtn active={globalScope === "ALL"} color={C.blue[700]} label="Brut" onClick={() => setGlobalScope("ALL")} />
+                    <MetricBtn active={globalScope === "CERTIFIED"} color={C.blue[700]} label="Certifiées" onClick={() => setGlobalScope("CERTIFIED")} />
+                    <MetricBtn active={globalScope === "CONTESTED"} color={C.blue[700]} label="Contestées" onClick={() => setGlobalScope("CONTESTED")} />
+                    <MetricBtn active={globalScope === "CREATED"} color={C.blue[700]} label="Brutes à traiter" onClick={() => setGlobalScope("CREATED")} />
+                  </div>
+                }
+              >
+                Statuts de certification billing
+              </SectionTitle>
+
+              {isLoading ? (
+                <Skeleton h={240} />
+              ) : data?.invoice_certification ? (
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 10, marginBottom: 16 }}>
+                    {[
+                      { label: "Brut", value: data.invoice_certification.summary.total, color: C.blue[700], bg: C.blue[50] },
+                      { label: "Certifiées", value: data.invoice_certification.summary.certified, color: C.ok.main, bg: C.ok.light },
+                      { label: "Contestées", value: data.invoice_certification.summary.contested, color: C.nok.main, bg: C.nok.light },
+                      { label: "Brutes à traiter", value: data.invoice_certification.summary.created, color: C.warn.main, bg: C.warn.light },
+                    ].map((tile) => (
+                      <div key={tile.label} style={{ padding: "12px 14px", borderRadius: 14, background: tile.bg, border: `1px solid ${C.slate[200]}` }}>
+                        <div style={{ fontSize: 18, fontWeight: 950, color: tile.color }}>{fmt.format(tile.value)}</div>
+                        <div style={{ fontSize: 11, color: C.slate[600], fontWeight: 700 }}>{tile.label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ fontSize: 12, color: C.slate[600], fontWeight: 700, marginBottom: 10 }}>
+                    Règle : <span style={{ color: C.ok.main, fontWeight: 900 }}>Payée = Certifiée</span> · Taux de certification :
+                    <span style={{ color: C.blue[700], fontWeight: 900 }}> {data.invoice_certification.summary.taux_certification}%</span>
+                  </div>
+
+                  <ResponsiveContainer width="100%" height={170}>
+                    <BarChart data={billingCertData} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={C.slate[100]} vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.slate[400] }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: C.slate[400] }} axisLine={false} tickLine={false} width={38} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Bar dataKey={billingCertChartKey} name={billingCertChartMeta[billingCertChartKey].label} fill={billingCertChartMeta[billingCertChartKey].color} radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </>
+              ) : (
+                <div style={{ color: C.slate[400], fontSize: 12.5, textAlign: "center", padding: "24px 0" }}>Aucune donnée de certification billing disponible</div>
+              )}
+            </Card>
         </div>
 
-        {!selectedSite && (
-          <div className="btp-fade" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 16 }}>
+            <Card>
+              <SectionTitle
+                icon={<PackageX size={15} />}
+                right={
+                  fnpStats && fnpStats.fnp_count > 0 ? (
+                    <button
+                      onClick={() => setShowFNPModal(true)}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 16px", borderRadius: 12, background: `linear-gradient(135deg, ${C.nok.main}, #E8401C)`, border: "none", color: "#fff", fontSize: 12, fontWeight: 900, cursor: "pointer", boxShadow: `0 6px 16px ${C.nok.main}40` }}
+                    >
+                      <PackageX size={13} /> {fnpStats.fnp_count} FNP · Voir détail
+                    </button>
+                  ) : undefined
+                }
+              >
+                Factures Non Parvenues — évolution mensuelle
+              </SectionTitle>
+
+              {fnpQ.isLoading ? (
+                <Skeleton h={200} />
+              ) : fnpChartData.length === 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 0", gap: 8 }}>
+                  <CheckCircle2 size={28} color={C.ok.main} />
+                  <div style={{ fontSize: 13, fontWeight: 900, color: C.ok.main }}>Aucune FNP sur la période</div>
+                  <div style={{ fontSize: 12, color: C.slate[400] }}>Toutes les factures attendues ont été reçues.</div>
+                </div>
+              ) : (
+                <>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={fnpChartData} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={C.slate[100]} vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.slate[400] }} axisLine={false} tickLine={false} />
+                      <YAxis yAxisId="left" tick={{ fontSize: 11, fill: C.slate[400] }} axisLine={false} tickLine={false} width={32} />
+                      <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: C.slate[400] }} axisLine={false} tickLine={false} width={52} tickFormatter={(v) => fmtM(v)} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Bar yAxisId="left" dataKey="fnp_count" name="Nb FNP" fill={C.nok.main} radius={[5, 5, 0, 0]} opacity={0.85} />
+                      <Bar yAxisId="right" dataKey="est_ht" name="HT estimé" fill={C.warn.main} radius={[5, 5, 0, 0]} opacity={0.6} />
+                    </BarChart>
+                  </ResponsiveContainer>
+
+                  <div style={{ marginTop: 16, borderRadius: 14, border: `1px solid ${C.slate[200]}`, overflow: "hidden" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                      <thead>
+                        <tr>
+                          {["Mois", "Nb FNP", "Sites", "HT estimé", "TTC estimé"].map((h) => (
+                            <th key={h} style={{ padding: "8px 12px", textAlign: "left", fontWeight: 900, color: C.slate[500], fontSize: 10, textTransform: "uppercase", letterSpacing: ".08em", borderBottom: `1px solid ${C.slate[200]}`, background: C.slate[50] }}>
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {fnpChartData.map((r, i) => {
+                          const monthRows = fnpData?.rows.filter((row) => row.period === r.period) ?? [];
+                          const estTtc = monthRows.reduce((s, row) => s + (row.est_montant_ttc ? Number(row.est_montant_ttc) : 0), 0);
+                          return (
+                            <tr key={r.period} className="btp-row" style={{ borderBottom: `1px solid ${C.slate[100]}`, background: i % 2 === 0 ? "#fff" : C.slate[50] }}>
+                              <td style={{ padding: "8px 12px", fontWeight: 900, color: C.nok.main, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{r.label}</td>
+                              <td style={{ padding: "8px 12px" }}><Badge tone="nok">{r.fnp_count}</Badge></td>
+                              <td style={{ padding: "8px 12px", color: C.slate[600] }}>{r.sites_count}</td>
+                              <td style={{ padding: "8px 12px", fontWeight: 900, color: C.slate[900], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
+                                {fmtM(r.est_ht)} <Badge tone="warn">EST</Badge>
+                              </td>
+                              <td style={{ padding: "8px 12px", fontWeight: 800, color: C.blue[700], fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
+                                {fmtM(estTtc)} <Badge tone="warn">EST</Badge>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </Card>
+
+            <Card>
+              <SectionTitle icon={<Clock size={15} />}>Résumé estimation FNP</SectionTitle>
+
+              {fnpQ.isLoading ? (
+                <Skeleton h={300} />
+              ) : !fnpStats ? (
+                <div style={{ color: C.slate[400], fontSize: 12, textAlign: "center", padding: "24px 0" }}>Aucune donnée</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div style={{ padding: "14px 16px", borderRadius: 14, background: fnpStats.months_with_fnp === 0 ? C.ok.light : C.nok.light, border: `1px solid ${fnpStats.months_with_fnp === 0 ? C.ok.mid : C.nok.mid}` }}>
+                    <div style={{ fontSize: 10, fontWeight: 900, color: C.slate[500], textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>Couverture mois</div>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                      <span style={{ fontSize: 28, fontWeight: 950, color: fnpStats.months_with_fnp === 0 ? C.ok.main : C.nok.main }}>{fnpStats.months_with_fnp}</span>
+                      <span style={{ fontSize: 14, color: C.slate[600], fontWeight: 700 }}>/ {fnpStats.months_covered} mois avec FNP</span>
+                    </div>
+                    <div style={{ marginTop: 8, height: 6, background: "rgba(0,0,0,.06)", borderRadius: 99, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${fnpStats.months_covered > 0 ? (fnpStats.months_with_fnp / fnpStats.months_covered) * 100 : 0}%`, background: fnpStats.months_with_fnp === 0 ? C.ok.main : C.nok.main, borderRadius: 99, transition: "width .5s ease" }} />
+                    </div>
+                  </div>
+
+                  {[
+                    { label: "Total HT estimé", value: fnpStats.estimated_total_ht, color: C.blue[700], bg: C.blue[50] },
+                    { label: "Total TTC estimé", value: fnpStats.estimated_total_ttc ?? "0", color: C.cyan.main, bg: C.cyan.light },
+                  ].map((item) => (
+                    <div key={item.label} style={{ padding: "12px 14px", borderRadius: 14, background: item.bg, border: `1px solid ${C.slate[200]}` }}>
+                      <div style={{ fontSize: 10, fontWeight: 900, color: C.slate[500], textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 4 }}>{item.label}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 20, fontWeight: 950, color: item.color }}>{fmtM(item.value)}</span>
+                        <Badge tone="warn">EST</Badge>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div style={{ padding: "10px 14px", borderRadius: 14, background: C.slate[50], border: `1px solid ${C.slate[200]}` }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                      {[
+                        { label: "Sites concernés", value: String(fnpStats.sites_count), color: C.slate[900] },
+                        { label: "Horizon estimation", value: `${fnpData?.horizon ?? 3} mois`, color: C.slate[600] },
+                        { label: "Sans historique", value: String(fnpStats.no_history_count), color: fnpStats.no_history_count > 0 ? C.nok.main : C.ok.main },
+                      ].map((item) => (
+                        <div key={item.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: 11, color: C.slate[400], fontWeight: 700 }}>{item.label}</span>
+                          <span style={{ fontSize: 12, fontWeight: 900, color: item.color }}>{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ padding: "10px 12px", borderRadius: 12, background: C.warn.light, border: `1px solid ${C.warn.mid}`, fontSize: 11, color: C.warn.dark, lineHeight: 1.5 }}>
+                    <strong>Estimation</strong> basée sur la moyenne glissante des {fnpData?.horizon ?? 3} derniers mois de factures reçues par contrat.
+                  </div>
+                </div>
+              )}
+            </Card>
+        </div>
+
+        {selectedSite ? (
+          <Card>
+            <div style={{ textAlign: "center", padding: "24px 0", color: C.slate[500] }}>
+              <Building2 size={26} color={C.slate[300]} style={{ marginBottom: 10 }} />
+              <div style={{ fontWeight: 800 }}>Vue site unique active</div>
+              <div style={{ fontSize: 12.5, marginTop: 4 }}>Repassez en "Vue globale" pour voir les classements top sites.</div>
+            </div>
+          </Card>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
             <Card>
               <SectionTitle>Top sites — Montant HT</SectionTitle>
-              {isLoading ? (
-                <Skeleton h={180} />
-              ) : (
-                <TopTable rows={data?.top.conso_vs_montant ?? []} valueKey="montant_ht" color={T.blue} />
-              )}
+              {isLoading ? <Skeleton h={180} /> : <TopTable rows={data?.top.conso_vs_montant ?? []} valueKey="montant_ht" color={C.blue[700]} />}
             </Card>
-
             <Card>
               <SectionTitle>Top sites — Pénalité</SectionTitle>
-              {isLoading ? (
-                <Skeleton h={180} />
-              ) : (
-                <TopTable rows={data?.top.pen_prime ?? []} valueKey="penalite_prime" color={T.red} />
-              )}
+              {isLoading ? <Skeleton h={180} /> : <TopTable rows={data?.top.pen_prime ?? []} valueKey="penalite_prime" color={C.nok.main} />}
             </Card>
-
             <Card>
-              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 18 }}>
-                <SectionTitle>Top sites — Cos φ</SectionTitle>
-                <span
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 600,
-                    color: T.violet,
-                    background: T.violetL,
-                    borderRadius: 6,
-                    padding: "2px 8px",
-                    flexShrink: 0,
-                  }}
-                >
-                  Positifs uniquement
-                </span>
-              </div>
-
-              {isLoading ? (
-                <Skeleton h={180} />
-              ) : (
-                <TopTable rows={data?.top.cosphi ?? []} valueKey="montant_cosphi" color={T.violet} filterPositive={true} />
-              )}
+              <SectionTitle right={<Badge tone="purple">Positifs uniquement</Badge>}>Top sites — Cos φ</SectionTitle>
+              {isLoading ? <Skeleton h={180} /> : <TopTable rows={data?.top.cosphi ?? []} valueKey="montant_cosphi" color={C.purple.main} filterPositive={true} />}
             </Card>
           </div>
         )}
-
-        {showFNPModal && fnpData && (
-          <FNPModal
-            data={fnpData}
-            horizon={fnpData.horizon}
-            dateStart={dateStart}
-            dateEnd={dateEnd}
-            onClose={() => setShowFNPModal(false)}
-          />
-        )}
-
-        {showExportModal && data && (
-          <ExportModal
-            data={data}
-            siteCode={siteCode}
-            scope={globalScope}
-            scopeLabel={scopeMeta[globalScope].label}
-            onClose={() => setShowExportModal(false)}
-          />
-        )}
       </div>
-    </>
+
+      {showFNPModal && fnpData ? (
+        <FNPModal data={fnpData} horizon={fnpData.horizon} dateStart={dateStart} dateEnd={dateEnd} onClose={() => setShowFNPModal(false)} />
+      ) : null}
+    </div>
   );
 }
