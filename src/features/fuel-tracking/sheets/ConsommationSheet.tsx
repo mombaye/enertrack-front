@@ -186,6 +186,7 @@ function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse 
 
   const currentLabel = monthLabel(data?.month_year);
   const couverture = kpis.total_sites > 0 ? Math.round((kpis.sites_avec_conso / kpis.total_sites) * 100) : 0;
+  const couvertureBrute = kpis.total_sites > 0 ? Math.round(((kpis.sites_avec_donnees_brutes ?? 0) / kpis.total_sites) * 100) : 0;
 
   return (
     <div
@@ -201,7 +202,8 @@ function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse 
       }}
     >
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
-        <KpiCard label="Sites avec données" value={`${fmt.format(kpis.sites_avec_conso)} / ${fmt.format(kpis.total_sites)}`} sub={`${currentLabel} · ${couverture}% de couverture`} tone="blue" icon={<Users size={14} />} />
+        <KpiCard label="Sites avec conso mesurée" value={`${fmt.format(kpis.sites_avec_conso)} / ${fmt.format(kpis.total_sites)}`} sub={`${currentLabel} · ${couverture}% · chute détectée`} tone="blue" icon={<Users size={14} />} />
+        <KpiCard label="Sites avec données brutes" value={`${fmt.format(kpis.sites_avec_donnees_brutes ?? 0)} / ${fmt.format(kpis.total_sites)}`} sub={`${couvertureBrute}% · tout relevé (≈ Power BI)`} tone="cyan" icon={<Users size={14} />} />
         <KpiCard label="Sites avec GE" value={fmt.format(kpis.sites_avec_ge)} sub={`dont ${fmt.format(kpis.sites_ge_enoc_only)} vus uniquement par ENOC`} tone="gold" icon={<Fuel size={14} />} />
         <KpiCard label="Sites sans GE" value={fmt.format(kpis.sites_sans_ge)} tone="slate" icon={<Fuel size={14} />} />
         <KpiCard label="Conso mesurée (Snowflake)" value={formatL(kpis.total_conso_snowflake_l)} tone="cyan" icon={<Droplets size={14} />} />
