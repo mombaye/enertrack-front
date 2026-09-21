@@ -9,7 +9,7 @@
 import { useState, type CSSProperties } from "react";
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Droplets, Fuel, Gauge, PieChart as PieChartIcon, Search, Users } from "lucide-react";
-import type { FuelConfigurationFilter, FuelConsommationResponse, FuelGeDetectionFilter, FuelRuntimeSourceFilter } from "@/services/fuelTracking";
+import type { FuelConfigurationFilter, FuelConsommationResponse, FuelGeDetectionFilter, FuelRuntimeAvailabilityFilter, FuelRuntimeSourceFilter } from "@/services/fuelTracking";
 import { Card, EmptyState, KpiCard, Modal, Pager, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { fmt, monthLabel } from "../helpers";
@@ -457,6 +457,13 @@ const CONFIGURATION_OPTIONS: Array<{ key: FuelConfigurationFilter; label: string
   { key: "none", label: "Sans configuration" },
 ];
 
+const RUNTIME_AVAILABILITY_OPTIONS: Array<{ key: FuelRuntimeAvailabilityFilter; label: string }> = [
+  { key: "avec_ge_avec_runtime", label: "Avec GE + Running Time" },
+  { key: "avec_ge_sans_runtime", label: "Avec GE, sans Running Time" },
+  { key: "avec_runtime_sans_cph", label: "Running Time connu, CPH absent" },
+  { key: "sans_ge", label: "Sans GE" },
+];
+
 export function ConsommationSheet({
   data,
   loading,
@@ -470,6 +477,8 @@ export function ConsommationSheet({
   onRuntimeSourceFilterChange,
   configurationFilter,
   onConfigurationFilterChange,
+  runtimeAvailabilityFilter,
+  onRuntimeAvailabilityFilterChange,
   page,
   onPageChange,
   stickyTop = 0,
@@ -486,6 +495,8 @@ export function ConsommationSheet({
   onRuntimeSourceFilterChange: (v: FuelRuntimeSourceFilter | null) => void;
   configurationFilter: FuelConfigurationFilter | null;
   onConfigurationFilterChange: (v: FuelConfigurationFilter | null) => void;
+  runtimeAvailabilityFilter: FuelRuntimeAvailabilityFilter | null;
+  onRuntimeAvailabilityFilterChange: (v: FuelRuntimeAvailabilityFilter | null) => void;
   page: number;
   onPageChange: (p: number) => void;
   stickyTop?: number;
@@ -576,6 +587,22 @@ export function ConsommationSheet({
               {RUNTIME_SOURCE_OPTIONS.map((o) => (
                 <option key={o.key} value={o.key}>
                   {o.label}{data?.kpis ? ` (${fmt.format(data.kpis.runtime_source_counts[o.key])})` : ""}
+                </option>
+              ))}
+            </select>
+            <select
+              value={runtimeAvailabilityFilter ?? ""}
+              onChange={(e) => onRuntimeAvailabilityFilterChange((e.target.value || null) as FuelRuntimeAvailabilityFilter | null)}
+              title="Filtrer par disponibilité Running Time / CPH"
+              style={{
+                border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px",
+                fontSize: 12.5, color: FT.text, fontWeight: 700, cursor: "pointer",
+              }}
+            >
+              <option value="">Disponibilité données : toutes</option>
+              {RUNTIME_AVAILABILITY_OPTIONS.map((o) => (
+                <option key={o.key} value={o.key}>
+                  {o.label}{data?.kpis ? ` (${fmt.format(data.kpis.runtime_availability_counts[o.key])})` : ""}
                 </option>
               ))}
             </select>
