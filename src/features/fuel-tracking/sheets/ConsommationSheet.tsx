@@ -8,8 +8,8 @@
 
 import { useState, type CSSProperties } from "react";
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Droplets, Fuel, Gauge, PieChart as PieChartIcon, Search, Users } from "lucide-react";
-import type { FuelConfigurationFilter, FuelConsommationResponse, FuelGeDetectionFilter, FuelRuntimeAvailabilityFilter, FuelRuntimeSourceFilter } from "@/services/fuelTracking";
+import { Download, Droplets, Fuel, Gauge, PieChart as PieChartIcon, Search, Users } from "lucide-react";
+import { exportFuelConsommationAnomalies, exportFuelConsommationControle, type FuelConfigurationFilter, type FuelConsommationResponse, type FuelGeDetectionFilter, type FuelRapprochementStatutFilter, type FuelRuntimeAvailabilityFilter, type FuelRuntimeSourceFilter } from "@/services/fuelTracking";
 import { Card, EmptyState, KpiCard, Modal, Pager, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { fmt, monthLabel } from "../helpers";
@@ -139,6 +139,57 @@ function SourceBadge({ source }: { source: string | null }) {
 }
 
 
+const RAPPROCHEMENT_STATUT_COLORS: Record<string, string> = {
+  OK: FT.green,
+  A_JUSTIFIER: FT.gold,
+  A_INVESTIGUER: FT.red,
+  DONNEES_INCOMPLETES: FT.textSub,
+  CPH_NON_CALCULE: FT.textSub,
+};
+
+const RAPPROCHEMENT_STATUT_LABELS: Record<string, string> = {
+  OK: "OK",
+  A_JUSTIFIER: "À justifier",
+  A_INVESTIGUER: "À investiguer",
+  DONNEES_INCOMPLETES: "Données incomplètes",
+  CPH_NON_CALCULE: "CPH non calculé",
+};
+
+function RapprochementStatutBadge({ statut }: { statut: string | null }) {
+  if (!statut) return <EmptyCell reason="Rapprochement non encore calculé." />;
+  const color = RAPPROCHEMENT_STATUT_COLORS[statut] ?? FT.textSub;
+  return (
+    <span style={{
+      display: "inline-block", padding: "2px 7px", borderRadius: 999,
+      fontSize: 11, fontWeight: 800, color,
+      background: color + "22", border: `1px solid ${color}44`,
+    }}>
+      {RAPPROCHEMENT_STATUT_LABELS[statut] ?? statut}
+    </span>
+  );
+}
+
+function LivraisonsSourceBadge({ source }: { source: string | null }) {
+  if (!source) return <EmptyCell />;
+  if (source === "LIVRAISONS_ENOC_A_CONTROLER") {
+    return (
+      <span style={{ fontSize: 11, fontWeight: 800, color: FT.orange }} title="ENOC = 0 L ce mois — données à contrôler avant de conclure.">
+        ⚠ À contrôler
+      </span>
+    );
+  }
+  return <span style={{ fontSize: 11, fontWeight: 700, color: FT.green }}>ENOC réel</span>;
+}
+
+const RAPPROCHEMENT_STATUT_OPTIONS: Array<{ key: FuelRapprochementStatutFilter; label: string }> = [
+  { key: "ok", label: "OK" },
+  { key: "a_justifier", label: "À justifier" },
+  { key: "a_investiguer", label: "À investiguer" },
+  { key: "donnees_incompletes", label: "Données incomplètes" },
+  { key: "cph_non_calcule", label: "CPH non calculé" },
+  { key: "livraisons_a_controler", label: "Livraisons à contrôler" },
+];
+
 type GeFilter = "all" | "true" | "false" | "incomplete";
 
 function GeFilterButtons({
@@ -186,7 +237,6 @@ function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse 
 
   const currentLabel = monthLabel(data?.month_year);
   const couverture = kpis.total_sites > 0 ? Math.round((kpis.sites_avec_conso / kpis.total_sites) * 100) : 0;
-  const couvertureBrute = kpis.total_sites > 0 ? Math.round(((kpis.sites_avec_donnees_brutes ?? 0) / kpis.total_sites) * 100) : 0;
 
   return (
     <div
@@ -202,8 +252,7 @@ function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse 
       }}
     >
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
-        <KpiCard label="Sites avec conso mesurée" value={`${fmt.format(kpis.sites_avec_conso)} / ${fmt.format(kpis.total_sites)}`} sub={`${currentLabel} · ${couverture}% · chute détectée`} tone="blue" icon={<Users size={14} />} />
-        <KpiCard label="Sites avec données brutes" value={`${fmt.format(kpis.sites_avec_donnees_brutes ?? 0)} / ${fmt.format(kpis.total_sites)}`} sub={`${couvertureBrute}% · tout relevé (≈ Power BI)`} tone="cyan" icon={<Users size={14} />} />
+        <KpiCard label="Sites avec données" value={`${fmt.format(kpis.sites_avec_conso)} / ${fmt.format(kpis.total_sites)}`} sub={`${currentLabel} · ${couverture}% de couverture`} tone="blue" icon={<Users size={14} />} />
         <KpiCard label="Sites avec GE" value={fmt.format(kpis.sites_avec_ge)} sub={`dont ${fmt.format(kpis.sites_ge_enoc_only)} vus uniquement par ENOC`} tone="gold" icon={<Fuel size={14} />} />
         <KpiCard label="Sites sans GE" value={fmt.format(kpis.sites_sans_ge)} tone="slate" icon={<Fuel size={14} />} />
         <KpiCard label="Conso mesurée (Snowflake)" value={formatL(kpis.total_conso_snowflake_l)} tone="cyan" icon={<Droplets size={14} />} />
@@ -216,6 +265,14 @@ function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse 
           tone="blue"
           icon={<Gauge size={14} />}
         />
+        {kpis.rapprochement_counts && (
+          <>
+            <KpiCard label="Rapprochement OK" value={fmt.format(kpis.rapprochement_counts.ok)} tone="green" icon={<Fuel size={14} />} />
+            <KpiCard label="Rapprochement À justifier" value={fmt.format(kpis.rapprochement_counts.a_justifier)} tone="gold" icon={<Fuel size={14} />} />
+            <KpiCard label="Rapprochement À investiguer" value={fmt.format(kpis.rapprochement_counts.a_investiguer)} tone="red" icon={<Fuel size={14} />} />
+            <KpiCard label="Livraisons à contrôler" value={fmt.format(kpis.rapprochement_counts.livraisons_a_controler)} tone="orange" icon={<Fuel size={14} />} sub="ENOC = 0 L" />
+          </>
+        )}
       </div>
     </div>
   );
@@ -469,6 +526,7 @@ const RUNTIME_AVAILABILITY_OPTIONS: Array<{ key: FuelRuntimeAvailabilityFilter; 
 export function ConsommationSheet({
   data,
   loading,
+  month,
   search,
   onSearchChange,
   geFilter,
@@ -477,16 +535,19 @@ export function ConsommationSheet({
   onDetectionFilterChange,
   runtimeSourceFilter,
   onRuntimeSourceFilterChange,
-  configurationFilter,
-  onConfigurationFilterChange,
   runtimeAvailabilityFilter,
   onRuntimeAvailabilityFilterChange,
+  configurationFilter,
+  onConfigurationFilterChange,
+  rapprochementStatutFilter,
+  onRapprochementStatutFilterChange,
   page,
   onPageChange,
   stickyTop = 0,
 }: {
   data: FuelConsommationResponse | undefined;
   loading: boolean;
+  month: string | null | undefined;
   search: string;
   onSearchChange: (v: string) => void;
   geFilter: GeFilter;
@@ -495,16 +556,51 @@ export function ConsommationSheet({
   onDetectionFilterChange: (v: FuelGeDetectionFilter | null) => void;
   runtimeSourceFilter: FuelRuntimeSourceFilter | null;
   onRuntimeSourceFilterChange: (v: FuelRuntimeSourceFilter | null) => void;
-  configurationFilter: FuelConfigurationFilter | null;
-  onConfigurationFilterChange: (v: FuelConfigurationFilter | null) => void;
   runtimeAvailabilityFilter: FuelRuntimeAvailabilityFilter | null;
   onRuntimeAvailabilityFilterChange: (v: FuelRuntimeAvailabilityFilter | null) => void;
+  configurationFilter: FuelConfigurationFilter | null;
+  onConfigurationFilterChange: (v: FuelConfigurationFilter | null) => void;
+  rapprochementStatutFilter: FuelRapprochementStatutFilter | null;
+  onRapprochementStatutFilterChange: (v: FuelRapprochementStatutFilter | null) => void;
   page: number;
   onPageChange: (p: number) => void;
   stickyTop?: number;
 }) {
   const [activeComment, setActiveComment] = useState<{ siteId: string; siteName: string | null; text: string } | null>(null);
   const [showDetectionModal, setShowDetectionModal] = useState(false);
+  const [exportingControle, setExportingControle] = useState(false);
+  const [exportingAnomalies, setExportingAnomalies] = useState(false);
+
+  function downloadBlob(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleExportControle() {
+    setExportingControle(true);
+    try {
+      const blob = await exportFuelConsommationControle({ month: month ?? undefined, rapprochement_statut: rapprochementStatutFilter ?? undefined });
+      downloadBlob(blob, `fuel_controle_${month ?? "export"}.csv`);
+    } finally {
+      setExportingControle(false);
+    }
+  }
+
+  async function handleExportAnomalies() {
+    setExportingAnomalies(true);
+    try {
+      const blob = await exportFuelConsommationAnomalies({ month: month ?? undefined });
+      downloadBlob(blob, `fuel_anomalies_${month ?? "export"}.csv`);
+    } finally {
+      setExportingAnomalies(false);
+    }
+  }
 
   if (loading) return <Skeleton h={520} />;
 
@@ -624,6 +720,22 @@ export function ConsommationSheet({
                 </option>
               ))}
             </select>
+            <select
+              value={rapprochementStatutFilter ?? ""}
+              onChange={(e) => onRapprochementStatutFilterChange((e.target.value || null) as FuelRapprochementStatutFilter | null)}
+              title="Filtrer par statut de rapprochement stock"
+              style={{
+                border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px",
+                fontSize: 12.5, color: FT.text, fontWeight: 700, cursor: "pointer",
+              }}
+            >
+              <option value="">Rapprochement : tous</option>
+              {RAPPROCHEMENT_STATUT_OPTIONS.map((o) => (
+                <option key={o.key} value={o.key}>
+                  {o.label}{data?.kpis?.rapprochement_counts ? ` (${fmt.format(data.kpis.rapprochement_counts[o.key])})` : ""}
+                </option>
+              ))}
+            </select>
             <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px", minWidth: 220 }}>
               <Search size={14} color={FT.textSub} />
               <input
@@ -633,6 +745,34 @@ export function ConsommationSheet({
                 style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, color: FT.text, flex: 1 }}
               />
             </div>
+            <button
+              onClick={handleExportControle}
+              disabled={exportingControle}
+              title="Exporter toutes les colonnes (y compris rapprochement) pour le mois sélectionné"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6, border: `1px solid ${FT.border}`,
+                background: FT.card, color: FT.text, cursor: exportingControle ? "wait" : "pointer",
+                fontSize: 12, fontWeight: 800, borderRadius: 9, padding: "7px 12px",
+                opacity: exportingControle ? 0.6 : 1,
+              }}
+            >
+              <Download size={13} color={FT.blue} />
+              {exportingControle ? "Export…" : "Contrôle complet"}
+            </button>
+            <button
+              onClick={handleExportAnomalies}
+              disabled={exportingAnomalies}
+              title="Exporter uniquement les anomalies fuel (À justifier / À investiguer / Livraisons à contrôler)"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6, border: `1px solid ${FT.redL}`,
+                background: FT.card, color: FT.red, cursor: exportingAnomalies ? "wait" : "pointer",
+                fontSize: 12, fontWeight: 800, borderRadius: 9, padding: "7px 12px",
+                opacity: exportingAnomalies ? 0.6 : 1,
+              }}
+            >
+              <Download size={13} />
+              {exportingAnomalies ? "Export…" : "Anomalies Fuel"}
+            </button>
           </div>
         </div>
 
@@ -666,6 +806,15 @@ export function ConsommationSheet({
                     <th style={th}>Écart (L)</th>
                     <th style={th}>Écart (%)</th>
                     <th style={{ ...th, textAlign: "left" }}>Commentaire</th>
+                    <th style={th}>Disponibilité RT (%)</th>
+                    <th style={th}>Stock initial (L)</th>
+                    <th style={th}>Livraisons ENOC (L)</th>
+                    <th style={th}>Conso stock (L)</th>
+                    <th style={th}>Écart rappr. (L)</th>
+                    <th style={th}>Écart rappr. (%)</th>
+                    <th style={th}>Statut rappr.</th>
+                    <th style={th}>Livraisons source</th>
+                    <th style={{ ...th, textAlign: "left" }}>Motif rappr.</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -794,6 +943,64 @@ export function ConsommationSheet({
                           </div>
                         ) : (
                           <span style={{ color: FT.green, fontSize: 11.5 }}>Toutes les données disponibles.</span>
+                        )}
+                      </td>
+                      <td style={td}>
+                        <NumCell
+                          value={r.cph_runtime_availability_pct}
+                          digits={1}
+                          suffix="%"
+                          emptyReason="Disponibilité runtime CPH non calculée (sync_fuel_cph non exécutée ou site sans GE)."
+                        />
+                      </td>
+                      <td style={td}>
+                        <NumCell
+                          value={r.rapprochement_stock_initial_l}
+                          digits={0}
+                          emptyReason="Stock initial inconnu — rapprochement non calculable."
+                        />
+                      </td>
+                      <td style={td}>
+                        <NumCell
+                          value={r.rapprochement_livraisons_l}
+                          digits={0}
+                          emptyReason="Aucune livraison ENOC ce mois."
+                        />
+                      </td>
+                      <td style={td}>
+                        <NumCell
+                          value={r.rapprochement_conso_stock_l}
+                          digits={0}
+                          emptyReason="Conso stock non calculable — stock initial ou final absent."
+                        />
+                      </td>
+                      <td style={td}>
+                        {r.rapprochement_ecart_l !== null && r.rapprochement_ecart_l !== undefined ? (
+                          <span style={{
+                            fontFamily: "ui-monospace, Menlo, monospace", fontWeight: 600,
+                            color: Math.abs(r.rapprochement_ecart_l) > 500 ? FT.red : FT.text,
+                          }}>
+                            {r.rapprochement_ecart_l.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                          </span>
+                        ) : <EmptyCell reason="Écart non calculable (données manquantes)." />}
+                      </td>
+                      <td style={td}>
+                        {r.rapprochement_ecart_pct !== null && r.rapprochement_ecart_pct !== undefined ? (
+                          <span style={{
+                            fontFamily: "ui-monospace, Menlo, monospace", fontWeight: 700,
+                            color: Math.abs(r.rapprochement_ecart_pct) > 20 ? FT.red : Math.abs(r.rapprochement_ecart_pct) > 10 ? FT.gold : FT.text,
+                          }}>
+                            {r.rapprochement_ecart_pct > 0 ? "+" : ""}{r.rapprochement_ecart_pct.toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
+                          </span>
+                        ) : <EmptyCell reason="Écart % non calculable." />}
+                      </td>
+                      <td style={td}><RapprochementStatutBadge statut={r.rapprochement_statut} /></td>
+                      <td style={td}><LivraisonsSourceBadge source={r.livraisons_source} /></td>
+                      <td style={{ ...td, textAlign: "left", maxWidth: 300 }}>
+                        {r.rapprochement_motif ? (
+                          <span style={{ fontSize: 11, color: FT.textSub }}>{r.rapprochement_motif}</span>
+                        ) : (
+                          <EmptyCell reason="Rapprochement non encore calculé." />
                         )}
                       </td>
                     </tr>

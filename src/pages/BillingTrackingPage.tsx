@@ -43,7 +43,6 @@ import { api } from "@/services/api";
 import * as XLSX from "xlsx";
 import { getFNPSites, type FNPResponse } from "@/features/sonatelBilling/api";
 import FNPModal from "./FNPModal";
-import { DataTable, type Col } from "@/components/DataTable";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type GlobalScope =
@@ -214,45 +213,6 @@ function defaultRange() {
     start: fmtDate(new Date(now.getFullYear(), 0, 1)),
     end: fmtDate(now),
   };
-}
-
-interface InvoiceRow {
-  id: number;
-  site_code: string | null;
-  site_name: string | null;
-  numero_facture: string;
-  numero_compte_contrat: string;
-  date_comptable_facture: string | null;
-  date_debut_periode: string | null;
-  date_fin_periode: string | null;
-  montant_hors_tva: string;
-  montant_ttc: string;
-  montant_total_energie: string;
-  montant_redevance: string;
-  status: string | null;
-  payment_status: string | null;
-}
-
-interface RecordsPage {
-  count: number;
-  results: InvoiceRow[];
-}
-
-async function fetchRecords(
-  start: string,
-  end: string,
-  siteCode: string | undefined,
-  scope: GlobalScope,
-  page: number
-): Promise<RecordsPage> {
-  const params: Record<string, string | number> = { start, end, page };
-  if (siteCode) params.site = siteCode;
-  if (scope === "PAID" || scope === "UNPAID" || scope === "OUT_OF_SCOPE" || scope === "UNDEFINED")
-    params.payment_status = scope;
-  else if (scope === "CERTIFIED" || scope === "CONTESTED" || scope === "CREATED")
-    params.status = scope;
-  const { data } = await api.get("/sonatel-billing/records/", { params });
-  return data;
 }
 
 async function fetchStats(
@@ -663,7 +623,6 @@ export default function BillingTrackingPage() {
   const [activeMetric, setActiveMetric] = useState<"ht" | "nrj" | "abonnement" | "penalite" | "cosphi">("ht");
   const [selectedSite, setSelectedSite] = useState<SiteOption | null>(null);
   const [globalScope, setGlobalScope] = useState<GlobalScope>("ALL");
-  const [recordsPage, setRecordsPage] = useState(1);
 
   const siteCode = selectedSite?.site_id ?? undefined;
   const [showFNPModal, setShowFNPModal] = useState(false);
@@ -678,15 +637,6 @@ export default function BillingTrackingPage() {
     queryFn: () => getFNPSites({ start: dateStart, end: dateEnd, site: siteCode }),
     staleTime: 5 * 60 * 1000,
   });
-
-  const recordsQ = useQuery({
-    queryKey: ["billing-records", dateStart, dateEnd, siteCode, globalScope, recordsPage],
-    queryFn: () => fetchRecords(dateStart, dateEnd, siteCode, globalScope, recordsPage),
-    staleTime: 5 * 60 * 1000,
-    placeholderData: (prev) => prev,
-  });
-
-  useEffect(() => { setRecordsPage(1); }, [dateStart, dateEnd, siteCode, globalScope]);
 
   const fnpData = fnpQ.data;
   const fnpStats = fnpData?.summary;
@@ -1291,140 +1241,6 @@ export default function BillingTrackingPage() {
           </div>
         )}
       </div>
-
-      {/* ─── Base Facture — tableau détaillé ─────────────────────────────────── */}
-      {(() => {
-        const PAGE_SIZE = 20;
-        const total = recordsQ.data?.count ?? 0;
-        const totalPages = Math.ceil(total / PAGE_SIZE);
-
-        const invoiceCols: Col<InvoiceRow>[] = [
-          {
-            key: "site_code",
-            title: "Site",
-            render: (r) => (
-              <span style={{ fontWeight: 900, fontSize: 11, background: C.blue[50], color: C.blue[800], borderRadius: 6, padding: "2px 7px" }}>
-                {r.site_code ?? "—"}
-              </span>
-            ),
-          },
-          {
-            key: "site_name",
-            title: "Nom site",
-            render: (r) => <span style={{ fontSize: 12 }}>{r.site_name ?? "—"}</span>,
-          },
-          {
-            key: "numero_facture",
-            title: "N° Facture",
-            render: (r) => <span style={{ fontFamily: "monospace", fontSize: 11 }}>{r.numero_facture}</span>,
-          },
-          {
-            key: "periode",
-            title: "Période",
-            render: (r) =>
-              r.date_debut_periode && r.date_fin_periode
-                ? <span style={{ fontSize: 11, color: C.slate[600] }}>{r.date_debut_periode.slice(0, 7)} → {r.date_fin_periode.slice(0, 7)}</span>
-                : <span style={{ color: C.slate[300] }}>—</span>,
-          },
-          {
-            key: "montant_hors_tva",
-            title: "Montant HT",
-            headClassName: "text-right",
-            className: "text-right tabular-nums",
-            render: (r) => <span style={{ fontWeight: 700 }}>{fmtM(r.montant_hors_tva)} F</span>,
-          },
-          {
-            key: "montant_total_energie",
-            title: "Énergie",
-            headClassName: "text-right",
-            className: "text-right tabular-nums",
-            render: (r) => <span style={{ color: C.blue[700] }}>{fmtM(r.montant_total_energie)} F</span>,
-          },
-          {
-            key: "montant_redevance",
-            title: "Abonnement",
-            headClassName: "text-right",
-            className: "text-right tabular-nums",
-            render: (r) => <span>{fmtM(r.montant_redevance)} F</span>,
-          },
-          {
-            key: "montant_ttc",
-            title: "Montant TTC",
-            headClassName: "text-right",
-            className: "text-right tabular-nums",
-            render: (r) => <span style={{ fontWeight: 900, color: C.blue[950] }}>{fmtM(r.montant_ttc)} F</span>,
-          },
-          {
-            key: "status",
-            title: "Certif.",
-            render: (r) => {
-              const s = r.status ?? "—";
-              const color = s === "CERTIFIED" ? C.ok.main : s === "CONTESTED" ? C.nok.main : s === "CREATED" ? C.warn.main : C.slate[400];
-              const label = s === "CERTIFIED" ? "Certifiée" : s === "CONTESTED" ? "Contestée" : s === "CREATED" ? "Brute" : s;
-              return (
-                <span style={{ fontSize: 11, fontWeight: 700, color, background: `${color}18`, borderRadius: 5, padding: "2px 6px" }}>
-                  {label}
-                </span>
-              );
-            },
-          },
-          {
-            key: "payment_status",
-            title: "Paiement",
-            render: (r) => {
-              const s = r.payment_status ?? "—";
-              const color = s === "PAID" ? C.ok.main : s === "UNPAID" ? C.nok.main : s === "OUT_OF_SCOPE" ? C.warn.main : C.slate[400];
-              const label = s === "PAID" ? "Payée" : s === "UNPAID" ? "Impayée" : s === "OUT_OF_SCOPE" ? "Hors scope" : s;
-              return (
-                <span style={{ fontSize: 11, fontWeight: 700, color, background: `${color}18`, borderRadius: 5, padding: "2px 6px" }}>
-                  {label}
-                </span>
-              );
-            },
-          },
-        ];
-
-        return (
-          <div style={{ padding: "0 24px 40px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 12 }}>
-              <div>
-                <div style={{ fontWeight: 950, fontSize: 14, color: C.blue[950] }}>Base Facture</div>
-                <div style={{ fontSize: 11.5, color: C.slate[500] }}>
-                  {recordsQ.isFetching ? "Chargement…" : `${fmt.format(total)} facture${total > 1 ? "s" : ""} · page ${recordsPage} / ${totalPages || 1}`}
-                </div>
-              </div>
-              {totalPages > 1 && (
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <button
-                    onClick={() => setRecordsPage((p) => Math.max(1, p - 1))}
-                    disabled={recordsPage <= 1}
-                    style={{ height: 30, padding: "0 10px", borderRadius: 8, border: `1px solid ${C.slate[200]}`, background: recordsPage <= 1 ? C.slate[50] : "#fff", color: recordsPage <= 1 ? C.slate[300] : C.slate[700], cursor: recordsPage <= 1 ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 700 }}
-                  >
-                    ‹ Préc.
-                  </button>
-                  <span style={{ fontSize: 12, color: C.slate[600], minWidth: 60, textAlign: "center" }}>
-                    {recordsPage} / {totalPages}
-                  </span>
-                  <button
-                    onClick={() => setRecordsPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={recordsPage >= totalPages}
-                    style={{ height: 30, padding: "0 10px", borderRadius: 8, border: `1px solid ${C.slate[200]}`, background: recordsPage >= totalPages ? C.slate[50] : "#fff", color: recordsPage >= totalPages ? C.slate[300] : C.slate[700], cursor: recordsPage >= totalPages ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 700 }}
-                  >
-                    Suiv. ›
-                  </button>
-                </div>
-              )}
-            </div>
-            <DataTable
-              bare={false}
-              cols={invoiceCols}
-              rows={recordsQ.data?.results ?? []}
-              loading={recordsQ.isLoading}
-              emptyText="Aucune facture pour les filtres sélectionnés."
-            />
-          </div>
-        );
-      })()}
 
       {showFNPModal && fnpData ? (
         <FNPModal data={fnpData} horizon={fnpData.horizon} dateStart={dateStart} dateEnd={dateEnd} onClose={() => setShowFNPModal(false)} />
