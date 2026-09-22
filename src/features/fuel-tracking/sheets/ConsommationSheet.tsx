@@ -236,7 +236,6 @@ function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse 
   if (!kpis) return null;
 
   const currentLabel = monthLabel(data?.month_year);
-  const couverture = kpis.total_sites > 0 ? Math.round((kpis.sites_avec_conso / kpis.total_sites) * 100) : 0;
 
   return (
     <div
@@ -251,10 +250,9 @@ function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse 
         padding: 14,
       }}
     >
+      {/* Mesures Snowflake / ENOC */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
-        <KpiCard label="Sites avec données" value={`${fmt.format(kpis.sites_avec_conso)} / ${fmt.format(kpis.total_sites)}`} sub={`${currentLabel} · ${couverture}% de couverture`} tone="blue" icon={<Users size={14} />} />
-        <KpiCard label="Sites avec GE" value={fmt.format(kpis.sites_avec_ge)} sub={`dont ${fmt.format(kpis.sites_ge_enoc_only)} vus uniquement par ENOC`} tone="gold" icon={<Fuel size={14} />} />
-        <KpiCard label="Sites sans GE" value={fmt.format(kpis.sites_sans_ge)} tone="slate" icon={<Fuel size={14} />} />
+        <KpiCard label="Sites avec mesure" value={fmt.format(kpis.sites_avec_conso)} sub={`${currentLabel} · capteur cuve Snowflake`} tone="blue" icon={<Users size={14} />} />
         <KpiCard label="Conso mesurée (Snowflake)" value={formatL(kpis.total_conso_snowflake_l)} tone="cyan" icon={<Droplets size={14} />} />
         <KpiCard label="Sites avec estimation" value={fmt.format(kpis.sites_avec_estimation)} sub="delta de niveau de cuve" tone="gold" icon={<Droplets size={14} />} />
         <KpiCard label="Qté ajoutée (ENOC validé)" value={formatL(kpis.total_enoc_qte_ajoutee_l)} tone="green" icon={<Fuel size={14} />} />
@@ -273,6 +271,32 @@ function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse 
             <KpiCard label="Livraisons à contrôler" value={fmt.format(kpis.rapprochement_counts.livraisons_a_controler)} tone="orange" icon={<Fuel size={14} />} sub="ENOC = 0 L" />
           </>
         )}
+      </div>
+
+      {/* Stan KPIs — dénominateur officiel Ops (Facturation avec GE = Oui) */}
+      {!kpis.stan_importe && (
+        <div style={{ marginTop: 10, padding: "8px 12px", borderRadius: 6, background: "#fffbe6", border: "1px solid #ffe58f", color: "#ad6800", fontSize: 12 }}>
+          ⚠ Fichier Stan non importé pour {currentLabel} — lancez <code>import_facturation_par_site</code> pour afficher les KPIs de couverture GE officiels.
+        </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginTop: 10 }}>
+        <KpiCard label="Sites GE validés Stan" value={fmt.format(kpis.sites_ge_valides_stan)} sub="Facturation avec GE = Oui · référentiel Ops" tone="blue" icon={<Users size={14} />} />
+        <KpiCard
+          label="Supervision Snowflake"
+          value={kpis.supervision_snowflake_pct != null ? `${kpis.supervision_snowflake_pct}%` : "—"}
+          sub={`${fmt.format(kpis.supervision_snowflake)} / ${fmt.format(kpis.sites_ge_valides_stan)} sites · ≥50% jours télémétrie`}
+          tone="cyan"
+          icon={<Gauge size={14} />}
+        />
+        <KpiCard
+          label="Disponibilité DSE"
+          value={kpis.disponibilite_runtime_dse_pct != null ? `${kpis.disponibilite_runtime_dse_pct}%` : "—"}
+          sub={`${fmt.format(kpis.disponibilite_runtime_dse)} / ${fmt.format(kpis.sites_ge_valides_stan)} sites · runtime DSE ≥50% jours`}
+          tone="gold"
+          icon={<Gauge size={14} />}
+        />
+        <KpiCard label="CPH calculé" value={fmt.format(kpis.sites_avec_cph_calcule)} sub={`${fmt.format(kpis.sites_cph_non_calcule)} sites sans CPH`} tone="green" icon={<Fuel size={14} />} />
+        <KpiCard label="CPH non calculé" value={fmt.format(kpis.sites_cph_non_calcule)} sub="running time ou CPH absent" tone="slate" icon={<Fuel size={14} />} />
       </div>
     </div>
   );

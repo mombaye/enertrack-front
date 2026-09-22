@@ -169,6 +169,17 @@ export type FuelConsommationKpis = {
     cph_non_calcule: number;
     livraisons_a_controler: number;
   };
+  // KPIs Stan — dénominateur = "ESCO SN Facturation par site",
+  // colonne "Facturation avec GE oui|Non = Oui" (463 en sept. 2026).
+  // stan_importe=false → import_facturation_par_site non lancé pour ce mois.
+  sites_ge_valides_stan: number;
+  supervision_snowflake: number;
+  supervision_snowflake_pct: number | null;
+  disponibilite_runtime_dse: number;
+  disponibilite_runtime_dse_pct: number | null;
+  sites_avec_cph_calcule: number;
+  sites_cph_non_calcule: number;
+  stan_importe: boolean;
 };
 
 export type FuelRuntimeSourceFilter = "tracker_5min" | "dse_controller" | "dg_on_calculated" | "rectifier_status_5min" | "none";
