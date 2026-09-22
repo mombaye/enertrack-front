@@ -300,6 +300,18 @@ export type FuelConsommationTopSite = {
   nb_mois_avec_conso: number;
 };
 
+export type FuelConsommationDashboardStanKpis = {
+  month_year: string;
+  sites_ge_valides_stan: number;
+  supervision_snowflake: number;
+  supervision_snowflake_pct: number | null;
+  disponibilite_runtime_dse: number;
+  disponibilite_runtime_dse_pct: number | null;
+  sites_avec_cph_calcule: number;
+  sites_cph_non_calcule: number;
+  stan_importe: boolean;
+};
+
 export type FuelConsommationDashboard = {
   months: string[];
   monthly: FuelConsommationMonthlyPoint[];
@@ -308,6 +320,7 @@ export type FuelConsommationDashboard = {
   available_months: string[];
   cph_parameters: FuelCphParametersStatus;
   ge_detection: FuelGeDetection | null;
+  stan_kpis: FuelConsommationDashboardStanKpis | null;
 };
 
 /**
