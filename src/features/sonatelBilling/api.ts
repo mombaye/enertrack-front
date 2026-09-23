@@ -270,3 +270,17 @@ export function getFNPSites(params: {
     .get<FNPResponse>("/sonatel-billing/fnp/", { params })
     .then((r) => r.data);
 }
+
+// ─── Liste Sites GRID ────────────────────────────────────────────────────────
+export type GridSiteListResponse = {
+  filename: string;
+  total: number;
+  columns: string[];
+  rows: (string | null)[][];
+};
+
+export function getGridSiteList() {
+  return api
+    .get<GridSiteListResponse>("/billing/grid-site-list/")
+    .then((r) => r.data);
+}
