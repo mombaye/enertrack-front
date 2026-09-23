@@ -13,8 +13,6 @@ import {
   BadgeCheck,
   AlertTriangle,
   RefreshCw,
-  List,
-  X,
 } from "lucide-react";
 import { DataTable, Col } from "@/components/DataTable";
 import { StatusPill, money, num } from "@/features/sonatelBilling/ui";
@@ -27,8 +25,6 @@ import {
   ContractMonth,
   getSonatelBillingStats,
   updateInvoiceStatus,
-  getGridSiteList,
-  GridSiteListResponse,
 } from "@/features/sonatelBilling/api";
 
 const COLORS = {
@@ -336,189 +332,6 @@ function EditablePaymentCell({ row }: { row: SonatelInvoice }) {
 }
 
 
-// ─── Modal Liste Sites GRID ──────────────────────────────────────────────────
-function GridSiteListModal({ onClose }: { onClose: () => void }) {
-  const [siteSearch, setSiteSearch] = useState("");
-
-  const { data, isLoading, isError, error } = useQuery<GridSiteListResponse>({
-    queryKey: ["billing-grid-site-list"],
-    queryFn: getGridSiteList,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const filteredRows = useMemo(() => {
-    if (!data) return [];
-    if (!siteSearch.trim()) return data.rows;
-    const term = siteSearch.trim().toLowerCase();
-    return data.rows.filter((row) =>
-      row.some((cell) => cell != null && String(cell).toLowerCase().includes(term))
-    );
-  }, [data, siteSearch]);
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Liste des sites GRID"
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(15,23,42,0.55)",
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "center",
-        zIndex: 9999,
-        padding: "16px",
-        overflowY: "auto",
-      }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div
-        style={{
-          background: COLORS.white,
-          borderRadius: 20,
-          width: "100%",
-          maxWidth: "98vw",
-          boxShadow: "0 32px 64px rgba(15,23,42,.25)",
-          overflow: "hidden",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        {/* Header modal */}
-        <div
-          style={{
-            background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
-            padding: "20px 24px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            color: COLORS.white,
-          }}
-        >
-          <div>
-            <div style={{ fontSize: 20, fontWeight: 800 }}>Liste des sites GRID</div>
-            {data && (
-              <div style={{ fontSize: 13, color: "#cbd5e1", marginTop: 4 }}>
-                {data.filename} — {data.total} site(s)
-              </div>
-            )}
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Fermer"
-            style={{
-              background: "rgba(255,255,255,.12)",
-              border: "none",
-              borderRadius: 10,
-              width: 36,
-              height: 36,
-              display: "grid",
-              placeItems: "center",
-              cursor: "pointer",
-              color: COLORS.white,
-            }}
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Search bar */}
-        <div style={{ padding: "14px 20px", borderBottom: `1px solid ${COLORS.slate200}`, background: COLORS.slate50 }}>
-          <div style={{ position: "relative", maxWidth: 360 }}>
-            <Search size={14} style={{ position: "absolute", left: 12, top: 12, color: COLORS.slate400 }} />
-            <input
-              value={siteSearch}
-              onChange={(e) => setSiteSearch(e.target.value)}
-              placeholder="Rechercher dans la liste..."
-              aria-label="Rechercher dans la liste des sites"
-              style={{
-                width: "100%",
-                padding: "10px 12px 10px 36px",
-                borderRadius: 12,
-                border: `1px solid ${COLORS.slate300}`,
-                outline: "none",
-                fontSize: 13,
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Body */}
-        <div style={{ overflowX: "auto", maxHeight: "78vh", overflowY: "auto" }}>
-          {isLoading && (
-            <div style={{ padding: 48, textAlign: "center", color: COLORS.slate500, fontSize: 14 }}>
-              Chargement…
-            </div>
-          )}
-          {isError && (
-            <div style={{ padding: 48, textAlign: "center", color: COLORS.red, fontSize: 14 }}>
-              {(error as any)?.response?.data?.detail ?? "Erreur lors du chargement du fichier."}
-            </div>
-          )}
-          {data && filteredRows.length === 0 && !isLoading && (
-            <div style={{ padding: 48, textAlign: "center", color: COLORS.slate400, fontSize: 14 }}>
-              Aucun résultat pour « {siteSearch} »
-            </div>
-          )}
-          {data && filteredRows.length > 0 && (
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: COLORS.slate50 }}>
-                  {data.columns.map((col) => (
-                    <th
-                      key={col}
-                      style={{
-                        padding: "10px 14px",
-                        textAlign: "left",
-                        fontWeight: 700,
-                        fontSize: 11,
-                        color: COLORS.slate500,
-                        textTransform: "uppercase",
-                        letterSpacing: ".05em",
-                        borderBottom: `1px solid ${COLORS.slate200}`,
-                        whiteSpace: "nowrap",
-                        position: "sticky",
-                        top: 0,
-                        background: COLORS.slate50,
-                      }}
-                    >
-                      {col}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRows.map((row, ri) => (
-                  <tr
-                    key={ri}
-                    style={{ borderBottom: `1px solid ${COLORS.slate100}`, background: ri % 2 === 0 ? COLORS.white : COLORS.slate50 }}
-                  >
-                    {row.map((cell, ci) => (
-                      <td key={ci} style={{ padding: "9px 14px", color: COLORS.slate700, whiteSpace: "nowrap" }}>
-                        {cell ?? <span style={{ color: COLORS.slate300 }}>—</span>}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        {/* Footer */}
-        {data && (
-          <div style={{ padding: "12px 20px", borderTop: `1px solid ${COLORS.slate200}`, background: COLORS.slate50, fontSize: 12, color: COLORS.slate500 }}>
-            {filteredRows.length < data.total
-              ? `${filteredRows.length} résultat(s) sur ${data.total} ligne(s)`
-              : `${data.total} ligne(s) au total`}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function SonatelBillingPage() {
   const defRange = useMemo(() => defaultRange(), []);
   const [tab, setTab] = useState<Tab>("INVOICES");
@@ -529,8 +342,6 @@ export default function SonatelBillingPage() {
   const [page, setPage] = useState(1);
   const [dateStart, setDateStart] = useState(defRange.start);
   const [dateEnd, setDateEnd] = useState(defRange.end);
-  const [siteListOpen, setSiteListOpen] = useState(false);
-  
   const pageSize = 25;
 
   const tabs = [
@@ -812,27 +623,6 @@ const outScopeCountQ = useQuery({
                 </button>
               ))}
 
-              {/* Séparateur */}
-              <div style={{ width: 1, height: 28, background: "rgba(255,255,255,.2)", margin: "0 4px" }} />
-
-              <button
-                onClick={() => setSiteListOpen(true)}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "10px 14px",
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,.25)",
-                  cursor: "pointer",
-                  fontWeight: 700,
-                  background: "rgba(255,255,255,.08)",
-                  color: "#ffffff",
-                }}
-              >
-                <List size={15} />
-                Liste Sites
-              </button>
             </div>
           </div>
         </div>
@@ -1042,7 +832,6 @@ const outScopeCountQ = useQuery({
         </div>
       </div>
 
-      {siteListOpen && <GridSiteListModal onClose={() => setSiteListOpen(false)} />}
     </div>
   );
 }
