@@ -4,6 +4,7 @@
 // sélection libre), sélecteur de base de marge (estimée / réelle), filtres
 // transverses — tout se recalcule côté client, sans rechargement.
 import { useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from "react";
+import * as XLSX from "xlsx";
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer,
@@ -12,7 +13,7 @@ import {
   TrendingDown, TrendingUp, Percent, Scale, Search, ChevronLeft, ChevronRight,
   Download, Upload, X, CheckCircle, AlertCircle,
 } from "lucide-react";
-import { useMargeDashboard, exportMargeDashboard, importMargeDashboard, type MargeRow, type MargePeriod, type ImportResult } from "./api";
+import { useMargeDashboard, importMargeDashboard, type MargeRow, type MargePeriod, type ImportResult } from "./api";
 import {
   applyScope, annotateBase, applyFilters, computeKpis, computeInsights, groupSumNok,
   groupCount, reliabilityBuckets, trendBuckets, transitionMatrix, coverageSplit,
@@ -127,6 +128,200 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// ── Export client-side XLSX ────────────────────────────────────────────────
+function buildExcel(
+  rows: import("./api").MargeRow[],
+  scoped: import("./calc").AnnotatedRow[],
+  filtered: import("./calc").AnnotatedRow[],
+  kpis: import("./calc").Kpis,
+  base: import("./calc").BaseMode,
+  scopeLabel: string,
+  periodLabel: string,
+) {
+  const wb = XLSX.utils.book_new();
+
+  // Tab 1 — Tous les sites (données brutes complètes)
+  const allRows = rows.map((r) => ({
+    "Site ID": r.site_id,
+    "Nom du site": r.site_name,
+    "Région": r.region,
+    "Batch": r.batch,
+    "Typo facturée": r.typo_facturee,
+    "Indoor/Outdoor": r.indoor_outdoor,
+    "Modernisé": r.modernise,
+    "Load Sénélec (W)": r.load_senelec_w ?? "",
+    "Redevance Mai (XOF)": r.redevance_mai ?? "",
+    "Redevance Juin (XOF)": r.redevance_juin ?? "",
+    "Conso Mai (XOF)": r.conso_mai_xof ?? "",
+    "Conso Juin (XOF)": r.conso_juin_xof ?? "",
+    "Marge Est. Mai (XOF)": r.marge_mai_est ?? "",
+    "Marge Est. Juin (XOF)": r.marge_juin_est ?? "",
+    "Statut estimé": r.statut_est,
+    "Factures réelles (XOF)": r.factures_reelles ?? "",
+    "Marge réelle (XOF)": r.marge_reelle ?? "",
+    "Statut réel": r.statut_reelle,
+    "Catégorie BO": r.categorie_bo,
+    "Commentaire BO": r.comment_bo,
+    "Owner": r.owner,
+    "Commentaire": r.commentaire,
+  }));
+  const ws1 = XLSX.utils.json_to_sheet(allRows);
+  XLSX.utils.book_append_sheet(wb, ws1, "Tous les sites");
+
+  // Tab 2 — Sites NOK (périmètre actif, tous filtres)
+  const nokRows = filtered
+    .filter((r) => r.statutActive === "NOK")
+    .map((r) => {
+      const ecart = r.marge_reelle !== null && r.marge_juin_est !== null ? r.marge_reelle - r.marge_juin_est : null;
+      return {
+        "Site ID": r.site_id,
+        "Nom du site": r.site_name,
+        "Région": r.region,
+        "Batch": r.batch,
+        "Typo facturée": r.typo_facturee,
+        "Indoor/Outdoor": r.indoor_outdoor,
+        "Modernisé": r.modernise,
+        "Owner": r.owner,
+        "Catégorie BO": r.categorie_bo,
+        "Commentaire BO": r.comment_bo,
+        "Commentaire": r.commentaire,
+        "Load Sénélec (W)": r.load_senelec_w ?? "",
+        "Redevance Juin (XOF)": r.redevance_juin ?? "",
+        "Marge Est. Juin (XOF)": r.marge_juin_est ?? "",
+        "Marge réelle (XOF)": r.marge_reelle ?? "",
+        "Marge active (XOF)": r.margeActive ?? "",
+        "Écart Réel−Est. (XOF)": ecart ?? "",
+        "Statut estimé": r.statut_est,
+        "Statut réel": r.statut_reelle,
+      };
+    });
+  const ws2 = XLSX.utils.json_to_sheet(nokRows);
+  XLSX.utils.book_append_sheet(wb, ws2, "Sites NOK");
+
+  // Tab 3 — KPIs résumé
+  const kpiRows = [
+    { "Indicateur": "Périmètre actif", "Valeur": scopeLabel },
+    { "Indicateur": "Base de marge", "Valeur": base === "estimee" ? "Estimée (modèle catalogue)" : "Réelle (facture Sénélec)" },
+    { "Indicateur": "Période", "Valeur": periodLabel },
+    { "Indicateur": "Total sites périmètre", "Valeur": kpis.total },
+    { "Indicateur": "Sites NOK", "Valeur": kpis.nokCount },
+    { "Indicateur": "% sites NOK", "Valeur": kpis.nokPct.toFixed(2) + "%" },
+    { "Indicateur": "Marge négative cumulée (XOF)", "Valeur": kpis.sumNok },
+    { "Indicateur": "Marge nég. moy./site NOK (XOF)", "Valeur": Math.round(kpis.avgNok) },
+    { "Indicateur": "Marge positive cumulée (XOF)", "Valeur": kpis.sumOk },
+    { "Indicateur": "Solde net (XOF)", "Valeur": kpis.net },
+    { "Indicateur": "Sites RAS (hors calcul)", "Valeur": kpis.rasCount },
+  ];
+  const ws3 = XLSX.utils.json_to_sheet(kpiRows);
+  XLSX.utils.book_append_sheet(wb, ws3, "KPIs résumé");
+
+  // Tab 4 — Par région
+  const nokScoped = scoped.filter((r) => r.statutActive === "NOK");
+  const byRegionMap = new Map<string, { nok: number; sum: number; total: number }>();
+  for (const r of scoped) {
+    const key = r.region || "Non renseigné";
+    const e = byRegionMap.get(key) ?? { nok: 0, sum: 0, total: 0 };
+    e.total++;
+    if (r.statutActive === "NOK") { e.nok++; e.sum += r.margeActive || 0; }
+    byRegionMap.set(key, e);
+  }
+  const regionRows = Array.from(byRegionMap.entries())
+    .sort((a, b) => a[1].sum - b[1].sum)
+    .map(([label, v]) => ({
+      "Région": label,
+      "Sites total": v.total,
+      "Sites NOK": v.nok,
+      "% NOK": v.total ? (v.nok / v.total * 100).toFixed(1) + "%" : "—",
+      "Marge négative cumulée (XOF)": v.sum,
+    }));
+  const ws4 = XLSX.utils.json_to_sheet(regionRows);
+  XLSX.utils.book_append_sheet(wb, ws4, "Par région");
+
+  // Tab 5 — Par catégorie BO
+  const byCatMap = new Map<string, { nok: number; sum: number; total: number }>();
+  for (const r of scoped) {
+    const key = r.categorie_bo || "Non renseigné";
+    const e = byCatMap.get(key) ?? { nok: 0, sum: 0, total: 0 };
+    e.total++;
+    if (r.statutActive === "NOK") { e.nok++; e.sum += r.margeActive || 0; }
+    byCatMap.set(key, e);
+  }
+  const catRows = Array.from(byCatMap.entries())
+    .sort((a, b) => a[1].sum - b[1].sum)
+    .map(([label, v]) => ({
+      "Catégorie BO": label,
+      "Sites total": v.total,
+      "Sites NOK": v.nok,
+      "% NOK": v.total ? (v.nok / v.total * 100).toFixed(1) + "%" : "—",
+      "Marge négative cumulée (XOF)": v.sum,
+    }));
+  const ws5 = XLSX.utils.json_to_sheet(catRows);
+  XLSX.utils.book_append_sheet(wb, ws5, "Par catégorie BO");
+
+  // Tab 6 — Par batch / sous-typo (NOK)
+  const byBatchMap = new Map<string, { nok: number; sum: number; total: number }>();
+  for (const r of scoped) {
+    const key = r.batch || "Non renseigné";
+    const e = byBatchMap.get(key) ?? { nok: 0, sum: 0, total: 0 };
+    e.total++;
+    if (r.statutActive === "NOK") { e.nok++; e.sum += r.margeActive || 0; }
+    byBatchMap.set(key, e);
+  }
+  const batchRows = Array.from(byBatchMap.entries())
+    .sort((a, b) => a[1].sum - b[1].sum)
+    .map(([label, v]) => ({
+      "Batch": label,
+      "Sites total": v.total,
+      "Sites NOK": v.nok,
+      "% NOK": v.total ? (v.nok / v.total * 100).toFixed(1) + "%" : "—",
+      "Marge négative cumulée (XOF)": v.sum,
+    }));
+  const ws6 = XLSX.utils.json_to_sheet(batchRows);
+  XLSX.utils.book_append_sheet(wb, ws6, "Par batch");
+
+  // Tab 7 — Distribution de magnitude (NOK)
+  const MAG: [string, (v: number) => boolean][] = [
+    ["0 à -50k", (v) => v >= -50000],
+    ["-50k à -100k", (v) => v >= -100000 && v < -50000],
+    ["-100k à -250k", (v) => v >= -250000 && v < -100000],
+    ["-250k à -500k", (v) => v >= -500000 && v < -250000],
+    ["-500k à -1M", (v) => v >= -1000000 && v < -500000],
+    ["< -1M", (v) => v < -1000000],
+  ];
+  const magRows = MAG.map(([label, test]) => {
+    const sites = nokScoped.filter((r) => test(r.margeActive || 0));
+    return {
+      "Tranche de marge négative": label,
+      "Nombre de sites NOK": sites.length,
+      "Marge cumulée (XOF)": sites.reduce((s, r) => s + (r.margeActive || 0), 0),
+    };
+  });
+  const ws7 = XLSX.utils.json_to_sheet(magRows);
+  XLSX.utils.book_append_sheet(wb, ws7, "Distribution magnitude");
+
+  // Tab 8 — Annotation modèle (pour réimport)
+  const annotationRows = rows.map((r) => ({
+    "site_id": r.site_id,
+    "site_name": r.site_name,
+    "region": r.region,
+    "batch": r.batch,
+    "typo_facturee": r.typo_facturee,
+    "marge_juin_est": r.marge_juin_est ?? "",
+    "marge_reelle": r.marge_reelle ?? "",
+    "statut_est": r.statut_est,
+    "statut_reelle": r.statut_reelle,
+    "categorie_bo": r.categorie_bo,
+    "comment_bo": r.comment_bo,
+    "owner": r.owner,
+    "commentaire": r.commentaire,
+  }));
+  const ws8 = XLSX.utils.json_to_sheet(annotationRows);
+  XLSX.utils.book_append_sheet(wb, ws8, "Annotations (import)");
+
+  const date = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, `marge_dashboard_${date}.xlsx`);
+}
+
 export default function MargeDashboardPage() {
   // undefined = laisse le backend choisir par défaut (dernière période de
   // l'année en cours, ou la plus récente disponible sinon) ; une fois les
@@ -174,23 +369,11 @@ export default function MargeDashboardPage() {
   const [page, setPage] = useState(1);
 
   // Import/Export state
-  const [exportLoading, setExportLoading] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  async function handleExport() {
-    setExportLoading(true);
-    try {
-      await exportMargeDashboard(period);
-    } catch {
-      // silently ignore — browser already shows network errors
-    } finally {
-      setExportLoading(false);
-    }
-  }
 
   async function handleImport() {
     const file = fileInputRef.current?.files?.[0];
@@ -301,6 +484,7 @@ export default function MargeDashboardPage() {
 
   const meta = data.meta;
   const scopeLabel = scopeMode === "portfolio" ? "Portefeuille entier" : scopeMode === "family" ? "Famille de typologie" : scopeMode === "exact" ? "Typologie exacte" : "Sélection de typologies";
+  const periodLabel = `${MONTH_LABELS[meta.reelle_month - 1]} ${meta.reelle_year}`;
 
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
@@ -320,18 +504,17 @@ export default function MargeDashboardPage() {
           </div>
           <div style={{ display: "flex", gap: 10, flexShrink: 0, alignItems: "center" }}>
             <button
-              onClick={handleExport}
-              disabled={exportLoading}
+              onClick={() => buildExcel(rows, scoped, filtered, kpis, base, scopeLabel + (scopeValue ? ` · ${clientFamilyLabel(scopeValue) ?? scopeValue}` : ""), periodLabel)}
               style={{
                 display: "flex", alignItems: "center", gap: 7, padding: "9px 16px",
-                borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: exportLoading ? "default" : "pointer",
+                borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer",
                 border: `1px solid ${C.blue[100]}`, background: C.blue[50], color: C.blue[800],
-                opacity: exportLoading ? .6 : 1, transition: "opacity .12s",
+                transition: "opacity .12s",
               }}
-              aria-label="Exporter le modèle Excel"
+              aria-label="Exporter en Excel"
             >
               <Download size={15} />
-              {exportLoading ? "Export…" : "Exporter"}
+              Exporter
             </button>
             <button
               onClick={() => { setImportOpen(true); setImportResult(null); setImportError(null); }}
