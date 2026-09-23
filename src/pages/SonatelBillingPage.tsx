@@ -368,7 +368,7 @@ function GridSiteListModal({ onClose }: { onClose: () => void }) {
         alignItems: "flex-start",
         justifyContent: "center",
         zIndex: 9999,
-        padding: "40px 16px",
+        padding: "16px",
         overflowY: "auto",
       }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
@@ -378,7 +378,7 @@ function GridSiteListModal({ onClose }: { onClose: () => void }) {
           background: COLORS.white,
           borderRadius: 20,
           width: "100%",
-          maxWidth: 1100,
+          maxWidth: "98vw",
           boxShadow: "0 32px 64px rgba(15,23,42,.25)",
           overflow: "hidden",
           display: "flex",
@@ -445,7 +445,7 @@ function GridSiteListModal({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Body */}
-        <div style={{ overflowX: "auto", maxHeight: "60vh", overflowY: "auto" }}>
+        <div style={{ overflowX: "auto", maxHeight: "78vh", overflowY: "auto" }}>
           {isLoading && (
             <div style={{ padding: 48, textAlign: "center", color: COLORS.slate500, fontSize: 14 }}>
               Chargement…
