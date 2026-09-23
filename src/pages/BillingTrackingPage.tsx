@@ -1,7 +1,7 @@
 // src/pages/BillingTrackingPage.tsx
 
 import { useState, useMemo, useRef, useEffect, type ReactNode, type CSSProperties } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import {
   AreaChart,
   Area,
@@ -38,10 +38,13 @@ import {
   Clock,
   TrendingDown,
   Loader2,
+  FileText,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { api } from "@/services/api";
 import * as XLSX from "xlsx";
-import { getFNPSites, type FNPResponse } from "@/features/sonatelBilling/api";
+import { getFNPSites, listInvoices, type FNPResponse } from "@/features/sonatelBilling/api";
 import FNPModal from "./FNPModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -702,6 +705,9 @@ export default function BillingTrackingPage() {
 
   const siteCode = selectedSite?.site_id ?? undefined;
   const [showFNPModal, setShowFNPModal] = useState(false);
+  const [baseFacturePage, setBaseFacturePage] = useState(1);
+  const BASE_FACTURE_PAGE_SIZE = 20;
+
   const q = useQuery({
     queryKey: ["billing-tracking", dateStart, dateEnd, siteCode, globalScope],
     queryFn: () => fetchStats(dateStart, dateEnd, siteCode, globalScope),
@@ -712,6 +718,22 @@ export default function BillingTrackingPage() {
     queryKey: ["billing-fnp", dateStart, dateEnd, siteCode],
     queryFn: () => getFNPSites({ start: dateStart, end: dateEnd, site: siteCode }),
     staleTime: 5 * 60 * 1000,
+  });
+
+  useEffect(() => { setBaseFacturePage(1); }, [dateStart, dateEnd, siteCode]);
+
+  const baseFactureQ = useQuery({
+    queryKey: ["billing-base-facture", dateStart, dateEnd, siteCode, baseFacturePage],
+    queryFn: () =>
+      listInvoices({
+        page: baseFacturePage,
+        page_size: BASE_FACTURE_PAGE_SIZE,
+        start: dateStart,
+        end: dateEnd,
+        site: siteCode,
+      }),
+    staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 
   const fnpData = fnpQ.data;
@@ -1154,6 +1176,93 @@ export default function BillingTrackingPage() {
               )}
             </Card>
         </div>
+
+        {/* ─── Base Facture ─────────────────────────────────────────────────── */}
+        <Card>
+          <SectionTitle icon={<FileText size={15} />}>
+            Base Facture
+            {baseFactureQ.data && (
+              <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: C.slate[500] }}>
+                — {baseFactureQ.data.count} facture{baseFactureQ.data.count !== 1 ? "s" : ""}
+              </span>
+            )}
+          </SectionTitle>
+
+          {baseFactureQ.isLoading ? (
+            <Skeleton h={180} />
+          ) : !baseFactureQ.data || baseFactureQ.data.count === 0 ? (
+            <div style={{ color: C.slate[400], fontSize: 12.5, textAlign: "center", padding: "24px 0" }}>
+              Aucune facture sur la période sélectionnée.
+            </div>
+          ) : (
+            <>
+              <div style={{ borderRadius: 14, border: `1px solid ${C.slate[200]}`, overflow: "hidden" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr>
+                      {["N° Facture", "Site", "Contrat", "Période", "Paiement"].map((h) => (
+                        <th key={h} style={{ padding: "8px 12px", textAlign: "left", fontWeight: 900, color: C.slate[500], fontSize: 10, textTransform: "uppercase", letterSpacing: ".08em", borderBottom: `1px solid ${C.slate[200]}`, background: C.slate[50] }}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {baseFactureQ.data.results.map((inv, i) => {
+                      const ps = inv.payment_status;
+                      const psColor = ps === "PAID" ? C.ok.main : ps === "UNPAID" ? C.nok.main : C.slate[400];
+                      const psLabel = ps === "PAID" ? "Payée" : ps === "UNPAID" ? "Impayée" : ps === "OUT_OF_SCOPE" ? "Hors scope" : "—";
+                      return (
+                        <tr key={inv.id} className="btp-row" style={{ borderBottom: `1px solid ${C.slate[100]}`, background: i % 2 === 0 ? "#fff" : C.slate[50] }}>
+                          <td style={{ padding: "8px 12px", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontWeight: 700, color: C.blue[700] }}>
+                            {inv.numero_facture || "—"}
+                          </td>
+                          <td style={{ padding: "8px 12px", color: C.slate[700] }}>
+                            {inv.site?.site_id || "—"}
+                          </td>
+                          <td style={{ padding: "8px 12px", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", color: C.slate[600], fontSize: 11 }}>
+                            {inv.numero_compte_contrat || "—"}
+                          </td>
+                          <td style={{ padding: "8px 12px", color: C.slate[600], fontSize: 11 }}>
+                            {inv.date_debut_periode || "—"} → {inv.date_fin_periode || "—"}
+                          </td>
+                          <td style={{ padding: "8px 12px" }}>
+                            <span style={{ fontWeight: 700, color: psColor, fontSize: 11 }}>{psLabel}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {baseFactureQ.data.count > BASE_FACTURE_PAGE_SIZE && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
+                  <div style={{ fontSize: 12, color: C.slate[500] }}>
+                    Page <strong style={{ color: C.slate[800] }}>{baseFacturePage}</strong> / {Math.ceil(baseFactureQ.data.count / BASE_FACTURE_PAGE_SIZE)} —{" "}
+                    <strong style={{ color: C.slate[800] }}>{baseFactureQ.data.count}</strong> factures
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button
+                      disabled={baseFacturePage <= 1}
+                      onClick={() => setBaseFacturePage((p) => p - 1)}
+                      style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${C.slate[200]}`, background: "#fff", cursor: baseFacturePage <= 1 ? "not-allowed" : "pointer", opacity: baseFacturePage <= 1 ? 0.4 : 1, display: "grid", placeItems: "center" }}
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                    <button
+                      disabled={baseFacturePage >= Math.ceil(baseFactureQ.data.count / BASE_FACTURE_PAGE_SIZE)}
+                      onClick={() => setBaseFacturePage((p) => p + 1)}
+                      style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${C.slate[200]}`, background: "#fff", cursor: baseFacturePage >= Math.ceil(baseFactureQ.data.count / BASE_FACTURE_PAGE_SIZE) ? "not-allowed" : "pointer", opacity: baseFacturePage >= Math.ceil(baseFactureQ.data.count / BASE_FACTURE_PAGE_SIZE) ? 0.4 : 1, display: "grid", placeItems: "center" }}
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </Card>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 16 }}>
             <Card>
