@@ -963,7 +963,7 @@ export default function BillingTrackingPage() {
                 <SectionTitle icon={<CheckCircle2 size={15} />}>Vue appliquée</SectionTitle>
                 <div style={{ minHeight: 150, display: "flex", flexDirection: "column", justifyContent: "center", gap: 10 }}>
                   <div>
-                    <Badge tone={globalScope === "ALL" ? "blue" : globalScope === "PAID" || globalScope === "CERTIFIED" ? "ok" : globalScope === "UNPAID" || globalScope === "CONTESTED" ? "nok" : "warn"}>
+                    <Badge tone={globalScope === "ALL" ? "blue" : globalScope === "PAID" ? "ok" : globalScope === "CERTIFIED" ? "ok" : globalScope === "UNPAID" || globalScope === "CONTESTED" ? "nok" : "warn"}>
                       {scopeMeta[globalScope].label}
                     </Badge>
                   </div>
@@ -1064,7 +1064,7 @@ export default function BillingTrackingPage() {
                   </div>
 
                   <div style={{ fontSize: 12, color: C.slate[600], fontWeight: 700, marginBottom: 10 }}>
-                    Règle : <span style={{ color: C.ok.main, fontWeight: 900 }}>Payée = Certifiée</span> · Taux de certification :
+                    Taux de certification :
                     <span style={{ color: C.blue[700], fontWeight: 900 }}> {data.invoice_certification.summary.taux_certification}%</span>
                   </div>
 
