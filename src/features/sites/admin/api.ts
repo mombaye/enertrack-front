@@ -64,11 +64,33 @@ export interface GridTargetRule {
   updated_at?: string;
 }
 
-export const fetchSites = (params?: Record<string, any>) =>
-  api.get<Site[] | { results: Site[] }>("/core/sites/", { params }).then((res) => {
+export const fetchSites = async (params?: Record<string, any>): Promise<Site[]> => {
+  const all: Site[] = [];
+  let path: string | null = "/core/sites/";
+  let reqParams: Record<string, any> | undefined = { page_size: 1000, ...params };
+
+  while (path) {
+    const res = await api.get<Site[] | { results: Site[]; next?: string | null }>(path, {
+      params: reqParams,
+    });
     const data = res.data;
-    return Array.isArray(data) ? data : data.results || [];
-  });
+    if (Array.isArray(data)) {
+      all.push(...data);
+      break;
+    }
+    all.push(...(data.results ?? []));
+    const next: string | null = (data as { next?: string | null }).next ?? null;
+    if (!next) break;
+    try {
+      const u = new URL(next);
+      path = u.pathname + u.search;
+    } catch {
+      path = next;
+    }
+    reqParams = undefined;
+  }
+  return all;
+};
 
 export const fetchSiteById = (id: number) =>
   api.get<Site>(`/core/sites/${id}/`).then((res) => res.data);

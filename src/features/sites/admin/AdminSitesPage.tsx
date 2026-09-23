@@ -8,7 +8,6 @@ import {
   RefreshCw,
   Pencil,
   Trash2,
-  MapPinned,
   Factory,
   CheckCircle2,
   XCircle,
@@ -18,15 +17,13 @@ import {
   Save,
   ShieldCheck,
   Database,
-  Settings2,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import type { GridTargetRule, Site } from "./api";
+import type { Site } from "./api";
 import {
   useCreateSite,
   useDeleteSite,
-  useGridTargetRules,
   useImportGridTargetRules,
   useImportSites,
   useSites,
@@ -528,83 +525,6 @@ function SiteFormModal({
   );
 }
 
-function GridTargetRulesPanel({
-  rows,
-  importing,
-  onImport,
-}: {
-  rows: GridTargetRule[];
-  importing: boolean;
-  onImport: () => void;
-}) {
-  return (
-    <div className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h3 className="text-base font-bold tracking-tight text-slate-900">
-            Règles GridTargetRule
-          </h3>
-          <p className="mt-1 text-sm text-slate-500">
-            Référentiel cible/redevance importé depuis le fichier client.
-          </p>
-        </div>
-        <button
-          onClick={onImport}
-          disabled={importing}
-          className="inline-flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 disabled:opacity-70"
-        >
-          {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-          Import GridTargetRule
-        </button>
-      </div>
-
-      <div className="mt-4 overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-100">
-            <tr className="border-b border-slate-300">
-              {["Configuration", "Type", "Load band", "Target kWh", "Target/jour", "Redevance"].map(
-                (h) => (
-                  <th
-                    key={h}
-                    className="whitespace-nowrap px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em] text-slate-600"
-                  >
-                    {h}
-                  </th>
-                )
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length ? (
-              rows.slice(0, 8).map((rule) => (
-                <tr key={rule.id} className="border-b border-slate-300">
-                  <td className="px-4 py-3 font-medium text-slate-800">{rule.configuration}</td>
-                  <td className="px-4 py-3"><SoftBadge label={rule.site_type} /></td>
-                  <td className="px-4 py-3"><SoftBadge label={rule.load_band} /></td>
-                  <td className="px-4 py-3 text-slate-700">{rule.target_kwh ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-700">{rule.target_kwh_per_day ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-700">{rule.grid_fee_amount ?? "—"}</td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
-                  Aucune règle importée.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {!!rows.length && (
-        <p className="mt-3 text-xs text-slate-500">
-          {rows.length} règle(s) disponible(s).
-        </p>
-      )}
-    </div>
-  );
-}
 
 export default function AdminSitesPage() {
   const [query, setQuery] = useState("");
@@ -621,7 +541,6 @@ export default function AdminSitesPage() {
   const gridFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const { data: rows = [], isLoading, isFetching, refetch } = useSites();
-  const { data: gridRules = [] } = useGridTargetRules();
 
   const createMutation = useCreateSite();
   const updateMutation = useUpdateSite();
@@ -660,42 +579,6 @@ export default function AdminSitesPage() {
     const inScope = rows.filter((s) => s.scope_status === "IN_SCOPE").length;
 
     return { total, modernized, solarPending, indoor, inScope };
-  }, [rows]);
-
-  const zoneStats = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const site of rows) {
-      const z = site.zone || "—";
-      map.set(z, (map.get(z) || 0) + 1);
-    }
-    return Array.from(map.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 6);
-  }, [rows]);
-
-  const completeness = useMemo(() => {
-    if (!rows.length) return 0;
-    const scored = rows.map((site) => {
-      let filled = 0;
-      const fields = [
-        site.site_id,
-        site.name,
-        site.zone,
-        site.installed_typology,
-        site.contract_number,
-        site.meter_number,
-        site.site_type,
-        site.invoice_payment,
-        site.configuration,
-        site.scope_status,
-      ];
-      fields.forEach((v) => {
-        if (v !== null && v !== undefined && String(v).trim() !== "") filled += 1;
-      });
-      return filled / fields.length;
-    });
-    const avg = scored.reduce((a, b) => a + b, 0) / scored.length;
-    return Math.round(avg * 100);
   }, [rows]);
 
   useEffect(() => {
@@ -992,8 +875,7 @@ export default function AdminSitesPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[minmax(0,1fr)_380px]">
-          <div className="overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <h2 className="text-lg font-bold tracking-tight text-slate-900">
@@ -1156,128 +1038,6 @@ export default function AdminSitesPage() {
                 </tbody>
               </table>
             </div>
-          </div>
-
-          <div className="space-y-6">
-            <div className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-base font-bold tracking-tight text-slate-900">
-                Actions rapides
-              </h3>
-              <div className="mt-4 space-y-3">
-                <button
-                  onClick={openCreate}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:bg-slate-50"
-                >
-                  <Plus className="h-4 w-4 text-blue-700" />
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">Créer un site</div>
-                    <div className="text-xs text-slate-500">
-                      Ajouter une nouvelle entrée au référentiel
-                    </div>
-                  </div>
-                </button>
-
-                <button
-                  onClick={handleImportClick}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:bg-slate-50"
-                >
-                  <Upload className="h-4 w-4 text-emerald-700" />
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">Importer les sites</div>
-                    <div className="text-xs text-slate-500">
-                      Mettre à jour les sites existants et créer les nouveaux
-                    </div>
-                  </div>
-                </button>
-
-                <button
-                  onClick={handleGridImportClick}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:bg-slate-50"
-                >
-                  <Database className="h-4 w-4 text-amber-700" />
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">
-                      Importer GridTargetRule
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      Charger les cibles et redevances client
-                    </div>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => refetch()}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:bg-slate-50"
-                >
-                  <RefreshCw className="h-4 w-4 text-amber-700" />
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">
-                      Synchroniser les données
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      Rafraîchir le référentiel depuis la base
-                    </div>
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            <div className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-base font-bold tracking-tight text-slate-900">Résumé</h3>
-              <div className="mt-4 space-y-4">
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                    <MapPinned className="h-4 w-4 text-blue-700" />
-                    Distribution zones
-                  </div>
-                  <div className="mt-3 space-y-2 text-sm text-slate-600">
-                    {zoneStats.length ? (
-                      zoneStats.map(([z, count]) => (
-                        <div key={z} className="flex items-center justify-between">
-                          <span>{z}</span>
-                          <span className="font-semibold text-slate-900">{count}</span>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-slate-500">Aucune donnée</div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <div className="text-sm font-semibold text-slate-800">
-                    Qualité référentiel
-                  </div>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
-                    <div
-                      className="h-full rounded-full bg-blue-800 transition-all"
-                      style={{ width: `${completeness}%` }}
-                    />
-                  </div>
-                  <p className="mt-2 text-xs text-slate-500">
-                    {completeness}% des lignes ont les informations principales correctement
-                    renseignées.
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
-                  <div className="flex items-start gap-3">
-                    <Settings2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
-                    <div>
-                      Les opérations de création, modification, suppression et import sont
-                      directement connectées aux endpoints backend du module Sites.
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <GridTargetRulesPanel
-              rows={gridRules}
-              importing={importGridMutation.isPending}
-              onImport={handleGridImportClick}
-            />
-          </div>
         </div>
 
         <SiteFormModal
