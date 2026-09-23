@@ -1145,7 +1145,7 @@ export default function BillingTrackingPage() {
                       <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.slate[400] }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 11, fill: C.slate[400] }} axisLine={false} tickLine={false} width={38} />
                       <Tooltip content={<CustomTooltip />} />
-                      <Bar dataKey={billingCertChartKey} name={billingCertChartMeta[billingCertChartKey].label} fill={billingCertChartMeta[billingCertChartKey].color} radius={[6, 6, 0, 0]} />
+                      <Bar dataKey={certChartView} name={billingCertChartMeta[certChartView].label} fill={billingCertChartMeta[certChartView].color} radius={[6, 6, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </>
