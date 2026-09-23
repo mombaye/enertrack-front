@@ -48,7 +48,7 @@ const COLORS = {
   white: "#ffffff",
 };
 
-type Tab = "INVOICES" | "MONTHLY" | "CONTRACT" | "CONFIG";
+type Tab = "INVOICES" | "MONTHLY" | "CONTRACT";
 
 function fmtDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -348,7 +348,6 @@ export default function SonatelBillingPage() {
     { key: "INVOICES" as Tab, label: "Factures", icon: <FileSpreadsheet size={15} /> },
     { key: "MONTHLY" as Tab, label: "Synthèse mensuelle", icon: <BarChart3 size={15} /> },
     { key: "CONTRACT" as Tab, label: "Contrat × Mois", icon: <TrendingUp size={15} /> },
-    { key: "CONFIG" as Tab, label: "Config Sonatel", icon: <ShieldAlert size={15} /> },
   ];
 
   const invoicesQ = useQuery({
@@ -459,22 +458,7 @@ const outScopeCountQ = useQuery({
     placeholderData: keepPreviousData,
   });
 
-  const configQ = useQuery({
-    enabled: tab === "CONFIG",
-    queryKey: ["sb-config", { page, search, site, dateStart, dateEnd }],
-    queryFn: () =>
-      listInvoices({
-        page,
-        page_size: pageSize,
-        search: search || undefined,
-        site: site || undefined,
-        start: dateStart,
-        end: dateEnd,
-      }),
-    placeholderData: keepPreviousData,
-  });
-
-  const active = tab === "INVOICES" ? invoicesQ : tab === "MONTHLY" ? monthlyQ : tab === "CONTRACT" ? contractQ : configQ;
+  const active = tab === "INVOICES" ? invoicesQ : tab === "MONTHLY" ? monthlyQ : contractQ;
   const rows = ((active?.data as any)?.results ?? []) as any[];
   const total = (active?.data as any)?.count ?? 0;
 
@@ -591,40 +575,6 @@ const outScopeCountQ = useQuery({
     [siteCol, mono, amt]
   );
 
-  const configCols: Col<SonatelInvoice>[] = useMemo(
-    () => [
-      { key: "site", title: "Site", render: siteCol },
-      { key: "fact", title: "N° Facture", render: (r) => mono(r.numero_facture) },
-      { key: "contract", title: "Contrat", render: (r) => mono(r.numero_compte_contrat) },
-      {
-        key: "period",
-        title: "Période",
-        render: (r) => (
-          <div style={{ fontSize: 12 }}>
-            <div style={{ color: COLORS.slate700 }}>{r.date_debut_periode || "—"}</div>
-            <div style={{ color: COLORS.slate400 }}>→ {r.date_fin_periode || "—"}</div>
-          </div>
-        ),
-      },
-      {
-        key: "pay",
-        title: "Statut paiement",
-        render: (r) => {
-          const ps = r.payment_status;
-          if (!ps) {
-            return (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 999, background: COLORS.redSoft, color: COLORS.red, fontSize: 12, fontWeight: 700 }}>
-                <span style={{ width: 7, height: 7, borderRadius: "50%", background: COLORS.red }} />
-                Impayée
-              </span>
-            );
-          }
-          return <PayPill value={ps} updatedAt={r.payment_status_updated_at} />;
-        },
-      },
-    ],
-    [siteCol, mono]
-  );
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)", padding: 24 }}>
@@ -844,9 +794,7 @@ const outScopeCountQ = useQuery({
                   ? "Liste des factures"
                   : tab === "MONTHLY"
                   ? "Synthèse mensuelle"
-                  : tab === "CONTRACT"
-                  ? "Agrégat contrat × mois"
-                  : "Config Sonatel — Numéros de factures"}
+                  : "Agrégat contrat × mois"}
               </div>
               <div style={{ fontSize: 12, color: COLORS.slate500 }}>
                 {active?.isFetching ? "Actualisation en cours..." : `${total} enregistrement(s)`}
@@ -863,9 +811,7 @@ const outScopeCountQ = useQuery({
                 ? (invoiceCols as Col<any>[])
                 : tab === "MONTHLY"
                 ? (monthlyCols as Col<any>[])
-                : tab === "CONTRACT"
-                ? (contractCols as Col<any>[])
-                : (configCols as Col<any>[])
+                : (contractCols as Col<any>[])
             }
             rows={rows}
             loading={active?.isLoading}
@@ -874,9 +820,7 @@ const outScopeCountQ = useQuery({
                 ? "Aucune facture pour les filtres sélectionnés."
                 : tab === "MONTHLY"
                 ? "Aucune synthèse mensuelle pour les filtres sélectionnés."
-                : tab === "CONTRACT"
-                ? "Aucun agrégat contrat × mois pour les filtres sélectionnés."
-                : "Aucune facture pour les filtres sélectionnés."
+                : "Aucun agrégat contrat × mois pour les filtres sélectionnés."
             }
           />
 
