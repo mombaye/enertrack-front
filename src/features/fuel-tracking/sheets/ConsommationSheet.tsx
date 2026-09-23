@@ -250,53 +250,31 @@ function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse 
         padding: 14,
       }}
     >
-      {/* Mesures Snowflake / ENOC */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
-        <KpiCard label="Sites avec mesure" value={fmt.format(kpis.sites_avec_donnees_brutes)} sub={`${currentLabel} · relevés bruts Snowflake`} tone="blue" icon={<Users size={14} />} />
-        <KpiCard label="Conso mesurée (Snowflake)" value={formatL(kpis.total_conso_snowflake_l)} tone="cyan" icon={<Droplets size={14} />} />
-        <KpiCard label="Sites avec estimation" value={fmt.format(kpis.sites_avec_estimation)} sub="delta de niveau de cuve" tone="gold" icon={<Droplets size={14} />} />
-        <KpiCard label="Qté ajoutée (ENOC validé)" value={formatL(kpis.total_enoc_qte_ajoutee_l)} tone="green" icon={<Fuel size={14} />} />
-        <KpiCard
-          label="Factures Sonatel"
-          value={`${fmt.format(kpis.factures_payees)} payées / ${fmt.format(kpis.factures_total)}`}
-          sub={`${fmt.format(kpis.factures_impayees)} non payées / ${fmt.format(kpis.factures_total)}`}
-          tone="blue"
-          icon={<Gauge size={14} />}
-        />
-        {kpis.rapprochement_counts && (
-          <>
-            <KpiCard label="Rapprochement OK" value={fmt.format(kpis.rapprochement_counts.ok)} tone="green" icon={<Fuel size={14} />} />
-            <KpiCard label="Rapprochement À justifier" value={fmt.format(kpis.rapprochement_counts.a_justifier)} tone="gold" icon={<Fuel size={14} />} />
-            <KpiCard label="Rapprochement À investiguer" value={fmt.format(kpis.rapprochement_counts.a_investiguer)} tone="red" icon={<Fuel size={14} />} />
-            <KpiCard label="Livraisons à contrôler" value={fmt.format(kpis.rapprochement_counts.livraisons_a_controler)} tone="orange" icon={<Fuel size={14} />} sub="ENOC = 0 L" />
-          </>
-        )}
-      </div>
-
       {/* Stan KPIs — dénominateur officiel Ops (Facturation avec GE = Oui) */}
       {!kpis.stan_importe && (
-        <div style={{ marginTop: 10, padding: "8px 12px", borderRadius: 6, background: "#fffbe6", border: "1px solid #ffe58f", color: "#ad6800", fontSize: 12 }}>
+        <div style={{ marginTop: 0, marginBottom: 10, padding: "8px 12px", borderRadius: 6, background: "#fffbe6", border: "1px solid #ffe58f", color: "#ad6800", fontSize: 12 }}>
           ⚠ Fichier Stan non importé pour {currentLabel} — lancez <code>import_facturation_par_site</code> pour afficher les KPIs de couverture GE officiels.
         </div>
       )}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginTop: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
         <KpiCard label="Sites GE validés Stan" value={fmt.format(kpis.sites_ge_valides_stan)} sub="Facturation avec GE = Oui · référentiel Ops" tone="blue" icon={<Users size={14} />} />
         <KpiCard
-          label="Supervision Snowflake"
+          label="Supervision Snowflake des sites GE Stan"
           value={kpis.supervision_snowflake_pct != null ? `${kpis.supervision_snowflake_pct}%` : "—"}
           sub={`${fmt.format(kpis.supervision_snowflake)} / ${fmt.format(kpis.sites_ge_valides_stan)} sites · ≥50% jours télémétrie`}
           tone="cyan"
           icon={<Gauge size={14} />}
         />
-        <KpiCard
-          label="Disponibilité DSE"
-          value={kpis.disponibilite_runtime_dse_pct != null ? `${kpis.disponibilite_runtime_dse_pct}%` : "—"}
-          sub={`${fmt.format(kpis.disponibilite_runtime_dse)} / ${fmt.format(kpis.sites_ge_valides_stan)} sites · runtime DSE ≥50% jours`}
-          tone="gold"
-          icon={<Gauge size={14} />}
-        />
-        <KpiCard label="CPH calculé" value={fmt.format(kpis.sites_avec_cph_calcule)} sub={`${fmt.format(kpis.sites_cph_non_calcule)} sites sans CPH`} tone="green" icon={<Fuel size={14} />} />
-        <KpiCard label="CPH non calculé" value={fmt.format(kpis.sites_cph_non_calcule)} sub="running time ou CPH absent" tone="slate" icon={<Fuel size={14} />} />
+        <KpiCard label="CPH calculé" value={fmt.format(kpis.sites_avec_cph_calcule)} sub={`/ ${fmt.format(kpis.sites_ge_valides_stan)} sites GE Stan`} tone="green" icon={<Fuel size={14} />} />
+        <KpiCard label="CPH non calculé" value={fmt.format(kpis.sites_cph_non_calcule)} sub="running time ou paramètres GE absents" tone="slate" icon={<Fuel size={14} />} />
+        {kpis.rapprochement_counts && (
+          <>
+            <KpiCard label="Rapprochement OK" value={fmt.format(kpis.rapprochement_counts.ok)} tone="green" icon={<Fuel size={14} />} />
+            <KpiCard label="À justifier" value={fmt.format(kpis.rapprochement_counts.a_justifier)} tone="gold" icon={<Fuel size={14} />} />
+            <KpiCard label="À investiguer" value={fmt.format(kpis.rapprochement_counts.a_investiguer)} tone="red" icon={<Fuel size={14} />} />
+            <KpiCard label="Données incomplètes" value={fmt.format(kpis.rapprochement_counts.donnees_incompletes)} tone="slate" icon={<Fuel size={14} />} sub="stock initial ou final manquant" />
+          </>
+        )}
       </div>
     </div>
   );
