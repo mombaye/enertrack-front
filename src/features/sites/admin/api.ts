@@ -83,7 +83,10 @@ export const fetchSites = async (params?: Record<string, any>): Promise<Site[]> 
     if (!next) break;
     try {
       const u = new URL(next);
-      path = u.pathname + u.search;
+      const rawPath = u.pathname + u.search;
+      // Strip the baseURL's path prefix to avoid double-prefix (e.g. /api/api/...)
+      const basePath = new URL(api.defaults.baseURL || "http://localhost").pathname.replace(/\/$/, "");
+      path = basePath && rawPath.startsWith(basePath) ? rawPath.slice(basePath.length) : rawPath;
     } catch {
       path = next;
     }
