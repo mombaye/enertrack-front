@@ -240,11 +240,13 @@ async function searchSites(q: string): Promise<SiteOption[]> {
   });
 }
 
-function exportToExcel(data: StatsResponse, siteCode?: string, scope: GlobalScope = "ALL") {
+function exportToExcel(data: StatsResponse, siteCode?: string, scope: GlobalScope = "ALL", fnpData?: import("@/features/sonatelBilling/api").FNPResponse) {
   const wb = XLSX.utils.book_new();
 
+  // ── Onglet 1 : Évolution mensuelle ──────────────────────────────────────────
   const evoRows = data.evolution.map((r) => ({
     "Période": r.period,
+    "Filtre appliqué": scope,
     "Nb Factures": r.invoices,
     "Montant HT (FCFA)": Number(r.montant_ht),
     "Montant TTC (FCFA)": Number(r.montant_ttc),
@@ -254,52 +256,124 @@ function exportToExcel(data: StatsResponse, siteCode?: string, scope: GlobalScop
     "Cos φ (FCFA)": Number(r.cosphi),
   }));
   const ws1 = XLSX.utils.json_to_sheet(evoRows);
-  ws1["!cols"] = [
-    { wch: 12 },
-    { wch: 12 },
-    { wch: 20 },
-    { wch: 20 },
-    { wch: 16 },
-    { wch: 18 },
-    { wch: 22 },
-    { wch: 14 },
-  ];
+  ws1["!cols"] = [{ wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 16 }, { wch: 18 }, { wch: 22 }, { wch: 14 }];
   XLSX.utils.book_append_sheet(wb, ws1, "Évolution mensuelle");
 
-  const topRows = data.top.conso_vs_montant.map((r) => ({
-    "Site ID": r.site_id,
-    "Site Nom": r.site_name,
-    "Montant HT (FCFA)": Number(r.montant_ht),
-    "Cos φ (FCFA)": Number(r.montant_cosphi),
-    "Pénalité (FCFA)": Number(r.penalite_prime),
-    "Abonnement (FCFA)": Number(r.abonnement),
-  }));
-  const ws2 = XLSX.utils.json_to_sheet(topRows);
-  ws2["!cols"] = [{ wch: 14 }, { wch: 28 }, { wch: 20 }, { wch: 14 }, { wch: 16 }, { wch: 18 }];
-  XLSX.utils.book_append_sheet(wb, ws2, "Top Sites");
-
+  // ── Onglet 2 : Distribution HT ──────────────────────────────────────────────
   const distRows = data.distribution_ht.parts.map((p) => ({
     "Composante": p.label,
     "Montant (FCFA)": Number(p.value),
     "% du HT": p.percent,
+    "Total HT (FCFA)": Number(data.distribution_ht.total_ht),
   }));
-  const ws3 = XLSX.utils.json_to_sheet(distRows);
-  ws3["!cols"] = [{ wch: 20 }, { wch: 20 }, { wch: 10 }];
-  XLSX.utils.book_append_sheet(wb, ws3, "Distribution HT");
+  const ws2 = XLSX.utils.json_to_sheet(distRows);
+  ws2["!cols"] = [{ wch: 22 }, { wch: 20 }, { wch: 10 }, { wch: 20 }];
+  XLSX.utils.book_append_sheet(wb, ws2, "Distribution HT");
 
+  // ── Onglet 3 : Top sites (tous classements fusionnés) ───────────────────────
+  const allTopIds = new Set([
+    ...data.top.conso_vs_montant.map((r) => r.site_id),
+    ...data.top.pen_prime.map((r) => r.site_id),
+    ...data.top.cosphi.map((r) => r.site_id),
+    ...data.top.abonnement.map((r) => r.site_id),
+  ]);
+  const topMap = new Map<string, TopSite>();
+  for (const r of [...data.top.conso_vs_montant, ...data.top.pen_prime, ...data.top.cosphi, ...data.top.abonnement]) {
+    if (!topMap.has(r.site_id)) topMap.set(r.site_id, r);
+  }
+  const topRows = Array.from(allTopIds)
+    .map((id) => topMap.get(id)!)
+    .filter(Boolean)
+    .map((r) => ({
+      "Site ID": r.site_id,
+      "Site Nom": r.site_name,
+      "Montant HT (FCFA)": Number(r.montant_ht),
+      "Cos φ (FCFA)": Number(r.montant_cosphi),
+      "Pénalité Prime (FCFA)": Number(r.penalite_prime),
+      "Abonnement (FCFA)": Number(r.abonnement),
+    }));
+  const ws3 = XLSX.utils.json_to_sheet(topRows);
+  ws3["!cols"] = [{ wch: 14 }, { wch: 30 }, { wch: 20 }, { wch: 16 }, { wch: 22 }, { wch: 20 }];
+  XLSX.utils.book_append_sheet(wb, ws3, "Top Sites");
+
+  // ── Onglet 4 : Statuts paiement — résumé + évolution ───────────────────────
   if (data.payment_statuses) {
-    const ws4 = XLSX.utils.json_to_sheet([data.payment_statuses.summary]);
-    XLSX.utils.book_append_sheet(wb, ws4, "Paiement résumé");
+    const s = data.payment_statuses.summary;
+    const payResume = [{
+      "Total factures": s.total,
+      "Payées": s.paid,
+      "Impayées": s.unpaid,
+      "Hors scope": s.out_of_scope,
+      "Non défini": s.undefined,
+      "Taux payé (%)": s.paid_pct,
+    }];
+    const ws4a = XLSX.utils.json_to_sheet(payResume);
+    ws4a["!cols"] = [{ wch: 16 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, ws4a, "Paiement résumé");
+
+    const payEvo = data.payment_statuses.evolution.map((r) => ({
+      "Période": r.period,
+      "Total": r.total,
+      "Payées": r.paid,
+      "Impayées": r.unpaid,
+      "Hors scope": r.out_of_scope,
+      "Non défini": r.undefined,
+    }));
+    const ws4b = XLSX.utils.json_to_sheet(payEvo);
+    ws4b["!cols"] = [{ wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 14 }];
+    XLSX.utils.book_append_sheet(wb, ws4b, "Paiement évolution");
   }
 
+  // ── Onglet 5 : Certification billing — résumé + évolution ──────────────────
   if (data.invoice_certification) {
-    const ws5 = XLSX.utils.json_to_sheet([data.invoice_certification.summary]);
-    XLSX.utils.book_append_sheet(wb, ws5, "Certif billing résumé");
+    const s = data.invoice_certification.summary;
+    const certResume = [{
+      "Total factures": s.total,
+      "Certifiées (Validées)": s.certified,
+      "Contestées": s.contested,
+      "Brutes à traiter (Créées)": s.created,
+      "Taux certification (%)": s.taux_certification,
+    }];
+    const ws5a = XLSX.utils.json_to_sheet(certResume);
+    ws5a["!cols"] = [{ wch: 16 }, { wch: 24 }, { wch: 14 }, { wch: 28 }, { wch: 22 }];
+    XLSX.utils.book_append_sheet(wb, ws5a, "Certification résumé");
+
+    const certEvo = data.invoice_certification.evolution.map((r) => ({
+      "Période": r.period,
+      "Total": r.total,
+      "Certifiées": r.certified,
+      "Contestées": r.contested,
+      "Brutes à traiter": r.created,
+    }));
+    const ws5b = XLSX.utils.json_to_sheet(certEvo);
+    ws5b["!cols"] = [{ wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(wb, ws5b, "Certification évolution");
   }
 
-  if (data.certification) {
-    const ws6 = XLSX.utils.json_to_sheet([data.certification.summary]);
-    XLSX.utils.book_append_sheet(wb, ws6, "Certification tech résumé");
+  // ── Onglet 6 : FNP détail ────────────────────────────────────────────────────
+  if (fnpData && fnpData.rows.length > 0) {
+    const fnpRows = fnpData.rows.map((r) => ({
+      "Site ID": r.site_id,
+      "Site Nom": r.site_name ?? "",
+      "Contrat": r.numero_compte_contrat,
+      "Période manquante": r.period,
+      "Conso estimée": r.est_conso != null ? Number(r.est_conso) : "",
+      "Montant HT estimé (FCFA)": r.est_montant_ht != null ? Number(r.est_montant_ht) : "",
+      "Montant TTC estimé (FCFA)": r.est_montant_ttc != null ? Number(r.est_montant_ttc) : "",
+      "Abonnement estimé (FCFA)": r.est_abonnement != null ? Number(r.est_abonnement) : "",
+      "Pénalité estimée (FCFA)": r.est_penalite != null ? Number(r.est_penalite) : "",
+      "NRJ estimée (FCFA)": r.est_nrj != null ? Number(r.est_nrj) : "",
+      "Mois historique dispo": r.history_months,
+      "Dernière facture reçue": r.last_invoice_period ?? "",
+      "Typologie": r.typology ?? "",
+    }));
+    const ws6 = XLSX.utils.json_to_sheet(fnpRows);
+    ws6["!cols"] = [
+      { wch: 14 }, { wch: 30 }, { wch: 22 }, { wch: 18 }, { wch: 16 },
+      { wch: 24 }, { wch: 26 }, { wch: 24 }, { wch: 24 }, { wch: 20 },
+      { wch: 22 }, { wch: 24 }, { wch: 14 },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws6, "FNP Détail");
   }
 
   const start = data.range.start.replace(/-/g, "");
@@ -623,6 +697,8 @@ export default function BillingTrackingPage() {
   const [activeMetric, setActiveMetric] = useState<"ht" | "nrj" | "abonnement" | "penalite" | "cosphi">("ht");
   const [selectedSite, setSelectedSite] = useState<SiteOption | null>(null);
   const [globalScope, setGlobalScope] = useState<GlobalScope>("ALL");
+  const [paymentChartView, setPaymentChartView] = useState<"total" | "paid" | "unpaid" | "out_of_scope" | "undefined">("total");
+  const [certChartView, setCertChartView] = useState<"total" | "certified" | "contested" | "created">("total");
 
   const siteCode = selectedSite?.site_id ?? undefined;
   const [showFNPModal, setShowFNPModal] = useState(false);
@@ -671,11 +747,6 @@ export default function BillingTrackingPage() {
     CREATED: { label: "Brutes à traiter", color: C.warn.main },
   };
 
-  const paymentChartKey =
-    globalScope === "PAID" ? "paid" : globalScope === "UNPAID" ? "unpaid" : globalScope === "OUT_OF_SCOPE" ? "out_of_scope" : globalScope === "UNDEFINED" ? "undefined" : "total";
-
-  const billingCertChartKey =
-    globalScope === "CERTIFIED" ? "certified" : globalScope === "CONTESTED" ? "contested" : globalScope === "CREATED" ? "created" : "total";
 
   const paymentChartMeta = {
     total: { label: "Brut", color: C.blue[700] },
@@ -799,7 +870,7 @@ export default function BillingTrackingPage() {
             <button
               type="button"
               disabled={!data}
-              onClick={() => data && exportToExcel(data, siteCode, globalScope)}
+              onClick={() => data && exportToExcel(data, siteCode, globalScope, fnpData ?? undefined)}
               style={{ ...iconButtonStyle, height: 36, background: data ? C.blue[700] : C.slate[100], color: data ? "#fff" : C.slate[400], border: "none", cursor: data ? "pointer" : "not-allowed" }}
             >
               <Download size={14} /> Exporter
@@ -981,11 +1052,11 @@ export default function BillingTrackingPage() {
                 icon={<CheckCircle2 size={15} />}
                 right={
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    <MetricBtn active={globalScope === "ALL"} color={C.blue[700]} label="Brut" onClick={() => setGlobalScope("ALL")} />
-                    <MetricBtn active={globalScope === "PAID"} color={C.blue[700]} label="Payées" onClick={() => setGlobalScope("PAID")} />
-                    <MetricBtn active={globalScope === "UNPAID"} color={C.blue[700]} label="Impayées" onClick={() => setGlobalScope("UNPAID")} />
-                    <MetricBtn active={globalScope === "OUT_OF_SCOPE"} color={C.blue[700]} label="Hors scope" onClick={() => setGlobalScope("OUT_OF_SCOPE")} />
-                    <MetricBtn active={globalScope === "UNDEFINED"} color={C.blue[700]} label="Non défini" onClick={() => setGlobalScope("UNDEFINED")} />
+                    <MetricBtn active={paymentChartView === "total"} color={C.blue[700]} label="Brut" onClick={() => setPaymentChartView("total")} />
+                    <MetricBtn active={paymentChartView === "paid"} color={C.ok.main} label="Payées" onClick={() => setPaymentChartView("paid")} />
+                    <MetricBtn active={paymentChartView === "unpaid"} color={C.nok.main} label="Impayées" onClick={() => setPaymentChartView("unpaid")} />
+                    <MetricBtn active={paymentChartView === "out_of_scope"} color={C.warn.main} label="Hors scope" onClick={() => setPaymentChartView("out_of_scope")} />
+                    <MetricBtn active={paymentChartView === "undefined"} color={C.slate[500]} label="Non défini" onClick={() => setPaymentChartView("undefined")} />
                   </div>
                 }
               >
@@ -1021,7 +1092,7 @@ export default function BillingTrackingPage() {
                       <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.slate[400] }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 11, fill: C.slate[400] }} axisLine={false} tickLine={false} width={38} />
                       <Tooltip content={<CustomTooltip />} />
-                      <Bar dataKey={paymentChartKey} name={paymentChartMeta[paymentChartKey].label} fill={paymentChartMeta[paymentChartKey].color} radius={[6, 6, 0, 0]} />
+                      <Bar dataKey={paymentChartView} name={paymentChartMeta[paymentChartView].label} fill={paymentChartMeta[paymentChartView].color} radius={[6, 6, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </>
@@ -1035,10 +1106,10 @@ export default function BillingTrackingPage() {
                 icon={<CheckCircle2 size={15} />}
                 right={
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    <MetricBtn active={globalScope === "ALL"} color={C.blue[700]} label="Brut" onClick={() => setGlobalScope("ALL")} />
-                    <MetricBtn active={globalScope === "CERTIFIED"} color={C.blue[700]} label="Certifiées" onClick={() => setGlobalScope("CERTIFIED")} />
-                    <MetricBtn active={globalScope === "CONTESTED"} color={C.blue[700]} label="Contestées" onClick={() => setGlobalScope("CONTESTED")} />
-                    <MetricBtn active={globalScope === "CREATED"} color={C.blue[700]} label="Brutes à traiter" onClick={() => setGlobalScope("CREATED")} />
+                    <MetricBtn active={certChartView === "total"} color={C.blue[700]} label="Brut" onClick={() => setCertChartView("total")} />
+                    <MetricBtn active={certChartView === "certified"} color={C.ok.main} label="Certifiées" onClick={() => setCertChartView("certified")} />
+                    <MetricBtn active={certChartView === "contested"} color={C.nok.main} label="Contestées" onClick={() => setCertChartView("contested")} />
+                    <MetricBtn active={certChartView === "created"} color={C.warn.main} label="Brutes à traiter" onClick={() => setCertChartView("created")} />
                   </div>
                 }
               >
