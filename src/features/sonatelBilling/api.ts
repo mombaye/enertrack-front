@@ -226,6 +226,27 @@ export async function updateInvoiceStatus(
   return data;
 }
 
+export type PaymentStatusImportResult = {
+  updated: number;
+  not_found: number;
+  total_rows: number;
+  col_facture: string;
+  col_statut: string | null;
+  default_when_missing: string;
+  rows: Array<{ numero_facture: string; payment_status: string; action: "updated" | "not_found" }>;
+};
+
+export async function importPaymentStatus(file: File): Promise<PaymentStatusImportResult> {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.post<PaymentStatusImportResult>(
+    "/sonatel-billing/batches/import-payment-status/",
+    form,
+    { headers: { "Content-Type": "multipart/form-data" } }
+  );
+  return data;
+}
+
 // ─── Types FNP ───────────────────────────────────────────────────────────────
 export type FNPRow = {
   site_id: string;
