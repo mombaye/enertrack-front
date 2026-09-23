@@ -1218,12 +1218,13 @@ export default function BillingTrackingPage() {
           <SectionTitle
             icon={<FileText size={15} />}
             right={
-              baseFactureQ.data && baseFactureQ.data.count > 0 ? (
+              !baseFactureQ.isLoading ? (
                 <button
                   onClick={() => { setModalPage(1); setShowFacturesModal(true); }}
                   style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 16px", borderRadius: 12, background: `linear-gradient(135deg, ${C.blue[700]}, #1d4ed8)`, border: "none", color: "#fff", fontSize: 12, fontWeight: 900, cursor: "pointer", boxShadow: `0 6px 16px ${C.blue[700]}40` }}
                 >
                   <FileText size={13} /> Voir la liste des factures
+                  {baseFactureQ.data ? ` (${baseFactureQ.data.count.toLocaleString("fr-FR")})` : ""}
                 </button>
               ) : undefined
             }
