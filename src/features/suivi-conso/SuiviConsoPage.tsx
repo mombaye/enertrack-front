@@ -206,7 +206,6 @@ const fmtInt = (v: number) => v.toLocaleString("fr-FR", { maximumFractionDigits:
 const fmtKwh = (v: string | number | null | undefined): string => {
   const value = maybeNum(v);
   if (value === null) return "—";
-  if (Math.abs(value) >= 1000) return `${(value / 1000).toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MWh`;
   return `${value.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} kWh`;
 };
 
@@ -215,7 +214,7 @@ const fmtPct = (v: number | null): string => {
   return `${v > 0 ? "+" : ""}${v.toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 };
 
-const mwhTick = (v: number) => (Math.abs(v) >= 1000 ? `${Math.round(v / 1000)} MWh` : `${Math.round(v)} kWh`);
+const mwhTick = (v: number) => `${Math.round(v).toLocaleString("fr-FR")} kWh`;
 
 const rowFacturee = (r: ConsoRow) => n(r.conso_facturee_kwh ?? r.conso_kwh);
 const rowFmsGrid = (r: ConsoRow) => n(r.fms_grid_kwh);
