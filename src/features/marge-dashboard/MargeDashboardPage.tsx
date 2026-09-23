@@ -3,15 +3,16 @@
 // Sélecteur de périmètre (portefeuille / famille / typologie exacte / multi-
 // sélection libre), sélecteur de base de marge (estimée / réelle), filtres
 // transverses — tout se recalcule côté client, sans rechargement.
-import { useEffect, useMemo, useState, type ReactNode, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from "react";
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer,
 } from "recharts";
 import {
   TrendingDown, TrendingUp, Percent, Scale, Search, ChevronLeft, ChevronRight,
+  Download, Upload, X, CheckCircle, AlertCircle,
 } from "lucide-react";
-import { useMargeDashboard, type MargeRow, type MargePeriod } from "./api";
+import { useMargeDashboard, exportMargeDashboard, importMargeDashboard, type MargeRow, type MargePeriod, type ImportResult } from "./api";
 import {
   applyScope, annotateBase, applyFilters, computeKpis, computeInsights, groupSumNok,
   groupCount, reliabilityBuckets, trendBuckets, transitionMatrix, coverageSplit,
@@ -172,6 +173,42 @@ export default function MargeDashboardPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
 
+  // Import/Export state
+  const [exportLoading, setExportLoading] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleExport() {
+    setExportLoading(true);
+    try {
+      await exportMargeDashboard(period);
+    } catch {
+      // silently ignore — browser already shows network errors
+    } finally {
+      setExportLoading(false);
+    }
+  }
+
+  async function handleImport() {
+    const file = fileInputRef.current?.files?.[0];
+    if (!file) return;
+    setImportLoading(true);
+    setImportResult(null);
+    setImportError(null);
+    try {
+      const result = await importMargeDashboard(file);
+      setImportResult(result);
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "Erreur lors de l'import.";
+      setImportError(msg);
+    } finally {
+      setImportLoading(false);
+    }
+  }
+
   const rows = data?.rows ?? [];
 
   const typoFamilies = useMemo(() => typoFamilyOptions(rows), [rows]);
@@ -269,16 +306,126 @@ export default function MargeDashboardPage() {
     <div style={{ display: "flex", flexDirection: "column" }}>
 
       <header style={{ background: "#fff", borderRadius: 20, padding: "22px 24px 20px", boxShadow: CARD_SHADOW, border: CARD_BORDER, marginBottom: 22 }}>
-        <div style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: C.blue[700], marginBottom: 8 }}>
-          Aktivco · Grid &amp; Energy Manager · Module Évaluation Financière
-        </div>
-        <h1 style={{ fontSize: 22, fontWeight: 900, margin: "0 0 6px", letterSpacing: "-.03em", color: "#0f172a" }}>Dashboard d'Analyse de Marge Grid — Focus Sites en Marge Négative</h1>
-        <div style={{ fontSize: 13, color: "#64748b", maxWidth: 760, lineHeight: 1.5 }}>
-          Comparaison {meta.month_a_label} → {meta.month_b_label} {meta.year} — {scopeLabel}
-          {scopeMode !== "portfolio" && scopeValue ? <> · <span style={{ fontFamily: "ui-monospace, Menlo, monospace", background: C.blue[50], color: C.blue[700], padding: "2px 8px", borderRadius: 20, border: `1px solid ${C.blue[100]}` }}>{clientFamilyLabel(scopeValue) ?? scopeValue}</span></> : null}
-          {" — "}<strong style={{ color: "#0f172a" }}>{kpis.total.toLocaleString("fr-FR")} sites</strong>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: C.blue[700], marginBottom: 8 }}>
+              Aktivco · Grid &amp; Energy Manager · Module Évaluation Financière
+            </div>
+            <h1 style={{ fontSize: 22, fontWeight: 900, margin: "0 0 6px", letterSpacing: "-.03em", color: "#0f172a" }}>Dashboard d'Analyse de Marge Grid — Focus Sites en Marge Négative</h1>
+            <div style={{ fontSize: 13, color: "#64748b", maxWidth: 760, lineHeight: 1.5 }}>
+              Comparaison {meta.month_a_label} → {meta.month_b_label} {meta.year} — {scopeLabel}
+              {scopeMode !== "portfolio" && scopeValue ? <> · <span style={{ fontFamily: "ui-monospace, Menlo, monospace", background: C.blue[50], color: C.blue[700], padding: "2px 8px", borderRadius: 20, border: `1px solid ${C.blue[100]}` }}>{clientFamilyLabel(scopeValue) ?? scopeValue}</span></> : null}
+              {" — "}<strong style={{ color: "#0f172a" }}>{kpis.total.toLocaleString("fr-FR")} sites</strong>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 10, flexShrink: 0, alignItems: "center" }}>
+            <button
+              onClick={handleExport}
+              disabled={exportLoading}
+              style={{
+                display: "flex", alignItems: "center", gap: 7, padding: "9px 16px",
+                borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: exportLoading ? "default" : "pointer",
+                border: `1px solid ${C.blue[100]}`, background: C.blue[50], color: C.blue[800],
+                opacity: exportLoading ? .6 : 1, transition: "opacity .12s",
+              }}
+              aria-label="Exporter le modèle Excel"
+            >
+              <Download size={15} />
+              {exportLoading ? "Export…" : "Exporter"}
+            </button>
+            <button
+              onClick={() => { setImportOpen(true); setImportResult(null); setImportError(null); }}
+              style={{
+                display: "flex", alignItems: "center", gap: 7, padding: "9px 16px",
+                borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer",
+                border: `1px solid ${C.blue[950]}`, background: C.blue[950], color: "#fff",
+                transition: "opacity .12s",
+              }}
+              aria-label="Importer un fichier Excel"
+            >
+              <Upload size={15} />
+              Importer
+            </button>
+          </div>
         </div>
       </header>
+
+      {/* ── Modal Import ─────────────────────────────────────────────────── */}
+      {importOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Import fichier Excel"
+          style={{
+            position: "fixed", inset: 0, zIndex: 1000,
+            background: "rgba(15,23,42,.45)", display: "grid", placeItems: "center",
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setImportOpen(false); }}
+        >
+          <div style={{ background: "#fff", borderRadius: 18, padding: "28px 30px 24px", width: "100%", maxWidth: 480, boxShadow: "0 20px 60px rgba(15,23,42,.22)", position: "relative" }}>
+            <button
+              onClick={() => setImportOpen(false)}
+              style={{ position: "absolute", top: 16, right: 16, background: "none", border: "none", cursor: "pointer", color: C.slate[400], padding: 4, lineHeight: 0 }}
+              aria-label="Fermer"
+            >
+              <X size={18} />
+            </button>
+            <div style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 10.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: C.blue[700], marginBottom: 6 }}>Import Excel</div>
+            <h2 style={{ fontSize: 18, fontWeight: 900, margin: "0 0 6px", color: C.slate[900] }}>Importer les annotations</h2>
+            <p style={{ fontSize: 13, color: C.slate[500], margin: "0 0 20px", lineHeight: 1.5 }}>
+              Sélectionnez un fichier Excel exporté depuis cette page, renseignez les colonnes Catégorie BO, Owner, Commentaire, puis importez.
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              style={{ display: "block", width: "100%", padding: "10px 12px", border: `1px solid ${C.slate[200]}`, borderRadius: 8, fontSize: 13, marginBottom: 16, boxSizing: "border-box" }}
+              aria-label="Choisir un fichier Excel"
+              onChange={() => { setImportResult(null); setImportError(null); }}
+            />
+            {importError && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: C.nok.light, borderRadius: 8, marginBottom: 14, fontSize: 13, color: C.nok.dark }}>
+                <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                {importError}
+              </div>
+            )}
+            {importResult && (
+              <div style={{ padding: "12px 14px", background: importResult.errors.length ? C.warn.light : C.ok.light, borderRadius: 8, marginBottom: 14, fontSize: 13 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, color: importResult.errors.length ? C.warn.dark : C.ok.dark, marginBottom: importResult.errors.length ? 8 : 0 }}>
+                  <CheckCircle size={16} style={{ flexShrink: 0 }} />
+                  {importResult.updated} ligne{importResult.updated !== 1 ? "s" : ""} mise{importResult.updated !== 1 ? "s" : ""} à jour · {importResult.skipped} ignorée{importResult.skipped !== 1 ? "s" : ""}
+                </div>
+                {importResult.errors.length > 0 && (
+                  <ul style={{ margin: 0, paddingLeft: 18, color: C.warn.dark }}>
+                    {importResult.errors.map((e, i) => <li key={i} style={{ marginBottom: 3 }}>{e}</li>)}
+                  </ul>
+                )}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setImportOpen(false)}
+                style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, border: `1px solid ${C.slate[200]}`, background: "#fff", color: C.slate[700], cursor: "pointer" }}
+              >
+                Fermer
+              </button>
+              <button
+                onClick={handleImport}
+                disabled={importLoading}
+                style={{
+                  display: "flex", alignItems: "center", gap: 7, padding: "9px 18px",
+                  borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: importLoading ? "default" : "pointer",
+                  border: `1px solid ${C.blue[950]}`, background: C.blue[950], color: "#fff",
+                  opacity: importLoading ? .6 : 1,
+                }}
+              >
+                <Upload size={14} />
+                {importLoading ? "Import en cours…" : "Valider l'import"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
         {/* ── Sélecteurs §1/§2 ─────────────────────────────────────────── */}
         <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr .7fr", gap: 14, marginBottom: 22 }}>

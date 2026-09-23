@@ -62,3 +62,33 @@ export function useMargeDashboard(period?: MargePeriod) {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+export async function exportMargeDashboard(period?: MargePeriod): Promise<void> {
+  const response = await api.get("/financial/marge-dashboard/export/", {
+    params: period ? { year: period.year, month: period.month } : {},
+    responseType: "blob",
+  });
+  const url = URL.createObjectURL(response.data as Blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const disposition = (response.headers["content-disposition"] as string | undefined) ?? "";
+  const match = disposition.match(/filename[^;=\n]*=([^;\n]*)/);
+  a.download = match ? match[1].replace(/['"]/g, "").trim() : "marge_dashboard.xlsx";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export interface ImportResult {
+  updated: number;
+  skipped: number;
+  errors: string[];
+}
+
+export async function importMargeDashboard(file: File): Promise<ImportResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await api.post<ImportResult>("/financial/marge-dashboard/import/", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+}
