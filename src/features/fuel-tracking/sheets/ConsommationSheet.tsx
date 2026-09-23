@@ -252,7 +252,7 @@ function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse 
     >
       {/* Mesures Snowflake / ENOC */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
-        <KpiCard label="Sites avec mesure" value={fmt.format(kpis.sites_avec_conso)} sub={`${currentLabel} · capteur cuve Snowflake`} tone="blue" icon={<Users size={14} />} />
+        <KpiCard label="Sites avec mesure" value={fmt.format(kpis.sites_avec_donnees_brutes)} sub={`${currentLabel} · relevés bruts Snowflake`} tone="blue" icon={<Users size={14} />} />
         <KpiCard label="Conso mesurée (Snowflake)" value={formatL(kpis.total_conso_snowflake_l)} tone="cyan" icon={<Droplets size={14} />} />
         <KpiCard label="Sites avec estimation" value={fmt.format(kpis.sites_avec_estimation)} sub="delta de niveau de cuve" tone="gold" icon={<Droplets size={14} />} />
         <KpiCard label="Qté ajoutée (ENOC validé)" value={formatL(kpis.total_enoc_qte_ajoutee_l)} tone="green" icon={<Fuel size={14} />} />
