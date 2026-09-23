@@ -133,6 +133,7 @@ export type FuelConsommationKpis = {
   sites_ge_enoc_only: number;
   sites_avec_ge_incomplet: number;
   sites_avec_conso: number;
+  sites_avec_donnees_brutes: number;
   sites_avec_estimation: number;
   total_conso_snowflake_l: number;
   total_enoc_qte_ajoutee_l: number;
