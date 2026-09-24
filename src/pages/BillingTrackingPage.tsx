@@ -711,6 +711,13 @@ export default function BillingTrackingPage() {
   const BASE_FACTURE_PAGE_SIZE = 20;
   const MODAL_PAGE_SIZE = 50;
 
+  // Export options inside the modal
+  type ExportMode = "current" | "custom" | "all";
+  const [exportMode, setExportMode] = useState<ExportMode>("current");
+  const [exportFrom, setExportFrom] = useState(dateStart);
+  const [exportTo,   setExportTo]   = useState(dateEnd);
+  const [exporting,  setExporting]  = useState(false);
+
   const q = useQuery({
     queryKey: ["billing-tracking", dateStart, dateEnd, siteCode, globalScope],
     queryFn: () => fetchStats(dateStart, dateEnd, siteCode, globalScope),
@@ -723,7 +730,12 @@ export default function BillingTrackingPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  useEffect(() => { setBaseFacturePage(1); setModalPage(1); }, [dateStart, dateEnd, siteCode]);
+  useEffect(() => {
+    setBaseFacturePage(1);
+    setModalPage(1);
+    setExportFrom(dateStart);
+    setExportTo(dateEnd);
+  }, [dateStart, dateEnd, siteCode]);
 
   const baseFactureQ = useQuery({
     queryKey: ["billing-base-facture", dateStart, dateEnd, siteCode, baseFacturePage],
@@ -749,20 +761,46 @@ export default function BillingTrackingPage() {
   });
 
   async function exportFacturesList() {
-    const all = await listInvoices({ page: 1, page_size: 9999, start: dateStart, end: dateEnd, site: siteCode });
-    const wb = XLSX.utils.book_new();
-    const rows = all.results.map((inv) => ({
-      "N° Facture": inv.numero_facture || "",
-      "Site": inv.site?.site_id || "",
-      "Contrat": inv.numero_compte_contrat || "",
-      "Début période": inv.date_debut_periode || "",
-      "Fin période": inv.date_fin_periode || "",
-      "Statut paiement": inv.payment_status === "PAID" ? "Payée" : inv.payment_status === "UNPAID" ? "Impayée" : inv.payment_status === "OUT_OF_SCOPE" ? "Hors scope" : "—",
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    ws["!cols"] = [{ wch: 22 }, { wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 14 }, { wch: 16 }];
-    XLSX.utils.book_append_sheet(wb, ws, "Factures");
-    XLSX.writeFile(wb, `factures_${dateStart}_${dateEnd}.xlsx`);
+    setExporting(true);
+    try {
+      const params: Parameters<typeof listInvoices>[0] = {
+        page: 1, page_size: 9999, site: siteCode,
+      };
+      let suffix = "tout";
+      if (exportMode === "current") {
+        params.start = dateStart; params.end = dateEnd;
+        suffix = `${dateStart}_${dateEnd}`;
+      } else if (exportMode === "custom") {
+        params.start = exportFrom; params.end = exportTo;
+        suffix = `${exportFrom}_${exportTo}`;
+      }
+      const all = await listInvoices(params);
+      const wb = XLSX.utils.book_new();
+      const rows = all.results.map((inv) => ({
+        "N° Facture":       inv.numero_facture || "",
+        "Site ID":          inv.site?.site_id || "",
+        "Nom du site":      inv.site?.name || "",
+        "Contrat":          inv.numero_compte_contrat || "",
+        "Début période":    inv.date_debut_periode || "",
+        "Fin période":      inv.date_fin_periode || "",
+        "Statut cert.":     inv.status || "",
+        "Statut paiement":  inv.payment_status === "PAID" ? "Payée"
+                            : inv.payment_status === "UNPAID" ? "Impayée"
+                            : inv.payment_status === "OUT_OF_SCOPE" ? "Hors scope" : "—",
+        "Montant TTC":      inv.montant_ttc || "",
+        "Montant HT":       inv.montant_hors_tva || "",
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws["!cols"] = [
+        { wch: 22 }, { wch: 14 }, { wch: 24 }, { wch: 22 },
+        { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 16 },
+        { wch: 14 }, { wch: 14 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, "Factures");
+      XLSX.writeFile(wb, `factures_${suffix}.xlsx`);
+    } finally {
+      setExporting(false);
+    }
   }
 
   const fnpData = fnpQ.data;
@@ -1428,37 +1466,96 @@ export default function BillingTrackingPage() {
           style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(15,23,42,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
           onClick={(e) => { if (e.target === e.currentTarget) setShowFacturesModal(false); }}
         >
-          <div style={{ background: "#fff", borderRadius: 24, width: "100%", maxWidth: 900, maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 30px 80px rgba(15,23,42,.25)" }}>
-            {/* Header modal */}
-            <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${C.slate[200]}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
-              <div>
-                <div style={{ fontSize: 18, fontWeight: 900, color: C.blue[950] }}>
-                  Liste des factures
-                  {modalFacturesQ.data && (
-                    <span style={{ marginLeft: 8, fontSize: 13, fontWeight: 700, color: C.slate[500] }}>
-                      — {modalFacturesQ.data.count.toLocaleString("fr-FR")} facture{modalFacturesQ.data.count !== 1 ? "s" : ""}
-                    </span>
-                  )}
+          <div style={{ background: "#fff", borderRadius: 24, width: "100%", maxWidth: 1060, maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 30px 80px rgba(15,23,42,.25)" }}>
+
+            {/* ── Header ── */}
+            <div style={{ padding: "20px 24px 14px", borderBottom: `1px solid ${C.slate[200]}`, flexShrink: 0 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: C.blue[950] }}>
+                    Liste des factures
+                    {modalFacturesQ.data && (
+                      <span style={{ marginLeft: 8, fontSize: 13, fontWeight: 700, color: C.slate[500] }}>
+                        — {modalFacturesQ.data.count.toLocaleString("fr-FR")} facture{modalFacturesQ.data.count !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11, color: C.slate[400], marginTop: 2 }}>
+                    Filtre actif : {dateStart} → {dateEnd}
+                    {siteCode ? ` · Site ${siteCode}` : ""}
+                  </div>
                 </div>
-                <div style={{ fontSize: 11, color: C.slate[400], marginTop: 2 }}>Période : {dateStart} → {dateEnd}</div>
-              </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <button
-                  onClick={exportFacturesList}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 12, background: C.ok.main, border: "none", color: "#fff", fontSize: 12, fontWeight: 900, cursor: "pointer" }}
-                >
-                  <Download size={13} /> Exporter Excel
-                </button>
                 <button
                   onClick={() => setShowFacturesModal(false)}
-                  style={{ width: 34, height: 34, borderRadius: 10, border: `1px solid ${C.slate[200]}`, background: C.slate[50], cursor: "pointer", display: "grid", placeItems: "center", color: C.slate[500] }}
+                  style={{ width: 34, height: 34, borderRadius: 10, border: `1px solid ${C.slate[200]}`, background: C.slate[50], cursor: "pointer", display: "grid", placeItems: "center", color: C.slate[500], flexShrink: 0 }}
                 >
                   <X size={16} />
                 </button>
               </div>
+
+              {/* ── Barre d'export ── */}
+              <div style={{ marginTop: 14, padding: "12px 16px", borderRadius: 14, background: C.slate[50], border: `1px solid ${C.slate[200]}`, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: C.slate[500], textTransform: "uppercase", letterSpacing: ".07em", flexShrink: 0 }}>Exporter :</span>
+
+                {/* Mode chips */}
+                {(["current", "custom", "all"] as ExportMode[]).map((m) => {
+                  const labels: Record<ExportMode, string> = { current: "Période affichée", custom: "Période personnalisée", all: "Tout exporter" };
+                  return (
+                    <button
+                      key={m}
+                      onClick={() => setExportMode(m)}
+                      style={{
+                        padding: "5px 13px", borderRadius: 100, fontSize: 12, fontWeight: 700, border: "none", cursor: "pointer",
+                        background: exportMode === m ? C.blue[700] : C.slate[100],
+                        color: exportMode === m ? "#fff" : C.slate[600],
+                        transition: "all .15s",
+                      }}
+                    >
+                      {labels[m]}
+                    </button>
+                  );
+                })}
+
+                {/* Custom date inputs */}
+                {exportMode === "custom" && (
+                  <>
+                    <input
+                      type="date" value={exportFrom}
+                      onChange={(e) => setExportFrom(e.target.value)}
+                      style={{ padding: "4px 10px", borderRadius: 9, border: `1.5px solid ${C.slate[300]}`, fontSize: 12, outline: "none", color: C.slate[800] }}
+                    />
+                    <span style={{ fontSize: 11, color: C.slate[400] }}>→</span>
+                    <input
+                      type="date" value={exportTo}
+                      onChange={(e) => setExportTo(e.target.value)}
+                      style={{ padding: "4px 10px", borderRadius: 9, border: `1.5px solid ${C.slate[300]}`, fontSize: 12, outline: "none", color: C.slate[800] }}
+                    />
+                  </>
+                )}
+
+                {exportMode === "all" && (
+                  <span style={{ fontSize: 11, color: C.slate[400], fontStyle: "italic" }}>Toutes les factures en base (sans filtre de date)</span>
+                )}
+
+                {/* Export button */}
+                <button
+                  onClick={exportFacturesList}
+                  disabled={exporting || (exportMode === "custom" && (!exportFrom || !exportTo))}
+                  style={{
+                    marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 7,
+                    padding: "7px 16px", borderRadius: 12, border: "none", cursor: exporting ? "wait" : "pointer",
+                    background: exporting ? C.slate[300] : C.ok.main,
+                    color: "#fff", fontSize: 12, fontWeight: 900,
+                    opacity: (exportMode === "custom" && (!exportFrom || !exportTo)) ? 0.5 : 1,
+                  }}
+                >
+                  <Download size={13} />
+                  {exporting ? "Export en cours…" : "Télécharger Excel"}
+                </button>
+              </div>
             </div>
 
-            {/* Table */}
+            {/* ── Table ── */}
             <div style={{ flex: 1, overflow: "auto" }}>
               {modalFacturesQ.isLoading ? (
                 <div style={{ padding: 40, textAlign: "center", color: C.slate[400] }}>Chargement…</div>
@@ -1466,9 +1563,9 @@ export default function BillingTrackingPage() {
                 <div style={{ padding: 40, textAlign: "center", color: C.slate[400] }}>Aucune facture sur la période.</div>
               ) : (
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                  <thead style={{ position: "sticky", top: 0 }}>
+                  <thead style={{ position: "sticky", top: 0, zIndex: 2 }}>
                     <tr>
-                      {["N° Facture", "Site", "Contrat", "Début période", "Fin période", "Paiement"].map((h) => (
+                      {["N° Facture", "Site ID", "Nom du site", "Contrat", "Début période", "Fin période", "Certif.", "Paiement"].map((h) => (
                         <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontWeight: 900, color: C.slate[500], fontSize: 10, textTransform: "uppercase", letterSpacing: ".08em", borderBottom: `1px solid ${C.slate[200]}`, background: C.slate[50], whiteSpace: "nowrap" }}>
                           {h}
                         </th>
@@ -1480,13 +1577,25 @@ export default function BillingTrackingPage() {
                       const ps = inv.payment_status;
                       const psColor = ps === "PAID" ? C.ok.main : ps === "UNPAID" ? C.nok.main : C.slate[400];
                       const psLabel = ps === "PAID" ? "Payée" : ps === "UNPAID" ? "Impayée" : ps === "OUT_OF_SCOPE" ? "Hors scope" : "—";
+                      const certColor = inv.status === "VALIDATED" ? C.ok.main : inv.status === "CONTESTED" ? C.nok.main : C.slate[400];
+                      const certLabel = inv.status === "VALIDATED" ? "Validée" : inv.status === "CONTESTED" ? "Contestée" : "Créée";
+                      const hasSite = !!inv.site;
                       return (
                         <tr key={inv.id} className="btp-row" style={{ borderBottom: `1px solid ${C.slate[100]}`, background: i % 2 === 0 ? "#fff" : C.slate[50] }}>
                           <td style={{ padding: "8px 14px", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontWeight: 700, color: C.blue[700], whiteSpace: "nowrap" }}>{inv.numero_facture || "—"}</td>
-                          <td style={{ padding: "8px 14px", color: C.slate[700] }}>{inv.site?.site_id || "—"}</td>
+                          <td style={{ padding: "8px 14px" }}>
+                            {hasSite
+                              ? <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontWeight: 700, color: C.blue[800], background: C.blue[50], borderRadius: 6, padding: "2px 7px", fontSize: 11 }}>{inv.site!.site_id}</span>
+                              : <span style={{ color: C.slate[300], fontStyle: "italic", fontSize: 11 }}>non lié</span>
+                            }
+                          </td>
+                          <td style={{ padding: "8px 14px", color: hasSite && inv.site!.name ? C.slate[700] : C.slate[300], fontStyle: hasSite && inv.site!.name ? "normal" : "italic", fontSize: 11 }}>
+                            {(hasSite && inv.site!.name) ? inv.site!.name : "—"}
+                          </td>
                           <td style={{ padding: "8px 14px", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", color: C.slate[600], fontSize: 11 }}>{inv.numero_compte_contrat || "—"}</td>
                           <td style={{ padding: "8px 14px", color: C.slate[600], whiteSpace: "nowrap" }}>{inv.date_debut_periode || "—"}</td>
                           <td style={{ padding: "8px 14px", color: C.slate[600], whiteSpace: "nowrap" }}>{inv.date_fin_periode || "—"}</td>
+                          <td style={{ padding: "8px 14px" }}><span style={{ fontSize: 11, fontWeight: 700, color: certColor }}>{certLabel}</span></td>
                           <td style={{ padding: "8px 14px" }}><span style={{ fontWeight: 700, color: psColor }}>{psLabel}</span></td>
                         </tr>
                       );
@@ -1496,7 +1605,7 @@ export default function BillingTrackingPage() {
               )}
             </div>
 
-            {/* Pagination modal */}
+            {/* ── Pagination ── */}
             {modalFacturesQ.data && modalFacturesQ.data.count > MODAL_PAGE_SIZE && (
               <div style={{ padding: "12px 20px", borderTop: `1px solid ${C.slate[200]}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0, background: C.slate[50] }}>
                 <div style={{ fontSize: 12, color: C.slate[500] }}>
