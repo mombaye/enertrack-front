@@ -7,10 +7,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useRef, useState, useEffect, useCallback } from "react";
+import * as XLSX from "xlsx";
 import { api } from "@/services/api";
 import {
   Upload, FileUp, X, CheckCircle2, XCircle, AlertCircle,
-  Loader2, ChevronDown, ChevronUp, Search, RefreshCw,
+  Loader2, ChevronDown, ChevronUp, Search, RefreshCw, Eye,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -64,6 +65,132 @@ interface TaskMeta {
   error_rows?: ErrorRow[];
   // progression partielle (en cours)
   rows_processed?: number;
+}
+
+// ─── File preview ─────────────────────────────────────────────────────────────
+
+interface FilePreview {
+  headers: string[];
+  rows: (string | number | null)[][];
+  total: number;
+}
+
+async function parseFilePreview(file: File): Promise<FilePreview> {
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: "array", cellDates: true });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const raw: (string | number | null | undefined)[][] = XLSX.utils.sheet_to_json(ws, {
+    header: 1,
+    defval: null,
+    blankrows: false,
+  }) as any;
+  if (!raw.length) return { headers: [], rows: [], total: 0 };
+  const headers = (raw[0] as any[]).map((h) => (h == null ? "" : String(h)));
+  const dataRows = raw.slice(1).map((r: any[]) =>
+    headers.map((_, ci) => {
+      const v = r[ci];
+      if (v == null) return null;
+      if (v instanceof Date) return v.toLocaleDateString("fr-FR");
+      return String(v);
+    })
+  );
+  return { headers, rows: dataRows, total: dataRows.length };
+}
+
+function FilePreviewTable({ preview }: { preview: FilePreview }) {
+  const PREVIEW_LIMIT = 30;
+  const shown = preview.rows.slice(0, PREVIEW_LIMIT);
+
+  return (
+    <div style={{
+      marginTop: 16, borderRadius: 14, border: "1.5px solid rgba(30,58,138,.12)",
+      background: "rgba(248,250,252,1)", overflow: "hidden",
+      animation: "fadeIn .2s ease",
+    }}>
+      {/* header bar */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8,
+        padding: "10px 14px", borderBottom: "1px solid rgba(30,58,138,.08)",
+        background: "rgba(30,58,138,.04)",
+      }}>
+        <Eye size={13} color="#1e3a8a"/>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "#1e3a8a" }}>
+          Aperçu du fichier
+        </span>
+        <span style={{
+          marginLeft: "auto", fontSize: 11, color: "#94a3b8",
+        }}>
+          {preview.total} ligne{preview.total > 1 ? "s" : ""} détectée{preview.total > 1 ? "s" : ""}
+          {preview.total > PREVIEW_LIMIT ? ` — affichage des ${PREVIEW_LIMIT} premières` : ""}
+        </span>
+      </div>
+
+      {/* columns badge row */}
+      <div style={{
+        padding: "8px 14px", borderBottom: "1px solid rgba(0,0,0,.05)",
+        display: "flex", gap: 6, flexWrap: "wrap",
+      }}>
+        {preview.headers.map((h, i) => (
+          <span key={i} style={{
+            padding: "2px 9px", borderRadius: 100, fontSize: 10.5, fontWeight: 600,
+            background: "rgba(30,58,138,.08)", color: "#1e3a8a",
+          }}>
+            {h || `Col ${i + 1}`}
+          </span>
+        ))}
+      </div>
+
+      {/* table */}
+      <div style={{ overflowX: "auto", maxHeight: 300 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}>
+          <thead>
+            <tr style={{ borderBottom: "1px solid rgba(0,0,0,.07)" }}>
+              <th style={{
+                padding: "7px 10px", textAlign: "left",
+                fontWeight: 700, color: "#94a3b8", fontSize: 10.5,
+                position: "sticky", top: 0, background: "white",
+                minWidth: 36,
+              }}>
+                #
+              </th>
+              {preview.headers.map((h, i) => (
+                <th key={i} style={{
+                  padding: "7px 10px", textAlign: "left",
+                  fontWeight: 700, color: "#374151", fontSize: 10.5,
+                  whiteSpace: "nowrap",
+                  position: "sticky", top: 0, background: "white",
+                }}>
+                  {h || `Col ${i + 1}`}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((row, ri) => (
+              <tr key={ri} style={{
+                borderBottom: "1px solid rgba(0,0,0,.04)",
+                background: ri % 2 === 0 ? "white" : "rgba(248,250,252,.7)",
+              }}>
+                <td style={{ padding: "6px 10px", color: "#94a3b8", fontSize: 10.5 }}>
+                  {ri + 1}
+                </td>
+                {row.map((cell, ci) => (
+                  <td key={ci} style={{
+                    padding: "6px 10px", color: cell == null ? "#cbd5e1" : "#0f172a",
+                    fontStyle: cell == null ? "italic" : "normal",
+                    whiteSpace: "nowrap", maxWidth: 200,
+                    overflow: "hidden", textOverflow: "ellipsis",
+                  }}>
+                    {cell ?? "—"}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
@@ -346,6 +473,8 @@ function DropZone({
 
 export default function StatusUpdateAdminPage() {
   const [file,          setFile]          = useState<File | null>(null);
+  const [preview,       setPreview]       = useState<FilePreview | null>(null);
+  const [previewErr,    setPreviewErr]    = useState<string | null>(null);
   const [targetStatus,  setTargetStatus]  = useState<TargetStatus>("VALIDATED");
   const [submitting,    setSubmitting]    = useState(false);
   const [error,         setError]         = useState<string | null>(null);
@@ -366,6 +495,21 @@ export default function StatusUpdateAdminPage() {
   useEffect(() => () => {
     if (pollRef.current) clearTimeout(pollRef.current);
   }, []);
+
+  // ── File selection with preview ────────────────────────────────────────────
+  async function onFileSelected(f: File) {
+    setFile(f);
+    setBatch(null);
+    setError(null);
+    setPreview(null);
+    setPreviewErr(null);
+    try {
+      const p = await parseFilePreview(f);
+      setPreview(p);
+    } catch (e: any) {
+      setPreviewErr(e?.message || "Impossible de lire le fichier.");
+    }
+  }
 
   // ── Submit ─────────────────────────────────────────────────────────────────
   async function onSubmit() {
@@ -439,7 +583,24 @@ export default function StatusUpdateAdminPage() {
         padding: "20px 22px", marginBottom: 20,
         boxShadow: "0 1px 6px rgba(0,0,0,.04)",
       }}>
-        <DropZone file={file} onFile={setFile} disabled={isRunning || submitting}/>
+        <DropZone file={file} onFile={onFileSelected} disabled={isRunning || submitting}/>
+
+        {/* Preview d'erreur de lecture */}
+        {previewErr && (
+          <div style={{
+            marginTop: 12, padding: "9px 14px", borderRadius: 11,
+            background: "rgba(220,38,38,.05)", border: "1px solid rgba(220,38,38,.15)",
+            display: "flex", alignItems: "center", gap: 8,
+          }}>
+            <XCircle size={13} color="#dc2626"/>
+            <span style={{ fontSize: 12, color: "#dc2626" }}>
+              Impossible de lire le fichier : {previewErr}
+            </span>
+          </div>
+        )}
+
+        {/* Aperçu des données */}
+        {preview && !previewErr && <FilePreviewTable preview={preview}/>}
 
         {/* Statut cible */}
         <div style={{ marginTop: 16 }}>
@@ -487,7 +648,7 @@ export default function StatusUpdateAdminPage() {
         <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
           {file && !isRunning && (
             <button
-              onClick={() => { setFile(null); setBatch(null); setError(null); }}
+              onClick={() => { setFile(null); setBatch(null); setError(null); setPreview(null); setPreviewErr(null); }}
               style={{
                 padding: "9px 16px", borderRadius: 11,
                 border: "1.5px solid rgba(0,0,0,.1)", background: "white",
