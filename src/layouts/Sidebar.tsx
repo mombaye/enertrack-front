@@ -11,6 +11,7 @@ import {
   ClipboardList,
   TrendingDown,
   LogOut,
+  FileText,
 
 } from "lucide-react";
 import camusatLogo from "@/assets/images/camusat-logo.png";
@@ -36,6 +37,7 @@ const LINKS: LinkItem[] = [
   { to: "/modules/evaluation-financiere", icon: <DollarSign />, label: "Évaluation Financière", section: "FACTURATION" },
   { to: "/modules/dashboard-marge", icon: <TrendingDown />, label: "Dashboard Marge", section: "FACTURATION" },
   { to: "/billing/sonatel",        icon: <Receipt />,      label: "Base Factures",            section: "FACTURATION",    end: true },
+  { to: "/billing/factures",       icon: <FileText />,     label: "Factures",                 section: "FACTURATION",    end: true },
 
 
    // ── CONSO & ESTIMATION ──────────────────────────────────────────────────────────────────
