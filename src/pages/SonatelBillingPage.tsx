@@ -396,8 +396,6 @@ export default function SonatelBillingPage() {
       const wb = XLSX.utils.book_new();
       const rows = all.results.map((inv) => ({
         "N° Facture":          inv.numero_facture || "",
-        "Site ID":             inv.site?.site_id || "",
-        "Nom du site":         inv.site?.name || "",
         "Contrat":             inv.numero_compte_contrat || "",
         "Date comptable":      inv.date_comptable_facture || "",
         "Début période":       inv.date_debut_periode || "",
@@ -413,7 +411,7 @@ export default function SonatelBillingPage() {
       }));
       const ws = XLSX.utils.json_to_sheet(rows);
       ws["!cols"] = [
-        { wch: 24 }, { wch: 14 }, { wch: 28 }, { wch: 22 }, { wch: 16 },
+        { wch: 24 }, { wch: 22 }, { wch: 16 },
         { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 16 },
         { wch: 20 }, { wch: 22 }, { wch: 16 }, { wch: 18 }, { wch: 18 }, { wch: 16 },
       ];
@@ -1298,7 +1296,7 @@ const outScopeCountQ = useQuery({
                   <thead>
                     <tr style={{ background: COLORS.slate50, borderBottom: `2px solid ${COLORS.slate200}` }}>
                       {[
-                        "N° Facture", "Site ID", "Nom du site", "Contrat",
+                        "N° Facture", "Contrat",
                         "Date compta.", "Début pér.", "Fin pér.",
                         "Certif.", "Paiement",
                         "Montant HT", "Montant TTC", "Cos φ",
@@ -1333,12 +1331,6 @@ const outScopeCountQ = useQuery({
                       >
                         <td style={{ padding: "10px 12px", fontFamily: "ui-monospace,monospace", color: COLORS.slate700 }}>
                           {inv.numero_facture || "—"}
-                        </td>
-                        <td style={{ padding: "10px 12px", fontWeight: 700, color: COLORS.navy }}>
-                          {inv.site?.site_id || "—"}
-                        </td>
-                        <td style={{ padding: "10px 12px", color: COLORS.slate500, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {inv.site?.name || "—"}
                         </td>
                         <td style={{ padding: "10px 12px", fontFamily: "ui-monospace,monospace", color: COLORS.slate700 }}>
                           {inv.numero_compte_contrat || "—"}
