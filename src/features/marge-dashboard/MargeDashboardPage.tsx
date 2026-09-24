@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode, type CSSPropertie
 import * as XLSX from "xlsx";
 import {
   TrendingDown, TrendingUp, Percent, Scale, Search, ChevronLeft, ChevronRight,
-  Download, Upload, X, CheckCircle, AlertCircle,
+  Download, Upload, X, CheckCircle, AlertCircle, ChevronDown,
 } from "lucide-react";
 import { useMargeDashboard, importMargeDashboard, type MargeRow, type MargePeriod, type ImportResult } from "./api";
 import {
@@ -375,6 +375,24 @@ export default function MargeDashboardPage() {
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [openPanel, setOpenPanel] = useState<"scope" | "base" | "period" | null>(null);
+  const selectorRef = useRef<HTMLDivElement>(null);
+
+  function togglePanel(name: "scope" | "base" | "period") {
+    setOpenPanel((p) => (p === name ? null : name));
+  }
+
+  useEffect(() => {
+    if (!openPanel) return;
+    function handleOutside(e: MouseEvent) {
+      if (selectorRef.current && !selectorRef.current.contains(e.target as Node)) {
+        setOpenPanel(null);
+      }
+    }
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [openPanel]);
+
   async function handleImport() {
     const file = fileInputRef.current?.files?.[0];
     if (!file) return;
@@ -527,17 +545,145 @@ export default function MargeDashboardPage() {
               {" — "}<strong style={{ color: "#0f172a" }}>{kpis.total.toLocaleString("fr-FR")} sites</strong>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 10, flexShrink: 0, alignItems: "center" }}>
+          <div ref={selectorRef} style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "center", flexWrap: "wrap" }}>
+
+            {/* ── ① Périmètre typologique ── */}
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={() => togglePanel("scope")}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 9, fontSize: 12.5, fontWeight: 700, cursor: "pointer", border: `1px solid ${openPanel === "scope" ? C.blue[700] : C.slate[200]}`, background: openPanel === "scope" ? C.blue[50] : "#fff", color: openPanel === "scope" ? C.blue[800] : C.slate[600], transition: "all .12s", whiteSpace: "nowrap" }}
+                aria-expanded={openPanel === "scope"}
+              >
+                <span style={{ fontSize: 10, fontWeight: 800, color: openPanel === "scope" ? C.blue[600] : C.slate[400] }}>①</span>
+                {scopeMode === "portfolio" ? "Portefeuille entier" : scopeMode === "family" ? ((clientFamilyLabel(scopeValue) ?? scopeValue) || "Famille…") : scopeMode === "exact" ? (scopeValue || "Typologie…") : `${multiValues.length} typo${multiValues.length !== 1 ? "s" : ""}`}
+                <ChevronDown size={13} style={{ transform: openPanel === "scope" ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
+              </button>
+              {openPanel === "scope" && (
+                <div style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 600, background: "#fff", border: CARD_BORDER, borderRadius: 14, boxShadow: "0 8px 32px rgba(15,23,42,.15)", padding: "16px 18px", width: 420, minWidth: 300 }}>
+                  <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".08em", color: C.slate[400], fontWeight: 800, marginBottom: 10 }}>① Sélecteur de périmètre typologique</div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <RadioPill checked={scopeMode === "portfolio"} onClick={() => changeScope("portfolio")}>Portefeuille entier</RadioPill>
+                    <RadioPill checked={scopeMode === "family"} onClick={() => changeScope("family")}>Famille de typologie</RadioPill>
+                    <RadioPill checked={scopeMode === "exact"} onClick={() => changeScope("exact")}>Typologie exacte</RadioPill>
+                    <RadioPill checked={scopeMode === "multi"} onClick={() => changeScope("multi")}>Sélection de typologies</RadioPill>
+                  </div>
+                  {scopeMode === "family" && (
+                    <div style={{ marginTop: 12 }}>
+                      <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".06em", color: C.slate[400], fontWeight: 800, marginBottom: 7 }}>Secteurs</div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                        {CLIENT_FAMILIES.map((f) => {
+                          const checked = scopeValue === f.key;
+                          return (
+                            <button key={f.key} onClick={() => { setScopeValue(f.key); setPage(1); }}
+                              style={{ padding: "6px 13px", borderRadius: 20, fontSize: 12, fontWeight: 800, cursor: "pointer", border: `1px solid ${checked ? C.blue[700] : C.slate[200]}`, background: checked ? C.blue[700] : "#fff", color: checked ? "#fff" : C.slate[600] }}
+                            >{f.label}</button>
+                          );
+                        })}
+                      </div>
+                      <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".06em", color: C.slate[400], fontWeight: 800, marginBottom: 7 }}>Autre famille</div>
+                      <Select value={scopeValue} onChange={(v) => { setScopeValue(v); setPage(1); }} options={typoFamilies} placeholder="— Choisir une famille —" />
+                    </div>
+                  )}
+                  {scopeMode === "exact" && (
+                    <div style={{ marginTop: 12 }}>
+                      <Select value={scopeValue} onChange={(v) => { setScopeValue(v); setPage(1); }} options={typoExacts} placeholder="— Choisir une typologie —" />
+                    </div>
+                  )}
+                  {scopeMode === "multi" && (
+                    <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 120, overflowY: "auto" }}>
+                      {typoExacts.map((t) => {
+                        const checked = multiValues.includes(t);
+                        return (
+                          <button key={t} onClick={() => { setMultiValues((prev) => checked ? prev.filter((x) => x !== t) : [...prev, t]); setPage(1); }}
+                            style={{ padding: "5px 11px", borderRadius: 20, fontSize: 11.5, fontWeight: 700, cursor: "pointer", border: `1px solid ${checked ? C.blue[700] : C.slate[200]}`, background: checked ? C.blue[50] : "#fff", color: checked ? C.blue[700] : C.slate[600] }}
+                          >{t}</button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* ── ② Base de marge ── */}
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={() => togglePanel("base")}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 9, fontSize: 12.5, fontWeight: 700, cursor: "pointer", border: `1px solid ${openPanel === "base" ? C.blue[700] : C.slate[200]}`, background: openPanel === "base" ? C.blue[50] : "#fff", color: openPanel === "base" ? C.blue[800] : C.slate[600], transition: "all .12s", whiteSpace: "nowrap" }}
+                aria-expanded={openPanel === "base"}
+              >
+                <span style={{ fontSize: 10, fontWeight: 800, color: openPanel === "base" ? C.blue[600] : C.slate[400] }}>②</span>
+                {base === "estimee" ? "Marge estimée" : "Marge réelle"}
+                <ChevronDown size={13} style={{ transform: openPanel === "base" ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
+              </button>
+              {openPanel === "base" && (
+                <div style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 600, background: "#fff", border: CARD_BORDER, borderRadius: 14, boxShadow: "0 8px 32px rgba(15,23,42,.15)", padding: "16px 18px", width: 320 }}>
+                  <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".08em", color: C.slate[400], fontWeight: 800, marginBottom: 10 }}>② Sélecteur de base de marge</div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <RadioPill checked={base === "estimee"} onClick={() => changeBase("estimee")}>Marge estimée (modèle catalogue)</RadioPill>
+                    <RadioPill checked={base === "reelle"} onClick={() => changeBase("reelle")}>Marge réelle (facture Sénélec)</RadioPill>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ── ③ Période ── */}
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={() => togglePanel("period")}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 9, fontSize: 12.5, fontWeight: 700, cursor: "pointer", border: `1px solid ${openPanel === "period" ? C.blue[700] : C.slate[200]}`, background: openPanel === "period" ? C.blue[50] : "#fff", color: openPanel === "period" ? C.blue[800] : C.slate[600], transition: "all .12s", whiteSpace: "nowrap" }}
+                aria-expanded={openPanel === "period"}
+              >
+                <span style={{ fontSize: 10, fontWeight: 800, color: openPanel === "period" ? C.blue[600] : C.slate[400] }}>③</span>
+                {periodLabel}
+                <ChevronDown size={13} style={{ transform: openPanel === "period" ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
+              </button>
+              {openPanel === "period" && (
+                <div style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 600, background: "#fff", border: CARD_BORDER, borderRadius: 14, boxShadow: "0 8px 32px rgba(15,23,42,.15)", padding: "16px 18px", width: 300 }}>
+                  <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".08em", color: C.slate[400], fontWeight: 800, marginBottom: 10 }}>③ Période (marge réelle)</div>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 10, color: C.slate[400], fontWeight: 700, marginBottom: 3 }}>Du</div>
+                      <input type="date" value={dateFrom} max={dateTo} onChange={(e) => e.target.value && setDateFrom(e.target.value)}
+                        style={{ width: "100%", background: C.slate[50], border: `1px solid ${C.slate[200]}`, color: C.slate[800], borderRadius: 10, padding: "8px 10px", fontSize: 12, fontWeight: 700, boxSizing: "border-box" }} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 10, color: C.slate[400], fontWeight: 700, marginBottom: 3 }}>Au</div>
+                      <input type="date" value={dateTo} min={dateFrom} onChange={(e) => e.target.value && setDateTo(e.target.value)}
+                        style={{ width: "100%", background: C.slate[50], border: `1px solid ${C.slate[200]}`, color: C.slate[800], borderRadius: 10, padding: "8px 10px", fontSize: 12, fontWeight: 700, boxSizing: "border-box" }} />
+                    </div>
+                  </div>
+                  <select
+                    value={filteredPeriods.some((p) => p.year === meta.reelle_year && p.month === meta.reelle_month) ? `${meta.reelle_year}-${meta.reelle_month}` : ""}
+                    onChange={(e) => { const [y, m] = e.target.value.split("-").map(Number); setPeriod({ year: y, month: m }); }}
+                    style={{ width: "100%", background: C.slate[50], border: `1px solid ${C.slate[200]}`, color: C.slate[800], borderRadius: 10, padding: "10px 12px", fontSize: 12.5, cursor: "pointer", fontWeight: 700 }}
+                  >
+                    {!filteredPeriods.length && <option value="">— Aucun mois dans cette plage —</option>}
+                    {filteredPeriods.map((p) => (
+                      <option key={`${p.year}-${p.month}`} value={`${p.year}-${p.month}`}>
+                        {MONTH_LABELS[p.month - 1]} {p.year}{p.year === CURRENT_YEAR ? " · année en cours" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <div style={{ fontSize: 11, color: C.slate[400], marginTop: 9, lineHeight: 1.4 }}>
+                    {filteredPeriods.length} mois avec facture Sénélec rapprochée dans la plage choisie (sur {meta.available_periods.length} au total).
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div style={{ width: 1, height: 24, background: C.slate[200], flexShrink: 0 }} />
+
             <button
               onClick={() => buildExcel(rows, scoped, filtered, kpis, base, scopeLabel + (scopeValue ? ` · ${clientFamilyLabel(scopeValue) ?? scopeValue}` : ""), periodLabel)}
-              style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", border: `1px solid ${C.blue[100]}`, background: C.blue[50], color: C.blue[800], transition: "opacity .12s" }}
+              style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", border: `1px solid ${C.blue[100]}`, background: C.blue[50], color: C.blue[800], transition: "opacity .12s", whiteSpace: "nowrap" }}
               aria-label="Exporter en Excel"
             >
               <Download size={15} /> Exporter
             </button>
             <button
               onClick={() => { setImportOpen(true); setImportResult(null); setImportError(null); }}
-              style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", border: `1px solid ${C.blue[950]}`, background: C.blue[950], color: "#fff", transition: "opacity .12s" }}
+              style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", border: `1px solid ${C.blue[950]}`, background: C.blue[950], color: "#fff", transition: "opacity .12s", whiteSpace: "nowrap" }}
               aria-label="Importer un fichier Excel"
             >
               <Upload size={15} /> Importer
@@ -595,90 +741,6 @@ export default function MargeDashboardPage() {
           </div>
         </div>
       )}
-
-      {/* ── Sélecteurs §1/§2/§3 ──────────────────────────────────────────── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr .7fr", gap: 14, marginBottom: 22 }}>
-        <Card>
-          <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".08em", color: C.slate[400], fontWeight: 800, marginBottom: 10 }}>① Sélecteur de périmètre typologique</div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <RadioPill checked={scopeMode === "portfolio"} onClick={() => changeScope("portfolio")}>Portefeuille entier</RadioPill>
-            <RadioPill checked={scopeMode === "family"} onClick={() => changeScope("family")}>Famille de typologie</RadioPill>
-            <RadioPill checked={scopeMode === "exact"} onClick={() => changeScope("exact")}>Typologie exacte</RadioPill>
-            <RadioPill checked={scopeMode === "multi"} onClick={() => changeScope("multi")}>Sélection de typologies</RadioPill>
-          </div>
-          {scopeMode === "family" && (
-            <div style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".06em", color: C.slate[400], fontWeight: 800, marginBottom: 7 }}>Secteurs</div>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-                {CLIENT_FAMILIES.map((f) => {
-                  const checked = scopeValue === f.key;
-                  return (
-                    <button key={f.key} onClick={() => { setScopeValue(f.key); setPage(1); }}
-                      style={{ padding: "6px 13px", borderRadius: 20, fontSize: 12, fontWeight: 800, cursor: "pointer", border: `1px solid ${checked ? C.blue[700] : C.slate[200]}`, background: checked ? C.blue[700] : "#fff", color: checked ? "#fff" : C.slate[600] }}
-                    >{f.label}</button>
-                  );
-                })}
-              </div>
-              <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".06em", color: C.slate[400], fontWeight: 800, marginBottom: 7 }}>Autre famille</div>
-              <Select value={scopeValue} onChange={(v) => { setScopeValue(v); setPage(1); }} options={typoFamilies} placeholder="— Choisir une famille —" />
-            </div>
-          )}
-          {scopeMode === "exact" && (
-            <div style={{ marginTop: 12 }}>
-              <Select value={scopeValue} onChange={(v) => { setScopeValue(v); setPage(1); }} options={typoExacts} placeholder="— Choisir une typologie —" />
-            </div>
-          )}
-          {scopeMode === "multi" && (
-            <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 110, overflowY: "auto" }}>
-              {typoExacts.map((t) => {
-                const checked = multiValues.includes(t);
-                return (
-                  <button key={t} onClick={() => { setMultiValues((prev) => checked ? prev.filter((x) => x !== t) : [...prev, t]); setPage(1); }}
-                    style={{ padding: "5px 11px", borderRadius: 20, fontSize: 11.5, fontWeight: 700, cursor: "pointer", border: `1px solid ${checked ? C.blue[700] : C.slate[200]}`, background: checked ? C.blue[50] : "#fff", color: checked ? C.blue[700] : C.slate[600] }}
-                  >{t}</button>
-                );
-              })}
-            </div>
-          )}
-        </Card>
-        <Card>
-          <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".08em", color: C.slate[400], fontWeight: 800, marginBottom: 10 }}>② Sélecteur de base de marge</div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <RadioPill checked={base === "estimee"} onClick={() => changeBase("estimee")}>Marge estimée (modèle catalogue)</RadioPill>
-            <RadioPill checked={base === "reelle"} onClick={() => changeBase("reelle")}>Marge réelle (facture Sénélec)</RadioPill>
-          </div>
-        </Card>
-        <Card>
-          <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".08em", color: C.slate[400], fontWeight: 800, marginBottom: 10 }}>③ Période (marge réelle)</div>
-          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 10, color: C.slate[400], fontWeight: 700, marginBottom: 3 }}>Du</div>
-              <input type="date" value={dateFrom} max={dateTo} onChange={(e) => e.target.value && setDateFrom(e.target.value)}
-                style={{ width: "100%", background: C.slate[50], border: `1px solid ${C.slate[200]}`, color: C.slate[800], borderRadius: 10, padding: "8px 10px", fontSize: 12, fontWeight: 700 }} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 10, color: C.slate[400], fontWeight: 700, marginBottom: 3 }}>Au</div>
-              <input type="date" value={dateTo} min={dateFrom} onChange={(e) => e.target.value && setDateTo(e.target.value)}
-                style={{ width: "100%", background: C.slate[50], border: `1px solid ${C.slate[200]}`, color: C.slate[800], borderRadius: 10, padding: "8px 10px", fontSize: 12, fontWeight: 700 }} />
-            </div>
-          </div>
-          <select
-            value={filteredPeriods.some((p) => p.year === meta.reelle_year && p.month === meta.reelle_month) ? `${meta.reelle_year}-${meta.reelle_month}` : ""}
-            onChange={(e) => { const [y, m] = e.target.value.split("-").map(Number); setPeriod({ year: y, month: m }); }}
-            style={{ width: "100%", background: C.slate[50], border: `1px solid ${C.slate[200]}`, color: C.slate[800], borderRadius: 10, padding: "10px 12px", fontSize: 12.5, cursor: "pointer", fontWeight: 700 }}
-          >
-            {!filteredPeriods.length && <option value="">— Aucun mois dans cette plage —</option>}
-            {filteredPeriods.map((p) => (
-              <option key={`${p.year}-${p.month}`} value={`${p.year}-${p.month}`}>
-                {MONTH_LABELS[p.month - 1]} {p.year}{p.year === CURRENT_YEAR ? " · année en cours" : ""}
-              </option>
-            ))}
-          </select>
-          <div style={{ fontSize: 11, color: C.slate[400], marginTop: 9, lineHeight: 1.4 }}>
-            {filteredPeriods.length} mois avec facture Sénélec rapprochée dans la plage choisie (sur {meta.available_periods.length} au total).
-          </div>
-        </Card>
-      </div>
 
       {/* ── KPI cards ────────────────────────────────────────────────────── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 14, marginBottom: 10 }}>
