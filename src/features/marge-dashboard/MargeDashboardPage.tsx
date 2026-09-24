@@ -1,14 +1,6 @@
 // src/features/marge-dashboard/MargeDashboardPage.tsx
-// Dashboard d'Analyse de Marge Grid — Focus Sites en Marge Négative (CDC v1.0)
-// Sélecteur de périmètre (portefeuille / famille / typologie exacte / multi-
-// sélection libre), sélecteur de base de marge (estimée / réelle), filtres
-// transverses — tout se recalcule côté client, sans rechargement.
 import { useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from "react";
 import * as XLSX from "xlsx";
-import {
-  BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
-  Legend, ResponsiveContainer,
-} from "recharts";
 import {
   TrendingDown, TrendingUp, Percent, Scale, Search, ChevronLeft, ChevronRight,
   Download, Upload, X, CheckCircle, AlertCircle,
@@ -22,7 +14,7 @@ import {
   type ScopeMode, type BaseMode, type Filters, type AnnotatedRow,
 } from "./calc";
 
-// ─── Design tokens Camusat (identiques aux autres modules EnerTrack) ──────────
+// ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
   blue: { 950: "#0B1F4D", 900: "#0F235A", 800: "#123C8C", 700: "#1A56C4", 600: "#2464D6", 500: "#3272E0", 300: "#91B9F8", 100: "#E4EFFE", 50: "#F2F6FE" },
   slate: { 900: "#0F172A", 800: "#1E293B", 700: "#334155", 600: "#475569", 500: "#64748B", 400: "#94A3B8", 300: "#CBD5E1", 200: "#E2E8F0", 100: "#F1F5F9", 50: "#F8FAFC" },
@@ -31,14 +23,13 @@ const C = {
   warn: { main: "#D97706", light: "#FEF3C7", dark: "#92400E" },
   ras: { main: "#64748B", light: "#F1F5F9", dark: "#334155" },
 };
-const PIE_COLORS = [C.blue[700], C.blue[950], C.warn.main, C.nok.main, C.ok.main, C.slate[400]];
 const PAGE_SIZE = 100;
 const MONTH_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
-
 const RADIUS = 10;
 const CARD_SHADOW = "0 1px 2px rgba(15,23,42,.04), 0 1px 1px rgba(15,23,42,.03)";
 const CARD_BORDER = "1px solid #E4E9F0";
 
+// ─── Shared UI ────────────────────────────────────────────────────────────────
 function Card({ children, style }: { children: ReactNode; style?: CSSProperties }) {
   return (
     <div style={{ background: "#fff", borderRadius: RADIUS, border: CARD_BORDER, boxShadow: CARD_SHADOW, padding: 20, ...style }}>
@@ -57,7 +48,7 @@ function SectionTitle({ num, children, desc }: { num?: string; children: ReactNo
   );
 }
 function CardH3({ children }: { children: ReactNode }) {
-  return <h3 style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".04em", color: C.slate[500], margin: "0 0 14px", fontWeight: 700 }}>{children}</h3>;
+  return <h3 style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".04em", color: C.slate[500], margin: "0 0 12px", fontWeight: 700 }}>{children}</h3>;
 }
 function KpiCard({ label, value, sub, icon, accent }: { label: string; value: string; sub?: string; icon: ReactNode; accent: string }) {
   return (
@@ -97,14 +88,41 @@ function Select({ value, onChange, options, placeholder }: { value: string; onCh
     </select>
   );
 }
-function ChartTooltip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null;
+
+// ─── Petit tableau brut réutilisable ──────────────────────────────────────────
+function RawTable({ headers, rows, alignRight }: {
+  headers: string[];
+  rows: (string | number | null)[][];
+  alignRight?: number[]; // indices de colonnes à aligner à droite
+}) {
+  const rightSet = new Set(alignRight ?? []);
   return (
-    <div style={{ background: "#fff", border: CARD_BORDER, borderRadius: 8, padding: "8px 12px", boxShadow: "0 4px 16px rgba(15,23,42,.10)", fontSize: 12 }}>
-      <div style={{ fontWeight: 700, color: C.slate[800], marginBottom: 2 }}>{label}</div>
-      {payload.map((p: any, i: number) => (
-        <div key={i} style={{ color: p.color || C.slate[600] }}>{p.name ?? "Valeur"} : {typeof p.value === "number" && Math.abs(p.value) > 1000 ? fmtXofExact(p.value) : p.value}</div>
-      ))}
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+        <thead>
+          <tr style={{ borderBottom: `2px solid ${C.slate[200]}` }}>
+            {headers.map((h, i) => (
+              <th key={i} style={{ padding: "8px 10px", textAlign: rightSet.has(i) ? "right" : "left", fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".05em", color: C.slate[500], fontWeight: 800, whiteSpace: "nowrap" }}>
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, ri) => (
+            <tr key={ri} style={{ borderBottom: `1px solid ${C.slate[100]}`, background: ri % 2 === 0 ? "#fff" : C.slate[50] }}>
+              {row.map((cell, ci) => (
+                <td key={ci} style={{ padding: "8px 10px", textAlign: rightSet.has(ci) ? "right" : "left", color: C.slate[700], fontFamily: typeof cell === "number" ? "ui-monospace, Menlo, monospace" : undefined, whiteSpace: "nowrap" }}>
+                  {cell === null || cell === undefined ? "—" : cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+          {rows.length === 0 && (
+            <tr><td colSpan={headers.length} style={{ padding: "20px 10px", textAlign: "center", color: C.slate[400], fontSize: 12 }}>Aucune donnée</td></tr>
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -130,17 +148,16 @@ function todayIso() {
 
 // ── Export client-side XLSX ────────────────────────────────────────────────
 function buildExcel(
-  rows: import("./api").MargeRow[],
-  scoped: import("./calc").AnnotatedRow[],
-  filtered: import("./calc").AnnotatedRow[],
+  rows: MargeRow[],
+  scoped: AnnotatedRow[],
+  filtered: AnnotatedRow[],
   kpis: import("./calc").Kpis,
-  base: import("./calc").BaseMode,
+  base: BaseMode,
   scopeLabel: string,
   periodLabel: string,
 ) {
   const wb = XLSX.utils.book_new();
 
-  // Tab 1 — Tous les sites (données brutes complètes)
   const allRows = rows.map((r) => ({
     "Site ID": r.site_id,
     "Nom du site": r.site_name,
@@ -168,7 +185,6 @@ function buildExcel(
   const ws1 = XLSX.utils.json_to_sheet(allRows);
   XLSX.utils.book_append_sheet(wb, ws1, "Tous les sites");
 
-  // Tab 2 — Sites NOK (périmètre actif, tous filtres)
   const nokRows = filtered
     .filter((r) => r.statutActive === "NOK")
     .map((r) => {
@@ -198,7 +214,6 @@ function buildExcel(
   const ws2 = XLSX.utils.json_to_sheet(nokRows);
   XLSX.utils.book_append_sheet(wb, ws2, "Sites NOK");
 
-  // Tab 3 — KPIs résumé
   const kpiRows = [
     { "Indicateur": "Périmètre actif", "Valeur": scopeLabel },
     { "Indicateur": "Base de marge", "Valeur": base === "estimee" ? "Estimée (modèle catalogue)" : "Réelle (facture Sénélec)" },
@@ -215,7 +230,6 @@ function buildExcel(
   const ws3 = XLSX.utils.json_to_sheet(kpiRows);
   XLSX.utils.book_append_sheet(wb, ws3, "KPIs résumé");
 
-  // Tab 4 — Par région
   const nokScoped = scoped.filter((r) => r.statutActive === "NOK");
   const byRegionMap = new Map<string, { nok: number; sum: number; total: number }>();
   for (const r of scoped) {
@@ -237,7 +251,6 @@ function buildExcel(
   const ws4 = XLSX.utils.json_to_sheet(regionRows);
   XLSX.utils.book_append_sheet(wb, ws4, "Par région");
 
-  // Tab 5 — Par catégorie BO
   const byCatMap = new Map<string, { nok: number; sum: number; total: number }>();
   for (const r of scoped) {
     const key = r.categorie_bo || "Non renseigné";
@@ -258,7 +271,6 @@ function buildExcel(
   const ws5 = XLSX.utils.json_to_sheet(catRows);
   XLSX.utils.book_append_sheet(wb, ws5, "Par catégorie BO");
 
-  // Tab 6 — Par batch / sous-typo (NOK)
   const byBatchMap = new Map<string, { nok: number; sum: number; total: number }>();
   for (const r of scoped) {
     const key = r.batch || "Non renseigné";
@@ -279,7 +291,6 @@ function buildExcel(
   const ws6 = XLSX.utils.json_to_sheet(batchRows);
   XLSX.utils.book_append_sheet(wb, ws6, "Par batch");
 
-  // Tab 7 — Distribution de magnitude (NOK)
   const MAG: [string, (v: number) => boolean][] = [
     ["0 à -50k", (v) => v >= -50000],
     ["-50k à -100k", (v) => v >= -100000 && v < -50000],
@@ -299,7 +310,6 @@ function buildExcel(
   const ws7 = XLSX.utils.json_to_sheet(magRows);
   XLSX.utils.book_append_sheet(wb, ws7, "Distribution magnitude");
 
-  // Tab 8 — Annotation modèle (pour réimport)
   const annotationRows = rows.map((r) => ({
     "site_id": r.site_id,
     "site_name": r.site_name,
@@ -323,22 +333,15 @@ function buildExcel(
 }
 
 export default function MargeDashboardPage() {
-  // undefined = laisse le backend choisir par défaut (dernière période de
-  // l'année en cours, ou la plus récente disponible sinon) ; une fois les
-  // données chargées, le sélecteur affiche la période réellement résolue.
   const [period, setPeriod] = useState<MargePeriod | undefined>(undefined);
   const { data, isLoading, isError } = useMargeDashboard(period);
 
-  // Plage de dates §3 : filtre juste la liste des mois sélectionnables (les
-  // seuls mois avec facture Sénélec rapprochée), par défaut janvier → aujourd'hui
-  // de l'année en cours. On sélectionne toujours UN seul mois au final (pas
-  // d'agrégation multi-mois) — la plage ne fait que réduire les choix proposés.
   const [dateFrom, setDateFrom] = useState(`${CURRENT_YEAR}-01-01`);
   const [dateTo, setDateTo] = useState(todayIso());
 
   const filteredPeriods = useMemo(() => {
     const all = data?.meta?.available_periods ?? [];
-    const fromKey = dateFrom.slice(0, 7); // "YYYY-MM"
+    const fromKey = dateFrom.slice(0, 7);
     const toKey = dateTo.slice(0, 7);
     return all.filter((p) => {
       const key = `${p.year}-${String(p.month).padStart(2, "0")}`;
@@ -346,8 +349,6 @@ export default function MargeDashboardPage() {
     });
   }, [data?.meta?.available_periods, dateFrom, dateTo]);
 
-  // Si la période actuellement affichée sort de la plage choisie, on retombe
-  // sur la plus récente période encore valide dans la nouvelle plage.
   useEffect(() => {
     const meta = data?.meta;
     if (!meta) return;
@@ -368,7 +369,6 @@ export default function MargeDashboardPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
 
-  // Import/Export state
   const [importOpen, setImportOpen] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
@@ -393,7 +393,6 @@ export default function MargeDashboardPage() {
   }
 
   const rows = data?.rows ?? [];
-
   const typoFamilies = useMemo(() => typoFamilyOptions(rows), [rows]);
   const typoExacts = useMemo(() => typoExactOptions(rows), [rows]);
 
@@ -402,7 +401,6 @@ export default function MargeDashboardPage() {
     return annotateBase(filtered, base);
   }, [rows, scopeMode, scopeValue, multiValues, base]);
 
-  // Filtres transverses : options dynamiquement bornées au périmètre actif
   const regionOptions = useMemo(() => Array.from(new Set(scoped.map((r) => r.region))).sort(), [scoped]);
   const batchOptions = useMemo(() => Array.from(new Set(scoped.map((r) => r.batch))).sort(), [scoped]);
   const catOptions = useMemo(() => Array.from(new Set(scoped.map((r) => r.categorie_bo))).sort(), [scoped]);
@@ -412,8 +410,6 @@ export default function MargeDashboardPage() {
   const kpis = useMemo(() => computeKpis(scoped), [scoped]);
   const insights = useMemo(() => computeInsights(scoped, base), [scoped, base]);
 
-  const byRegion = useMemo(() => groupSumNok(scoped, (r) => r.region), [scoped]);
-  const byCategorie = useMemo(() => groupSumNok(scoped, (r) => r.categorie_bo), [scoped]);
   const bySubcat = useMemo(() => {
     if (scopeMode === "family" && scopeValue) {
       return groupSumNok(scoped, (r) => {
@@ -425,17 +421,6 @@ export default function MargeDashboardPage() {
     return groupSumNok(scoped, (r) => r.batch);
   }, [scoped, scopeMode, scopeValue]);
 
-  const statutPie = useMemo(() => {
-    const nok = scoped.filter((r) => r.statutActive === "NOK").length;
-    const ok = scoped.filter((r) => r.statutActive === "OK").length;
-    const ras = scoped.filter((r) => r.statutActive === "RAS").length;
-    return [
-      { label: "NOK", count: nok },
-      { label: "OK", count: ok },
-      { label: "RAS", count: ras },
-    ];
-  }, [scoped]);
-
   const reliabilityData = useMemo(() => (base === "estimee" ? trendBuckets(scoped) : reliabilityBuckets(scoped)), [scoped, base]);
   const transitions = useMemo(() => transitionMatrix(scoped), [scoped]);
   const coverage = useMemo(() => coverageSplit(scoped), [scoped]);
@@ -445,6 +430,35 @@ export default function MargeDashboardPage() {
   const modPie = useMemo(() => groupCount(nokScoped, (r) => r.modernise), [nokScoped]);
   const ownerPie = useMemo(() => groupCount(nokScoped, (r) => r.owner), [nokScoped]);
   const buckets = useMemo(() => magnitudeBuckets(scoped), [scoped]);
+
+  // Données brutes par région / catégorie BO
+  const byRegionFull = useMemo(() => {
+    const map = new Map<string, { nok: number; sum: number; total: number }>();
+    for (const r of scoped) {
+      const key = r.region || "Non renseigné";
+      const e = map.get(key) ?? { nok: 0, sum: 0, total: 0 };
+      e.total++;
+      if (r.statutActive === "NOK") { e.nok++; e.sum += r.margeActive || 0; }
+      map.set(key, e);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => a[1].sum - b[1].sum)
+      .map(([label, v]) => ({ label, ...v }));
+  }, [scoped]);
+
+  const byCatFull = useMemo(() => {
+    const map = new Map<string, { nok: number; sum: number; total: number }>();
+    for (const r of scoped) {
+      const key = r.categorie_bo || "Non renseigné";
+      const e = map.get(key) ?? { nok: 0, sum: 0, total: 0 };
+      e.total++;
+      if (r.statutActive === "NOK") { e.nok++; e.sum += r.margeActive || 0; }
+      map.set(key, e);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => a[1].sum - b[1].sum)
+      .map(([label, v]) => ({ label, ...v }));
+  }, [scoped]);
 
   const nokFiltered = useMemo(() => filtered.filter((r) => r.statutActive === "NOK"), [filtered]);
   const sorted = useMemo(() => {
@@ -486,9 +500,20 @@ export default function MargeDashboardPage() {
   const scopeLabel = scopeMode === "portfolio" ? "Portefeuille entier" : scopeMode === "family" ? "Famille de typologie" : scopeMode === "exact" ? "Typologie exacte" : "Sélection de typologies";
   const periodLabel = `${MONTH_LABELS[meta.reelle_month - 1]} ${meta.reelle_year}`;
 
+  // ─── Données tableau répartition statut ──────────────────────────────────
+  const nok = scoped.filter((r) => r.statutActive === "NOK").length;
+  const ok  = scoped.filter((r) => r.statutActive === "OK").length;
+  const ras = scoped.filter((r) => r.statutActive === "RAS").length;
+  const statutRows: (string | number)[][] = [
+    ["NOK", nok, scoped.length ? (nok / scoped.length * 100).toFixed(1) + " %" : "—"],
+    ["OK",  ok,  scoped.length ? (ok  / scoped.length * 100).toFixed(1) + " %" : "—"],
+    ["RAS", ras, scoped.length ? (ras / scoped.length * 100).toFixed(1) + " %" : "—"],
+  ];
+
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
 
+      {/* ── En-tête ──────────────────────────────────────────────────────── */}
       <header style={{ background: "#fff", borderRadius: 20, padding: "22px 24px 20px", boxShadow: CARD_SHADOW, border: CARD_BORDER, marginBottom: 22 }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -505,29 +530,17 @@ export default function MargeDashboardPage() {
           <div style={{ display: "flex", gap: 10, flexShrink: 0, alignItems: "center" }}>
             <button
               onClick={() => buildExcel(rows, scoped, filtered, kpis, base, scopeLabel + (scopeValue ? ` · ${clientFamilyLabel(scopeValue) ?? scopeValue}` : ""), periodLabel)}
-              style={{
-                display: "flex", alignItems: "center", gap: 7, padding: "9px 16px",
-                borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer",
-                border: `1px solid ${C.blue[100]}`, background: C.blue[50], color: C.blue[800],
-                transition: "opacity .12s",
-              }}
+              style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", border: `1px solid ${C.blue[100]}`, background: C.blue[50], color: C.blue[800], transition: "opacity .12s" }}
               aria-label="Exporter en Excel"
             >
-              <Download size={15} />
-              Exporter
+              <Download size={15} /> Exporter
             </button>
             <button
               onClick={() => { setImportOpen(true); setImportResult(null); setImportError(null); }}
-              style={{
-                display: "flex", alignItems: "center", gap: 7, padding: "9px 16px",
-                borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer",
-                border: `1px solid ${C.blue[950]}`, background: C.blue[950], color: "#fff",
-                transition: "opacity .12s",
-              }}
+              style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 16px", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", border: `1px solid ${C.blue[950]}`, background: C.blue[950], color: "#fff", transition: "opacity .12s" }}
               aria-label="Importer un fichier Excel"
             >
-              <Upload size={15} />
-              Importer
+              <Upload size={15} /> Importer
             </button>
           </div>
         </div>
@@ -535,22 +548,12 @@ export default function MargeDashboardPage() {
 
       {/* ── Modal Import ─────────────────────────────────────────────────── */}
       {importOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Import fichier Excel"
-          style={{
-            position: "fixed", inset: 0, zIndex: 1000,
-            background: "rgba(15,23,42,.45)", display: "grid", placeItems: "center",
-          }}
+        <div role="dialog" aria-modal="true" aria-label="Import fichier Excel"
+          style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(15,23,42,.45)", display: "grid", placeItems: "center" }}
           onClick={(e) => { if (e.target === e.currentTarget) setImportOpen(false); }}
         >
           <div style={{ background: "#fff", borderRadius: 18, padding: "28px 30px 24px", width: "100%", maxWidth: 480, boxShadow: "0 20px 60px rgba(15,23,42,.22)", position: "relative" }}>
-            <button
-              onClick={() => setImportOpen(false)}
-              style={{ position: "absolute", top: 16, right: 16, background: "none", border: "none", cursor: "pointer", color: C.slate[400], padding: 4, lineHeight: 0 }}
-              aria-label="Fermer"
-            >
+            <button onClick={() => setImportOpen(false)} style={{ position: "absolute", top: 16, right: 16, background: "none", border: "none", cursor: "pointer", color: C.slate[400], padding: 4, lineHeight: 0 }} aria-label="Fermer">
               <X size={18} />
             </button>
             <div style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 10.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: C.blue[700], marginBottom: 6 }}>Import Excel</div>
@@ -558,18 +561,14 @@ export default function MargeDashboardPage() {
             <p style={{ fontSize: 13, color: C.slate[500], margin: "0 0 20px", lineHeight: 1.5 }}>
               Sélectionnez un fichier Excel exporté depuis cette page, renseignez les colonnes Catégorie BO, Owner, Commentaire, puis importez.
             </p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls"
+            <input ref={fileInputRef} type="file" accept=".xlsx,.xls"
               style={{ display: "block", width: "100%", padding: "10px 12px", border: `1px solid ${C.slate[200]}`, borderRadius: 8, fontSize: 13, marginBottom: 16, boxSizing: "border-box" }}
               aria-label="Choisir un fichier Excel"
               onChange={() => { setImportResult(null); setImportError(null); }}
             />
             {importError && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: C.nok.light, borderRadius: 8, marginBottom: 14, fontSize: 13, color: C.nok.dark }}>
-                <AlertCircle size={16} style={{ flexShrink: 0 }} />
-                {importError}
+                <AlertCircle size={16} style={{ flexShrink: 0 }} />{importError}
               </div>
             )}
             {importResult && (
@@ -586,402 +585,326 @@ export default function MargeDashboardPage() {
               </div>
             )}
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-              <button
-                onClick={() => setImportOpen(false)}
-                style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, border: `1px solid ${C.slate[200]}`, background: "#fff", color: C.slate[700], cursor: "pointer" }}
+              <button onClick={() => setImportOpen(false)} style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, border: `1px solid ${C.slate[200]}`, background: "#fff", color: C.slate[700], cursor: "pointer" }}>Fermer</button>
+              <button onClick={handleImport} disabled={importLoading}
+                style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: importLoading ? "default" : "pointer", border: `1px solid ${C.blue[950]}`, background: C.blue[950], color: "#fff", opacity: importLoading ? .6 : 1 }}
               >
-                Fermer
-              </button>
-              <button
-                onClick={handleImport}
-                disabled={importLoading}
-                style={{
-                  display: "flex", alignItems: "center", gap: 7, padding: "9px 18px",
-                  borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: importLoading ? "default" : "pointer",
-                  border: `1px solid ${C.blue[950]}`, background: C.blue[950], color: "#fff",
-                  opacity: importLoading ? .6 : 1,
-                }}
-              >
-                <Upload size={14} />
-                {importLoading ? "Import en cours…" : "Valider l'import"}
+                <Upload size={14} />{importLoading ? "Import en cours…" : "Valider l'import"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-        {/* ── Sélecteurs §1/§2 ─────────────────────────────────────────── */}
-        <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr .7fr", gap: 14, marginBottom: 22 }}>
-          <Card>
-            <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".08em", color: C.slate[400], fontWeight: 800, marginBottom: 10 }}>① Sélecteur de périmètre typologique</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <RadioPill checked={scopeMode === "portfolio"} onClick={() => changeScope("portfolio")}>Portefeuille entier</RadioPill>
-              <RadioPill checked={scopeMode === "family"} onClick={() => changeScope("family")}>Famille de typologie</RadioPill>
-              <RadioPill checked={scopeMode === "exact"} onClick={() => changeScope("exact")}>Typologie exacte</RadioPill>
-              <RadioPill checked={scopeMode === "multi"} onClick={() => changeScope("multi")}>Sélection de typologies</RadioPill>
-            </div>
-            {scopeMode === "family" && (
-              <div style={{ marginTop: 12 }}>
-                <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".06em", color: C.slate[400], fontWeight: 800, marginBottom: 7 }}>Secteurs</div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-                  {CLIENT_FAMILIES.map((f) => {
-                    const checked = scopeValue === f.key;
-                    return (
-                      <button
-                        key={f.key}
-                        onClick={() => { setScopeValue(f.key); setPage(1); }}
-                        style={{
-                          padding: "6px 13px", borderRadius: 20, fontSize: 12, fontWeight: 800, cursor: "pointer",
-                          border: `1px solid ${checked ? C.blue[700] : C.slate[200]}`,
-                          background: checked ? C.blue[700] : "#fff", color: checked ? "#fff" : C.slate[600],
-                        }}
-                      >
-                        {f.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".06em", color: C.slate[400], fontWeight: 800, marginBottom: 7 }}>Autre famille</div>
-                <Select value={scopeValue} onChange={(v) => { setScopeValue(v); setPage(1); }} options={typoFamilies} placeholder="— Choisir une famille —" />
-              </div>
-            )}
-            {scopeMode === "exact" && (
-              <div style={{ marginTop: 12 }}>
-                <Select value={scopeValue} onChange={(v) => { setScopeValue(v); setPage(1); }} options={typoExacts} placeholder="— Choisir une typologie —" />
-              </div>
-            )}
-            {scopeMode === "multi" && (
-              <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 110, overflowY: "auto" }}>
-                {typoExacts.map((t) => {
-                  const checked = multiValues.includes(t);
+      {/* ── Sélecteurs §1/§2/§3 ──────────────────────────────────────────── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr .7fr", gap: 14, marginBottom: 22 }}>
+        <Card>
+          <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".08em", color: C.slate[400], fontWeight: 800, marginBottom: 10 }}>① Sélecteur de périmètre typologique</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <RadioPill checked={scopeMode === "portfolio"} onClick={() => changeScope("portfolio")}>Portefeuille entier</RadioPill>
+            <RadioPill checked={scopeMode === "family"} onClick={() => changeScope("family")}>Famille de typologie</RadioPill>
+            <RadioPill checked={scopeMode === "exact"} onClick={() => changeScope("exact")}>Typologie exacte</RadioPill>
+            <RadioPill checked={scopeMode === "multi"} onClick={() => changeScope("multi")}>Sélection de typologies</RadioPill>
+          </div>
+          {scopeMode === "family" && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".06em", color: C.slate[400], fontWeight: 800, marginBottom: 7 }}>Secteurs</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                {CLIENT_FAMILIES.map((f) => {
+                  const checked = scopeValue === f.key;
                   return (
-                    <button
-                      key={t}
-                      onClick={() => { setMultiValues((prev) => checked ? prev.filter((x) => x !== t) : [...prev, t]); setPage(1); }}
-                      style={{
-                        padding: "5px 11px", borderRadius: 20, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
-                        border: `1px solid ${checked ? C.blue[700] : C.slate[200]}`,
-                        background: checked ? C.blue[50] : "#fff", color: checked ? C.blue[700] : C.slate[600],
-                      }}
-                    >
-                      {t}
-                    </button>
+                    <button key={f.key} onClick={() => { setScopeValue(f.key); setPage(1); }}
+                      style={{ padding: "6px 13px", borderRadius: 20, fontSize: 12, fontWeight: 800, cursor: "pointer", border: `1px solid ${checked ? C.blue[700] : C.slate[200]}`, background: checked ? C.blue[700] : "#fff", color: checked ? "#fff" : C.slate[600] }}
+                    >{f.label}</button>
                   );
                 })}
               </div>
-            )}
-          </Card>
-          <Card>
-            <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".08em", color: C.slate[400], fontWeight: 800, marginBottom: 10 }}>② Sélecteur de base de marge</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <RadioPill checked={base === "estimee"} onClick={() => changeBase("estimee")}>Marge estimée (modèle catalogue)</RadioPill>
-              <RadioPill checked={base === "reelle"} onClick={() => changeBase("reelle")}>Marge réelle (facture Sénélec)</RadioPill>
+              <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".06em", color: C.slate[400], fontWeight: 800, marginBottom: 7 }}>Autre famille</div>
+              <Select value={scopeValue} onChange={(v) => { setScopeValue(v); setPage(1); }} options={typoFamilies} placeholder="— Choisir une famille —" />
             </div>
-          </Card>
-          <Card>
-            <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".08em", color: C.slate[400], fontWeight: 800, marginBottom: 10 }}>③ Période (marge réelle)</div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 10, color: C.slate[400], fontWeight: 700, marginBottom: 3 }}>Du</div>
-                <input
-                  type="date"
-                  value={dateFrom}
-                  max={dateTo}
-                  onChange={(e) => e.target.value && setDateFrom(e.target.value)}
-                  style={{ width: "100%", background: C.slate[50], border: `1px solid ${C.slate[200]}`, color: C.slate[800], borderRadius: 10, padding: "8px 10px", fontSize: 12, fontWeight: 700 }}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 10, color: C.slate[400], fontWeight: 700, marginBottom: 3 }}>Au</div>
-                <input
-                  type="date"
-                  value={dateTo}
-                  min={dateFrom}
-                  onChange={(e) => e.target.value && setDateTo(e.target.value)}
-                  style={{ width: "100%", background: C.slate[50], border: `1px solid ${C.slate[200]}`, color: C.slate[800], borderRadius: 10, padding: "8px 10px", fontSize: 12, fontWeight: 700 }}
-                />
-              </div>
+          )}
+          {scopeMode === "exact" && (
+            <div style={{ marginTop: 12 }}>
+              <Select value={scopeValue} onChange={(v) => { setScopeValue(v); setPage(1); }} options={typoExacts} placeholder="— Choisir une typologie —" />
             </div>
-            <select
-              value={filteredPeriods.some((p) => p.year === meta.reelle_year && p.month === meta.reelle_month) ? `${meta.reelle_year}-${meta.reelle_month}` : ""}
-              onChange={(e) => {
-                const [y, m] = e.target.value.split("-").map(Number);
-                setPeriod({ year: y, month: m });
-              }}
-              style={{ width: "100%", background: C.slate[50], border: `1px solid ${C.slate[200]}`, color: C.slate[800], borderRadius: 10, padding: "10px 12px", fontSize: 12.5, cursor: "pointer", fontWeight: 700 }}
-            >
-              {!filteredPeriods.length && <option value="">— Aucun mois dans cette plage —</option>}
-              {filteredPeriods.map((p) => (
-                <option key={`${p.year}-${p.month}`} value={`${p.year}-${p.month}`}>
-                  {MONTH_LABELS[p.month - 1]} {p.year}{p.year === CURRENT_YEAR ? " · année en cours" : ""}
-                </option>
-              ))}
-            </select>
-            <div style={{ fontSize: 11, color: C.slate[400], marginTop: 9, lineHeight: 1.4 }}>
-              {filteredPeriods.length} mois avec facture Sénélec rapprochée dans la plage choisie (sur {meta.available_periods.length} au total) — choisis-en un pour voir la marge réelle.
+          )}
+          {scopeMode === "multi" && (
+            <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 110, overflowY: "auto" }}>
+              {typoExacts.map((t) => {
+                const checked = multiValues.includes(t);
+                return (
+                  <button key={t} onClick={() => { setMultiValues((prev) => checked ? prev.filter((x) => x !== t) : [...prev, t]); setPage(1); }}
+                    style={{ padding: "5px 11px", borderRadius: 20, fontSize: 11.5, fontWeight: 700, cursor: "pointer", border: `1px solid ${checked ? C.blue[700] : C.slate[200]}`, background: checked ? C.blue[50] : "#fff", color: checked ? C.blue[700] : C.slate[600] }}
+                  >{t}</button>
+                );
+              })}
             </div>
-          </Card>
-        </div>
-
-        {/* ── §7.2 KPI ─────────────────────────────────────────────────── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 14, marginBottom: 10 }}>
-          <KpiCard label="Sites NOK" value={kpis.nokCount.toLocaleString("fr-FR")} sub={`${fmtPct(kpis.nokPct)} du périmètre`} icon={<TrendingDown size={17} />} accent={C.nok.main} />
-          <KpiCard label="Marge négative cumulée" value={fmtXof(kpis.sumNok)} sub={fmtXofExact(kpis.sumNok)} icon={<TrendingDown size={17} />} accent={C.nok.main} />
-          <KpiCard label="Marge nég. moy. / site NOK" value={fmtXof(kpis.avgNok)} sub={fmtXofExact(kpis.avgNok)} icon={<Percent size={17} />} accent={C.warn.main} />
-          <KpiCard label="Marge positive cumulée" value={fmtXof(kpis.sumOk)} sub={fmtXofExact(kpis.sumOk)} icon={<TrendingUp size={17} />} accent={C.ok.main} />
-          <KpiCard label="Solde net · RAS" value={fmtXof(kpis.net)} sub={`${kpis.rasCount.toLocaleString("fr-FR")} sites hors calcul`} icon={<Scale size={17} />} accent={C.blue[700]} />
-        </div>
-
-        {/* ── Diagnostic rapide ────────────────────────────────────────── */}
-        <SectionTitle>Diagnostic rapide</SectionTitle>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
-          {insights.map((ins, i) => (
-            <div key={i} style={{ background: "#fff", borderRadius: RADIUS, border: CARD_BORDER, borderLeft: `3px solid ${C.blue[700]}`, boxShadow: CARD_SHADOW, padding: "16px 18px" }}>
-              <div style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 17, fontWeight: 700, color: C.blue[950], overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ins.big}</div>
-              <div style={{ fontSize: 12, color: C.slate[600], marginTop: 8, fontWeight: 700, lineHeight: 1.45 }}>
-                {ins.label}<br /><span style={{ color: C.slate[400], fontWeight: 500 }}>{ins.sub}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* ── §7.4 Répartition & fiabilité ──────────────────────────────── */}
-        <SectionTitle num="7.4" desc="Statut de marge sur le périmètre actif">Répartition et fiabilité</SectionTitle>
-        <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 14 }}>
-          <Card>
-            <CardH3>Statut marge</CardH3>
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie data={statutPie} dataKey="count" nameKey="label" cx="50%" cy="50%" innerRadius={62} outerRadius={92} paddingAngle={2}>
-                  {statutPie.map((s, i) => <Cell key={i} fill={s.label === "NOK" ? C.nok.main : s.label === "OK" ? C.ok.main : C.ras.main} />)}
-                </Pie>
-                <Tooltip content={<ChartTooltip />} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </Card>
-          <Card>
-            <CardH3>{base === "estimee" ? "Tendance sites NOK — Mai → Juin" : "Fiabilité du modèle — Écart Réel vs Estimation"}</CardH3>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={reliabilityData} layout="vertical" margin={{ left: 10, right: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={C.slate[100]} horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: C.slate[500] }} />
-                <YAxis type="category" dataKey="label" width={170} tick={{ fontSize: 11, fill: C.slate[600] }} />
-                <Tooltip content={<ChartTooltip />} />
-                <Bar dataKey="count" name="Sites" radius={[0, 4, 4, 0]}>
-                  {reliabilityData.map((_, i) => <Cell key={i} fill={[C.nok.main, C.warn.main, C.ok.main][i] ?? C.blue[700]} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </Card>
-        </div>
-
-        {/* ── §4.3 Transition (uniquement base réelle) ─────────────────── */}
-        {base === "reelle" && (
-          <>
-            <SectionTitle num="4.3" desc="Comment le statut modèle évolue une fois la facture réelle disponible">Transition de statut — estimation → réel</SectionTitle>
-            <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 14 }}>
-              <Card>
-                <CardH3>Sites par trajectoire de statut (estimé → réel)</CardH3>
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={transitions} margin={{ left: 0, right: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={C.slate[100]} vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.slate[600] }} />
-                    <YAxis tick={{ fontSize: 11, fill: C.slate[500] }} />
-                    <Tooltip content={<ChartTooltip />} />
-                    <Bar dataKey="count" name="Sites" radius={[4, 4, 0, 0]}>
-                      {transitions.map((t, i) => <Cell key={i} fill={t.label.endsWith("NOK") ? C.nok.main : t.label.endsWith("OK") ? C.ok.main : C.ras.main} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </Card>
-              <Card>
-                <CardH3>Couverture des factures réelles</CardH3>
-                <ResponsiveContainer width="100%" height={240}>
-                  <PieChart>
-                    <Pie data={coverage} dataKey="count" nameKey="label" cx="50%" cy="50%" innerRadius={58} outerRadius={88} paddingAngle={2}>
-                      {coverage.map((_, i) => <Cell key={i} fill={[C.blue[700], C.warn.main, C.ras.main][i]} />)}
-                    </Pie>
-                    <Tooltip content={<ChartTooltip />} />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              </Card>
-            </div>
-          </>
-        )}
-
-        {/* ── §7.5 Sous-catégorie ───────────────────────────────────────── */}
-        <SectionTitle num="7.5" desc={scopeMode === "family" ? "Variantes au sein de la famille sélectionnée" : "Vague de déploiement / commissioning"}>
-          {scopeMode === "family" ? "Marge négative par sous-typologie" : "Marge négative par batch opérationnel"}
-        </SectionTitle>
-        <Card>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={bySubcat} margin={{ left: 0, right: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={C.slate[100]} vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.slate[600] }} interval={0} angle={-20} textAnchor="end" height={60} />
-              <YAxis tick={{ fontSize: 11, fill: C.slate[500] }} tickFormatter={(v) => fmtXof(v)} />
-              <Tooltip content={<ChartTooltip />} />
-              <Bar dataKey="sum" name="Marge négative cumulée" fill={C.blue[950]} radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          )}
         </Card>
-
-        {/* ── §7.6 Localisation & causes ────────────────────────────────── */}
-        <SectionTitle num="7.6" desc="Région O&M · catégorie BO">Localisation et causes racines</SectionTitle>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-          <Card>
-            <CardH3>Marge négative cumulée par région</CardH3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={byRegion} layout="vertical" margin={{ left: 10, right: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={C.slate[100]} horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: C.slate[500] }} tickFormatter={(v) => fmtXof(v)} />
-                <YAxis type="category" dataKey="label" width={90} tick={{ fontSize: 11, fill: C.slate[600] }} />
-                <Tooltip content={<ChartTooltip />} formatter={(v: any) => fmtXofExact(v)} />
-                <Bar dataKey="sum" name="Marge négative" fill={C.nok.main} radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </Card>
-          <Card>
-            <CardH3>Catégorie BO (cause identifiée)</CardH3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={byCategorie} layout="vertical" margin={{ left: 10, right: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={C.slate[100]} horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: C.slate[500] }} tickFormatter={(v) => fmtXof(v)} />
-                <YAxis type="category" dataKey="label" width={190} tick={{ fontSize: 10.5, fill: C.slate[600] }} />
-                <Tooltip content={<ChartTooltip />} />
-                <Bar dataKey="sum" name="Marge négative" fill={C.warn.main} radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </Card>
-        </div>
-
-        {/* ── §7.7 Paramètres essentiels ────────────────────────────────── */}
-        <SectionTitle num="7.7" desc="Configuration site · propriétaire d'action · magnitude">Paramètres essentiels à l'analyse</SectionTitle>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
-          <Card>
-            <CardH3>Indoor vs Outdoor (sites NOK)</CardH3>
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie data={ioPie} dataKey="count" nameKey="label" cx="50%" cy="50%" innerRadius={44} outerRadius={72} paddingAngle={2}>
-                  {ioPie.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                </Pie>
-                <Tooltip content={<ChartTooltip />} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </Card>
-          <Card>
-            <CardH3>Statut de modernisation (sites NOK)</CardH3>
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie data={modPie} dataKey="count" nameKey="label" cx="50%" cy="50%" innerRadius={44} outerRadius={72} paddingAngle={2}>
-                  {modPie.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                </Pie>
-                <Tooltip content={<ChartTooltip />} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </Card>
-          <Card>
-            <CardH3>Owner d'action assigné (sites NOK)</CardH3>
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie data={ownerPie} dataKey="count" nameKey="label" cx="50%" cy="50%" innerRadius={44} outerRadius={72} paddingAngle={2}>
-                  {ownerPie.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                </Pie>
-                <Tooltip content={<ChartTooltip />} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </Card>
-        </div>
-        <Card style={{ marginTop: 14 }}>
-          <CardH3>Distribution de la magnitude de marge négative (XOF)</CardH3>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={buckets} margin={{ left: 0, right: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={C.slate[100]} vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.slate[600] }} />
-              <YAxis tick={{ fontSize: 11, fill: C.slate[500] }} />
-              <Tooltip content={<ChartTooltip />} />
-              <Bar dataKey="count" name="Sites" fill={C.nok.main} radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
-
-        {/* ── §7.8 Tableau détaillé ─────────────────────────────────────── */}
-        <SectionTitle num="7.8" desc="Triable, filtrable, recherche libre">Détail des sites en marge négative</SectionTitle>
         <Card>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
-            <div style={{ position: "relative", minWidth: 230 }}>
-              <Search size={14} style={{ position: "absolute", left: 10, top: 10, color: C.slate[400] }} />
-              <input
-                type="text" placeholder="Rechercher site, ID, commentaire..."
-                value={filters.search}
-                onChange={(e) => { setFilters((f) => ({ ...f, search: e.target.value })); setPage(1); }}
-                style={{ width: "100%", padding: "8px 12px 8px 30px", borderRadius: 8, border: `1px solid ${C.slate[200]}`, fontSize: 12.5, background: C.slate[50] }}
+          <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".08em", color: C.slate[400], fontWeight: 800, marginBottom: 10 }}>② Sélecteur de base de marge</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <RadioPill checked={base === "estimee"} onClick={() => changeBase("estimee")}>Marge estimée (modèle catalogue)</RadioPill>
+            <RadioPill checked={base === "reelle"} onClick={() => changeBase("reelle")}>Marge réelle (facture Sénélec)</RadioPill>
+          </div>
+        </Card>
+        <Card>
+          <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".08em", color: C.slate[400], fontWeight: 800, marginBottom: 10 }}>③ Période (marge réelle)</div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 10, color: C.slate[400], fontWeight: 700, marginBottom: 3 }}>Du</div>
+              <input type="date" value={dateFrom} max={dateTo} onChange={(e) => e.target.value && setDateFrom(e.target.value)}
+                style={{ width: "100%", background: C.slate[50], border: `1px solid ${C.slate[200]}`, color: C.slate[800], borderRadius: 10, padding: "8px 10px", fontSize: 12, fontWeight: 700 }} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 10, color: C.slate[400], fontWeight: 700, marginBottom: 3 }}>Au</div>
+              <input type="date" value={dateTo} min={dateFrom} onChange={(e) => e.target.value && setDateTo(e.target.value)}
+                style={{ width: "100%", background: C.slate[50], border: `1px solid ${C.slate[200]}`, color: C.slate[800], borderRadius: 10, padding: "8px 10px", fontSize: 12, fontWeight: 700 }} />
+            </div>
+          </div>
+          <select
+            value={filteredPeriods.some((p) => p.year === meta.reelle_year && p.month === meta.reelle_month) ? `${meta.reelle_year}-${meta.reelle_month}` : ""}
+            onChange={(e) => { const [y, m] = e.target.value.split("-").map(Number); setPeriod({ year: y, month: m }); }}
+            style={{ width: "100%", background: C.slate[50], border: `1px solid ${C.slate[200]}`, color: C.slate[800], borderRadius: 10, padding: "10px 12px", fontSize: 12.5, cursor: "pointer", fontWeight: 700 }}
+          >
+            {!filteredPeriods.length && <option value="">— Aucun mois dans cette plage —</option>}
+            {filteredPeriods.map((p) => (
+              <option key={`${p.year}-${p.month}`} value={`${p.year}-${p.month}`}>
+                {MONTH_LABELS[p.month - 1]} {p.year}{p.year === CURRENT_YEAR ? " · année en cours" : ""}
+              </option>
+            ))}
+          </select>
+          <div style={{ fontSize: 11, color: C.slate[400], marginTop: 9, lineHeight: 1.4 }}>
+            {filteredPeriods.length} mois avec facture Sénélec rapprochée dans la plage choisie (sur {meta.available_periods.length} au total).
+          </div>
+        </Card>
+      </div>
+
+      {/* ── KPI cards ────────────────────────────────────────────────────── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 14, marginBottom: 10 }}>
+        <KpiCard label="Sites NOK" value={kpis.nokCount.toLocaleString("fr-FR")} sub={`${fmtPct(kpis.nokPct)} du périmètre`} icon={<TrendingDown size={17} />} accent={C.nok.main} />
+        <KpiCard label="Marge négative cumulée" value={fmtXof(kpis.sumNok)} sub={fmtXofExact(kpis.sumNok)} icon={<TrendingDown size={17} />} accent={C.nok.main} />
+        <KpiCard label="Marge nég. moy. / site NOK" value={fmtXof(kpis.avgNok)} sub={fmtXofExact(kpis.avgNok)} icon={<Percent size={17} />} accent={C.warn.main} />
+        <KpiCard label="Marge positive cumulée" value={fmtXof(kpis.sumOk)} sub={fmtXofExact(kpis.sumOk)} icon={<TrendingUp size={17} />} accent={C.ok.main} />
+        <KpiCard label="Solde net · RAS" value={fmtXof(kpis.net)} sub={`${kpis.rasCount.toLocaleString("fr-FR")} sites hors calcul`} icon={<Scale size={17} />} accent={C.blue[700]} />
+      </div>
+
+      {/* ── Détail des sites en marge négative (EN HAUT) ─────────────────── */}
+      <SectionTitle desc="Triable, filtrable, recherche libre">Détail des sites en marge négative</SectionTitle>
+      <Card>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ position: "relative", minWidth: 230 }}>
+            <Search size={14} style={{ position: "absolute", left: 10, top: 10, color: C.slate[400] }} />
+            <input type="text" placeholder="Rechercher site, ID, commentaire..."
+              value={filters.search}
+              onChange={(e) => { setFilters((f) => ({ ...f, search: e.target.value })); setPage(1); }}
+              style={{ width: "100%", padding: "8px 12px 8px 30px", borderRadius: 8, border: `1px solid ${C.slate[200]}`, fontSize: 12.5, background: C.slate[50] }}
+            />
+          </div>
+          <div style={{ minWidth: 150 }}><Select value={filters.region} onChange={(v) => { setFilters((f) => ({ ...f, region: v })); setPage(1); }} options={regionOptions} placeholder="Toutes régions" /></div>
+          <div style={{ minWidth: 150 }}><Select value={filters.batch} onChange={(v) => { setFilters((f) => ({ ...f, batch: v })); setPage(1); }} options={batchOptions} placeholder="Tous batchs" /></div>
+          <div style={{ minWidth: 190 }}><Select value={filters.categorieBo} onChange={(v) => { setFilters((f) => ({ ...f, categorieBo: v })); setPage(1); }} options={catOptions} placeholder="Toutes catégories BO" /></div>
+          <div style={{ minWidth: 150 }}><Select value={filters.owner} onChange={(v) => { setFilters((f) => ({ ...f, owner: v })); setPage(1); }} options={ownerOptions} placeholder="Tous owners" /></div>
+          <span style={{ marginLeft: "auto", fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11.5, color: C.blue[700], background: C.blue[50], border: `1px solid ${C.blue[100]}`, borderRadius: 20, padding: "6px 13px", fontWeight: 700 }}>
+            {sorted.length.toLocaleString("fr-FR")} / {kpis.nokCount.toLocaleString("fr-FR")} sites NOK
+          </span>
+        </div>
+
+        <div style={{ overflowX: "auto", border: `1px solid ${C.slate[200]}`, borderRadius: 14 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+            <thead>
+              <tr>
+                {[
+                  ["site_id", "Site ID"], ["site_name", "Nom du site"], ["region", "Région"], ["batch", "Batch"],
+                  ["marge_juin_est", "Marge Estimée (XOF)"], ["marge_reelle", "Marge Réelle (XOF)"], ["ecart", "Écart Réel−Est."],
+                  ["categorie_bo", "Catégorie BO"], ["owner", "Owner"], ["load_senelec_w", "Load Senelec (W)"],
+                ].map(([key, label]) => (
+                  <th key={key} onClick={() => sortBy(key)}
+                    style={{ position: "sticky", top: 0, background: C.slate[50], textAlign: "left", padding: "10px 13px", fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".05em", color: sortKey === key ? C.blue[700] : C.slate[500], borderBottom: `1px solid ${C.slate[200]}`, cursor: "pointer", whiteSpace: "nowrap", fontWeight: 800 }}
+                  >
+                    {label}{sortKey === key ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {pageRows.map((r) => {
+                const ecart = r.marge_reelle !== null && r.marge_juin_est !== null ? r.marge_reelle - r.marge_juin_est : null;
+                return (
+                  <tr key={r.site_id} style={{ borderBottom: `1px solid ${C.slate[100]}` }}>
+                    <td style={{ padding: "9px 13px", fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12 }}>{r.site_id}</td>
+                    <td style={{ padding: "9px 13px", fontWeight: 700, color: C.slate[800], maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.site_name}>{r.site_name}</td>
+                    <td style={{ padding: "9px 13px", color: C.slate[600] }}>{r.region}</td>
+                    <td style={{ padding: "9px 13px", color: C.slate[600] }}>{r.batch}</td>
+                    <td style={{ padding: "9px 13px", fontFamily: "ui-monospace, Menlo, monospace", color: C.nok.main, fontWeight: 700 }}>{fmtXofExact(r.marge_juin_est)}</td>
+                    <td style={{ padding: "9px 13px", fontFamily: "ui-monospace, Menlo, monospace", color: C.nok.main, fontWeight: 700 }}>{fmtXofExact(r.marge_reelle)}</td>
+                    <td style={{ padding: "9px 13px", fontFamily: "ui-monospace, Menlo, monospace", color: C.slate[700] }}>{ecart === null ? "—" : (ecart >= 0 ? "+" : "") + ecart.toLocaleString("fr-FR")}</td>
+                    <td style={{ padding: "9px 13px", color: C.slate[600], maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.categorie_bo}>{r.categorie_bo}</td>
+                    <td style={{ padding: "9px 13px", color: C.slate[600] }}>{r.owner}</td>
+                    <td style={{ padding: "9px 13px", fontFamily: "ui-monospace, Menlo, monospace", color: C.slate[700] }}>{r.load_senelec_w === null ? "—" : Math.round(r.load_senelec_w).toLocaleString("fr-FR")}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, marginTop: 12, fontSize: 12, color: C.slate[500] }}>
+          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}
+            style={{ display: "flex", alignItems: "center", gap: 4, background: C.slate[50], border: `1px solid ${C.slate[200]}`, borderRadius: 8, padding: "7px 14px", cursor: page <= 1 ? "not-allowed" : "pointer", opacity: page <= 1 ? 0.4 : 1, fontWeight: 700, color: C.blue[950] }}
+          ><ChevronLeft size={13} /> Précédent</button>
+          <span>Page {page} / {totalPages}</span>
+          <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+            style={{ display: "flex", alignItems: "center", gap: 4, background: C.slate[50], border: `1px solid ${C.slate[200]}`, borderRadius: 8, padding: "7px 14px", cursor: page >= totalPages ? "not-allowed" : "pointer", opacity: page >= totalPages ? 0.4 : 1, fontWeight: 700, color: C.blue[950] }}
+          >Suivant <ChevronRight size={13} /></button>
+        </div>
+      </Card>
+
+      {/* ── Diagnostic rapide ────────────────────────────────────────────── */}
+      <SectionTitle>Diagnostic rapide</SectionTitle>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
+        {insights.map((ins, i) => (
+          <div key={i} style={{ background: "#fff", borderRadius: RADIUS, border: CARD_BORDER, borderLeft: `3px solid ${C.blue[700]}`, boxShadow: CARD_SHADOW, padding: "16px 18px" }}>
+            <div style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 17, fontWeight: 700, color: C.blue[950], overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ins.big}</div>
+            <div style={{ fontSize: 12, color: C.slate[600], marginTop: 8, fontWeight: 700, lineHeight: 1.45 }}>
+              {ins.label}<br /><span style={{ color: C.slate[400], fontWeight: 500 }}>{ins.sub}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Répartition du statut & fiabilité ────────────────────────────── */}
+      <SectionTitle desc="Statut de marge sur le périmètre actif">Répartition et fiabilité</SectionTitle>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <Card>
+          <CardH3>Statut marge — périmètre actif ({scoped.length.toLocaleString("fr-FR")} sites)</CardH3>
+          <RawTable
+            headers={["Statut", "Sites", "% du périmètre"]}
+            rows={statutRows}
+            alignRight={[1, 2]}
+          />
+        </Card>
+        <Card>
+          <CardH3>{base === "estimee" ? "Tendance sites NOK — Mai → Juin" : "Fiabilité du modèle — Écart Réel vs Estimation"}</CardH3>
+          <RawTable
+            headers={["Bucket", "Sites"]}
+            rows={reliabilityData.map((d) => [d.label, d.count])}
+            alignRight={[1]}
+          />
+        </Card>
+      </div>
+
+      {/* ── Transition de statut (base réelle uniquement) ─────────────────── */}
+      {base === "reelle" && (
+        <>
+          <SectionTitle desc="Comment le statut modèle évolue une fois la facture réelle disponible">Transition de statut — estimation → réel</SectionTitle>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <Card>
+              <CardH3>Sites par trajectoire (estimé → réel)</CardH3>
+              <RawTable
+                headers={["Trajectoire", "Sites"]}
+                rows={transitions.map((t) => [t.label, t.count])}
+                alignRight={[1]}
               />
-            </div>
-            <div style={{ minWidth: 150 }}><Select value={filters.region} onChange={(v) => { setFilters((f) => ({ ...f, region: v })); setPage(1); }} options={regionOptions} placeholder="Toutes régions" /></div>
-            <div style={{ minWidth: 150 }}><Select value={filters.batch} onChange={(v) => { setFilters((f) => ({ ...f, batch: v })); setPage(1); }} options={batchOptions} placeholder="Tous batchs" /></div>
-            <div style={{ minWidth: 190 }}><Select value={filters.categorieBo} onChange={(v) => { setFilters((f) => ({ ...f, categorieBo: v })); setPage(1); }} options={catOptions} placeholder="Toutes catégories BO" /></div>
-            <div style={{ minWidth: 150 }}><Select value={filters.owner} onChange={(v) => { setFilters((f) => ({ ...f, owner: v })); setPage(1); }} options={ownerOptions} placeholder="Tous owners" /></div>
-            <span style={{ marginLeft: "auto", fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11.5, color: C.blue[700], background: C.blue[50], border: `1px solid ${C.blue[100]}`, borderRadius: 20, padding: "6px 13px", fontWeight: 700 }}>
-              {sorted.length.toLocaleString("fr-FR")} / {kpis.nokCount.toLocaleString("fr-FR")} sites NOK
-            </span>
+            </Card>
+            <Card>
+              <CardH3>Couverture des factures réelles</CardH3>
+              <RawTable
+                headers={["Couverture", "Sites"]}
+                rows={coverage.map((c) => [c.label, c.count])}
+                alignRight={[1]}
+              />
+            </Card>
           </div>
+        </>
+      )}
 
-          <div style={{ overflowX: "auto", border: `1px solid ${C.slate[200]}`, borderRadius: 14 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
-              <thead>
-                <tr>
-                  {[
-                    ["site_id", "Site ID"], ["site_name", "Nom du site"], ["region", "Région"], ["batch", "Batch"],
-                    ["marge_juin_est", "Marge Estimée (XOF)"], ["marge_reelle", "Marge Réelle (XOF)"], ["ecart", "Écart Réel−Est."],
-                    ["categorie_bo", "Catégorie BO"], ["owner", "Owner"], ["load_senelec_w", "Load Senelec (W)"],
-                  ].map(([key, label]) => (
-                    <th
-                      key={key}
-                      onClick={() => sortBy(key)}
-                      style={{ position: "sticky", top: 0, background: C.slate[50], textAlign: "left", padding: "10px 13px", fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".05em", color: sortKey === key ? C.blue[700] : C.slate[500], borderBottom: `1px solid ${C.slate[200]}`, cursor: "pointer", whiteSpace: "nowrap", fontWeight: 800 }}
-                    >
-                      {label}{sortKey === key ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {pageRows.map((r) => {
-                  const ecart = r.marge_reelle !== null && r.marge_juin_est !== null ? r.marge_reelle - r.marge_juin_est : null;
-                  return (
-                    <tr key={r.site_id} style={{ borderBottom: `1px solid ${C.slate[100]}` }}>
-                      <td style={{ padding: "9px 13px", fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12 }}>{r.site_id}</td>
-                      <td style={{ padding: "9px 13px", fontWeight: 700, color: C.slate[800], maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.site_name}>{r.site_name}</td>
-                      <td style={{ padding: "9px 13px", color: C.slate[600] }}>{r.region}</td>
-                      <td style={{ padding: "9px 13px", color: C.slate[600] }}>{r.batch}</td>
-                      <td style={{ padding: "9px 13px", fontFamily: "ui-monospace, Menlo, monospace", color: C.nok.main, fontWeight: 700 }}>{fmtXofExact(r.marge_juin_est)}</td>
-                      <td style={{ padding: "9px 13px", fontFamily: "ui-monospace, Menlo, monospace", color: C.nok.main, fontWeight: 700 }}>{fmtXofExact(r.marge_reelle)}</td>
-                      <td style={{ padding: "9px 13px", fontFamily: "ui-monospace, Menlo, monospace", color: C.slate[700] }}>{ecart === null ? "—" : (ecart >= 0 ? "+" : "") + ecart.toLocaleString("fr-FR")}</td>
-                      <td style={{ padding: "9px 13px", color: C.slate[600], maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.categorie_bo}>{r.categorie_bo}</td>
-                      <td style={{ padding: "9px 13px", color: C.slate[600] }}>{r.owner}</td>
-                      <td style={{ padding: "9px 13px", fontFamily: "ui-monospace, Menlo, monospace", color: C.slate[700] }}>{r.load_senelec_w === null ? "—" : Math.round(r.load_senelec_w).toLocaleString("fr-FR")}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, marginTop: 12, fontSize: 12, color: C.slate[500] }}>
-            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} style={{ display: "flex", alignItems: "center", gap: 4, background: C.slate[50], border: `1px solid ${C.slate[200]}`, borderRadius: 8, padding: "7px 14px", cursor: page <= 1 ? "not-allowed" : "pointer", opacity: page <= 1 ? 0.4 : 1, fontWeight: 700, color: C.blue[950] }}>
-              <ChevronLeft size={13} /> Précédent
-            </button>
-            <span>Page {page} / {totalPages}</span>
-            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} style={{ display: "flex", alignItems: "center", gap: 4, background: C.slate[50], border: `1px solid ${C.slate[200]}`, borderRadius: 8, padding: "7px 14px", cursor: page >= totalPages ? "not-allowed" : "pointer", opacity: page >= totalPages ? 0.4 : 1, fontWeight: 700, color: C.blue[950] }}>
-              Suivant <ChevronRight size={13} />
-            </button>
-          </div>
+      {/* ── Localisation & causes racines ────────────────────────────────── */}
+      <SectionTitle desc="Région O&M · catégorie BO">Localisation et causes racines</SectionTitle>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <Card>
+          <CardH3>Marge négative cumulée par région</CardH3>
+          <RawTable
+            headers={["Région", "Total", "NOK", "% NOK", "Marge nég. cumulée (XOF)"]}
+            rows={byRegionFull.map((v) => [
+              v.label,
+              v.total.toLocaleString("fr-FR"),
+              v.nok.toLocaleString("fr-FR"),
+              v.total ? (v.nok / v.total * 100).toFixed(1) + " %" : "—",
+              fmtXofExact(v.sum),
+            ])}
+            alignRight={[1, 2, 3, 4]}
+          />
         </Card>
+        <Card>
+          <CardH3>Catégorie BO (cause identifiée)</CardH3>
+          <RawTable
+            headers={["Catégorie BO", "Total", "NOK", "% NOK", "Marge nég. cumulée (XOF)"]}
+            rows={byCatFull.map((v) => [
+              v.label,
+              v.total.toLocaleString("fr-FR"),
+              v.nok.toLocaleString("fr-FR"),
+              v.total ? (v.nok / v.total * 100).toFixed(1) + " %" : "—",
+              fmtXofExact(v.sum),
+            ])}
+            alignRight={[1, 2, 3, 4]}
+          />
+        </Card>
+      </div>
+
+      {/* ── Par sous-typo / batch ─────────────────────────────────────────── */}
+      <SectionTitle desc={scopeMode === "family" ? "Variantes au sein de la famille sélectionnée" : "Vague de déploiement / commissioning"}>
+        {scopeMode === "family" ? "Marge négative par sous-typologie" : "Marge négative par batch opérationnel"}
+      </SectionTitle>
+      <Card>
+        <RawTable
+          headers={[scopeMode === "family" ? "Sous-typologie" : "Batch", "Marge nég. cumulée (XOF)"]}
+          rows={bySubcat.map((d) => [d.label, fmtXofExact(d.sum)])}
+          alignRight={[1]}
+        />
+      </Card>
+
+      {/* ── Paramètres essentiels ─────────────────────────────────────────── */}
+      <SectionTitle desc="Configuration site · propriétaire d'action · magnitude">Paramètres essentiels à l'analyse</SectionTitle>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
+        <Card>
+          <CardH3>Indoor vs Outdoor (sites NOK)</CardH3>
+          <RawTable
+            headers={["Type", "Sites NOK"]}
+            rows={ioPie.map((d) => [d.label, d.count.toLocaleString("fr-FR")])}
+            alignRight={[1]}
+          />
+        </Card>
+        <Card>
+          <CardH3>Statut de modernisation (sites NOK)</CardH3>
+          <RawTable
+            headers={["Modernisé", "Sites NOK"]}
+            rows={modPie.map((d) => [d.label, d.count.toLocaleString("fr-FR")])}
+            alignRight={[1]}
+          />
+        </Card>
+        <Card>
+          <CardH3>Owner d'action assigné (sites NOK)</CardH3>
+          <RawTable
+            headers={["Owner", "Sites NOK"]}
+            rows={ownerPie.map((d) => [d.label, d.count.toLocaleString("fr-FR")])}
+            alignRight={[1]}
+          />
+        </Card>
+      </div>
+      <Card style={{ marginTop: 14 }}>
+        <CardH3>Distribution de la magnitude de marge négative</CardH3>
+        <RawTable
+          headers={["Tranche (XOF)", "Sites NOK", "% des NOK", "Marge cumulée (XOF)"]}
+          rows={buckets.map((b) => [
+            b.label,
+            b.count.toLocaleString("fr-FR"),
+            kpis.nokCount ? (b.count / kpis.nokCount * 100).toFixed(1) + " %" : "—",
+            fmtXofExact((b as any).sum ?? 0),
+          ])}
+          alignRight={[1, 2, 3]}
+        />
+      </Card>
 
       <footer style={{ marginTop: 36, paddingTop: 16, borderTop: `1px solid ${C.slate[200]}`, fontSize: 11, color: C.slate[400], fontFamily: "ui-monospace, Menlo, monospace", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <span>Aktivco Grid &amp; Energy Manager — Module Évaluation Financière</span>
