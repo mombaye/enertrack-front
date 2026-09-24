@@ -13,7 +13,10 @@ import {
   BadgeCheck,
   AlertTriangle,
   RefreshCw,
+  Download,
+  Loader2,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { DataTable, Col } from "@/components/DataTable";
 import { StatusPill, money, num } from "@/features/sonatelBilling/ui";
 import {
@@ -52,6 +55,13 @@ type Tab = "INVOICES" | "MONTHLY" | "CONTRACT";
 
 function fmtDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function certLabelText(s: string) {
+  return s === "VALIDATED" ? "Validée" : s === "CONTESTED" ? "Contestée" : "Créée";
+}
+function payLabelText(s?: string | null) {
+  return s === "PAID" ? "Payée" : s === "UNPAID" ? "Impayée" : s === "OUT_OF_SCOPE" ? "Hors scope" : "—";
 }
 
 function defaultRange() {
@@ -342,7 +352,52 @@ export default function SonatelBillingPage() {
   const [page, setPage] = useState(1);
   const [dateStart, setDateStart] = useState(defRange.start);
   const [dateEnd, setDateEnd] = useState(defRange.end);
+  const [exporting, setExporting] = useState(false);
   const pageSize = 25;
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const all = await listInvoices({
+        start: dateStart,
+        end: dateEnd,
+        search: search || undefined,
+        status: status || undefined,
+        payment_status: paymentStatus || undefined,
+        site: site || undefined,
+        page: 1,
+        page_size: 9999,
+      });
+      const wb = XLSX.utils.book_new();
+      const rows = all.results.map((inv) => ({
+        "N° Facture":          inv.numero_facture || "",
+        "Site ID":             inv.site?.site_id || "",
+        "Nom du site":         inv.site?.name || "",
+        "Contrat":             inv.numero_compte_contrat || "",
+        "Date comptable":      inv.date_comptable_facture || "",
+        "Début période":       inv.date_debut_periode || "",
+        "Fin période":         inv.date_fin_periode || "",
+        "Statut cert.":        certLabelText(inv.status),
+        "Statut paiement":     payLabelText(inv.payment_status),
+        "Montant HT (FCFA)":   inv.montant_hors_tva ? Number(inv.montant_hors_tva) : "",
+        "Montant TTC (FCFA)":  inv.montant_ttc ? Number(inv.montant_ttc) : "",
+        "Cos φ (FCFA)":        inv.montant_cosinus_phi ? Number(inv.montant_cosinus_phi) : "",
+        "Énergie calculée":    inv.energie_calculee ? Number(inv.energie_calculee) : "",
+        "Abonnement calc.":    inv.abonnement_calcule ? Number(inv.abonnement_calcule) : "",
+        "Pénalité calc.":      inv.penalite_abonnement_calculee ? Number(inv.penalite_abonnement_calculee) : "",
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws["!cols"] = [
+        { wch: 24 }, { wch: 14 }, { wch: 28 }, { wch: 22 }, { wch: 16 },
+        { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 16 },
+        { wch: 20 }, { wch: 22 }, { wch: 16 }, { wch: 18 }, { wch: 18 }, { wch: 16 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, "Factures");
+      XLSX.writeFile(wb, `factures_${dateStart}_${dateEnd}.xlsx`);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const tabs = [
     { key: "INVOICES" as Tab, label: "Factures", icon: <FileSpreadsheet size={15} /> },
@@ -578,6 +633,7 @@ const outScopeCountQ = useQuery({
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)", padding: 24 }}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       <div style={{ display: "grid", gap: 18 }}>
         <div
           style={{
@@ -801,7 +857,29 @@ const outScopeCountQ = useQuery({
               </div>
             </div>
 
-            {active?.isFetching && <RefreshCw size={16} style={{ color: COLORS.blue }} />}
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {active?.isFetching && <RefreshCw size={16} style={{ color: COLORS.blue }} />}
+              {tab === "INVOICES" && (
+                <button
+                  onClick={handleExport}
+                  disabled={exporting || total === 0}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 7,
+                    padding: "8px 16px", borderRadius: 10, border: "none",
+                    background: exporting || total === 0 ? COLORS.slate200 : COLORS.blue,
+                    color: exporting || total === 0 ? COLORS.slate400 : COLORS.white,
+                    fontWeight: 700, fontSize: 13, cursor: exporting || total === 0 ? "not-allowed" : "pointer",
+                    transition: "background .15s",
+                  }}
+                >
+                  {exporting
+                    ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
+                    : <Download size={14} />
+                  }
+                  {exporting ? "Export en cours…" : `Exporter Excel${total > 0 ? ` (${total.toLocaleString("fr-FR")})` : ""}`}
+                </button>
+              )}
+            </div>
           </div>
 
           <DataTable

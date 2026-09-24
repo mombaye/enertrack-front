@@ -21,9 +21,6 @@ import CertificationPage from "@/features/certification/CertificationPage";
 // ✅ Suivi Facturation
 import BillingTrackingPage from "@/pages/BillingTrackingPage";
 
-// ✅ Factures
-import InvoicesListPage from "@/pages/InvoicesListPage";
-
 // ✅ NOUVEAU — Module Estimation
 import EstimationPage from "@/features/estimation/EstimationPage";
 
@@ -76,11 +73,6 @@ export default function App() {
                 {/* ✅ Suivi Facturation */}
                 <Route path="/billing/suivi" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
                   <Route index element={<BillingTrackingPage />} />
-                </Route>
-
-                {/* ✅ Factures */}
-                <Route path="/billing/factures" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
-                  <Route index element={<InvoicesListPage />} />
                 </Route>
 
                 {/* ✅ Certification */}
