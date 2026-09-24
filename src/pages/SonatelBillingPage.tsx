@@ -355,6 +355,8 @@ export default function SonatelBillingPage() {
   const [dateStart, setDateStart] = useState(defRange.start);
   const [dateEnd, setDateEnd] = useState(defRange.end);
   const [exporting, setExporting] = useState(false);
+  const [exportingMonthly, setExportingMonthly] = useState(false);
+  const [exportingContract, setExportingContract] = useState(false);
   const [showDB, setShowDB] = useState(false);
   const [dbSearch, setDbSearch] = useState("");
   const [dbDateStart, setDbDateStart] = useState(defRange.start);
@@ -463,6 +465,83 @@ export default function SonatelBillingPage() {
       XLSX.writeFile(wb, `factures_${dateStart}_${dateEnd}.xlsx`);
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function handleMonthlyExport() {
+    setExportingMonthly(true);
+    try {
+      const all = await listMonthly({
+        start: dateStart, end: dateEnd,
+        status: status || undefined,
+        site: site || undefined,
+        account: search || undefined,
+        page: 1, page_size: 9999,
+      });
+      const wb = XLSX.utils.book_new();
+      const rows = all.results.map((r) => ({
+        "Site ID":            r.site_id || "",
+        "Nom du site":        r.site_name || "",
+        "Contrat":            r.numero_compte_contrat || "",
+        "Facture":            r.numero_facture || "",
+        "Année":              r.year,
+        "Mois":               r.month,
+        "Conso":              r.conso ? Number(r.conso) : "",
+        "Montant HT (FCFA)":  r.montant_hors_tva ? Number(r.montant_hors_tva) : "",
+        "Montant TTC (FCFA)": r.montant_ttc ? Number(r.montant_ttc) : "",
+        "Abonnement calc.":   r.abonnement_calcule ? Number(r.abonnement_calcule) : "",
+        "Pénalité calc.":     r.penalite_abonnement_calculee ? Number(r.penalite_abonnement_calculee) : "",
+        "Énergie calculée":   r.energie_calculee ? Number(r.energie_calculee) : "",
+        "Statut certif.":     certLabelText(r.status),
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws["!cols"] = [
+        { wch: 14 }, { wch: 28 }, { wch: 22 }, { wch: 24 },
+        { wch: 8 }, { wch: 8 }, { wch: 14 },
+        { wch: 20 }, { wch: 22 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 14 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, "Synthèse mensuelle");
+      XLSX.writeFile(wb, `synthese_mensuelle_${dateStart}_${dateEnd}.xlsx`);
+    } finally {
+      setExportingMonthly(false);
+    }
+  }
+
+  async function handleContractExport() {
+    setExportingContract(true);
+    try {
+      const all = await listContractMonths({
+        start: dateStart, end: dateEnd,
+        status: status || undefined,
+        site: site || undefined,
+        account: search || undefined,
+        page: 1, page_size: 9999,
+      });
+      const wb = XLSX.utils.book_new();
+      const rows = all.results.map((r) => ({
+        "Site ID":            r.site_id || "",
+        "Nom du site":        r.site_name || "",
+        "Contrat":            r.numero_compte_contrat || "",
+        "Année":              r.year,
+        "Mois":               r.month,
+        "# Factures":         r.invoices_count,
+        "Conso":              r.conso ? Number(r.conso) : "",
+        "Montant HT (FCFA)":  r.montant_hors_tva ? Number(r.montant_hors_tva) : "",
+        "Montant TTC (FCFA)": r.montant_ttc ? Number(r.montant_ttc) : "",
+        "Abonnement calc.":   r.abonnement_calcule ? Number(r.abonnement_calcule) : "",
+        "Pénalité calc.":     r.penalite_abonnement_calculee ? Number(r.penalite_abonnement_calculee) : "",
+        "Énergie calculée":   r.energie_calculee ? Number(r.energie_calculee) : "",
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws["!cols"] = [
+        { wch: 14 }, { wch: 28 }, { wch: 22 },
+        { wch: 8 }, { wch: 8 }, { wch: 12 }, { wch: 14 },
+        { wch: 20 }, { wch: 22 }, { wch: 18 }, { wch: 16 }, { wch: 18 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, "Contrat × Mois");
+      XLSX.writeFile(wb, `contrat_mois_${dateStart}_${dateEnd}.xlsx`);
+    } finally {
+      setExportingContract(false);
     }
   }
 
@@ -964,6 +1043,46 @@ const outScopeCountQ = useQuery({
                     : <Download size={14} />
                   }
                   {exporting ? "Export en cours…" : `Exporter Excel${total > 0 ? ` (${total.toLocaleString("fr-FR")})` : ""}`}
+                </button>
+              )}
+              {tab === "MONTHLY" && (
+                <button
+                  onClick={handleMonthlyExport}
+                  disabled={exportingMonthly || total === 0}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 7,
+                    padding: "8px 16px", borderRadius: 10, border: "none",
+                    background: exportingMonthly || total === 0 ? COLORS.slate200 : COLORS.blue,
+                    color: exportingMonthly || total === 0 ? COLORS.slate400 : COLORS.white,
+                    fontWeight: 700, fontSize: 13, cursor: exportingMonthly || total === 0 ? "not-allowed" : "pointer",
+                    transition: "background .15s",
+                  }}
+                >
+                  {exportingMonthly
+                    ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
+                    : <Download size={14} />
+                  }
+                  {exportingMonthly ? "Export en cours…" : `Exporter Excel${total > 0 ? ` (${total.toLocaleString("fr-FR")})` : ""}`}
+                </button>
+              )}
+              {tab === "CONTRACT" && (
+                <button
+                  onClick={handleContractExport}
+                  disabled={exportingContract || total === 0}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 7,
+                    padding: "8px 16px", borderRadius: 10, border: "none",
+                    background: exportingContract || total === 0 ? COLORS.slate200 : COLORS.blue,
+                    color: exportingContract || total === 0 ? COLORS.slate400 : COLORS.white,
+                    fontWeight: 700, fontSize: 13, cursor: exportingContract || total === 0 ? "not-allowed" : "pointer",
+                    transition: "background .15s",
+                  }}
+                >
+                  {exportingContract
+                    ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
+                    : <Download size={14} />
+                  }
+                  {exportingContract ? "Export en cours…" : `Exporter Excel${total > 0 ? ` (${total.toLocaleString("fr-FR")})` : ""}`}
                 </button>
               )}
             </div>
