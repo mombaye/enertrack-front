@@ -8,13 +8,18 @@ import {
   CheckCircle2, XCircle, Clock, AlertTriangle, Download,
   Zap, Server, BarChart3, HelpCircle, Loader2,
   TrendingUp, Activity,
-  Upload,
+  Upload, ArrowLeftRight, FileSpreadsheet,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { api } from "@/services/api";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
-import {EstimationBatch, EstimationResult, fetchBatches, fetchBatchStatus, fetchResults, HistoryImportResult, importEstimationHistory, launchBatch } from '@/features/estimation/api' 
+import {
+  EstimationBatch, EstimationResult,
+  fetchBatches, fetchBatchStatus, fetchResults,
+  HistoryImportResult, importEstimationHistory, launchBatch,
+  ExternalImportResult, CompareData, importExternalEstimation, fetchComparison,
+} from '@/features/estimation/api'
 
 
 
@@ -169,6 +174,176 @@ function exportResults(results: EstimationResult[], batch: EstimationBatch) {
   XLSX.writeFile(wb, `estimation_${batch.label}.xlsx`);
 }
 
+// ─── Comparison tab ───────────────────────────────────────────────────────────
+const fmtPct = (v: number | null) =>
+  v === null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`;
+
+function EcartBadge({ pct }: { pct: number | null }) {
+  if (pct === null) return <span style={{ color: "#94a3b8" }}>—</span>;
+  const abs = Math.abs(pct);
+  const color = abs <= 5 ? "#059669" : abs <= 15 ? "#d97706" : "#dc2626";
+  return (
+    <span style={{ fontSize: 11, fontWeight: 700, color }}>
+      {fmtPct(pct)}
+    </span>
+  );
+}
+
+function MatchBadge({ match }: { match: boolean }) {
+  return match
+    ? <span style={{ fontSize: 11, fontWeight: 700, color: "#059669", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 5, padding: "2px 7px" }}>✓ OK</span>
+    : <span style={{ fontSize: 11, fontWeight: 700, color: "#dc2626", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 5, padding: "2px 7px" }}>✗ Écart</span>;
+}
+
+function ComparisonTab({
+  data, isLoading, isError, onRequestImport,
+}: {
+  data: CompareData | null;
+  isLoading: boolean;
+  isError: boolean;
+  onRequestImport: () => void;
+}) {
+  const fmt = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
+
+  if (isLoading) return (
+    <div style={{ padding: "40px", textAlign: "center", color: "#94a3b8", fontSize: 13 }}>
+      <Loader2 size={20} style={{ animation: "spin 1s linear infinite", display: "block", margin: "0 auto 8px" }}/>
+      Chargement de la comparaison…
+    </div>
+  );
+
+  if (isError) return (
+    <div style={{ padding: "40px", textAlign: "center", color: "#dc2626", fontSize: 13 }}>
+      Erreur lors du chargement.
+    </div>
+  );
+
+  if (!data || !data.has_external) return (
+    <div style={{ padding: "48px 24px", textAlign: "center" }}>
+      <ArrowLeftRight size={40} style={{ display: "block", margin: "0 auto 12px", opacity: .2 }}/>
+      <p style={{ fontSize: 14, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
+        Aucun fichier externe importé pour cette période
+      </p>
+      <p style={{ fontSize: 12.5, color: "#64748b", marginBottom: 18 }}>
+        Importez un fichier déjà estimé via le bouton <strong>Import fichier estimé</strong> pour comparer les résultats.
+      </p>
+      <button
+        onClick={onRequestImport}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 7,
+          padding: "10px 20px", borderRadius: 10,
+          background: "#0891b2", color: "white", border: "none",
+          fontSize: 13, fontWeight: 700, cursor: "pointer",
+          boxShadow: "0 4px 12px rgba(8,145,178,.25)",
+          fontFamily: "'DM Sans', sans-serif",
+        }}
+      >
+        <FileSpreadsheet size={14}/> Importer maintenant
+      </button>
+    </div>
+  );
+
+  const s = data.score;
+  return (
+    <div>
+      {/* Score cards */}
+      <div style={{ padding: "16px 18px", borderBottom: "1px solid rgba(30,58,138,.07)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 12 }}>
+          {[
+            { label: "Sites EnerTrack",  value: s.total_enertrack, color: "#7c3aed" },
+            { label: "Sites fichier ext.", value: s.total_external,  color: "#0891b2" },
+            { label: "Comparables",       value: s.comparable,       color: "#334155" },
+            { label: "Correspondances",   value: s.matched,          color: "#059669" },
+          ].map(k => (
+            <div key={k.label} style={{
+              background: "#f8faff", borderRadius: 12, padding: "12px 14px",
+              border: "1px solid rgba(30,58,138,.07)",
+            }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 4 }}>
+                {k.label}
+              </div>
+              <div style={{ fontFamily: "'Outfit', sans-serif", fontSize: 22, fontWeight: 800, color: k.color }}>
+                {k.value.toLocaleString("fr-FR")}
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* Score bar */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 12, background: s.match_pct >= 90 ? "#f0fdf4" : s.match_pct >= 70 ? "#fffbeb" : "#fef2f2", border: `1px solid ${s.match_pct >= 90 ? "#bbf7d0" : s.match_pct >= 70 ? "#fde68a" : "#fecaca"}` }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ height: 8, background: "rgba(0,0,0,.06)", borderRadius: 99, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${s.match_pct}%`, borderRadius: 99, background: s.match_pct >= 90 ? "#059669" : s.match_pct >= 70 ? "#d97706" : "#dc2626", transition: "width .4s" }}/>
+            </div>
+          </div>
+          <div style={{ fontFamily: "'Outfit', sans-serif", fontSize: 20, fontWeight: 800, color: s.match_pct >= 90 ? "#059669" : s.match_pct >= 70 ? "#d97706" : "#dc2626", flexShrink: 0 }}>
+            {s.match_pct.toFixed(1)}%
+          </div>
+          <div style={{ fontSize: 11.5, color: "#64748b", flexShrink: 0 }}>
+            de correspondance (seuil ±{s.threshold_pct}% conso)
+          </div>
+        </div>
+      </div>
+
+      {/* Comparison table */}
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ background: "#f8faff", borderBottom: "1px solid rgba(30,58,138,.07)" }}>
+              {["Site", "EnerTrack conso", "Fichier ext. conso", "Écart conso", "EnerTrack montant", "Fichier ext. montant", "Écart montant", "Match"].map(h => (
+                <th key={h} style={{ padding: "9px 12px", textAlign: "left", fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".06em", whiteSpace: "nowrap" }}>
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.rows.length === 0 ? (
+              <tr><td colSpan={8} style={{ padding: "32px", textAlign: "center", color: "#94a3b8", fontSize: 13 }}>Aucune donnée</td></tr>
+            ) : (
+              data.rows.map(r => (
+                <tr key={r.site_id} className="ep-row" style={{ borderBottom: "1px solid rgba(30,58,138,.05)" }}>
+                  <td style={{ padding: "9px 12px", minWidth: 130 }}>
+                    <div style={{ fontWeight: 700, fontSize: 12.5, color: "#0f172a" }}>{r.site_id}</div>
+                    <div style={{ fontSize: 10.5, color: "#94a3b8", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.site_name}</div>
+                    {r.enertrack_source && <SourceBadge source={r.enertrack_source} />}
+                  </td>
+                  <td style={{ padding: "9px 12px", whiteSpace: "nowrap", fontFamily: "'Outfit', sans-serif", fontSize: 13, fontWeight: 800, color: "#7c3aed" }}>
+                    {r.enertrack_conso !== null ? `${fmt.format(Math.round(r.enertrack_conso))} kWh` : <span style={{ color: "#94a3b8", fontFamily: "'DM Sans'" }}>—</span>}
+                  </td>
+                  <td style={{ padding: "9px 12px", whiteSpace: "nowrap", fontFamily: "'Outfit', sans-serif", fontSize: 13, fontWeight: 800, color: "#0891b2" }}>
+                    {r.external_conso !== null ? `${fmt.format(Math.round(r.external_conso))} kWh` : <span style={{ color: "#94a3b8", fontFamily: "'DM Sans'" }}>—</span>}
+                  </td>
+                  <td style={{ padding: "9px 12px", whiteSpace: "nowrap" }}>
+                    <EcartBadge pct={r.ecart_conso_pct} />
+                    {r.ecart_conso !== null && (
+                      <div style={{ fontSize: 10, color: "#94a3b8" }}>{r.ecart_conso > 0 ? "+" : ""}{fmt.format(Math.round(r.ecart_conso))} kWh</div>
+                    )}
+                  </td>
+                  <td style={{ padding: "9px 12px", whiteSpace: "nowrap", fontFamily: "'Outfit', sans-serif", fontSize: 13, fontWeight: 800, color: "#7c3aed" }}>
+                    {r.enertrack_montant !== null ? `${fmt.format(Math.round(r.enertrack_montant))} F` : <span style={{ color: "#94a3b8", fontFamily: "'DM Sans'" }}>—</span>}
+                  </td>
+                  <td style={{ padding: "9px 12px", whiteSpace: "nowrap", fontFamily: "'Outfit', sans-serif", fontSize: 13, fontWeight: 800, color: "#0891b2" }}>
+                    {r.external_montant !== null ? `${fmt.format(Math.round(r.external_montant))} F` : <span style={{ color: "#94a3b8", fontFamily: "'DM Sans'" }}>—</span>}
+                  </td>
+                  <td style={{ padding: "9px 12px", whiteSpace: "nowrap" }}>
+                    <EcartBadge pct={r.ecart_montant_pct} />
+                    {r.ecart_montant !== null && (
+                      <div style={{ fontSize: 10, color: "#94a3b8" }}>{r.ecart_montant > 0 ? "+" : ""}{fmt.format(Math.round(r.ecart_montant))} F</div>
+                    )}
+                  </td>
+                  <td style={{ padding: "9px 12px" }}>
+                    <MatchBadge match={r.match} />
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function EstimationPage() {
   const qc = useQueryClient();
@@ -187,7 +362,32 @@ export default function EstimationPage() {
   const [importResult,  setImportResult]  = useState<HistoryImportResult | null>(null);
   const [importError,   setImportError]   = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
- 
+
+  const [activeTab, setActiveTab] = useState<"resultats" | "comparaison">("resultats");
+
+  const [showExternalImport,    setShowExternalImport]    = useState(false);
+  const [externalImportFile,    setExternalImportFile]    = useState<File | null>(null);
+  const [externalImporting,     setExternalImporting]     = useState(false);
+  const [externalImportResult,  setExternalImportResult]  = useState<ExternalImportResult | null>(null);
+  const [externalImportError,   setExternalImportError]   = useState<string | null>(null);
+  const externalImportInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleExternalImport() {
+    if (!externalImportFile) return;
+    setExternalImporting(true);
+    setExternalImportError(null);
+    setExternalImportResult(null);
+    try {
+      const res = await importExternalEstimation(externalImportFile);
+      setExternalImportResult(res);
+      qc.invalidateQueries({ queryKey: ["estimation-compare"] });
+    } catch (e: any) {
+      setExternalImportError(e?.response?.data?.detail || "Erreur lors de l'import.");
+    } finally {
+      setExternalImporting(false);
+    }
+  }
+
   async function handleImportHistory() {
     if (!importFile) return;
     setImporting(true);
@@ -246,6 +446,13 @@ export default function EstimationPage() {
     queryFn:  () => fetchResults(selectedBatch!.id, resultPage, filterSource || undefined),
     enabled:  !!selectedBatch && selectedBatch.status === "DONE",
     placeholderData: keepPreviousData,
+  });
+
+  const compareQ = useQuery({
+    queryKey: ["estimation-compare", selectedBatch?.year, selectedBatch?.month],
+    queryFn:  () => fetchComparison(selectedBatch!.year, selectedBatch!.month),
+    enabled:  !!selectedBatch && selectedBatch.status === "DONE" && activeTab === "comparaison",
+    staleTime: 30 * 1000,
   });
 
   // Export : charger toutes les pages
@@ -391,7 +598,7 @@ export default function EstimationPage() {
                 Lancer
               </button>
 
-                            <button
+              <button
                 onClick={() => { setShowImport(true); setImportFile(null); setImportResult(null); setImportError(null); }}
                 style={{
                   display: "flex", alignItems: "center", gap: 7,
@@ -405,7 +612,22 @@ export default function EstimationPage() {
                 <Upload size={14} />
                 Importer historique
               </button>
- 
+
+              <button
+                onClick={() => { setShowExternalImport(true); setExternalImportFile(null); setExternalImportResult(null); setExternalImportError(null); }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 7,
+                  padding: "9px 16px", borderRadius: 10,
+                  background: "white",
+                  color: "#0891b2", border: "1.5px solid rgba(8,145,178,.25)",
+                  fontSize: 13, fontWeight: 600, cursor: "pointer",
+                  fontFamily: "'DM Sans', sans-serif",
+                }}
+              >
+                <FileSpreadsheet size={14} />
+                Import fichier estimé
+              </button>
+
             </div>
           </div>
         </div>
@@ -566,12 +788,33 @@ export default function EstimationPage() {
                     boxShadow: "0 1px 3px rgba(30,58,138,.04)",
                     overflow: "hidden",
                   }}>
-                    {/* Toolbar */}
-                    <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(30,58,138,.07)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <span style={{ fontFamily: "'Outfit', sans-serif", fontSize: 15, fontWeight: 800, color: "#0f172a" }}>
-                          {getMonthName(selectedBatch.month)} {selectedBatch.year}
-                        </span>
+                    {/* Tab bar */}
+                    <div style={{ padding: "0 18px", borderBottom: "1px solid rgba(30,58,138,.07)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", gap: 0 }}>
+                        {([
+                          { key: "resultats",   label: "Résultats EnerTrack", icon: <BarChart3 size={13}/> },
+                          { key: "comparaison", label: "Comparaison", icon: <ArrowLeftRight size={13}/> },
+                        ] as const).map(tab => (
+                          <button
+                            key={tab.key}
+                            onClick={() => setActiveTab(tab.key)}
+                            style={{
+                              display: "flex", alignItems: "center", gap: 6,
+                              padding: "13px 16px", border: "none", background: "none",
+                              fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+                              color: activeTab === tab.key ? "#7c3aed" : "#64748b",
+                              borderBottom: activeTab === tab.key ? "2px solid #7c3aed" : "2px solid transparent",
+                              fontFamily: "'DM Sans', sans-serif",
+                              transition: "color .15s",
+                            }}
+                          >
+                            {tab.icon} {tab.label}
+                          </button>
+                        ))}
+                      </div>
+                      {/* Toolbar actions — only for Résultats tab */}
+                      {activeTab === "resultats" && (
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 0" }}>
                         <span style={{ fontSize: 12, color: "#94a3b8" }}>{totalRes} sites</span>
                         {montantTotal > 0 && (
                           <span style={{
@@ -579,12 +822,9 @@ export default function EstimationPage() {
                             background: "#faf5ff", border: "1px solid #ddd6fe",
                             borderRadius: 6, padding: "2px 8px",
                           }}>
-                            Total estimé : {money(montantTotal)}
+                            {money(montantTotal)}
                           </span>
                         )}
-                      </div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        {/* Source filter */}
                         <select
                           value={filterSource}
                           onChange={e => { setFilterSource(e.target.value); setResultPage(1); }}
@@ -595,7 +835,6 @@ export default function EstimationPage() {
                             <option key={s} value={s}>{SOURCE_CONFIG[s]?.label ?? s}</option>
                           ))}
                         </select>
-                        {/* Export */}
                         <button
                           onClick={handleExport}
                           disabled={exporting}
@@ -617,9 +856,11 @@ export default function EstimationPage() {
                           Exporter
                         </button>
                       </div>
+                      )}
                     </div>
 
-                    {/* Table */}
+                    {/* ── Onglet Résultats ─────────────────────────────── */}
+                    {activeTab === "resultats" && <div style={{ overflowX: "auto" }}>
                     <div style={{ overflowX: "auto" }}>
                       <table style={{ width: "100%", borderCollapse: "collapse" }}>
                         <thead>
@@ -713,6 +954,17 @@ export default function EstimationPage() {
                         ))}
                       </div>
                     </div>
+                    </div>}
+
+                    {/* ── Onglet Comparaison ────────────────────────────── */}
+                    {activeTab === "comparaison" && (
+                      <ComparisonTab
+                        data={compareQ.data ?? null}
+                        isLoading={compareQ.isLoading}
+                        isError={compareQ.isError}
+                        onRequestImport={() => { setShowExternalImport(true); setExternalImportFile(null); setExternalImportResult(null); setExternalImportError(null); }}
+                      />
+                    )}
                   </div>
                 )}
               </>
@@ -891,6 +1143,135 @@ export default function EstimationPage() {
             )}
         </DialogContent>
       </Dialog>
+      )}
+
+      {/* External import modal */}
+      {showExternalImport && (
+        <Dialog open onOpenChange={(next) => { if (!next && !externalImporting) setShowExternalImport(false); }}>
+          <DialogContent
+            className="p-0 gap-0 border-0"
+            style={{
+              background: "white", borderRadius: 24, padding: 32,
+              maxWidth: 500, width: "100%",
+              boxShadow: "0 32px 80px rgba(0,0,0,.22)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+              <div>
+                <DialogTitle asChild>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", margin: "0 0 4px" }}>
+                    Importer un fichier déjà estimé
+                  </h3>
+                </DialogTitle>
+                <p style={{ fontSize: 12.5, color: "#64748b", margin: 0 }}>
+                  Fichier avec colonnes : site_ID · Conso_Kwh · Montant · Source · Mois
+                </p>
+              </div>
+            </div>
+
+            {!externalImportResult ? (
+              <>
+                <div
+                  onClick={() => externalImportInputRef.current?.click()}
+                  style={{
+                    border: `2px dashed ${externalImportFile ? "rgba(8,145,178,.4)" : "rgba(8,145,178,.2)"}`,
+                    borderRadius: 16, padding: "28px 20px", textAlign: "center",
+                    cursor: "pointer",
+                    background: externalImportFile ? "rgba(8,145,178,.03)" : "#f8fafc",
+                    marginBottom: 16,
+                  }}
+                >
+                  <input
+                    ref={externalImportInputRef}
+                    type="file"
+                    accept=".xlsx,.xls"
+                    style={{ display: "none" }}
+                    onChange={e => e.target.files?.[0] && setExternalImportFile(e.target.files[0])}
+                  />
+                  <FileSpreadsheet size={28} color={externalImportFile ? "#0891b2" : "#94a3b8"} style={{ marginBottom: 10 }} />
+                  {externalImportFile ? (
+                    <div>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: "#0891b2", margin: "0 0 2px" }}>
+                        {externalImportFile.name}
+                      </p>
+                      <p style={{ fontSize: 11.5, color: "#94a3b8", margin: 0 }}>
+                        {(externalImportFile.size / 1024 / 1024).toFixed(1)} Mo
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: "#374151", margin: "0 0 2px" }}>
+                        Glisser-déposer ou cliquer
+                      </p>
+                      <p style={{ fontSize: 11.5, color: "#94a3b8", margin: 0 }}>.xlsx — Feuil1 requis</p>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{
+                  padding: "10px 14px", borderRadius: 12, marginBottom: 14,
+                  background: "rgba(8,145,178,.05)",
+                  border: "1px solid rgba(8,145,178,.15)",
+                  fontSize: 11.5, color: "#0e7490",
+                }}>
+                  Les données seront comparées avec les résultats du programme EnerTrack pour la même période.
+                  Chaque import remplace les données externes du même mois.
+                </div>
+
+                {externalImportError && (
+                  <div style={{ padding: "10px 14px", borderRadius: 12, marginBottom: 14,
+                    background: "rgba(220,38,38,.07)", border: "1px solid rgba(220,38,38,.15)",
+                    fontSize: 12.5, color: "#dc2626", fontWeight: 500 }}>
+                    ⚠ {externalImportError}
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button onClick={() => setShowExternalImport(false)} disabled={externalImporting}
+                    style={{ flex: 1, padding: "9px 0", borderRadius: 12,
+                      border: "1.5px solid rgba(0,0,0,.1)", background: "white",
+                      fontSize: 13, fontWeight: 600, color: "#374151",
+                      cursor: externalImporting ? "not-allowed" : "pointer" }}>
+                    Annuler
+                  </button>
+                  <button
+                    disabled={!externalImportFile || externalImporting}
+                    onClick={handleExternalImport}
+                    style={{ flex: 2, padding: "9px 0", borderRadius: 12, border: "none",
+                      background: externalImportFile && !externalImporting ? "#0891b2" : "rgba(8,145,178,.25)",
+                      fontSize: 13, fontWeight: 600, color: "white",
+                      cursor: externalImportFile && !externalImporting ? "pointer" : "not-allowed",
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                    }}>
+                    {externalImporting && <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />}
+                    {externalImporting ? "Import en cours…" : "Importer pour comparaison"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div>
+                <div style={{ textAlign: "center", padding: "8px 0 20px" }}>
+                  <CheckCircle2 size={40} color="#0891b2" style={{ marginBottom: 10 }} />
+                  <h4 style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", margin: "0 0 4px" }}>
+                    Fichier importé
+                  </h4>
+                  <p style={{ fontSize: 12.5, color: "#64748b", margin: "0 0 16px" }}>
+                    {externalImportResult.imported.toLocaleString("fr-FR")} sites sur {externalImportResult.periods.join(", ")}
+                  </p>
+                  <p style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>
+                    Ouvrez l'onglet <strong>Comparaison</strong> d'un batch pour voir les écarts.
+                  </p>
+                </div>
+                <button onClick={() => { setShowExternalImport(false); setActiveTab("comparaison"); }}
+                  style={{ width: "100%", padding: "10px 0", borderRadius: 12, border: "none",
+                    background: "#0891b2", fontSize: 13, fontWeight: 600, color: "white",
+                    cursor: "pointer" }}>
+                  Voir la comparaison
+                </button>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       )}
     </>
   );

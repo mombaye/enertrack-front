@@ -93,6 +93,63 @@ export interface HistoryImportResult {
   skipped_invalid_dates: number;
 }
  
+export interface ExternalImportResult {
+  imported: number;
+  periods: string[];
+  skipped_invalid_dates: number;
+}
+
+export interface CompareRow {
+  site_id: string;
+  site_name: string;
+  enertrack_conso: number | null;
+  enertrack_montant: number | null;
+  enertrack_source: string | null;
+  external_conso: number | null;
+  external_montant: number | null;
+  external_source: string | null;
+  ecart_conso: number | null;
+  ecart_conso_pct: number | null;
+  ecart_montant: number | null;
+  ecart_montant_pct: number | null;
+  match: boolean;
+}
+
+export interface CompareScore {
+  total_enertrack: number;
+  total_external: number;
+  comparable: number;
+  matched: number;
+  match_pct: number;
+  threshold_pct: number;
+}
+
+export interface CompareData {
+  year: number;
+  month: number;
+  has_external: boolean;
+  score: CompareScore;
+  rows: CompareRow[];
+}
+
+export const importExternalEstimation = async (file: File): Promise<ExternalImportResult> => {
+  const fd = new FormData();
+  fd.append("file", file);
+  const { data } = await api.post<ExternalImportResult>(
+    "/estimation/external/import/",
+    fd,
+    { headers: { "Content-Type": "multipart/form-data" } },
+  );
+  return data;
+};
+
+export const fetchComparison = async (year: number, month: number): Promise<CompareData> => {
+  const { data } = await api.get<CompareData>("/estimation/compare/", {
+    params: { year, month },
+  });
+  return data;
+};
+
 export const importEstimationHistory = async (
   file: File,
   onProgress?: (pct: number) => void
