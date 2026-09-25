@@ -39,6 +39,7 @@ type GlobalScope =
   | "PAID"
   | "UNPAID"
   | "OUT_OF_SCOPE"
+  | "CANCELLED"
   | "UNDEFINED"
   | "CERTIFIED"
   | "CONTESTED"
@@ -727,7 +728,8 @@ export default function BillingTrackingPage() {
         "Statut cert.":     inv.status || "",
         "Statut paiement":  inv.payment_status === "PAID" ? "Payée"
                             : inv.payment_status === "UNPAID" ? "Impayée"
-                            : inv.payment_status === "OUT_OF_SCOPE" ? "Hors scope" : "—",
+                            : inv.payment_status === "OUT_OF_SCOPE" ? "Hors scope"
+                            : inv.payment_status === "CANCELLED" ? "Annulée" : "—",
         "Montant TTC":      inv.montant_ttc || "",
         "Montant HT":       inv.montant_hors_tva || "",
       }));
@@ -771,6 +773,7 @@ export default function BillingTrackingPage() {
     PAID: { label: "Payées", color: C.ok.main },
     UNPAID: { label: "Impayées", color: C.nok.main },
     OUT_OF_SCOPE: { label: "Hors scope", color: C.warn.main },
+    CANCELLED: { label: "Annulées", color: C.nok.main },
     UNDEFINED: { label: "Non défini", color: C.slate[500] },
     CERTIFIED: { label: "Certifiées", color: C.ok.main },
     CONTESTED: { label: "Contestées", color: C.nok.main },
@@ -894,7 +897,7 @@ export default function BillingTrackingPage() {
         {/* Filtre global */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
           <span style={{ fontSize: 10.5, fontWeight: 900, color: C.slate[400], textTransform: "uppercase", letterSpacing: ".08em" }}>Filtre global</span>
-          {(["ALL", "PAID", "UNPAID", "OUT_OF_SCOPE", "UNDEFINED", "CERTIFIED", "CONTESTED", "CREATED"] as GlobalScope[]).map((scope) => (
+          {(["ALL", "PAID", "UNPAID", "OUT_OF_SCOPE", "CANCELLED", "UNDEFINED", "CERTIFIED", "CONTESTED", "CREATED"] as GlobalScope[]).map((scope) => (
             <button
               key={scope}
               onClick={() => setGlobalScope(scope)}
@@ -1443,7 +1446,7 @@ export default function BillingTrackingPage() {
                     {modalFacturesQ.data.results.map((inv, i) => {
                       const ps = inv.payment_status;
                       const psColor = ps === "PAID" ? C.ok.main : ps === "UNPAID" ? C.nok.main : C.slate[400];
-                      const psLabel = ps === "PAID" ? "Payée" : ps === "UNPAID" ? "Impayée" : ps === "OUT_OF_SCOPE" ? "Hors scope" : "—";
+                      const psLabel = ps === "PAID" ? "Payée" : ps === "UNPAID" ? "Impayée" : ps === "OUT_OF_SCOPE" ? "Hors scope" : ps === "CANCELLED" ? "Annulée" : "—";
                       const certColor = inv.status === "VALIDATED" ? C.ok.main : inv.status === "CONTESTED" ? C.nok.main : C.slate[400];
                       const certLabel = inv.status === "VALIDATED" ? "Validée" : inv.status === "CONTESTED" ? "Contestée" : "Créée";
                       const hasSite = !!inv.site;

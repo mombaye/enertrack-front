@@ -15,7 +15,11 @@ export default function SonatelBillingBrutePage() {
   // ✅ Invoices tab (données cibles)
   const invoicesQ = useQuery({
     queryKey: ["sb-invoices", { page, search, status }],
-    queryFn: () => listInvoices({ page, page_size: 20, search, status }),
+    queryFn: () => listInvoices({
+      page, page_size: 20, search,
+      status: status && status !== "CANCELLED" ? status : undefined,
+      payment_status: status === "CANCELLED" ? "CANCELLED" : undefined,
+    }),
     placeholderData: keepPreviousData,
   });
 
@@ -118,6 +122,7 @@ export default function SonatelBillingBrutePage() {
           <option value="CREATED">Créée</option>
           <option value="VALIDATED">Validée</option>
           <option value="CONTESTED">Contestée</option>
+          <option value="CANCELLED">Annulée</option>
         </select>
 
         <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-slate-700">

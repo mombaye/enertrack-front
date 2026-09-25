@@ -31,7 +31,7 @@ export type SonatelInvoice = {
   status: "CREATED" | "VALIDATED" | "CONTESTED";
   
   // ✅ FIX: Renommé de status_payment → payment_status (pour matcher le backend)
-  payment_status?: "PAID" | "UNPAID" | "OUT_OF_SCOPE" | null;
+  payment_status?: "PAID" | "UNPAID" | "OUT_OF_SCOPE" | "CANCELLED" | null;
   payment_status_updated_at?: string | null;
 };
 
