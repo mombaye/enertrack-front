@@ -502,7 +502,16 @@ export default function EstimationPage() {
     try {
       const res = await importEstimationHistory(importFile, setImportPct);
       setImportResult(res);
-      qc.invalidateQueries({ queryKey: ["estimation-batches"] });
+      qc.invalidateQueries({ queryKey: ["estimation-compare"] });
+      const fresh = await batchesQ.refetch();
+      const relaunched = fresh.data?.results?.find(b => b.id === res.relaunched.batch_id);
+      if (relaunched) {
+        setSelectedBatch(relaunched);
+        setResultPage(1);
+        setFilterSource("");
+        setChosenSource({});
+        setActiveTab("comparaison");
+      }
     } catch (e: any) {
       setImportError(e?.response?.data?.detail || "Erreur lors de l'import.");
     } finally {
@@ -516,25 +525,27 @@ export default function EstimationPage() {
     queryKey: ["estimation-batches"],
     queryFn:  fetchBatches,
     refetchInterval: (q) => {
-      const running = q.state.data?.results?.some(b => b.status === "RUNNING");
-      return running ? 3000 : false;
+      const inProgress = q.state.data?.results?.some(b => b.status === "RUNNING" || b.status === "PENDING");
+      return inProgress ? 3000 : false;
     },
   });
 
   const batches = batchesQ.data?.results ?? [];
 
-  // Polling automatique si le batch sélectionné est RUNNING
+  // Polling automatique si le batch sélectionné est en attente ou en cours
+  const selectedInProgress = !!selectedBatch && (selectedBatch.status === "RUNNING" || selectedBatch.status === "PENDING");
   const statusQ = useQuery({
     queryKey: ["estimation-batch-status", selectedBatch?.id],
     queryFn:  () => fetchBatchStatus(selectedBatch!.id),
-    enabled:  !!selectedBatch && selectedBatch.status === "RUNNING",
+    enabled:  selectedInProgress,
     refetchInterval: 3000,
   });
 
+  // /status/ renvoie un résumé (sans id/year/month) : on relit le batch depuis la liste.
   useEffect(() => {
-    if (statusQ.data && statusQ.data.status !== "RUNNING") {
+    if (statusQ.data && statusQ.data.status !== "RUNNING" && statusQ.data.status !== "PENDING") {
       qc.invalidateQueries({ queryKey: ["estimation-batches"] });
-      setSelectedBatch(statusQ.data);
+      qc.invalidateQueries({ queryKey: ["estimation-compare"] });
     }
   }, [statusQ.data]);
 
@@ -908,7 +919,7 @@ export default function EstimationPage() {
                 )}
 
                 {/* Running state */}
-                {selectedBatch.status === "RUNNING" && (
+                {(selectedBatch.status === "RUNNING" || selectedBatch.status === "PENDING") && (
                   <div className="ep-card" style={{
                     background: "#eff6ff", borderRadius: 14,
                     border: "1px solid #bfdbfe", padding: "16px 20px",
@@ -916,10 +927,13 @@ export default function EstimationPage() {
                   }}>
                     <Loader2 size={18} color="#2563eb" style={{ animation: "spin 1s linear infinite", flexShrink: 0 }}/>
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: "#1e40af" }}>Estimation en cours…</div>
+                      <div role="status" style={{ fontSize: 13, fontWeight: 700, color: "#1e40af" }}>
+                        {selectedBatch.status === "PENDING" ? "Estimation en attente de démarrage…" : "Estimation en cours…"}
+                      </div>
                       <div style={{ fontSize: 12, color: "#3b82f6" }}>
                         {selectedBatch.count_acm + selectedBatch.count_grid + selectedBatch.count_histo + selectedBatch.count_nc} sites traités
                         {selectedBatch.total > 0 ? ` sur ${selectedBatch.total}` : ""}
+                        {activeTab === "comparaison" && " — la comparaison avec le fichier s'affichera à la fin."}
                       </div>
                     </div>
                   </div>
@@ -1149,7 +1163,7 @@ export default function EstimationPage() {
                 </DialogTitle>
                 <p style={{ fontSize: 12.5, color: "#64748b", margin: 0 }}>
                   Fichier <strong>Provisions_GRID_Conso.xlsx</strong> — colonnes :
-                  site_ID · Conso_Kwh · Montant · Source · Mois
+                  site_ID · Site_Name · Conso_Kwh · Montant · Source · Mois
                 </p>
               </div>
             </div>
@@ -1194,18 +1208,18 @@ export default function EstimationPage() {
                   )}
                 </div>
  
-                {/* Mapping info */}
+                {/* Déroulé */}
                 <div style={{
                   padding: "10px 14px", borderRadius: 12, marginBottom: 14,
                   background: "rgba(124,58,237,.05)",
                   border: "1px solid rgba(124,58,237,.12)",
-                  fontSize: 11.5, color: "#5b21b6",
+                  fontSize: 11.5, color: "#5b21b6", lineHeight: 1.55,
                 }}>
-                  <strong>Mapping sources :</strong> gFMS → Grid · Estimation SENELEC → Historique ·
-                  Estimation Target → Target · Estimation Théorique → Théorique ·
-                  Hors Scope / Site démonté → Hors scope
+                  <strong>Après l'import :</strong> les valeurs du fichier deviennent la référence de comparaison
+                  (sans écraser les résultats du programme), l'estimation est relancée pour le mois le plus récent
+                  du fichier, puis l'onglet <strong>Comparaison</strong> s'ouvre.
                 </div>
- 
+
                 {/* Progress */}
                 {importing && importPct > 0 && (
                   <div style={{ marginBottom: 12 }}>
@@ -1269,16 +1283,15 @@ export default function EstimationPage() {
                     Import terminé
                   </h4>
                   <p style={{ fontSize: 12.5, color: "#64748b", margin: "0 0 16px" }}>
-                    {importResult.periods} période(s) importée(s) · {importResult.total_parsed.toLocaleString("fr-FR")} lignes
+                    {importResult.periods.length} période(s) importée(s)
+                    {importResult.periods.length > 0 && ` (${importResult.periods[0]} → ${importResult.periods[importResult.periods.length - 1]})`}
+                    {" · "}{importResult.total_parsed.toLocaleString("fr-FR")} lignes
                   </p>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 16 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 12 }}>
                     {[
-                      { label: "Batches créés",  value: importResult.created_batches,  color: "#059669" },
-                      { label: "Batches maj",    value: importResult.updated_batches,  color: "#0891b2" },
-                      { label: "Résultats créés",value: importResult.created_results,  color: "#7c3aed" },
-                      { label: "Résultats maj",  value: importResult.updated_results,  color: "#0891b2" },
-                      { label: "Sites inconnus", value: importResult.skipped_unknown_sites, color: "#f59e0b" },
-                      { label: "Dates invalides",value: importResult.skipped_invalid_dates, color: "#94a3b8" },
+                      { label: "Lignes de référence", value: importResult.imported,              color: "#7c3aed" },
+                      { label: "Sites inconnus",      value: importResult.skipped_unknown_sites, color: "#f59e0b" },
+                      { label: "Dates invalides",     value: importResult.skipped_invalid_dates, color: "#94a3b8" },
                     ].map(s => (
                       <div key={s.label} style={{ padding: "8px 10px", borderRadius: 10,
                         background: "rgba(0,0,0,.03)", border: "1px solid rgba(0,0,0,.06)" }}>
@@ -1288,12 +1301,19 @@ export default function EstimationPage() {
                       </div>
                     ))}
                   </div>
+                  <div role="status" style={{ padding: "10px 14px", borderRadius: 12, textAlign: "left",
+                    background: "rgba(37,99,235,.06)", border: "1px solid rgba(37,99,235,.15)",
+                    fontSize: 12.5, color: "#1e40af" }}>
+                    {importResult.relaunched.already_running
+                      ? <>Une estimation <strong>{importResult.relaunched.label}</strong> était déjà en cours : la comparaison utilisera son résultat.</>
+                      : <>Estimation <strong>{importResult.relaunched.label}</strong> relancée. La comparaison s'affichera dès la fin du calcul.</>}
+                  </div>
                 </div>
                 <button onClick={() => setShowImport(false)}
                   style={{ width: "100%", padding: "10px 0", borderRadius: 12, border: "none",
                     background: "#7c3aed", fontSize: 13, fontWeight: 600, color: "white",
                     cursor: "pointer" }}>
-                  Fermer
+                  Voir la comparaison
                 </button>
               </div>
             )}

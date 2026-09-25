@@ -84,13 +84,18 @@ export const launchBatch = async ({ year, month }: { year: number; month: number
 export interface HistoryImportResult {
   message:               string;
   total_parsed:          number;
-  periods:               number;
-  created_batches:       number;
-  updated_batches:       number;
-  created_results:       number;
-  updated_results:       number;
+  imported:              number;
+  periods:               string[];
   skipped_unknown_sites: number;
   skipped_invalid_dates: number;
+  relaunched: {
+    batch_id:        number;
+    year:            number;
+    month:           number;
+    label:           string;
+    status:          EstimationBatch["status"];
+    already_running: boolean;
+  };
 }
  
 export interface ExternalImportResult {
