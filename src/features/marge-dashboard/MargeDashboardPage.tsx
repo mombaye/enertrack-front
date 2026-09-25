@@ -1,5 +1,6 @@
 // src/features/marge-dashboard/MargeDashboardPage.tsx
 import { useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import {
   TrendingDown, TrendingUp, Percent, Scale, Search, ChevronLeft, ChevronRight,
@@ -333,6 +334,7 @@ function buildExcel(
 }
 
 export default function MargeDashboardPage() {
+  const queryClient = useQueryClient();
   const [period, setPeriod] = useState<MargePeriod | undefined>(undefined);
   const { data, isLoading, isError } = useMargeDashboard(period);
 
@@ -402,6 +404,11 @@ export default function MargeDashboardPage() {
     try {
       const result = await importMargeDashboard(file);
       setImportResult(result);
+      if ((result.imported ?? 0) > 0) {
+        // Source format: full snapshot replaced — refresh dashboard data
+        await queryClient.invalidateQueries({ queryKey: ["marge-dashboard"] });
+        setPeriod(undefined);
+      }
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "Erreur lors de l'import.";
       setImportError(msg);
@@ -703,9 +710,11 @@ export default function MargeDashboardPage() {
               <X size={18} />
             </button>
             <div style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 10.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: C.blue[700], marginBottom: 6 }}>Import Excel</div>
-            <h2 style={{ fontSize: 18, fontWeight: 900, margin: "0 0 6px", color: C.slate[900] }}>Importer les annotations</h2>
+            <h2 style={{ fontSize: 18, fontWeight: 900, margin: "0 0 6px", color: C.slate[900] }}>Importer un fichier Marge</h2>
             <p style={{ fontSize: 13, color: C.slate[500], margin: "0 0 20px", lineHeight: 1.5 }}>
-              Sélectionnez un fichier Excel exporté depuis cette page, renseignez les colonnes Catégorie BO, Owner, Commentaire, puis importez.
+              Deux formats acceptés :<br />
+              <strong>• Analyse_Marge.xlsx</strong> (source) — remplace tous les sites du dashboard.<br />
+              <strong>• Export depuis ce dashboard</strong> — met à jour les annotations BO uniquement.
             </p>
             <input ref={fileInputRef} type="file" accept=".xlsx,.xls"
               style={{ display: "block", width: "100%", padding: "10px 12px", border: `1px solid ${C.slate[200]}`, borderRadius: 8, fontSize: 13, marginBottom: 16, boxSizing: "border-box" }}
@@ -721,7 +730,16 @@ export default function MargeDashboardPage() {
               <div style={{ padding: "12px 14px", background: importResult.errors.length ? C.warn.light : C.ok.light, borderRadius: 8, marginBottom: 14, fontSize: 13 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, color: importResult.errors.length ? C.warn.dark : C.ok.dark, marginBottom: importResult.errors.length ? 8 : 0 }}>
                   <CheckCircle size={16} style={{ flexShrink: 0 }} />
-                  {importResult.updated} ligne{importResult.updated !== 1 ? "s" : ""} mise{importResult.updated !== 1 ? "s" : ""} à jour · {importResult.skipped} ignorée{importResult.skipped !== 1 ? "s" : ""}
+                  {(importResult.imported ?? 0) > 0 ? (
+                    <>
+                      {importResult.imported} site{importResult.imported !== 1 ? "s" : ""} importé{importResult.imported !== 1 ? "s" : ""}
+                      {importResult.month_a && importResult.month_b ? ` · ${importResult.month_a} / ${importResult.month_b}` : ""}
+                      {importResult.sheet ? ` · feuille «${importResult.sheet}»` : ""}
+                      {(importResult.skipped ?? 0) > 0 ? ` · ${importResult.skipped} ligne${importResult.skipped !== 1 ? "s" : ""} ignorée${importResult.skipped !== 1 ? "s" : ""}` : ""}
+                    </>
+                  ) : (
+                    <>{importResult.updated} ligne{importResult.updated !== 1 ? "s" : ""} mise{importResult.updated !== 1 ? "s" : ""} à jour · {importResult.skipped} ignorée{importResult.skipped !== 1 ? "s" : ""}</>
+                  )}
                 </div>
                 {importResult.errors.length > 0 && (
                   <ul style={{ margin: 0, paddingLeft: 18, color: C.warn.dark }}>

@@ -82,6 +82,10 @@ export interface ImportResult {
   updated: number;
   skipped: number;
   errors: string[];
+  imported?: number;
+  sheet?: string;
+  month_a?: string;
+  month_b?: string;
 }
 
 export async function importMargeDashboard(file: File): Promise<ImportResult> {
