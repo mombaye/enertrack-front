@@ -67,6 +67,71 @@ interface TaskMeta {
   rows_processed?: number;
 }
 
+// ─── Column detection ─────────────────────────────────────────────────────────
+
+const _PAYMENT_NORMS = ["payee", "paye", "impayee", "hors scope", "annule", "annulee"];
+const _CERT_NORMS    = ["validee", "valide", "contestee", "conteste", "creee", "cree",
+                        "sites certif", "pas ok", "numero de contrat"];
+
+function _normVal(v: string): string {
+  return v.trim().toLowerCase()
+    .normalize("NFD").replace(/\p{Diacritic}/gu, "");
+}
+
+type ColType = "cert" | "payment" | "mixed" | "unknown";
+
+interface DetectedCol {
+  colName: string;
+  type: ColType;
+  valueCounts: Record<string, number>;
+}
+
+interface DetectedColumns {
+  statut: DetectedCol | null;
+  statutPaiement: DetectedCol | null;
+}
+
+function _classifyValues(valueCounts: Record<string, number>): ColType {
+  let hasCert = false;
+  let hasPayment = false;
+  for (const v of Object.keys(valueCounts)) {
+    const n = _normVal(v);
+    if (_PAYMENT_NORMS.some(p => n.includes(p))) hasPayment = true;
+    if (_CERT_NORMS.some(p => n.includes(p)))    hasCert = true;
+  }
+  if (hasCert && hasPayment) return "mixed";
+  if (hasCert)    return "cert";
+  if (hasPayment) return "payment";
+  return "unknown";
+}
+
+function detectStatusColumns(preview: FilePreview): DetectedColumns {
+  const result: DetectedColumns = { statut: null, statutPaiement: null };
+  for (let ci = 0; ci < preview.headers.length; ci++) {
+    const norm = _normVal(preview.headers[ci]);
+    const isStatut = norm === "statut";
+    const isStatutPay = norm === "statut paiement" || norm === "statut_paiement";
+    if (!isStatut && !isStatutPay) continue;
+
+    const valueCounts: Record<string, number> = {};
+    for (const row of preview.rows) {
+      const v = row[ci];
+      if (v == null) continue;
+      const s = String(v).trim();
+      if (s) valueCounts[s] = (valueCounts[s] ?? 0) + 1;
+    }
+
+    const col: DetectedCol = {
+      colName: preview.headers[ci],
+      type: _classifyValues(valueCounts),
+      valueCounts,
+    };
+    if (isStatut) result.statut = col;
+    else result.statutPaiement = col;
+  }
+  return result;
+}
+
 // ─── File preview ─────────────────────────────────────────────────────────────
 
 interface FilePreview {
@@ -188,6 +253,79 @@ function FilePreviewTable({ preview }: { preview: FilePreview }) {
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Detected columns display ─────────────────────────────────────────────────
+
+function DetectedColumnsInfo({ detected }: { detected: DetectedColumns }) {
+  const { statut, statutPaiement } = detected;
+  if (!statut && !statutPaiement) return null;
+
+  const typeLabel: Record<ColType, { label: string; color: string; bg: string }> = {
+    payment: { label: "Statut Paiement",      color: "#059669", bg: "rgba(5,150,105,.08)"  },
+    cert:    { label: "Statut Certification", color: "#1e3a8a", bg: "rgba(30,58,138,.08)"  },
+    mixed:   { label: "Types mixtes",         color: "#f59e0b", bg: "rgba(245,158,11,.08)" },
+    unknown: { label: "Non classifié",        color: "#94a3b8", bg: "rgba(148,163,184,.08)"},
+  };
+
+  function ColBadge({ col }: { col: DetectedCol }) {
+    const info = typeLabel[col.type];
+    const topValues = Object.entries(col.valueCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4);
+    return (
+      <div style={{
+        padding: "10px 14px", borderRadius: 12,
+        background: info.bg, border: `1.5px solid ${info.color}33`,
+        display: "flex", flexDirection: "column", gap: 6, flex: 1,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <span style={{
+            padding: "2px 9px", borderRadius: 100,
+            fontSize: 10.5, fontWeight: 700,
+            background: info.color, color: "white",
+          }}>
+            {info.label}
+          </span>
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: "#0f172a" }}>
+            ← {col.colName}
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+          {topValues.map(([v, n]) => (
+            <span key={v} style={{
+              padding: "1px 8px", borderRadius: 100,
+              fontSize: 10.5, fontWeight: 600,
+              background: "rgba(255,255,255,.7)",
+              border: `1px solid ${info.color}44`,
+              color: "#374151",
+            }}>
+              {v} <span style={{ color: "#94a3b8" }}>×{n}</span>
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      marginTop: 12, padding: "12px 14px", borderRadius: 12,
+      background: "rgba(248,250,252,1)",
+      border: "1.5px solid rgba(30,58,138,.1)",
+    }}>
+      <div style={{
+        fontSize: 11, fontWeight: 700, color: "#64748b",
+        textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 8,
+      }}>
+        Colonnes détectées
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {statut && <ColBadge col={statut}/>}
+        {statutPaiement && <ColBadge col={statutPaiement}/>}
       </div>
     </div>
   );
@@ -475,6 +613,7 @@ export default function StatusUpdateAdminPage() {
   const [file,          setFile]          = useState<File | null>(null);
   const [preview,       setPreview]       = useState<FilePreview | null>(null);
   const [previewErr,    setPreviewErr]    = useState<string | null>(null);
+  const [detected,      setDetected]      = useState<DetectedColumns | null>(null);
   const [targetStatus,  setTargetStatus]  = useState<TargetStatus>("VALIDATED");
   const [submitting,    setSubmitting]    = useState(false);
   const [error,         setError]         = useState<string | null>(null);
@@ -503,9 +642,11 @@ export default function StatusUpdateAdminPage() {
     setError(null);
     setPreview(null);
     setPreviewErr(null);
+    setDetected(null);
     try {
       const p = await parseFilePreview(f);
       setPreview(p);
+      setDetected(detectStatusColumns(p));
     } catch (e: any) {
       setPreviewErr(e?.message || "Impossible de lire le fichier.");
     }
@@ -602,35 +743,49 @@ export default function StatusUpdateAdminPage() {
         {/* Aperçu des données */}
         {preview && !previewErr && <FilePreviewTable preview={preview}/>}
 
-        {/* Statut cible */}
-        <div style={{ marginTop: 16 }}>
-          <label style={{ fontSize: 12, fontWeight: 700, color: "#374151", display: "block", marginBottom: 8 }}>
-            Statut cible
-          </label>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {STATUS_OPTIONS.map(opt => (
-              <button
-                key={opt.value}
-                disabled={isRunning || submitting}
-                onClick={() => setTargetStatus(opt.value)}
-                style={{
-                  padding: "6px 16px", borderRadius: 100, border: "none",
-                  cursor: isRunning || submitting ? "not-allowed" : "pointer",
-                  fontSize: 12.5, fontWeight: 600, transition: "all .15s",
-                  background: targetStatus === opt.value ? opt.color : "rgba(0,0,0,.05)",
-                  color: targetStatus === opt.value ? "white" : "#64748b",
-                  boxShadow: targetStatus === opt.value
-                    ? `0 2px 8px ${opt.color}44` : "none",
-                }}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          <p style={{ fontSize: 11.5, color: "#94a3b8", margin: "6px 0 0" }}>
-            Toutes les factures trouvées en base seront marquées avec ce statut.
-          </p>
-        </div>
+        {/* Colonnes détectées */}
+        {detected && !previewErr && <DetectedColumnsInfo detected={detected}/>}
+
+        {/* Statut cible (fallback) */}
+        {(() => {
+          const hasAutoDetect = detected?.statut != null || detected?.statutPaiement != null;
+          const label = hasAutoDetect
+            ? "Statut certification de secours"
+            : "Statut de certification à appliquer";
+          const hint = hasAutoDetect
+            ? "Utilisé uniquement si la colonne « Statut » du fichier contient des valeurs de certification non reconnues."
+            : "Aucune colonne « Statut » détectée — ce statut sera appliqué à toutes les factures trouvées.";
+          return (
+            <div style={{ marginTop: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#374151", display: "block", marginBottom: 8 }}>
+                {label}
+              </label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {STATUS_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    disabled={isRunning || submitting}
+                    onClick={() => setTargetStatus(opt.value)}
+                    style={{
+                      padding: "6px 16px", borderRadius: 100, border: "none",
+                      cursor: isRunning || submitting ? "not-allowed" : "pointer",
+                      fontSize: 12.5, fontWeight: 600, transition: "all .15s",
+                      background: targetStatus === opt.value ? opt.color : "rgba(0,0,0,.05)",
+                      color: targetStatus === opt.value ? "white" : "#64748b",
+                      boxShadow: targetStatus === opt.value
+                        ? `0 2px 8px ${opt.color}44` : "none",
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <p style={{ fontSize: 11.5, color: "#94a3b8", margin: "6px 0 0" }}>
+                {hint}
+              </p>
+            </div>
+          );
+        })()}
 
         {/* Error */}
         {error && (
@@ -648,7 +803,7 @@ export default function StatusUpdateAdminPage() {
         <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
           {file && !isRunning && (
             <button
-              onClick={() => { setFile(null); setBatch(null); setError(null); setPreview(null); setPreviewErr(null); }}
+              onClick={() => { setFile(null); setBatch(null); setError(null); setPreview(null); setPreviewErr(null); setDetected(null); }}
               style={{
                 padding: "9px 16px", borderRadius: 11,
                 border: "1.5px solid rgba(0,0,0,.1)", background: "white",
