@@ -174,6 +174,36 @@ function exportResults(results: EstimationResult[], batch: EstimationBatch) {
   XLSX.writeFile(wb, `estimation_${batch.label}.xlsx`);
 }
 
+// ─── Comparison export ───────────────────────────────────────────────────────
+function exportComparaisonChoix(
+  data: CompareData,
+  choices: Record<string, "enertrack" | "external">,
+  batch: EstimationBatch,
+) {
+  const f = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
+  const rows = data.rows.map(r => {
+    const src = choices[r.site_id] ?? "enertrack";
+    return {
+      "Site ID":             r.site_id,
+      "Site Nom":            r.site_name,
+      "Source retenue":      src === "enertrack" ? "EnerTrack" : "Externe",
+      "Conso retenue (kWh)": src === "enertrack" ? (r.enertrack_conso ?? "") : (r.external_conso ?? ""),
+      "Montant retenu (F)":  src === "enertrack" ? (r.enertrack_montant ?? "") : (r.external_montant ?? ""),
+      "EnerTrack conso":     r.enertrack_conso ?? "",
+      "Externe conso":       r.external_conso ?? "",
+      "Écart conso %":       r.ecart_conso_pct !== null ? `${r.ecart_conso_pct > 0 ? "+" : ""}${r.ecart_conso_pct.toFixed(1)}%` : "",
+      "EnerTrack montant":   r.enertrack_montant ?? "",
+      "Externe montant":     r.external_montant ?? "",
+      "Match":               r.match ? "✓" : "✗",
+    };
+  });
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws["!cols"] = [{ wch: 14 }, { wch: 26 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 8 }];
+  XLSX.utils.book_append_sheet(wb, ws, "Comparaison");
+  XLSX.writeFile(wb, `comparaison_${batch.label}.xlsx`);
+}
+
 // ─── Comparison tab ───────────────────────────────────────────────────────────
 const fmtPct = (v: number | null) =>
   v === null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`;
@@ -197,11 +227,16 @@ function MatchBadge({ match }: { match: boolean }) {
 
 function ComparisonTab({
   data, isLoading, isError, onRequestImport,
+  chosenSource, onChoose, onChooseAll, onExportChoices,
 }: {
   data: CompareData | null;
   isLoading: boolean;
   isError: boolean;
   onRequestImport: () => void;
+  chosenSource: Record<string, "enertrack" | "external">;
+  onChoose: (siteId: string, src: "enertrack" | "external") => void;
+  onChooseAll: (src: "enertrack" | "external") => void;
+  onExportChoices: () => void;
 }) {
   const fmt = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 
@@ -244,16 +279,19 @@ function ComparisonTab({
   );
 
   const s = data.score;
+  const nEnertrack = data.rows.filter(r => (chosenSource[r.site_id] ?? "enertrack") === "enertrack").length;
+  const nExternal  = data.rows.length - nEnertrack;
+
   return (
     <div>
       {/* Score cards */}
       <div style={{ padding: "16px 18px", borderBottom: "1px solid rgba(30,58,138,.07)" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 12 }}>
           {[
-            { label: "Sites EnerTrack",  value: s.total_enertrack, color: "#7c3aed" },
+            { label: "Sites EnerTrack",   value: s.total_enertrack, color: "#7c3aed" },
             { label: "Sites fichier ext.", value: s.total_external,  color: "#0891b2" },
-            { label: "Comparables",       value: s.comparable,       color: "#334155" },
-            { label: "Correspondances",   value: s.matched,          color: "#059669" },
+            { label: "Comparables",        value: s.comparable,      color: "#334155" },
+            { label: "Correspondances",    value: s.matched,         color: "#059669" },
           ].map(k => (
             <div key={k.label} style={{
               background: "#f8faff", borderRadius: 12, padding: "12px 14px",
@@ -284,13 +322,54 @@ function ComparisonTab({
         </div>
       </div>
 
+      {/* Selection toolbar */}
+      {data.rows.length > 0 && (
+        <div style={{ padding: "10px 18px", borderBottom: "1px solid rgba(30,58,138,.07)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginRight: 2 }}>Sélection :</span>
+          {(["enertrack", "external"] as const).map(src => (
+            <button
+              key={src}
+              onClick={() => onChooseAll(src)}
+              style={{
+                padding: "5px 12px", borderRadius: 8, border: "1.5px solid",
+                fontSize: 11, fontWeight: 700, cursor: "pointer",
+                background: "white",
+                color: src === "enertrack" ? "#7c3aed" : "#0891b2",
+                borderColor: src === "enertrack" ? "#7c3aed" : "#0891b2",
+                fontFamily: "'DM Sans', sans-serif",
+              }}
+            >
+              Tout {src === "enertrack" ? "EnerTrack" : "Externe"}
+            </button>
+          ))}
+          <div style={{ flex: 1 }}/>
+          <span style={{ fontSize: 11, color: "#64748b" }}>
+            <span style={{ fontWeight: 700, color: "#7c3aed" }}>{nEnertrack}</span> EnerTrack ·{" "}
+            <span style={{ fontWeight: 700, color: "#0891b2" }}>{nExternal}</span> Externe
+          </span>
+          <button
+            onClick={onExportChoices}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "6px 14px", borderRadius: 8, border: "none",
+              background: "#7c3aed", color: "white",
+              fontSize: 11.5, fontWeight: 700, cursor: "pointer",
+              boxShadow: "0 3px 8px rgba(124,58,237,.25)",
+              fontFamily: "'DM Sans', sans-serif",
+            }}
+          >
+            <Download size={12}/> Exporter les choix
+          </button>
+        </div>
+      )}
+
       {/* Comparison table */}
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ background: "#f8faff", borderBottom: "1px solid rgba(30,58,138,.07)" }}>
-              {["Site", "EnerTrack conso", "Fichier ext. conso", "Écart conso", "EnerTrack montant", "Fichier ext. montant", "Écart montant", "Match"].map(h => (
-                <th key={h} style={{ padding: "9px 12px", textAlign: "left", fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".06em", whiteSpace: "nowrap" }}>
+              {["Site", "EnerTrack conso", "Fichier ext. conso", "Écart conso", "EnerTrack montant", "Fichier ext. montant", "Écart montant", "Match", "Source retenue"].map(h => (
+                <th key={h} style={{ padding: "9px 12px", textAlign: "left", fontSize: 10, fontWeight: 700, color: h === "Source retenue" ? "#7c3aed" : "#64748b", textTransform: "uppercase", letterSpacing: ".06em", whiteSpace: "nowrap" }}>
                   {h}
                 </th>
               ))}
@@ -298,44 +377,69 @@ function ComparisonTab({
           </thead>
           <tbody>
             {data.rows.length === 0 ? (
-              <tr><td colSpan={8} style={{ padding: "32px", textAlign: "center", color: "#94a3b8", fontSize: 13 }}>Aucune donnée</td></tr>
+              <tr><td colSpan={9} style={{ padding: "32px", textAlign: "center", color: "#94a3b8", fontSize: 13 }}>Aucune donnée</td></tr>
             ) : (
-              data.rows.map(r => (
-                <tr key={r.site_id} className="ep-row" style={{ borderBottom: "1px solid rgba(30,58,138,.05)" }}>
-                  <td style={{ padding: "9px 12px", minWidth: 130 }}>
-                    <div style={{ fontWeight: 700, fontSize: 12.5, color: "#0f172a" }}>{r.site_id}</div>
-                    <div style={{ fontSize: 10.5, color: "#94a3b8", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.site_name}</div>
-                    {r.enertrack_source && <SourceBadge source={r.enertrack_source} />}
-                  </td>
-                  <td style={{ padding: "9px 12px", whiteSpace: "nowrap", fontFamily: "'Outfit', sans-serif", fontSize: 13, fontWeight: 800, color: "#7c3aed" }}>
-                    {r.enertrack_conso !== null ? `${fmt.format(Math.round(r.enertrack_conso))} kWh` : <span style={{ color: "#94a3b8", fontFamily: "'DM Sans'" }}>—</span>}
-                  </td>
-                  <td style={{ padding: "9px 12px", whiteSpace: "nowrap", fontFamily: "'Outfit', sans-serif", fontSize: 13, fontWeight: 800, color: "#0891b2" }}>
-                    {r.external_conso !== null ? `${fmt.format(Math.round(r.external_conso))} kWh` : <span style={{ color: "#94a3b8", fontFamily: "'DM Sans'" }}>—</span>}
-                  </td>
-                  <td style={{ padding: "9px 12px", whiteSpace: "nowrap" }}>
-                    <EcartBadge pct={r.ecart_conso_pct} />
-                    {r.ecart_conso !== null && (
-                      <div style={{ fontSize: 10, color: "#94a3b8" }}>{r.ecart_conso > 0 ? "+" : ""}{fmt.format(Math.round(r.ecart_conso))} kWh</div>
-                    )}
-                  </td>
-                  <td style={{ padding: "9px 12px", whiteSpace: "nowrap", fontFamily: "'Outfit', sans-serif", fontSize: 13, fontWeight: 800, color: "#7c3aed" }}>
-                    {r.enertrack_montant !== null ? `${fmt.format(Math.round(r.enertrack_montant))} F` : <span style={{ color: "#94a3b8", fontFamily: "'DM Sans'" }}>—</span>}
-                  </td>
-                  <td style={{ padding: "9px 12px", whiteSpace: "nowrap", fontFamily: "'Outfit', sans-serif", fontSize: 13, fontWeight: 800, color: "#0891b2" }}>
-                    {r.external_montant !== null ? `${fmt.format(Math.round(r.external_montant))} F` : <span style={{ color: "#94a3b8", fontFamily: "'DM Sans'" }}>—</span>}
-                  </td>
-                  <td style={{ padding: "9px 12px", whiteSpace: "nowrap" }}>
-                    <EcartBadge pct={r.ecart_montant_pct} />
-                    {r.ecart_montant !== null && (
-                      <div style={{ fontSize: 10, color: "#94a3b8" }}>{r.ecart_montant > 0 ? "+" : ""}{fmt.format(Math.round(r.ecart_montant))} F</div>
-                    )}
-                  </td>
-                  <td style={{ padding: "9px 12px" }}>
-                    <MatchBadge match={r.match} />
-                  </td>
-                </tr>
-              ))
+              data.rows.map(r => {
+                const chosen = chosenSource[r.site_id] ?? "enertrack";
+                return (
+                  <tr key={r.site_id} className="ep-row" style={{ borderBottom: "1px solid rgba(30,58,138,.05)" }}>
+                    <td style={{ padding: "9px 12px", minWidth: 130 }}>
+                      <div style={{ fontWeight: 700, fontSize: 12.5, color: "#0f172a" }}>{r.site_id}</div>
+                      <div style={{ fontSize: 10.5, color: "#94a3b8", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.site_name}</div>
+                      {r.enertrack_source && <SourceBadge source={r.enertrack_source} />}
+                    </td>
+                    <td style={{ padding: "9px 12px", whiteSpace: "nowrap", fontFamily: "'Outfit', sans-serif", fontSize: 13, fontWeight: 800, color: chosen === "enertrack" ? "#7c3aed" : "#94a3b8", opacity: chosen === "enertrack" ? 1 : 0.45 }}>
+                      {r.enertrack_conso !== null ? `${fmt.format(Math.round(r.enertrack_conso))} kWh` : <span style={{ color: "#94a3b8", fontFamily: "'DM Sans'" }}>—</span>}
+                    </td>
+                    <td style={{ padding: "9px 12px", whiteSpace: "nowrap", fontFamily: "'Outfit', sans-serif", fontSize: 13, fontWeight: 800, color: chosen === "external" ? "#0891b2" : "#94a3b8", opacity: chosen === "external" ? 1 : 0.45 }}>
+                      {r.external_conso !== null ? `${fmt.format(Math.round(r.external_conso))} kWh` : <span style={{ color: "#94a3b8", fontFamily: "'DM Sans'" }}>—</span>}
+                    </td>
+                    <td style={{ padding: "9px 12px", whiteSpace: "nowrap" }}>
+                      <EcartBadge pct={r.ecart_conso_pct} />
+                      {r.ecart_conso !== null && (
+                        <div style={{ fontSize: 10, color: "#94a3b8" }}>{r.ecart_conso > 0 ? "+" : ""}{fmt.format(Math.round(r.ecart_conso))} kWh</div>
+                      )}
+                    </td>
+                    <td style={{ padding: "9px 12px", whiteSpace: "nowrap", fontFamily: "'Outfit', sans-serif", fontSize: 13, fontWeight: 800, color: chosen === "enertrack" ? "#7c3aed" : "#94a3b8", opacity: chosen === "enertrack" ? 1 : 0.45 }}>
+                      {r.enertrack_montant !== null ? `${fmt.format(Math.round(r.enertrack_montant))} F` : <span style={{ color: "#94a3b8", fontFamily: "'DM Sans'" }}>—</span>}
+                    </td>
+                    <td style={{ padding: "9px 12px", whiteSpace: "nowrap", fontFamily: "'Outfit', sans-serif", fontSize: 13, fontWeight: 800, color: chosen === "external" ? "#0891b2" : "#94a3b8", opacity: chosen === "external" ? 1 : 0.45 }}>
+                      {r.external_montant !== null ? `${fmt.format(Math.round(r.external_montant))} F` : <span style={{ color: "#94a3b8", fontFamily: "'DM Sans'" }}>—</span>}
+                    </td>
+                    <td style={{ padding: "9px 12px", whiteSpace: "nowrap" }}>
+                      <EcartBadge pct={r.ecart_montant_pct} />
+                      {r.ecart_montant !== null && (
+                        <div style={{ fontSize: 10, color: "#94a3b8" }}>{r.ecart_montant > 0 ? "+" : ""}{fmt.format(Math.round(r.ecart_montant))} F</div>
+                      )}
+                    </td>
+                    <td style={{ padding: "9px 12px" }}>
+                      <MatchBadge match={r.match} />
+                    </td>
+                    {/* Source choice toggle */}
+                    <td style={{ padding: "9px 12px", whiteSpace: "nowrap" }}>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        {(["enertrack", "external"] as const).map(src => (
+                          <button
+                            key={src}
+                            onClick={() => onChoose(r.site_id, src)}
+                            style={{
+                              padding: "4px 9px", borderRadius: 7,
+                              border: `1.5px solid ${src === "enertrack" ? "#7c3aed" : "#0891b2"}`,
+                              fontSize: 10.5, fontWeight: 700, cursor: "pointer",
+                              fontFamily: "'DM Sans', sans-serif",
+                              transition: "all .12s",
+                              background: chosen === src ? (src === "enertrack" ? "#7c3aed" : "#0891b2") : "white",
+                              color: chosen === src ? "white" : (src === "enertrack" ? "#7c3aed" : "#0891b2"),
+                            }}
+                          >
+                            {src === "enertrack" ? "ET" : "Ext"}
+                          </button>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -364,6 +468,7 @@ export default function EstimationPage() {
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const [activeTab, setActiveTab] = useState<"resultats" | "comparaison">("resultats");
+  const [chosenSource, setChosenSource] = useState<Record<string, "enertrack" | "external">>({});
 
   const [showExternalImport,    setShowExternalImport]    = useState(false);
   const [externalImportFile,    setExternalImportFile]    = useState<File | null>(null);
@@ -454,6 +559,19 @@ export default function EstimationPage() {
     enabled:  !!selectedBatch && selectedBatch.status === "DONE" && activeTab === "comparaison",
     staleTime: 30 * 1000,
   });
+
+  // Auto-init choices when comparison data loads (default: all EnerTrack)
+  useEffect(() => {
+    if (compareQ.data?.rows) {
+      setChosenSource(prev => {
+        const next: Record<string, "enertrack" | "external"> = {};
+        compareQ.data!.rows.forEach(r => {
+          next[r.site_id] = prev[r.site_id] ?? "enertrack";
+        });
+        return next;
+      });
+    }
+  }, [compareQ.data]);
 
   // Export : charger toutes les pages
   const [exporting, setExporting] = useState(false);
@@ -628,6 +746,33 @@ export default function EstimationPage() {
                 Import fichier estimé
               </button>
 
+              <button
+                onClick={() => {
+                  if (!selectedBatch || selectedBatch.status !== "DONE") {
+                    const latest = batches.find(b => b.status === "DONE");
+                    if (latest) { setSelectedBatch(latest); setResultPage(1); setFilterSource(""); setChosenSource({}); }
+                  }
+                  setActiveTab("comparaison");
+                }}
+                disabled={!batches.some(b => b.status === "DONE")}
+                style={{
+                  display: "flex", alignItems: "center", gap: 7,
+                  padding: "9px 18px", borderRadius: 10,
+                  background: batches.some(b => b.status === "DONE")
+                    ? "linear-gradient(135deg,#7c3aed,#0891b2)"
+                    : "#e2e8f0",
+                  color: batches.some(b => b.status === "DONE") ? "white" : "#94a3b8",
+                  border: "none",
+                  fontSize: 13, fontWeight: 700, cursor: batches.some(b => b.status === "DONE") ? "pointer" : "not-allowed",
+                  boxShadow: batches.some(b => b.status === "DONE") ? "0 4px 12px rgba(124,58,237,.28)" : "none",
+                  fontFamily: "'DM Sans', sans-serif",
+                  transition: "all .18s",
+                }}
+              >
+                <ArrowLeftRight size={14} />
+                Comparaison
+              </button>
+
             </div>
           </div>
         </div>
@@ -669,7 +814,7 @@ export default function EstimationPage() {
                   return (
                     <div
                       key={b.id}
-                      onClick={() => { setSelectedBatch(b); setResultPage(1); setFilterSource(""); }}
+                      onClick={() => { setSelectedBatch(b); setResultPage(1); setFilterSource(""); setChosenSource({}); }}
                       style={{
                         padding: "11px 12px", borderRadius: 12, marginBottom: 4,
                         cursor: "pointer", transition: "all .15s",
@@ -963,6 +1108,17 @@ export default function EstimationPage() {
                         isLoading={compareQ.isLoading}
                         isError={compareQ.isError}
                         onRequestImport={() => { setShowExternalImport(true); setExternalImportFile(null); setExternalImportResult(null); setExternalImportError(null); }}
+                        chosenSource={chosenSource}
+                        onChoose={(siteId, src) => setChosenSource(prev => ({ ...prev, [siteId]: src }))}
+                        onChooseAll={(src) => {
+                          if (!compareQ.data) return;
+                          const next: Record<string, "enertrack" | "external"> = {};
+                          compareQ.data.rows.forEach(r => { next[r.site_id] = src; });
+                          setChosenSource(next);
+                        }}
+                        onExportChoices={() => {
+                          if (compareQ.data && selectedBatch) exportComparaisonChoix(compareQ.data, chosenSource, selectedBatch);
+                        }}
                       />
                     )}
                   </div>
