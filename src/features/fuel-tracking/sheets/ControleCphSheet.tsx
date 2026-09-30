@@ -6,7 +6,7 @@
 
 import { useId, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, BookOpen, CalendarRange, CheckCircle2, ChevronRight, Columns3, Download, FileUp, Gauge, Info, Search, SlidersHorizontal, X, XCircle } from "lucide-react";
+import { AlertTriangle, BookOpen, CalendarRange, CheckCircle2, ChevronRight, Columns3, Download, FileUp, Fuel, Gauge, HelpCircle, Info, ListChecks, Scale, Search, SlidersHorizontal, XCircle } from "lucide-react";
 
 import {
   approveCphCurve,
@@ -433,17 +433,73 @@ function SiteDetailModal({ siteId, start, end, onClose }: { siteId: string; star
 
 // ─── Préparation des données : ce qui doit être prêt avant de lire les résultats ─
 
-type PrepItem = { key: string; title: string; ready: boolean; partial?: boolean; pending?: boolean; status: ReactNode; actions?: ReactNode };
+type PrepItem = { key: string; title: string; short: string; ready: boolean; partial?: boolean; pending?: boolean; status: ReactNode; actions?: ReactNode };
+type PrepHandlers = { onAbaque: () => void; onReferentiel: () => void; onObservations: () => void };
+
+function prepTone(item: PrepItem) {
+  return item.ready ? (item.partial ? FT.orange : FT.green) : item.pending ? FT.orange : FT.red;
+}
+
+function prepItems(meta: CphMeta, h: PrepHandlers): PrepItem[] {
+  const primary: CSSProperties = { ...btn, background: FT.navy, color: "#fff", borderColor: FT.navy };
+  const hasAbaque = meta.curves_total > 0;
+  const obs = meta.observations_last_import;
+  const sync = meta.facts_last_sync;
+  return [
+    {
+      key: "snowflake", title: "Données Snowflake (heures de marche, puissance)", ready: !!meta.facts_last_date,
+      short: meta.facts_last_date ? `Snowflake jusqu'au ${fmtDate(meta.facts_last_date)}` : "Snowflake : aucune donnée",
+      status: meta.facts_last_date
+        ? <>Disponibles jusqu'au <strong>{fmtDate(meta.facts_last_date)}</strong> · mise à jour automatique toutes les heures.</>
+        : <>Aucune donnée synchronisée{sync ? ` (dernier essai : ${sync.status}${sync.error ? ` — ${sync.error}` : ""})` : " — la synchronisation n'a encore jamais tourné"}.</>,
+    },
+    {
+      key: "abaque", title: "Abaque CPH (courbes des GE)", ready: hasAbaque,
+      short: hasAbaque ? `Abaque : ${meta.curves_usable}/${meta.curves_total} courbes` : "Abaque non importé",
+      status: hasAbaque
+        ? <>{meta.curves_usable}/{meta.curves_total} courbes utilisables · {meta.abaque_file ?? "abaque"}{meta.abaque_imported_at ? `, importé le ${new Date(meta.abaque_imported_at).toLocaleDateString("fr-FR")}` : ""}</>
+        : "Non importé : aucun CPH ne peut être calculé.",
+      actions: <button type="button" onClick={h.onAbaque} style={hasAbaque ? btn : primary}><FileUp size={13} aria-hidden /> {hasAbaque ? "Mettre à jour" : "Importer l'abaque CPH"}</button>,
+    },
+    {
+      key: "plaques", title: "Plaques signalétiques (GE → courbe)", ready: meta.mappings_validated > 0, partial: meta.mappings_validated < meta.mappings_total,
+      short: `Plaques : ${meta.mappings_validated}/${meta.mappings_total} validées`,
+      status: !hasAbaque ? "Disponible après l'import de l'abaque."
+        : <><strong>{meta.mappings_validated}</strong>/{meta.mappings_total} types de GE validés. Un site dont le GE n'est pas validé n'a pas de CPH.</>,
+      actions: <button type="button" onClick={h.onReferentiel} disabled={!hasAbaque} style={{ ...(hasAbaque && meta.mappings_validated === 0 ? primary : btn), opacity: hasAbaque ? 1 : 0.5, cursor: hasAbaque ? "pointer" : "not-allowed" }}><BookOpen size={13} aria-hidden /> Valider les plaques</button>,
+    },
+    {
+      key: "obs", title: "Relevés de stock (fichier d'observation)", ready: !!obs,
+      short: obs ? `Relevés : ${obs.file_name}` : "Aucun relevé de stock",
+      status: obs
+        ? <>{obs.file_name} · {obs.rows_imported} ligne(s){obs.rows_rejected ? `, ${obs.rows_rejected} rejetée(s)` : ""} · {new Date(obs.at).toLocaleDateString("fr-FR")}</>
+        : "Aucun relevé importé : pas de comparaison avec le stock.",
+      actions: <>
+        <button type="button" onClick={h.onObservations} style={obs ? btn : primary}><FileUp size={13} aria-hidden /> Importer les relevés</button>
+        <button type="button" onClick={downloadObservationTemplate} style={btn}><Download size={13} aria-hidden /> Modèle</button>
+      </>,
+    },
+    {
+      key: "enoc", title: "Livraisons ENOC", ready: meta.enoc_deliveries_connected, pending: true,
+      short: meta.enoc_deliveries_connected ? "Livraisons ENOC raccordées" : "Livraisons ENOC à contrôler",
+      status: meta.enoc_deliveries_connected
+        ? "Raccordées : les rapprochements peuvent conclure."
+        : <>Non raccordées : les rapprochements restent <strong>« à contrôler »</strong> (aucun verdict OK / À justifier / À investiguer).</>,
+    },
+  ];
+}
+
+function PrepIcon({ item, size = 15 }: { item: PrepItem; size?: number }) {
+  const Icon = item.ready && !item.partial ? CheckCircle2 : item.ready || item.pending ? AlertTriangle : XCircle;
+  return <Icon size={size} color={prepTone(item)} aria-hidden style={{ flexShrink: 0 }} />;
+}
 
 function PrepTile({ item }: { item: PrepItem }) {
-  const tone = item.ready ? (item.partial ? FT.orange : FT.green) : item.pending ? FT.orange : FT.red;
-  const Icon = item.ready && !item.partial ? CheckCircle2 : item.ready || item.pending ? AlertTriangle : XCircle;
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6, border: `1px solid ${FT.border}`, borderTop: `3px solid ${tone}`, borderRadius: 10, padding: "10px 12px", background: FT.card, minWidth: 0 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, border: `1px solid ${FT.border}`, borderTop: `3px solid ${prepTone(item)}`, borderRadius: 10, padding: "10px 12px", background: FT.card, minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-        <Icon size={15} color={tone} aria-hidden style={{ flexShrink: 0 }} />
+        <PrepIcon item={item} />
         <h4 style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: FT.text }}>{item.title}</h4>
-        <span className="sr-only">{item.ready ? (item.partial ? " — partiel" : " — prêt") : item.pending ? " — en attente" : " — à faire"}</span>
       </div>
       <div style={{ fontSize: 11.5, color: FT.textMid, flex: 1, overflowWrap: "anywhere" }}>{item.status}</div>
       {item.actions && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{item.actions}</div>}
@@ -451,72 +507,23 @@ function PrepTile({ item }: { item: PrepItem }) {
   );
 }
 
-function PreparationPanel({ meta, onAbaque, onReferentiel, onObservations }: { meta: CphMeta | undefined; onAbaque: () => void; onReferentiel: () => void; onObservations: () => void }) {
-  const primary: CSSProperties = { ...btn, background: FT.navy, color: "#fff", borderColor: FT.navy };
-  if (!meta) return <Skeleton h={150} />;
-  const hasAbaque = meta.curves_total > 0;
-  const obs = meta.observations_last_import;
-  const sync = meta.facts_last_sync;
-  const cphItems: PrepItem[] = [
-    {
-      key: "snowflake", title: "Données Snowflake (heures de marche, puissance)", ready: !!meta.facts_last_date,
-      status: meta.facts_last_date
-        ? <>Disponibles jusqu'au <strong>{fmtDate(meta.facts_last_date)}</strong> · mise à jour automatique toutes les heures.</>
-        : <>Aucune donnée synchronisée{sync ? ` (dernier essai : ${sync.status}${sync.error ? ` — ${sync.error}` : ""})` : " — la synchronisation n'a encore jamais tourné"}.</>,
-    },
-    {
-      key: "abaque", title: "Abaque CPH (courbes des GE)", ready: hasAbaque,
-      status: hasAbaque
-        ? <>{meta.curves_usable}/{meta.curves_total} courbes utilisables · {meta.abaque_file ?? "abaque"}{meta.abaque_imported_at ? `, importé le ${new Date(meta.abaque_imported_at).toLocaleDateString("fr-FR")}` : ""}</>
-        : "Non importé : aucun CPH ne peut être calculé.",
-      actions: <button type="button" onClick={onAbaque} style={hasAbaque ? btn : primary}><FileUp size={13} aria-hidden /> {hasAbaque ? "Mettre à jour" : "Importer l'abaque CPH"}</button>,
-    },
-    {
-      key: "plaques", title: "Plaques signalétiques (GE → courbe)", ready: meta.mappings_validated > 0, partial: meta.mappings_validated < meta.mappings_total,
-      status: !hasAbaque ? "Disponible après l'import de l'abaque."
-        : <><strong>{meta.mappings_validated}</strong>/{meta.mappings_total} types de GE validés. Un site dont le GE n'est pas validé n'a pas de CPH.</>,
-      actions: <button type="button" onClick={onReferentiel} disabled={!hasAbaque} style={{ ...(hasAbaque && meta.mappings_validated === 0 ? primary : btn), opacity: hasAbaque ? 1 : 0.5, cursor: hasAbaque ? "pointer" : "not-allowed" }}><BookOpen size={13} aria-hidden /> Valider les plaques</button>,
-    },
-  ];
-  const recItems: PrepItem[] = [
-    {
-      key: "obs", title: "Relevés de stock (fichier d'observation)", ready: !!obs,
-      status: obs
-        ? <>{obs.file_name} · {obs.rows_imported} ligne(s){obs.rows_rejected ? `, ${obs.rows_rejected} rejetée(s)` : ""} · {new Date(obs.at).toLocaleDateString("fr-FR")}</>
-        : "Aucun relevé importé : pas de comparaison avec le stock.",
-      actions: <>
-        <button type="button" onClick={onObservations} style={obs ? btn : primary}><FileUp size={13} aria-hidden /> Importer les relevés</button>
-        <button type="button" onClick={downloadObservationTemplate} style={btn}><Download size={13} aria-hidden /> Modèle</button>
-      </>,
-    },
-    {
-      key: "enoc", title: "Livraisons ENOC", ready: meta.enoc_deliveries_connected, pending: true,
-      status: meta.enoc_deliveries_connected
-        ? "Raccordées : les rapprochements peuvent conclure."
-        : <>Non raccordées : les rapprochements restent <strong>« à contrôler »</strong> (aucun verdict OK / À justifier / À investiguer).</>,
-    },
-  ];
-  const all = [...cphItems, ...recItems];
-  const readyCount = all.filter((i) => i.ready).length;
-  const group = (title: string, items: PrepItem[]) => (
-    <div style={{ flex: `${items.length} 1 ${items.length * 230}px`, minWidth: 0 }}>
+function PreparationModal({ meta, handlers, onClose }: { meta: CphMeta; handlers: PrepHandlers; onClose: () => void }) {
+  const items = prepItems(meta, handlers);
+  const group = (title: string, list: PrepItem[]) => (
+    <div>
       <div style={{ fontSize: 10.5, fontWeight: 800, color: FT.textSub, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 6 }}>{title}</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 8 }}>
-        {items.map((i) => <PrepTile key={i.key} item={i} />)}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 8 }}>
+        {list.map((i) => <PrepTile key={i.key} item={i} />)}
       </div>
     </div>
   );
   return (
-    <section aria-labelledby="cph-prep-title">
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-        <h3 id="cph-prep-title" style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: FT.text }}>1. Préparation des données</h3>
-        <Tag tone={readyCount === all.length ? FT.green : FT.orange}>{readyCount}/{all.length} prêtes</Tag>
+    <Modal title={`Préparation des données — ${items.filter((i) => i.ready).length}/${items.length} prêtes`} onClose={onClose} maxWidth={900}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {group("Pour calculer la consommation théorique", items.slice(0, 3))}
+        {group("Pour comparer avec le stock", items.slice(3))}
       </div>
-      <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-        {group("Pour calculer la consommation théorique", cphItems)}
-        {group("Pour comparer avec le stock", recItems)}
-      </div>
-    </section>
+    </Modal>
   );
 }
 
@@ -533,11 +540,10 @@ function FBox({ title, sub, tone }: { title: string; sub: string; tone: string }
 
 const op: CSSProperties = { fontSize: 18, fontWeight: 800, color: FT.textSub, padding: "0 2px" };
 
-function HowItWorks() {
+function HowItWorksModal({ onClose, ruleVersion }: { onClose: () => void; ruleVersion?: string }) {
   return (
-    <details style={{ marginTop: 12, border: `1px solid ${FT.border}`, borderRadius: 10, padding: "8px 12px", background: FT.cardAlt }}>
-      <summary style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 800, color: FT.navy }}>Comment le contrôle est-il calculé ?</summary>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }}>
+    <Modal title="Comment le contrôle est-il calculé ?" onClose={onClose} maxWidth={860}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
           <FBox title="Heures de marche GE" sub="DSE en priorité, sinon sources de secours contrôlées" tone={FT.blue} />
           <span style={op} aria-label="multiplié par">×</span>
@@ -557,82 +563,14 @@ function HowItWorks() {
         </div>
         <div style={{ fontSize: 11.5, color: FT.textMid }}>
           Une donnée absente reste « — » : elle n'est jamais remplacée par 0 ni estimée. La consommation théorique n'est affichée que si <strong>tous</strong> les jours de la période sont calculés.
+          {ruleVersion && <> Règle {ruleVersion}.</>}
         </div>
       </div>
-    </details>
+    </Modal>
   );
 }
 
-// ─── Résultat : entonnoir, verdicts et blocages ─────────────────────────────
-
-function FunnelStep({ label, value, total, tone, hint }: { label: string; value: number | undefined; total: number; tone: string; hint: string }) {
-  const pct = total > 0 && value !== undefined ? Math.round((100 * value) / total) : 0;
-  return (
-    <div style={{ flex: "1 1 100px", minWidth: 0 }}>
-      <div style={{ fontSize: 11, fontWeight: 800, color: FT.textMid, minHeight: 28 }}>{label}</div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-        <span style={{ fontSize: 22, fontWeight: 800, color: FT.text }}>{value === undefined ? "—" : value.toLocaleString("fr-FR")}</span>
-        {value !== undefined && total > 0 && <span style={{ fontSize: 11.5, color: FT.textSub }}>{pct} %</span>}
-      </div>
-      <div role="img" aria-label={`${pct} % des sites avec GE`} style={{ height: 6, borderRadius: 3, background: FT.slateL, overflow: "hidden", margin: "4px 0" }}>
-        <div style={{ width: `${pct}%`, height: "100%", background: tone }} />
-      </div>
-      <div style={{ fontSize: 10.5, color: FT.textSub }}>{hint}</div>
-    </div>
-  );
-}
-
-const VERDICTS: Array<{ statut: CphReconciliationStatus; key: keyof CphSynthesis; hint: string }> = [
-  { statut: "OK", key: "ok", hint: "écart dans la tolérance" },
-  { statut: "A_JUSTIFIER", key: "a_justifier", hint: "écart modéré à expliquer" },
-  { statut: "A_INVESTIGUER", key: "a_investiguer", hint: "écart important" },
-  { statut: "DONNEES_INCOMPLETES", key: "donnees_incompletes", hint: "relevé ou livraisons manquants" },
-  { statut: "CPH_NON_CALCULE", key: "rapprochement_cph_non_calcule", hint: "relevé présent, CPH manquant" },
-];
-
-function ResultPanel({ s, activeStatut, onStatut }: { s: CphSynthesis | undefined; activeStatut?: string; onStatut: (statut: string) => void }) {
-  const total = s?.sites ?? 0;
-  return (
-    <Card>
-      <h3 style={{ margin: "0 0 12px", fontSize: 13.5, fontWeight: 800, color: FT.text }}>2. Résultat sur la période</h3>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
-        <FunnelStep label="Sites avec GE" value={s?.sites} total={total} tone={FT.blue} hint="périmètre contrôlé" />
-        <ChevronRight size={14} color={FT.textSub} aria-hidden style={{ marginTop: 34, flexShrink: 0 }} />
-        <FunnelStep label="CPH calculé" value={s?.cph_calcules} total={total} tone={FT.violet} hint="au moins un jour" />
-        <ChevronRight size={14} color={FT.textSub} aria-hidden style={{ marginTop: 34, flexShrink: 0 }} />
-        <FunnelStep label="Conso théorique complète" value={s?.conso_theorique_complete} total={total} tone={FT.cyan} hint="tous les jours calculés" />
-        <ChevronRight size={14} color={FT.textSub} aria-hidden style={{ marginTop: 34, flexShrink: 0 }} />
-        <FunnelStep label="Comparés au stock" value={s?.rapprochements_calcules} total={total} tone={FT.green} hint="verdict rendu" />
-      </div>
-      <div style={{ fontSize: 11, fontWeight: 800, color: FT.textSub, textTransform: "uppercase", letterSpacing: ".05em", margin: "16px 0 6px" }}>
-        Verdict du rapprochement — cliquez pour filtrer le tableau
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 8 }}>
-        {VERDICTS.map((v) => {
-          const color = STATUT_COLORS[v.statut];
-          const active = activeStatut === v.statut;
-          const n = s ? (s[v.key] as number) : undefined;
-          return (
-            <button
-              key={v.statut}
-              type="button"
-              aria-pressed={active}
-              onClick={() => onStatut(active ? "" : v.statut)}
-              style={{ textAlign: "left", cursor: "pointer", border: `1px solid ${active ? color : FT.border}`, outline: active ? `2px solid ${color}` : "none", background: active ? `${color}12` : FT.card, borderRadius: 10, padding: "8px 10px" }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span aria-hidden style={{ width: 8, height: 8, borderRadius: 4, background: color }} />
-                <span style={{ fontSize: 11.5, fontWeight: 800, color: FT.text }}>{STATUT_LABELS[v.statut]}</span>
-              </div>
-              <div style={{ fontSize: 20, fontWeight: 800, color }}>{n === undefined ? "—" : n.toLocaleString("fr-FR")}</div>
-              <div style={{ fontSize: 10.5, color: FT.textSub }}>{v.hint}</div>
-            </button>
-          );
-        })}
-      </div>
-    </Card>
-  );
-}
+// ─── Blocages : pourquoi des sites n'ont pas de verdict ─────────────────────
 
 const BLOCAGE_ACTIONS: Record<string, { label: string; target: "referentiel" | "abaque" | "observations" }> = {
   MAPPAGE_NON_VALIDE: { label: "Valider les plaques", target: "referentiel" },
@@ -643,17 +581,18 @@ const BLOCAGE_ACTIONS: Record<string, { label: string; target: "referentiel" | "
   OBSERVATION_INCOMPLETE: { label: "Corriger les relevés", target: "observations" },
 };
 
-function BlocagesPanel({ s, active, onSelect, onAction }: {
-  s: CphSynthesis | undefined; active?: string; onSelect: (code: string) => void; onAction: (target: "referentiel" | "abaque" | "observations") => void;
+function BlocagesModal({ s, active, onSelect, onAction, onClose }: {
+  s: CphSynthesis; active?: string; onSelect: (code: string) => void;
+  onAction: (target: "referentiel" | "abaque" | "observations") => void; onClose: () => void;
 }) {
-  const list = s?.blocages ?? [];
+  const list = s.blocages ?? [];
   const max = Math.max(1, ...list.map((b) => b.sites));
   const section = (etape: "cph" | "rapprochement", title: string) => {
     const items = list.filter((b) => b.etape === etape);
     if (items.length === 0) return null;
     return (
       <div>
-        <div style={{ fontSize: 11, fontWeight: 800, color: FT.textSub, textTransform: "uppercase", letterSpacing: ".05em", margin: "8px 0 6px" }}>{title}</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: FT.textSub, textTransform: "uppercase", letterSpacing: ".05em", margin: "10px 0 6px" }}>{title}</div>
         <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
           {items.map((b) => {
             const isActive = active === b.code;
@@ -663,20 +602,20 @@ function BlocagesPanel({ s, active, onSelect, onAction }: {
                 <button
                   type="button"
                   aria-pressed={isActive}
-                  onClick={() => onSelect(isActive ? "" : b.code)}
-                  title="Filtrer le tableau sur ces sites"
-                  style={{ flex: "1 1 220px", minWidth: 0, textAlign: "left", cursor: "pointer", border: `1px solid ${isActive ? FT.blue : FT.border}`, background: isActive ? FT.blueL : FT.card, borderRadius: 8, padding: "6px 9px" }}
+                  onClick={() => { onSelect(isActive ? "" : b.code); onClose(); }}
+                  title="Afficher ces sites dans le tableau"
+                  style={{ flex: "1 1 260px", minWidth: 0, textAlign: "left", cursor: "pointer", border: `1px solid ${isActive ? FT.blue : FT.border}`, background: isActive ? FT.blueL : FT.card, borderRadius: 8, padding: "7px 10px" }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12, fontWeight: 700, color: FT.text }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, fontWeight: 700, color: FT.text }}>
                     <span>{b.label}</span>
                     <span style={{ fontWeight: 800 }}>{b.sites.toLocaleString("fr-FR")} site{b.sites > 1 ? "s" : ""}</span>
                   </div>
-                  <div aria-hidden style={{ height: 5, borderRadius: 3, background: FT.slateL, marginTop: 4, overflow: "hidden" }}>
+                  <div aria-hidden style={{ height: 5, borderRadius: 3, background: FT.slateL, marginTop: 5, overflow: "hidden" }}>
                     <div style={{ width: `${(100 * b.sites) / max}%`, height: "100%", background: etape === "cph" ? FT.violet : FT.orange }} />
                   </div>
                 </button>
                 {action && (
-                  <button type="button" onClick={() => onAction(action.target)} style={{ ...btn, padding: "5px 9px", fontSize: 11.5 }}>
+                  <button type="button" onClick={() => { onClose(); onAction(action.target); }} style={{ ...btn, padding: "6px 10px", fontSize: 11.5 }}>
                     {action.label} <ChevronRight size={12} aria-hidden />
                   </button>
                 )}
@@ -688,10 +627,11 @@ function BlocagesPanel({ s, active, onSelect, onAction }: {
     );
   };
   return (
-    <Card>
-      <h3 style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: FT.text }}>3. Pourquoi des sites ne sont pas contrôlés ?</h3>
-      <div style={{ fontSize: 11.5, color: FT.textMid, marginTop: 3 }}>Premier point bloquant de chaque site, dans l'ordre du calcul. Cliquez pour voir les sites concernés.</div>
-      {!s ? <Skeleton h={140} /> : list.length === 0 ? (
+    <Modal title="Pourquoi des sites n'ont pas de verdict ?" onClose={onClose} maxWidth={760}>
+      <div style={{ fontSize: 12.5, color: FT.textMid }}>
+        Premier point bloquant de chaque site, dans l'ordre du calcul. Cliquez sur une ligne pour afficher ces sites dans le tableau.
+      </div>
+      {list.length === 0 ? (
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 12.5, color: FT.green }}>
           <CheckCircle2 size={16} aria-hidden /> {s.sites > 0 ? "Aucun blocage : tous les sites ont un verdict." : "Aucun site sur ce périmètre."}
         </div>
@@ -701,7 +641,7 @@ function BlocagesPanel({ s, active, onSelect, onAction }: {
           {section("rapprochement", "Comparaison avec le stock")}
         </>
       )}
-    </Card>
+    </Modal>
   );
 }
 
@@ -969,8 +909,6 @@ function ReferentielModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-// ─── Onglet ──────────────────────────────────────────────────────────────────
-
 // ─── Tableaux ────────────────────────────────────────────────────────────────
 
 function SimpleTable({ rows, onDetail }: { rows: CphSiteRow[]; onDetail: (siteId: string) => void }) {
@@ -1156,6 +1094,82 @@ function periodPresets() {
   ];
 }
 
+const pill: CSSProperties = {
+  display: "inline-flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.card, color: FT.text,
+  cursor: "pointer", fontSize: 12.5, fontWeight: 800, borderRadius: 10, padding: "9px 14px", boxShadow: FT.shadow,
+};
+
+function VerdictButtons({ value, onChange, s }: { value: string; onChange: (v: string) => void; s: CphSynthesis | undefined }) {
+  const n = (v: number | undefined) => (v === undefined ? "" : ` (${v.toLocaleString("fr-FR")})`);
+  const options: Array<{ key: string; label: string }> = [
+    { key: "", label: `Tous${n(s?.sites)}` },
+    { key: "OK", label: `OK${n(s?.ok)}` },
+    { key: "A_JUSTIFIER", label: `À justifier${n(s?.a_justifier)}` },
+    { key: "A_INVESTIGUER", label: `À investiguer${n(s?.a_investiguer)}` },
+    { key: "DONNEES_INCOMPLETES", label: `Données incomplètes${n(s?.donnees_incompletes)}` },
+    { key: "CPH_NON_CALCULE", label: `CPH non calculé${n(s?.rapprochement_cph_non_calcule)}` },
+  ];
+  return (
+    <div role="group" aria-label="Verdict du rapprochement" style={{ display: "inline-flex", flexWrap: "wrap", gap: 3, padding: 4, borderRadius: 10, background: FT.slateL, border: `1px solid ${FT.border}` }}>
+      {options.map((opt) => {
+        const active = opt.key === value;
+        const dot = opt.key ? STATUT_COLORS[opt.key as CphReconciliationStatus] : null;
+        return (
+          <button
+            key={opt.key || "all"}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onChange(opt.key)}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px", borderRadius: 7, border: "none",
+              background: active ? "#fff" : "transparent", color: active ? FT.navy : FT.textMid,
+              boxShadow: active ? FT.shadow : "none", fontSize: 11.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap",
+            }}
+          >
+            {dot && <span aria-hidden style={{ width: 7, height: 7, borderRadius: 4, background: dot }} />}
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function CphKpis({ s, meta, onPreparation, handlers }: { s: CphSynthesis | undefined; meta: CphMeta | undefined; onPreparation: () => void; handlers: PrepHandlers }) {
+  if (!s || !meta) return <Skeleton h={150} />;
+  const pct = (v: number) => (s.sites > 0 ? `${Math.round((100 * v) / s.sites)} %` : "—");
+  const sansVerdict = s.donnees_incompletes + s.rapprochement_cph_non_calcule;
+  const items = prepItems(meta, handlers);
+  const warnStyle: CSSProperties = { marginBottom: 10, padding: "8px 12px", borderRadius: 6, background: "#fffbe6", border: "1px solid #ffe58f", color: "#ad6800", fontSize: 12 };
+  const warnLink: CSSProperties = { ...linkBtn, color: "#ad6800" };
+  return (
+    <div style={{ background: FT.card, borderRadius: FT.radius, border: `1px solid ${FT.border}`, boxShadow: FT.shadow, padding: 14 }}>
+      {meta.curves_total === 0 ? (
+        <div role="note" style={warnStyle}>⚠ Abaque CPH non importé — aucun CPH ne peut être calculé. <button type="button" onClick={handlers.onAbaque} style={warnLink}>Importer l'abaque</button></div>
+      ) : meta.mappings_validated === 0 ? (
+        <div role="note" style={warnStyle}>⚠ Aucune plaque signalétique validée — aucun CPH ne peut être calculé. <button type="button" onClick={handlers.onReferentiel} style={warnLink}>Valider les plaques</button></div>
+      ) : !meta.facts_last_date ? (
+        <div role="note" style={warnStyle}>⚠ Aucune donnée Snowflake synchronisée pour le calcul CPH (synchronisation automatique toutes les heures).</div>
+      ) : null}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
+        <KpiCard label="Sites avec GE" value={s.sites.toLocaleString("fr-FR")} sub="inventaire Snowflake (DG_COUNT > 0)" tone="blue" icon={<Fuel size={14} />} />
+        <KpiCard label="CPH calculé" value={s.cph_calcules.toLocaleString("fr-FR")} sub={`${pct(s.cph_calcules)} des sites · ${s.conso_theorique_complete.toLocaleString("fr-FR")} complets sur la période`} tone="violet" icon={<Gauge size={14} />} />
+        <KpiCard label="Comparés au stock" value={s.rapprochements_calcules.toLocaleString("fr-FR")} sub={`${s.ok} OK · ${s.a_justifier} à justifier · ${s.a_investiguer} à investiguer`} tone="green" icon={<Scale size={14} />} />
+        <KpiCard label="Sans verdict" value={sansVerdict.toLocaleString("fr-FR")} sub={`${s.donnees_incompletes} données incomplètes · ${s.rapprochement_cph_non_calcule} CPH non calculé`} tone="slate" icon={<HelpCircle size={14} />} />
+      </div>
+      <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", fontSize: 11.5, color: FT.textSub }}>
+        <span>Préparation :</span>
+        {items.map((i) => (
+          <button key={i.key} type="button" onClick={onPreparation} title={`${i.title} — ouvrir la préparation des données`}
+            style={{ display: "inline-flex", alignItems: "center", gap: 5, border: `1px solid ${FT.border}`, background: FT.cardAlt, borderRadius: 999, padding: "3px 9px", fontSize: 11.5, fontWeight: 700, color: FT.textMid, cursor: "pointer" }}>
+            <PrepIcon item={i} size={12} /> {i.short}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function ControleCphSheet() {
   const qc = useQueryClient();
   const [period, setPeriod] = useState(defaultPeriod);
@@ -1164,9 +1178,7 @@ export function ControleCphSheet() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(50);
   const [detailSite, setDetailSite] = useState<string | null>(null);
-  const [showImport, setShowImport] = useState(false);
-  const [showReferentiel, setShowReferentiel] = useState(false);
-  const [showAbaque, setShowAbaque] = useState(false);
+  const [modal, setModal] = useState<null | "import" | "referentiel" | "abaque" | "preparation" | "blocages" | "how">(null);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [detailedView, setDetailedView] = useState(false);
   const [exporting, setExporting] = useState<null | "controle" | "anomalies">(null);
@@ -1204,7 +1216,11 @@ export function ControleCphSheet() {
     }
   }
 
-  const openTarget = (t: "referentiel" | "abaque" | "observations") => (t === "referentiel" ? setShowReferentiel(true) : t === "abaque" ? setShowAbaque(true) : setShowImport(true));
+  const handlers: PrepHandlers = {
+    onAbaque: () => setModal("abaque"),
+    onReferentiel: () => setModal("referentiel"),
+    onObservations: () => setModal("import"),
+  };
 
   const data = q.data;
   const s = data?.synthesis;
@@ -1212,87 +1228,84 @@ export function ControleCphSheet() {
   const rows = data?.data ?? [];
   const sortedRuntimeSources = useMemo(() => data?.filters.runtime_sources ?? [], [data?.filters.runtime_sources]);
   const advancedCount = [filters.country, filters.zone, filters.runtime_source, filters.power_source, filters.cph_status].filter(Boolean).length;
-  const blocageLabel = (code: string) => s?.blocages?.find((b) => b.code === code)?.label ?? code;
-  const activeChips: Array<{ key: keyof typeof filters; label: string }> = [
-    ...(filters.statut ? [{ key: "statut" as const, label: `Verdict : ${STATUT_LABELS[filters.statut as CphReconciliationStatus] ?? filters.statut}` }] : []),
-    ...(filters.blocage ? [{ key: "blocage" as const, label: `Blocage : ${blocageLabel(filters.blocage)}` }] : []),
-  ];
-  const presetActive = presets.find((p) => p.start === period.start && p.end === period.end)?.label;
+  const presetActive = presets.find((p) => p.start === period.start && p.end === period.end)?.label ?? "";
+  const blocages = s?.blocages ?? [];
+  const sansVerdict = s ? s.donnees_incompletes + s.rapprochement_cph_non_calcule : undefined;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <Card>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 14, flexWrap: "wrap", alignItems: "flex-start" }}>
-          <div style={{ display: "flex", gap: 10, alignItems: "flex-start", maxWidth: 640 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 11, background: FT.blueL, display: "grid", placeItems: "center", color: FT.navy, flexShrink: 0 }}><Gauge size={17} aria-hidden /></div>
-            <div>
-              <h2 style={{ margin: 0, fontSize: 15.5, fontWeight: 800, color: FT.text }}>Contrôle CPH — consommation théorique et rapprochement</h2>
-              <p style={{ fontSize: 12.5, color: FT.textMid, margin: "4px 0 0" }}>
-                Pour chaque site avec GE : combien de gasoil le GE <strong>aurait dû</strong> consommer (heures de marche × CPH de sa courbe),
-                comparé à ce que montre <strong>le stock</strong>.
-              </p>
-              <div style={{ fontSize: 11, color: FT.textSub, marginTop: 3 }}>{meta ? `Règle ${meta.rule_version}` : "…"}</div>
-            </div>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
-            <div role="group" aria-label="Périodes rapides" style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
-              {presets.map((p) => (
-                <button key={p.label} type="button" aria-pressed={presetActive === p.label} onClick={() => choosePeriod(p.start, p.end)}
-                  style={{ ...btn, padding: "5px 10px", fontSize: 11.5, ...(presetActive === p.label ? { background: FT.navy, color: "#fff", borderColor: FT.navy } : {}) }}>
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 7, ...control, flexWrap: "wrap" }}>
-              <CalendarRange size={14} color={FT.textSub} aria-hidden />
-              <label htmlFor="cph-start" style={{ fontSize: 11.5, color: FT.textSub }}>Du</label>
-              <input id="cph-start" type="date" value={period.start} max={period.end} onChange={(e) => choosePeriod(e.target.value, period.end)} style={{ border: "none", background: "transparent", fontWeight: 700, color: FT.text }} />
-              <label htmlFor="cph-end" style={{ fontSize: 11.5, color: FT.textSub }}>au</label>
-              <input id="cph-end" type="date" value={period.end} min={period.start} onChange={(e) => choosePeriod(period.start, e.target.value)} style={{ border: "none", background: "transparent", fontWeight: 700, color: FT.text }} />
-              <span style={{ fontSize: 11.5, color: FT.textSub }}>({nbDays > 0 ? nbDays : 0} j)</span>
-            </div>
-          </div>
-        </div>
-        {periodError && <div role="alert" style={{ marginTop: 10, color: FT.red, fontSize: 12.5 }}>{periodError}</div>}
-        <HowItWorks />
-      </Card>
+      <CphKpis s={s} meta={meta} onPreparation={() => setModal("preparation")} handlers={handlers} />
 
-      <Card>
-        <PreparationPanel meta={meta} onAbaque={() => setShowAbaque(true)} onReferentiel={() => setShowReferentiel(true)} onObservations={() => setShowImport(true)} />
-      </Card>
-
-      {q.isError ? (
-        <Card><div role="alert" style={{ color: FT.red, fontSize: 13 }}>Calcul impossible : {apiError(q.error)}</div></Card>
-      ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 460px), 1fr))", gap: 16 }}>
-          <ResultPanel s={s} activeStatut={filters.statut} onStatut={(v) => setFilter("statut", v)} />
-          <BlocagesPanel s={s} active={filters.blocage} onSelect={(v) => setFilter("blocage", v)} onAction={openTarget} />
-        </div>
-      )}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <button type="button" onClick={() => setModal("blocages")} disabled={!s} style={pill}>
+          <HelpCircle size={14} color={FT.blue} aria-hidden /> Pourquoi des sites sans verdict ?{sansVerdict !== undefined ? ` (${sansVerdict.toLocaleString("fr-FR")})` : ""}
+        </button>
+        <button type="button" onClick={() => setModal("preparation")} disabled={!meta} style={pill}>
+          <ListChecks size={14} color={FT.blue} aria-hidden /> Préparation des données{meta ? ` (${prepItems(meta, handlers).filter((i) => i.ready).length}/5)` : ""}
+        </button>
+        <button type="button" onClick={() => setModal("how")} style={pill}>
+          <Info size={14} color={FT.blue} aria-hidden /> Comment c'est calculé ?
+        </button>
+      </div>
 
       <Card padded={false} style={{ padding: 20 }}>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
-          <h3 style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: FT.text, marginRight: 6 }}>4. Détail par site</h3>
-          <div style={{ display: "flex", alignItems: "center", gap: 7, ...control, minWidth: 200, flex: "0 1 260px" }}>
-            <Search size={14} color={FT.textSub} aria-hidden />
-            <input aria-label="Rechercher un site" value={siteInput} onChange={(e) => { setSiteInput(e.target.value); setPage(1); }} placeholder="Site ID ou nom…" style={{ border: "none", outline: "none", background: "transparent", flex: 1, fontSize: 12.5, minWidth: 0 }} />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 11, background: FT.blueL, display: "grid", placeItems: "center", color: FT.navy, flexShrink: 0 }}>
+              <Gauge size={17} aria-hidden />
+            </div>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 15.5, fontWeight: 800, color: FT.text }}>Contrôle CPH par site — {fmtDate(period.start)} → {fmtDate(period.end)}</h2>
+              <div style={{ fontSize: 12.5, color: FT.textSub, marginTop: 3 }}>
+                Conso théorique (heures de marche × CPH de la courbe du GE) comparée au stock.
+                {data?.pagination && ` ${data.pagination.total.toLocaleString("fr-FR")} site(s).`}
+              </div>
+            </div>
           </div>
-          <button type="button" aria-expanded={showMoreFilters || advancedCount > 0} aria-controls="cph-more-filters" onClick={() => setShowMoreFilters((v) => !v)} style={btn}>
-            <SlidersHorizontal size={13} aria-hidden /> Plus de filtres{advancedCount > 0 ? ` (${advancedCount})` : ""}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <select aria-label="Période" value={presetActive} onChange={(e) => { const p = presets.find((x) => x.label === e.target.value); if (p) choosePeriod(p.start, p.end); }} style={{ ...control, cursor: "pointer" }}>
+              {presets.map((p) => <option key={p.label} value={p.label}>{p.label}</option>)}
+              <option value="" disabled>Personnalisée</option>
+            </select>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, ...control }}>
+              <CalendarRange size={14} color={FT.textSub} aria-hidden />
+              <label htmlFor="cph-start" className="sr-only">Date de début</label>
+              <input id="cph-start" type="date" value={period.start} max={period.end} onChange={(e) => choosePeriod(e.target.value, period.end)} style={{ border: "none", background: "transparent", fontWeight: 700, color: FT.text }} />
+              <span aria-hidden style={{ color: FT.textSub }}>→</span>
+              <label htmlFor="cph-end" className="sr-only">Date de fin</label>
+              <input id="cph-end" type="date" value={period.end} min={period.start} onChange={(e) => choosePeriod(period.start, e.target.value)} style={{ border: "none", background: "transparent", fontWeight: 700, color: FT.text }} />
+            </div>
+          </div>
+        </div>
+        {periodError && <div role="alert" style={{ marginBottom: 10, color: FT.red, fontSize: 12.5 }}>{periodError}</div>}
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+          <VerdictButtons value={filters.statut ?? ""} onChange={(v) => setFilter("statut", v)} s={s} />
+          <select aria-label="Point bloquant" value={filters.blocage ?? ""} onChange={(e) => setFilter("blocage", e.target.value)} style={{ ...control, cursor: "pointer", maxWidth: 300 }}>
+            <option value="">Point bloquant : tous</option>
+            {blocages.map((b) => <option key={b.code} value={b.code}>{b.label} ({b.sites})</option>)}
+            {filters.blocage && !blocages.some((b) => b.code === filters.blocage) && <option value={filters.blocage}>{filters.blocage}</option>}
+          </select>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, ...control, minWidth: 200, flex: "0 1 240px" }}>
+            <Search size={14} color={FT.textSub} aria-hidden />
+            <input aria-label="Rechercher un site" value={siteInput} onChange={(e) => { setSiteInput(e.target.value); setPage(1); }} placeholder="Site ID ou nom..." style={{ border: "none", outline: "none", background: "transparent", flex: 1, fontSize: 12.5, minWidth: 0 }} />
+          </div>
+          <div style={{ flex: 1 }} />
+          <button type="button" aria-expanded={showMoreFilters || advancedCount > 0} aria-controls="cph-more-filters" onClick={() => setShowMoreFilters((v) => !v)} style={btn} title="Pays, zone, sources, calcul CPH">
+            <SlidersHorizontal size={13} aria-hidden /> Filtres{advancedCount > 0 ? ` (${advancedCount})` : ""}
           </button>
           <button type="button" aria-pressed={detailedView} onClick={() => setDetailedView((v) => !v)} style={{ ...btn, ...(detailedView ? { background: FT.navy, color: "#fff", borderColor: FT.navy } : {}) }}>
             <Columns3 size={13} aria-hidden /> {detailedView ? "Vue simple" : "Toutes les colonnes"}
           </button>
-          <div style={{ flex: 1 }} />
-          <button type="button" onClick={() => handleExport("controle")} disabled={!!exporting || !!periodError} style={{ ...btn, opacity: exporting ? 0.6 : 1 }}>
+          <button type="button" onClick={() => handleExport("controle")} disabled={!!exporting || !!periodError} style={{ ...btn, opacity: exporting ? 0.6 : 1 }} title="Export CSV du contrôle complet">
             <Download size={13} color={FT.blue} aria-hidden /> {exporting === "controle" ? "Export…" : "Contrôle complet"}
           </button>
-          <button type="button" onClick={() => handleExport("anomalies")} disabled={!!exporting || !!periodError} style={{ ...btn, color: FT.red, borderColor: FT.redL, opacity: exporting ? 0.6 : 1 }}>
+          <button type="button" onClick={() => handleExport("anomalies")} disabled={!!exporting || !!periodError} style={{ ...btn, color: FT.red, borderColor: FT.redL, opacity: exporting ? 0.6 : 1 }} title="Export CSV des anomalies">
             <Download size={13} aria-hidden /> {exporting === "anomalies" ? "Export…" : "Anomalies Fuel"}
           </button>
         </div>
         {(showMoreFilters || advancedCount > 0) && (
-          <div id="cph-more-filters" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10, padding: 10, borderRadius: 10, background: FT.cardAlt, border: `1px solid ${FT.border}` }}>
+          <div id="cph-more-filters" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12, padding: 10, borderRadius: 10, background: FT.cardAlt, border: `1px solid ${FT.border}` }}>
             <select aria-label="Pays" value={filters.country ?? ""} onChange={(e) => setFilter("country", e.target.value)} style={control}>
               <option value="">Pays : tous</option>
               {(data?.filters.countries ?? []).map((c) => <option key={c} value={c}>{c}</option>)}
@@ -1315,17 +1328,6 @@ export function ControleCphSheet() {
             </select>
           </div>
         )}
-        {activeChips.length > 0 && (
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
-            <span style={{ fontSize: 11.5, color: FT.textSub }}>Filtré sur :</span>
-            {activeChips.map((c) => (
-              <button key={c.key} type="button" onClick={() => setFilter(c.key, "")} aria-label={`Retirer le filtre ${c.label}`}
-                style={{ ...btn, padding: "3px 8px", fontSize: 11.5, background: FT.blueL, borderColor: `${FT.blue}55`, color: FT.navy }}>
-                {c.label} <X size={12} aria-hidden />
-              </button>
-            ))}
-          </div>
-        )}
         {exportError && <div role="alert" style={{ color: FT.red, fontSize: 12.5, marginBottom: 10 }}>Export impossible : {exportError}</div>}
 
         {q.isLoading ? (
@@ -1333,12 +1335,9 @@ export function ControleCphSheet() {
         ) : q.isError ? (
           <div role="alert" style={{ color: FT.red, fontSize: 13 }}>Calcul impossible : {apiError(q.error)}</div>
         ) : rows.length === 0 ? (
-          <EmptyState icon={<Gauge size={20} />} title="Aucun site" subtitle={activeChips.length || advancedCount || siteInput ? "Aucun site ne correspond à ces filtres." : "Aucun site avec GE sur ce périmètre, ou les données Snowflake ne sont pas encore synchronisées."} />
+          <EmptyState icon={<Gauge size={20} />} title="Aucun site" subtitle={filters.statut || filters.blocage || advancedCount || siteInput ? "Aucun site ne correspond à ces filtres." : "Aucun site avec GE sur ce périmètre, ou les données Snowflake ne sont pas encore synchronisées."} />
         ) : (
           <>
-            <div style={{ fontSize: 11.5, color: FT.textSub, marginBottom: 6 }}>
-              {data?.pagination.total.toLocaleString("fr-FR")} site(s) · « Détail » montre le calcul jour par jour.
-            </div>
             <div style={{ overflow: "auto", maxHeight: 620, borderRadius: 12, border: `1px solid ${FT.border}`, opacity: q.isFetching ? 0.6 : 1 }} aria-busy={q.isFetching}>
               {detailedView ? <LegacyTable rows={rows} onDetail={setDetailSite} /> : <SimpleTable rows={rows} onDetail={setDetailSite} />}
             </div>
@@ -1360,21 +1359,26 @@ export function ControleCphSheet() {
       </Card>
 
       {detailSite && <SiteDetailModal siteId={detailSite} start={period.start} end={period.end} onClose={() => setDetailSite(null)} />}
-      {showImport && (
+      {modal === "preparation" && meta && <PreparationModal meta={meta} handlers={handlers} onClose={() => setModal(null)} />}
+      {modal === "blocages" && s && (
+        <BlocagesModal s={s} active={filters.blocage} onSelect={(v) => setFilter("blocage", v)} onAction={(t) => setModal(t === "observations" ? "import" : t)} onClose={() => setModal(null)} />
+      )}
+      {modal === "how" && <HowItWorksModal onClose={() => setModal(null)} ruleVersion={meta?.rule_version} />}
+      {modal === "import" && (
         <ObservationImportModal
-          onClose={() => setShowImport(false)}
+          onClose={() => setModal(null)}
           onImported={() => qc.invalidateQueries({ queryKey: ["cph-period"] })}
-          onOpenAbaque={() => { setShowImport(false); setShowAbaque(true); }}
+          onOpenAbaque={() => setModal("abaque")}
         />
       )}
-      {showAbaque && (
+      {modal === "abaque" && (
         <AbaqueImportModal
-          onClose={() => setShowAbaque(false)}
+          onClose={() => setModal(null)}
           canValidate={meta?.can_validate ?? true}
-          onOpenReferentiel={() => { setShowAbaque(false); setShowReferentiel(true); }}
+          onOpenReferentiel={() => setModal("referentiel")}
         />
       )}
-      {showReferentiel && <ReferentielModal onClose={() => setShowReferentiel(false)} />}
+      {modal === "referentiel" && <ReferentielModal onClose={() => setModal(null)} />}
     </div>
   );
 }
