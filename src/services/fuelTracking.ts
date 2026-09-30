@@ -535,6 +535,8 @@ export type CphMeta = {
   mappings_total: number;
   mappings_validated: number;
   max_period_days: number;
+  observations_last_import?: { file_name: string; at: string; rows_imported: number; rows_rejected: number } | null;
+  can_validate?: boolean;
 };
 
 export type CphPeriodResponse = {

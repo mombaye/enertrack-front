@@ -21,6 +21,7 @@ import {
   validateCphMapping,
   type CphAbaqueImportResult,
   type CphFilters,
+  type CphMeta,
   type CphObservationImportResult,
   type CphReconciliation,
   type CphReconciliationStatus,
@@ -372,11 +373,75 @@ function SiteDetailModal({ siteId, start, end, onClose }: { siteId: string; star
   );
 }
 
+// ─── Données de référence : 3 étapes toujours visibles ──────────────────────
+
+function SetupStep({ n, title, status, tone, children }: { n: number; title: string; status: ReactNode; tone: string; children: ReactNode }) {
+  return (
+    <div style={{ flex: "1 1 250px", display: "flex", flexDirection: "column", gap: 6, border: `1px solid ${FT.border}`, borderLeft: `4px solid ${tone}`, borderRadius: 10, padding: "10px 12px", background: FT.card }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span aria-hidden style={{ width: 20, height: 20, borderRadius: 10, background: tone, color: "#fff", fontSize: 11, fontWeight: 800, display: "grid", placeItems: "center", flexShrink: 0 }}>{n}</span>
+        <h3 style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: FT.text }}>{title}</h3>
+      </div>
+      <div style={{ fontSize: 11.5, color: FT.textMid, flex: 1 }}>{status}</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{children}</div>
+    </div>
+  );
+}
+
+function SetupSteps({ meta, onAbaque, onReferentiel, onObservations }: { meta: CphMeta | undefined; onAbaque: () => void; onReferentiel: () => void; onObservations: () => void }) {
+  const primary: CSSProperties = { ...btn, background: FT.navy, color: "#fff", borderColor: FT.navy };
+  if (!meta) return <div style={{ marginTop: 12 }}><Skeleton h={92} /></div>;
+  const hasAbaque = meta.curves_total > 0;
+  const mappingsOk = meta.mappings_validated > 0;
+  const obs = meta.observations_last_import;
+  return (
+    <section aria-label="Données de référence du contrôle CPH" style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+      <SetupStep
+        n={1}
+        title="Abaque CPH (courbes PRP 50 Hz)"
+        tone={hasAbaque ? FT.green : FT.red}
+        status={hasAbaque
+          ? <>{meta.abaque_file ?? "Abaque"} · {meta.curves_usable}/{meta.curves_total} courbes utilisables{meta.abaque_imported_at ? ` · importé le ${new Date(meta.abaque_imported_at).toLocaleDateString("fr-FR")}` : ""}</>
+          : <strong style={{ color: FT.red }}>Non importé — aucun CPH calculable.</strong>}
+      >
+        <button type="button" onClick={onAbaque} style={hasAbaque ? btn : primary}><FileUp size={13} color={hasAbaque ? FT.blue : "#fff"} /> {hasAbaque ? "Mettre à jour l'abaque" : "Importer l'abaque CPH"}</button>
+      </SetupStep>
+      <SetupStep
+        n={2}
+        title="Plaques signalétiques GE → courbe"
+        tone={!hasAbaque ? FT.slate : mappingsOk ? (meta.mappings_validated < meta.mappings_total ? FT.orange : FT.green) : FT.red}
+        status={!hasAbaque ? "Disponible après l'import de l'abaque." : <><strong>{meta.mappings_validated}</strong>/{meta.mappings_total} libellés GE validés vers une courbe.</>}
+      >
+        <button type="button" onClick={onReferentiel} disabled={!hasAbaque} style={{ ...(hasAbaque && !mappingsOk ? primary : btn), opacity: hasAbaque ? 1 : 0.5, cursor: hasAbaque ? "pointer" : "not-allowed" }}>
+          <BookOpen size={13} color={hasAbaque && !mappingsOk ? "#fff" : FT.blue} /> Référentiel courbes
+        </button>
+      </SetupStep>
+      <SetupStep
+        n={3}
+        title="Observations stock (inventaires de cuve)"
+        tone={obs ? FT.green : FT.slate}
+        status={obs
+          ? <>{obs.file_name} · {obs.rows_imported} ligne(s){obs.rows_rejected ? `, ${obs.rows_rejected} rejetée(s)` : ""} · {new Date(obs.at).toLocaleDateString("fr-FR")}</>
+          : "Aucun fichier importé — nécessaire pour le rapprochement stock."}
+      >
+        <button type="button" onClick={onObservations} style={btn}><FileUp size={13} color={FT.blue} /> Importer observations</button>
+        <button type="button" onClick={downloadObservationTemplate} style={btn}><Download size={13} color={FT.blue} /> Modèle</button>
+      </SetupStep>
+    </section>
+  );
+}
+
 // ─── Import du fichier d'observation ─────────────────────────────────────────
 
-const OBSERVATION_COLUMNS = "country, site_id, site_name, observation_start, observation_end, opening_fuel_l, closing_fuel_l, fuel_deliveries_l, fuel_transfer_in_l, fuel_transfer_out_l, fuel_theft_l, fuel_drain_l, observation_status, comment, justificatif";
+const OBSERVATION_COLUMNS = ["country", "site_id", "site_name", "observation_start", "observation_end", "opening_fuel_l", "closing_fuel_l", "fuel_deliveries_l", "fuel_transfer_in_l", "fuel_transfer_out_l", "fuel_theft_l", "fuel_drain_l", "observation_status", "comment", "justificatif"];
 
-function ObservationImportModal({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
+function downloadObservationTemplate() {
+  downloadBlob(new Blob([`\ufeff${OBSERVATION_COLUMNS.join(";")}\r\n`], { type: "text/csv;charset=utf-8" }), "modele_observation_stock.csv");
+}
+
+const linkBtn: CSSProperties = { border: "none", background: "transparent", color: FT.blue, fontWeight: 800, textDecoration: "underline", cursor: "pointer", padding: 0, fontSize: "inherit" };
+
+function ObservationImportModal({ onClose, onImported, onOpenAbaque }: { onClose: () => void; onImported: () => void; onOpenAbaque: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<CphObservationImportResult | null>(null);
   const mut = useMutation({
@@ -384,18 +449,41 @@ function ObservationImportModal({ onClose, onImported }: { onClose: () => void; 
     onSuccess: (r) => { setResult(r); onImported(); },
   });
   const inputId = useId();
+  const looksLikeAbaque = !!file && /abaque/i.test(file.name);
+  const errorText = mut.isError ? apiError(mut.error) : null;
   return (
-    <Modal title="Importer un fichier d'observation stock" onClose={onClose} maxWidth={640}>
+    <Modal title="Importer les observations stock (inventaires de cuve)" onClose={onClose} maxWidth={680}>
       <p style={{ fontSize: 12.5, color: FT.textMid, marginTop: 0 }}>
-        Format standard (.xlsx ou .csv), colonnes : <code style={{ fontSize: 11.5 }}>{OBSERVATION_COLUMNS}</code>.
-        Une cellule vide reste vide (jamais 0) ; une valeur illisible rejette la ligne. Le fichier, l'utilisateur, la date et la version de règle sont conservés.
+        Relevés de cuve par site et par période (stock initial / final, livraisons, transferts, vols, vidanges) servant au rapprochement.
+        Une cellule vide reste vide (jamais 0) ; une valeur illisible rejette la ligne.
       </p>
-      <label htmlFor={inputId} style={{ fontSize: 12, fontWeight: 800 }}>Fichier</label>
-      <input id={inputId} type="file" accept=".xlsx,.csv" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setResult(null); }} style={{ display: "block", margin: "6px 0 12px" }} />
+      <div role="note" style={{ fontSize: 12, padding: "8px 11px", borderRadius: 8, background: FT.blueL, color: FT.navy, marginBottom: 12 }}>
+        Vous voulez charger l'abaque <code>ABAQUE_CPH_GE_PRP_50HZ.xlsx</code> (courbes CPH) ?{" "}
+        <button type="button" onClick={onOpenAbaque} style={linkBtn}>Utilisez « Importer l'abaque CPH »</button>.
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 5 }}>Colonnes attendues en 1<sup>re</sup> ligne (.xlsx ou .csv)</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+        {OBSERVATION_COLUMNS.map((c) => <code key={c} style={{ fontSize: 11, background: FT.slateL, border: `1px solid ${FT.border}`, borderRadius: 5, padding: "1px 5px" }}>{c}</code>)}
+      </div>
+      <button type="button" onClick={downloadObservationTemplate} style={{ ...btn, marginBottom: 14 }}><Download size={13} color={FT.blue} /> Télécharger le modèle (.csv)</button>
+      <label htmlFor={inputId} style={{ display: "block", fontSize: 12, fontWeight: 800 }}>Fichier d'observation</label>
+      <input id={inputId} type="file" accept=".xlsx,.csv" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setResult(null); mut.reset(); }} style={{ display: "block", margin: "6px 0 10px" }} />
+      {looksLikeAbaque && (
+        <div role="alert" style={{ fontSize: 12.5, color: FT.orange, background: FT.orangeL, padding: "8px 11px", borderRadius: 8, marginBottom: 10 }}>
+          « {file?.name} » ressemble à l'abaque CPH, pas à un fichier d'observation.{" "}
+          <button type="button" onClick={onOpenAbaque} style={{ ...linkBtn, color: FT.orange }}>Importer ce fichier comme abaque</button>
+        </div>
+      )}
       <button type="button" disabled={!file || mut.isPending} onClick={() => file && mut.mutate(file)} style={{ ...btn, background: FT.navy, color: "#fff", opacity: !file || mut.isPending ? 0.5 : 1 }}>
-        <FileUp size={13} /> {mut.isPending ? "Import…" : "Importer"}
+        <FileUp size={13} /> {mut.isPending ? "Import…" : "Importer les observations"}
       </button>
-      {mut.isError && <div role="alert" style={{ color: FT.red, fontSize: 12.5, marginTop: 10 }}>{apiError(mut.error)}</div>}
+      {errorText && (
+        <div role="alert" style={{ color: FT.red, fontSize: 12.5, marginTop: 10 }}>
+          {errorText}
+          {/abaque/i.test(errorText) && <> <button type="button" onClick={onOpenAbaque} style={{ ...linkBtn, color: FT.red }}>Ouvrir l'import de l'abaque</button></>}
+          {/modèle|Colonnes manquantes/i.test(errorText) && <> <button type="button" onClick={downloadObservationTemplate} style={{ ...linkBtn, color: FT.red }}>Télécharger le modèle</button></>}
+        </div>
+      )}
       {result && (
         <div role="status" style={{ marginTop: 12, fontSize: 12.5 }}>
           <strong>{result.rows_imported}</strong> ligne(s) importée(s), <strong>{result.rows_rejected}</strong> rejetée(s) sur {result.rows_total} — règle {result.rule_version}.
@@ -485,6 +573,30 @@ function AbaqueImport({ onImported }: { onImported: () => void }) {
         </div>
       )}
     </div>
+  );
+}
+
+function AbaqueImportModal({ onClose, canValidate, onOpenReferentiel }: { onClose: () => void; canValidate: boolean; onOpenReferentiel: () => void }) {
+  const qc = useQueryClient();
+  const [done, setDone] = useState(false);
+  const refresh = () => { setDone(true); qc.invalidateQueries({ queryKey: ["cph-referentiel"] }); qc.invalidateQueries({ queryKey: ["cph-period"] }); };
+  return (
+    <Modal title="Importer l'abaque CPH (courbes PRP 50 Hz)" onClose={onClose} maxWidth={640}>
+      <p style={{ fontSize: 12.5, color: FT.textMid, marginTop: 0 }}>
+        Fichier de référence des courbes de consommation des GE (<code>ABAQUE_CPH_GE_PRP_50HZ.xlsx</code>). Après l'import, chaque
+        libellé GE doit être <strong>validé</strong> vers sa courbe (plaque signalétique) dans le référentiel avant tout calcul de CPH.
+      </p>
+      {canValidate ? <AbaqueImport onImported={refresh} /> : (
+        <div role="note" style={{ fontSize: 12.5, color: FT.orange, background: FT.orangeL, padding: "8px 11px", borderRadius: 8 }}>
+          Import réservé aux rôles admin et manager : demandez-leur de charger l'abaque.
+        </div>
+      )}
+      {done && (
+        <button type="button" onClick={onOpenReferentiel} style={{ ...btn, marginTop: 12 }}>
+          <BookOpen size={13} color={FT.blue} /> Étape suivante : valider les plaques signalétiques
+        </button>
+      )}
+    </Modal>
   );
 }
 
@@ -595,6 +707,7 @@ export function ControleCphSheet() {
   const [detailSite, setDetailSite] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [showReferentiel, setShowReferentiel] = useState(false);
+  const [showAbaque, setShowAbaque] = useState(false);
   const [exporting, setExporting] = useState<null | "controle" | "anomalies">(null);
   const [exportError, setExportError] = useState<string | null>(null);
 
@@ -669,10 +782,14 @@ export function ControleCphSheet() {
               <input id="cph-end" type="date" value={period.end} min={period.start} onChange={(e) => { setPeriod((p) => ({ ...p, end: e.target.value })); setPage(1); }} style={{ border: "none", background: "transparent", fontWeight: 700, color: FT.text }} />
               <span style={{ fontSize: 11.5, color: FT.textSub }}>({nbDays > 0 ? nbDays : 0} j)</span>
             </div>
-            <button type="button" onClick={() => setShowReferentiel(true)} style={btn}><BookOpen size={13} color={FT.blue} /> Référentiel courbes</button>
-            <button type="button" onClick={() => setShowImport(true)} style={btn}><FileUp size={13} color={FT.blue} /> Importer observations</button>
           </div>
         </div>
+        <SetupSteps
+          meta={meta}
+          onAbaque={() => setShowAbaque(true)}
+          onReferentiel={() => setShowReferentiel(true)}
+          onObservations={() => setShowImport(true)}
+        />
         {periodError && <div role="alert" style={{ marginTop: 10, color: FT.red, fontSize: 12.5 }}>{periodError}</div>}
         {meta && !meta.enoc_deliveries_connected && (
           <div role="note" style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 12px", borderRadius: 8, background: FT.orangeL, color: FT.orange, fontSize: 12.5 }}>
@@ -685,10 +802,10 @@ export function ControleCphSheet() {
             <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
             <span>
               <strong>Abaque CPH non importé</strong> — aucune courbe PRP 50 Hz en base, aucun CPH ne peut être calculé.{" "}
-              <button type="button" onClick={() => setShowReferentiel(true)} style={{ border: "none", background: "transparent", color: FT.red, fontWeight: 800, textDecoration: "underline", cursor: "pointer", padding: 0 }}>
-                Importer l'abaque
+              <button type="button" onClick={() => setShowAbaque(true)} style={{ border: "none", background: "transparent", color: FT.red, fontWeight: 800, textDecoration: "underline", cursor: "pointer", padding: 0 }}>
+                Importer l'abaque CPH
               </button>{" "}
-              (Référentiel courbes, rôles admin / manager).
+              (étape 1 ci-dessus, rôles admin / manager).
             </span>
           </div>
         ) : meta && meta.mappings_validated === 0 ? (
@@ -891,7 +1008,20 @@ export function ControleCphSheet() {
       </Card>
 
       {detailSite && <SiteDetailModal siteId={detailSite} start={period.start} end={period.end} onClose={() => setDetailSite(null)} />}
-      {showImport && <ObservationImportModal onClose={() => setShowImport(false)} onImported={() => qc.invalidateQueries({ queryKey: ["cph-period"] })} />}
+      {showImport && (
+        <ObservationImportModal
+          onClose={() => setShowImport(false)}
+          onImported={() => qc.invalidateQueries({ queryKey: ["cph-period"] })}
+          onOpenAbaque={() => { setShowImport(false); setShowAbaque(true); }}
+        />
+      )}
+      {showAbaque && (
+        <AbaqueImportModal
+          onClose={() => setShowAbaque(false)}
+          canValidate={meta?.can_validate ?? true}
+          onOpenReferentiel={() => { setShowAbaque(false); setShowReferentiel(true); }}
+        />
+      )}
       {showReferentiel && <ReferentielModal onClose={() => setShowReferentiel(false)} />}
     </div>
   );
