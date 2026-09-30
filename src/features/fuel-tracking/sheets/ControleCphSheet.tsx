@@ -14,10 +14,12 @@ import {
   getCphPeriod,
   getCphReferentiel,
   getCphSiteDetail,
+  importCphAbaque,
   importCphObservations,
   revokeCphCurve,
   unvalidateCphMapping,
   validateCphMapping,
+  type CphAbaqueImportResult,
   type CphFilters,
   type CphObservationImportResult,
   type CphReconciliation,
@@ -454,6 +456,38 @@ function MappingRow({ m, canValidate, onChanged }: { m: CphReferentielMapping; c
   );
 }
 
+function AbaqueImport({ onImported }: { onImported: () => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [result, setResult] = useState<CphAbaqueImportResult | null>(null);
+  const inputId = useId();
+  const mut = useMutation({
+    mutationFn: (f: File) => importCphAbaque(f),
+    onSuccess: (r) => { setResult(r); onImported(); },
+  });
+  return (
+    <div style={{ border: `1px solid ${FT.border}`, borderRadius: 9, padding: 12 }}>
+      <label htmlFor={inputId} style={{ fontSize: 12.5, fontWeight: 800 }}>Importer / mettre à jour l'abaque (ABAQUE_CPH_GE_PRP_50HZ.xlsx)</label>
+      <div style={{ fontSize: 11.5, color: FT.textSub, margin: "3px 0 8px" }}>
+        Feuilles « Abaque CPH » et « Mappage inventaire ». Les validations métier déjà saisies sont conservées ; un nouvel import ne valide rien automatiquement.
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <input id={inputId} type="file" accept=".xlsx,.xlsm" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setResult(null); }} />
+        <button type="button" disabled={!file || mut.isPending} onClick={() => file && mut.mutate(file)} style={{ ...btn, background: FT.navy, color: "#fff", opacity: !file || mut.isPending ? 0.5 : 1 }}>
+          <FileUp size={13} /> {mut.isPending ? "Import…" : "Importer l'abaque"}
+        </button>
+      </div>
+      {mut.isError && <div role="alert" style={{ color: FT.red, fontSize: 12, marginTop: 8 }}>{apiError(mut.error)}</div>}
+      {result && (
+        <div role="status" style={{ fontSize: 12, marginTop: 8 }}>
+          {result.curves} courbes ({Object.entries(result.status_counts).map(([k, v]) => `${k} : ${v}`).join(", ")}) et {result.mappings} mappages importés depuis {result.file_name}.
+          {result.warnings.length > 0 && <div style={{ color: FT.orange }}>Avertissements : {result.warnings.join(" · ")}</div>}
+          {result.validations_reset.length > 0 && <div style={{ color: FT.orange }}>Validations annulées (courbe plus candidate) : {result.validations_reset.join(", ")}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ReferentielModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["cph-referentiel"], queryFn: getCphReferentiel });
@@ -475,8 +509,14 @@ function ReferentielModal({ onClose }: { onClose: () => void }) {
           <div style={{ fontSize: 12.5, color: FT.textMid }}>
             Un CPH n'est calculé pour un site que si son libellé GE (Base GE, avec son kVA) est <strong>validé</strong> vers une courbe utilisable :
             VALIDÉ_CONSTRUCTEUR, ou courbe historique / archivée / distributeur <strong>activée explicitement</strong>.
-            {!data.can_validate && " Validation réservée aux rôles admin et manager."}
+            {!data.can_validate && " Import de l'abaque et validation réservés aux rôles admin et manager."}
           </div>
+          {data.can_validate && <AbaqueImport onImported={refresh} />}
+          {data.curves.length === 0 && (
+            <div role="note" style={{ color: FT.red, fontSize: 12.5 }}>
+              Aucune courbe en base : l'abaque n'a pas encore été importé{data.can_validate ? " — utilisez l'import ci-dessus." : " — demandez à un admin ou manager de l'importer."}
+            </div>
+          )}
           <div style={{ display: "flex", alignItems: "center", gap: 7, ...control, maxWidth: 320 }}>
             <Search size={14} color={FT.textSub} />
             <input aria-label="Filtrer le référentiel" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Libellé, modèle ou ID courbe…" style={{ border: "none", outline: "none", background: "transparent", flex: 1, fontSize: 12.5 }} />
@@ -640,10 +680,36 @@ export function ControleCphSheet() {
             <span><strong>LIVRAISONS_ENOC_A_CONTROLER</strong> — les livraisons ENOC réelles ne sont pas encore raccordées : aucun rapprochement ne peut conclure OK / À justifier / À investiguer tant que ce raccordement n'est pas fait.</span>
           </div>
         )}
-        {meta && meta.mappings_validated === 0 && (
+        {meta && meta.curves_total === 0 ? (
           <div role="note" style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 12px", borderRadius: 8, background: FT.redL, color: FT.red, fontSize: 12.5 }}>
             <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
-            <span>Aucun mappage GE → courbe n'est encore validé ({meta.mappings_total} à traiter, {meta.curves_usable}/{meta.curves_total} courbes utilisables) : aucun CPH ne peut être calculé. Ouvrez « Référentiel courbes » pour valider les plaques signalétiques.</span>
+            <span>
+              <strong>Abaque CPH non importé</strong> — aucune courbe PRP 50 Hz en base, aucun CPH ne peut être calculé.{" "}
+              <button type="button" onClick={() => setShowReferentiel(true)} style={{ border: "none", background: "transparent", color: FT.red, fontWeight: 800, textDecoration: "underline", cursor: "pointer", padding: 0 }}>
+                Importer l'abaque
+              </button>{" "}
+              (Référentiel courbes, rôles admin / manager).
+            </span>
+          </div>
+        ) : meta && meta.mappings_validated === 0 ? (
+          <div role="note" style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 12px", borderRadius: 8, background: FT.redL, color: FT.red, fontSize: 12.5 }}>
+            <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>
+              Abaque importé ({meta.abaque_file ?? "—"}, {meta.curves_usable}/{meta.curves_total} courbes utilisables) mais aucun des {meta.mappings_total} mappages GE → courbe n'est validé : aucun CPH ne peut être calculé.{" "}
+              <button type="button" onClick={() => setShowReferentiel(true)} style={{ border: "none", background: "transparent", color: FT.red, fontWeight: 800, textDecoration: "underline", cursor: "pointer", padding: 0 }}>
+                Valider les plaques signalétiques
+              </button>
+            </span>
+          </div>
+        ) : null}
+        {meta && !meta.facts_last_date && (
+          <div role="note" style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 12px", borderRadius: 8, background: FT.slateL, color: FT.textMid, fontSize: 12.5 }}>
+            <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>
+              <strong>Aucune donnée Snowflake synchronisée</strong> pour le calcul CPH
+              {meta.facts_last_sync ? ` (dernière synchronisation : ${meta.facts_last_sync.status}${meta.facts_last_sync.error ? ` — ${meta.facts_last_sync.error}` : ""})` : " (la synchronisation n'a encore jamais tourné)"}.
+              Elle tourne automatiquement toutes les heures sur J-3 → aujourd'hui ; l'historique se charge avec <code>sync_fuel_daily_facts --start … --end …</code>.
+            </span>
           </div>
         )}
       </Card>

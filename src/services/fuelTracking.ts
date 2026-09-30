@@ -524,6 +524,8 @@ export type CphSynthesis = {
 };
 
 export type CphMeta = {
+  abaque_file: string | null;
+  abaque_imported_at: string | null;
   rule_version: string;
   enoc_deliveries_connected: boolean;
   facts_last_date: string | null;
@@ -635,6 +637,24 @@ export type CphReferentiel = {
   curves: CphReferentielCurve[];
   mappings: CphReferentielMapping[];
 };
+
+export type CphAbaqueImportResult = {
+  file_name: string;
+  curves: number;
+  status_counts: Record<string, number>;
+  mappings: number;
+  warnings: string[];
+  validations_reset: string[];
+};
+
+export async function importCphAbaque(file: File) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const { data } = await api.post<CphAbaqueImportResult>(`${BASE}/cph/abaque/import/`, fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+}
 
 export async function getCphReferentiel() {
   const { data } = await api.get<CphReferentiel>(`${BASE}/cph/referentiel/`);
