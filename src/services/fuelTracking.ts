@@ -482,7 +482,11 @@ export type CphSiteRow = {
   rapprochement_statut: CphReconciliationStatus;
   rapprochement: CphReconciliation | null;
   observations: number;
+  /** Premier point bloquant (null = site entièrement rapproché). */
+  blocage?: CphBlocage | null;
 };
+
+export type CphBlocage = { code: string; etape: "cph" | "rapprochement"; label: string; detail: string | null };
 
 export type CphDay = {
   date: string;
@@ -521,6 +525,7 @@ export type CphSynthesis = {
   a_investiguer: number;
   donnees_incompletes: number;
   rapprochement_cph_non_calcule: number;
+  blocages?: Array<{ code: string; etape: "cph" | "rapprochement"; label: string; sites: number }>;
 };
 
 export type CphMeta = {
@@ -560,6 +565,7 @@ export type CphFilters = {
   power_source?: string;
   statut?: string;
   cph_status?: string;
+  blocage?: string;
 };
 
 export async function getCphPeriod(params: CphFilters & { page?: number; limit?: number }) {

@@ -6,7 +6,7 @@
 
 import { useId, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, BookOpen, CalendarRange, Download, FileUp, Gauge, Info, Search } from "lucide-react";
+import { AlertTriangle, BookOpen, CalendarRange, CheckCircle2, ChevronRight, Columns3, Download, FileUp, Gauge, Info, Search, SlidersHorizontal, X, XCircle } from "lucide-react";
 
 import {
   approveCphCurve,
@@ -26,7 +26,9 @@ import {
   type CphReconciliation,
   type CphReconciliationStatus,
   type CphReferentielMapping,
+  type CphSiteDetail,
   type CphSiteRow,
+  type CphSynthesis,
 } from "@/services/fuelTracking";
 import { Card, EmptyState, KpiCard, Modal, Pager, Skeleton } from "../ui";
 import { FT } from "../theme";
@@ -248,6 +250,61 @@ function ReconciliationBlock({ r }: { r: CphReconciliation }) {
   );
 }
 
+// ─── Chaîne de calcul d'un site (résumé lisible en tête du détail) ──────────
+
+function CalculationChain({ d }: { d: CphSiteDetail }) {
+  const rec = d.rapprochement;
+  const steps: Array<{ label: string; value: string | null; sub: string; reason: string | null }> = [
+    {
+      label: "Heures de marche", value: nf(d.runtime_total_h, 1, " h"),
+      sub: `${d.runtime_days}/${d.days} j${d.runtime_source_main ? ` · ${RUNTIME_SOURCE_LABELS[d.runtime_source_main]}` : ""}`,
+      reason: "Aucune source fiable",
+    },
+    {
+      label: "Puissance GE", value: nf(d.p_ge_moy_kw, 2, " kW"),
+      sub: d.power_source_main ? POWER_SOURCE_LABELS[d.power_source_main] : "—", reason: "Non disponible",
+    },
+    { label: "Courbe", value: d.curve ? d.curve.curve_id : null, sub: d.curve ? d.curve.label : d.ge_label ?? "GE inconnu", reason: d.curve_reason ? `Pas de courbe : ${d.curve_reason}` : "Pas de courbe" },
+    { label: "CPH", value: nf(d.cph_moy_l_h, 2, " L/h"), sub: `${d.cph_days}/${d.days} j calculés`, reason: "Non calculé" },
+    {
+      label: "Conso théorique", value: nf(d.conso_theorique_l, 0, " L"),
+      sub: d.conso_partielle_l !== null ? `partiel ${nf(d.conso_partielle_l, 0, " L")} (${d.conso_days}/${d.days} j)` : CPH_STATUS_LABELS[d.cph_status] ?? "",
+      reason: d.conso_partielle_l !== null ? "Période incomplète" : "Non calculée",
+    },
+    { label: "Conso stock", value: nf(rec?.conso_stock_l, 0, " L"), sub: rec ? `relevé ${fmtDate(rec.observation_start)} → ${fmtDate(rec.observation_end)}` : "aucun relevé", reason: rec ? "Non calculée — voir le verdict" : "Aucun relevé" },
+    { label: "Écart", value: nf(rec?.ecart_l, 0, " L"), sub: rec?.ecart_pct !== null && rec?.ecart_pct !== undefined ? nf(rec.ecart_pct, 1, " %") ?? "" : STATUT_LABELS[d.rapprochement_statut], reason: "Pas de comparaison" },
+  ];
+  return (
+    <section aria-label="Chaîne de calcul du site">
+      <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "stretch" }}>
+        {steps.map((st, i) => {
+          const ok = st.value !== null;
+          return (
+            <li key={st.label} style={{ display: "flex", alignItems: "center", gap: 6, flex: "1 1 130px", minWidth: 0 }}>
+              <div style={{ flex: 1, minWidth: 0, border: `1px solid ${FT.border}`, borderTop: `3px solid ${ok ? FT.green : FT.slate}`, borderRadius: 9, padding: "7px 9px", background: ok ? FT.card : FT.slateL, height: "100%" }}>
+                <div style={{ fontSize: 10.5, fontWeight: 800, color: FT.textSub, textTransform: "uppercase" }}>{i + 1}. {st.label}</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: ok ? FT.text : FT.textSub }}>{st.value ?? "—"}</div>
+                <div style={{ fontSize: 10.5, color: ok ? FT.textMid : FT.orange, overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }} title={ok ? st.sub : st.reason ?? undefined}>
+                  {ok ? st.sub : st.reason}
+                </div>
+              </div>
+              {i < steps.length - 1 && <ChevronRight size={14} color={FT.textSub} aria-hidden style={{ flexShrink: 0 }} />}
+            </li>
+          );
+        })}
+      </ol>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap", fontSize: 12.5 }}>
+        <strong>Verdict :</strong> <StatutBadge statut={d.rapprochement_statut} />
+        {d.blocage && (
+          <span style={{ color: d.blocage.etape === "cph" ? FT.violet : FT.orange }}>
+            Point bloquant : <strong>{d.blocage.label}</strong>{d.blocage.detail ? ` — ${d.blocage.detail}` : ""}
+          </span>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function SiteDetailModal({ siteId, start, end, onClose }: { siteId: string; start: string; end: string; onClose: () => void }) {
   const q = useQuery({ queryKey: ["cph-site", siteId, start, end], queryFn: () => getCphSiteDetail(siteId, { start, end }) });
   const d = q.data;
@@ -257,6 +314,7 @@ function SiteDetailModal({ siteId, start, end, onClose }: { siteId: string; star
       {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 13 }}>Impossible de charger le détail : {apiError(q.error)}</div>}
       {d && (
         <div style={{ display: "flex", flexDirection: "column", gap: 14, fontSize: 12.5 }}>
+          <CalculationChain d={d} />
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
             <div><strong>Site</strong> : {d.site_name ?? "—"} · {d.zone ?? "zone —"} · {d.country ?? "—"}</div>
             <div><strong>Type</strong> : {d.kind ?? "inconnu"}{d.kind_source ? ` (${d.kind_source})` : ""} · réseau : {d.grid_supply ?? "inconnu"}</div>
@@ -373,61 +431,277 @@ function SiteDetailModal({ siteId, start, end, onClose }: { siteId: string; star
   );
 }
 
-// ─── Données de référence : 3 étapes toujours visibles ──────────────────────
+// ─── Préparation des données : ce qui doit être prêt avant de lire les résultats ─
 
-function SetupStep({ n, title, status, tone, children }: { n: number; title: string; status: ReactNode; tone: string; children: ReactNode }) {
+type PrepItem = { key: string; title: string; ready: boolean; partial?: boolean; pending?: boolean; status: ReactNode; actions?: ReactNode };
+
+function PrepTile({ item }: { item: PrepItem }) {
+  const tone = item.ready ? (item.partial ? FT.orange : FT.green) : item.pending ? FT.orange : FT.red;
+  const Icon = item.ready && !item.partial ? CheckCircle2 : item.ready || item.pending ? AlertTriangle : XCircle;
   return (
-    <div style={{ flex: "1 1 250px", display: "flex", flexDirection: "column", gap: 6, border: `1px solid ${FT.border}`, borderLeft: `4px solid ${tone}`, borderRadius: 10, padding: "10px 12px", background: FT.card }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span aria-hidden style={{ width: 20, height: 20, borderRadius: 10, background: tone, color: "#fff", fontSize: 11, fontWeight: 800, display: "grid", placeItems: "center", flexShrink: 0 }}>{n}</span>
-        <h3 style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: FT.text }}>{title}</h3>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, border: `1px solid ${FT.border}`, borderTop: `3px solid ${tone}`, borderRadius: 10, padding: "10px 12px", background: FT.card, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+        <Icon size={15} color={tone} aria-hidden style={{ flexShrink: 0 }} />
+        <h4 style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: FT.text }}>{item.title}</h4>
+        <span className="sr-only">{item.ready ? (item.partial ? " — partiel" : " — prêt") : item.pending ? " — en attente" : " — à faire"}</span>
       </div>
-      <div style={{ fontSize: 11.5, color: FT.textMid, flex: 1 }}>{status}</div>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{children}</div>
+      <div style={{ fontSize: 11.5, color: FT.textMid, flex: 1, overflowWrap: "anywhere" }}>{item.status}</div>
+      {item.actions && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{item.actions}</div>}
     </div>
   );
 }
 
-function SetupSteps({ meta, onAbaque, onReferentiel, onObservations }: { meta: CphMeta | undefined; onAbaque: () => void; onReferentiel: () => void; onObservations: () => void }) {
+function PreparationPanel({ meta, onAbaque, onReferentiel, onObservations }: { meta: CphMeta | undefined; onAbaque: () => void; onReferentiel: () => void; onObservations: () => void }) {
   const primary: CSSProperties = { ...btn, background: FT.navy, color: "#fff", borderColor: FT.navy };
-  if (!meta) return <div style={{ marginTop: 12 }}><Skeleton h={92} /></div>;
+  if (!meta) return <Skeleton h={150} />;
   const hasAbaque = meta.curves_total > 0;
-  const mappingsOk = meta.mappings_validated > 0;
   const obs = meta.observations_last_import;
+  const sync = meta.facts_last_sync;
+  const cphItems: PrepItem[] = [
+    {
+      key: "snowflake", title: "Données Snowflake (heures de marche, puissance)", ready: !!meta.facts_last_date,
+      status: meta.facts_last_date
+        ? <>Disponibles jusqu'au <strong>{fmtDate(meta.facts_last_date)}</strong> · mise à jour automatique toutes les heures.</>
+        : <>Aucune donnée synchronisée{sync ? ` (dernier essai : ${sync.status}${sync.error ? ` — ${sync.error}` : ""})` : " — la synchronisation n'a encore jamais tourné"}.</>,
+    },
+    {
+      key: "abaque", title: "Abaque CPH (courbes des GE)", ready: hasAbaque,
+      status: hasAbaque
+        ? <>{meta.curves_usable}/{meta.curves_total} courbes utilisables · {meta.abaque_file ?? "abaque"}{meta.abaque_imported_at ? `, importé le ${new Date(meta.abaque_imported_at).toLocaleDateString("fr-FR")}` : ""}</>
+        : "Non importé : aucun CPH ne peut être calculé.",
+      actions: <button type="button" onClick={onAbaque} style={hasAbaque ? btn : primary}><FileUp size={13} aria-hidden /> {hasAbaque ? "Mettre à jour" : "Importer l'abaque CPH"}</button>,
+    },
+    {
+      key: "plaques", title: "Plaques signalétiques (GE → courbe)", ready: meta.mappings_validated > 0, partial: meta.mappings_validated < meta.mappings_total,
+      status: !hasAbaque ? "Disponible après l'import de l'abaque."
+        : <><strong>{meta.mappings_validated}</strong>/{meta.mappings_total} types de GE validés. Un site dont le GE n'est pas validé n'a pas de CPH.</>,
+      actions: <button type="button" onClick={onReferentiel} disabled={!hasAbaque} style={{ ...(hasAbaque && meta.mappings_validated === 0 ? primary : btn), opacity: hasAbaque ? 1 : 0.5, cursor: hasAbaque ? "pointer" : "not-allowed" }}><BookOpen size={13} aria-hidden /> Valider les plaques</button>,
+    },
+  ];
+  const recItems: PrepItem[] = [
+    {
+      key: "obs", title: "Relevés de stock (fichier d'observation)", ready: !!obs,
+      status: obs
+        ? <>{obs.file_name} · {obs.rows_imported} ligne(s){obs.rows_rejected ? `, ${obs.rows_rejected} rejetée(s)` : ""} · {new Date(obs.at).toLocaleDateString("fr-FR")}</>
+        : "Aucun relevé importé : pas de comparaison avec le stock.",
+      actions: <>
+        <button type="button" onClick={onObservations} style={obs ? btn : primary}><FileUp size={13} aria-hidden /> Importer les relevés</button>
+        <button type="button" onClick={downloadObservationTemplate} style={btn}><Download size={13} aria-hidden /> Modèle</button>
+      </>,
+    },
+    {
+      key: "enoc", title: "Livraisons ENOC", ready: meta.enoc_deliveries_connected, pending: true,
+      status: meta.enoc_deliveries_connected
+        ? "Raccordées : les rapprochements peuvent conclure."
+        : <>Non raccordées : les rapprochements restent <strong>« à contrôler »</strong> (aucun verdict OK / À justifier / À investiguer).</>,
+    },
+  ];
+  const all = [...cphItems, ...recItems];
+  const readyCount = all.filter((i) => i.ready).length;
+  const group = (title: string, items: PrepItem[]) => (
+    <div style={{ flex: `${items.length} 1 ${items.length * 230}px`, minWidth: 0 }}>
+      <div style={{ fontSize: 10.5, fontWeight: 800, color: FT.textSub, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 6 }}>{title}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 8 }}>
+        {items.map((i) => <PrepTile key={i.key} item={i} />)}
+      </div>
+    </div>
+  );
   return (
-    <section aria-label="Données de référence du contrôle CPH" style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-      <SetupStep
-        n={1}
-        title="Abaque CPH (courbes PRP 50 Hz)"
-        tone={hasAbaque ? FT.green : FT.red}
-        status={hasAbaque
-          ? <>{meta.abaque_file ?? "Abaque"} · {meta.curves_usable}/{meta.curves_total} courbes utilisables{meta.abaque_imported_at ? ` · importé le ${new Date(meta.abaque_imported_at).toLocaleDateString("fr-FR")}` : ""}</>
-          : <strong style={{ color: FT.red }}>Non importé — aucun CPH calculable.</strong>}
-      >
-        <button type="button" onClick={onAbaque} style={hasAbaque ? btn : primary}><FileUp size={13} color={hasAbaque ? FT.blue : "#fff"} /> {hasAbaque ? "Mettre à jour l'abaque" : "Importer l'abaque CPH"}</button>
-      </SetupStep>
-      <SetupStep
-        n={2}
-        title="Plaques signalétiques GE → courbe"
-        tone={!hasAbaque ? FT.slate : mappingsOk ? (meta.mappings_validated < meta.mappings_total ? FT.orange : FT.green) : FT.red}
-        status={!hasAbaque ? "Disponible après l'import de l'abaque." : <><strong>{meta.mappings_validated}</strong>/{meta.mappings_total} libellés GE validés vers une courbe.</>}
-      >
-        <button type="button" onClick={onReferentiel} disabled={!hasAbaque} style={{ ...(hasAbaque && !mappingsOk ? primary : btn), opacity: hasAbaque ? 1 : 0.5, cursor: hasAbaque ? "pointer" : "not-allowed" }}>
-          <BookOpen size={13} color={hasAbaque && !mappingsOk ? "#fff" : FT.blue} /> Référentiel courbes
-        </button>
-      </SetupStep>
-      <SetupStep
-        n={3}
-        title="Observations stock (inventaires de cuve)"
-        tone={obs ? FT.green : FT.slate}
-        status={obs
-          ? <>{obs.file_name} · {obs.rows_imported} ligne(s){obs.rows_rejected ? `, ${obs.rows_rejected} rejetée(s)` : ""} · {new Date(obs.at).toLocaleDateString("fr-FR")}</>
-          : "Aucun fichier importé — nécessaire pour le rapprochement stock."}
-      >
-        <button type="button" onClick={onObservations} style={btn}><FileUp size={13} color={FT.blue} /> Importer observations</button>
-        <button type="button" onClick={downloadObservationTemplate} style={btn}><Download size={13} color={FT.blue} /> Modèle</button>
-      </SetupStep>
+    <section aria-labelledby="cph-prep-title">
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+        <h3 id="cph-prep-title" style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: FT.text }}>1. Préparation des données</h3>
+        <Tag tone={readyCount === all.length ? FT.green : FT.orange}>{readyCount}/{all.length} prêtes</Tag>
+      </div>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+        {group("Pour calculer la consommation théorique", cphItems)}
+        {group("Pour comparer avec le stock", recItems)}
+      </div>
     </section>
+  );
+}
+
+// ─── Comment le contrôle est calculé ─────────────────────────────────────────
+
+function FBox({ title, sub, tone }: { title: string; sub: string; tone: string }) {
+  return (
+    <div style={{ border: `1px solid ${tone}40`, background: `${tone}0d`, borderRadius: 9, padding: "7px 10px", minWidth: 150, flex: "1 1 150px" }}>
+      <div style={{ fontSize: 12.5, fontWeight: 800, color: tone }}>{title}</div>
+      <div style={{ fontSize: 11, color: FT.textMid }}>{sub}</div>
+    </div>
+  );
+}
+
+const op: CSSProperties = { fontSize: 18, fontWeight: 800, color: FT.textSub, padding: "0 2px" };
+
+function HowItWorks() {
+  return (
+    <details style={{ marginTop: 12, border: `1px solid ${FT.border}`, borderRadius: 10, padding: "8px 12px", background: FT.cardAlt }}>
+      <summary style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 800, color: FT.navy }}>Comment le contrôle est-il calculé ?</summary>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <FBox title="Heures de marche GE" sub="DSE en priorité, sinon sources de secours contrôlées" tone={FT.blue} />
+          <span style={op} aria-label="multiplié par">×</span>
+          <FBox title="CPH (L/h)" sub="courbe du GE (abaque) à la charge observée" tone={FT.violet} />
+          <span style={op} aria-label="égal">=</span>
+          <FBox title="Conso théorique (L)" sub="ce que le GE aurait dû consommer, jour par jour" tone={FT.cyan} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <FBox title="Conso stock (L)" sub="stock initial + livraisons ± mouvements − stock final" tone={FT.slate} />
+          <span style={op} aria-label="moins">−</span>
+          <FBox title="Conso théorique (L)" sub="calculée ci-dessus" tone={FT.cyan} />
+          <span style={op} aria-label="égal">=</span>
+          <FBox title="Écart (L)" sub="positif : plus de gasoil sorti du stock que prévu" tone={FT.orange} />
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", fontSize: 11.5, color: FT.textMid }}>
+          Verdict : <StatutBadge statut="OK" /> écart ≤ max(100 L ; 10 %) · <StatutBadge statut="A_JUSTIFIER" /> ≤ max(200 L ; 20 %) · <StatutBadge statut="A_INVESTIGUER" /> au-delà.
+        </div>
+        <div style={{ fontSize: 11.5, color: FT.textMid }}>
+          Une donnée absente reste « — » : elle n'est jamais remplacée par 0 ni estimée. La consommation théorique n'est affichée que si <strong>tous</strong> les jours de la période sont calculés.
+        </div>
+      </div>
+    </details>
+  );
+}
+
+// ─── Résultat : entonnoir, verdicts et blocages ─────────────────────────────
+
+function FunnelStep({ label, value, total, tone, hint }: { label: string; value: number | undefined; total: number; tone: string; hint: string }) {
+  const pct = total > 0 && value !== undefined ? Math.round((100 * value) / total) : 0;
+  return (
+    <div style={{ flex: "1 1 100px", minWidth: 0 }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: FT.textMid, minHeight: 28 }}>{label}</div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+        <span style={{ fontSize: 22, fontWeight: 800, color: FT.text }}>{value === undefined ? "—" : value.toLocaleString("fr-FR")}</span>
+        {value !== undefined && total > 0 && <span style={{ fontSize: 11.5, color: FT.textSub }}>{pct} %</span>}
+      </div>
+      <div role="img" aria-label={`${pct} % des sites avec GE`} style={{ height: 6, borderRadius: 3, background: FT.slateL, overflow: "hidden", margin: "4px 0" }}>
+        <div style={{ width: `${pct}%`, height: "100%", background: tone }} />
+      </div>
+      <div style={{ fontSize: 10.5, color: FT.textSub }}>{hint}</div>
+    </div>
+  );
+}
+
+const VERDICTS: Array<{ statut: CphReconciliationStatus; key: keyof CphSynthesis; hint: string }> = [
+  { statut: "OK", key: "ok", hint: "écart dans la tolérance" },
+  { statut: "A_JUSTIFIER", key: "a_justifier", hint: "écart modéré à expliquer" },
+  { statut: "A_INVESTIGUER", key: "a_investiguer", hint: "écart important" },
+  { statut: "DONNEES_INCOMPLETES", key: "donnees_incompletes", hint: "relevé ou livraisons manquants" },
+  { statut: "CPH_NON_CALCULE", key: "rapprochement_cph_non_calcule", hint: "relevé présent, CPH manquant" },
+];
+
+function ResultPanel({ s, activeStatut, onStatut }: { s: CphSynthesis | undefined; activeStatut?: string; onStatut: (statut: string) => void }) {
+  const total = s?.sites ?? 0;
+  return (
+    <Card>
+      <h3 style={{ margin: "0 0 12px", fontSize: 13.5, fontWeight: 800, color: FT.text }}>2. Résultat sur la période</h3>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
+        <FunnelStep label="Sites avec GE" value={s?.sites} total={total} tone={FT.blue} hint="périmètre contrôlé" />
+        <ChevronRight size={14} color={FT.textSub} aria-hidden style={{ marginTop: 34, flexShrink: 0 }} />
+        <FunnelStep label="CPH calculé" value={s?.cph_calcules} total={total} tone={FT.violet} hint="au moins un jour" />
+        <ChevronRight size={14} color={FT.textSub} aria-hidden style={{ marginTop: 34, flexShrink: 0 }} />
+        <FunnelStep label="Conso théorique complète" value={s?.conso_theorique_complete} total={total} tone={FT.cyan} hint="tous les jours calculés" />
+        <ChevronRight size={14} color={FT.textSub} aria-hidden style={{ marginTop: 34, flexShrink: 0 }} />
+        <FunnelStep label="Comparés au stock" value={s?.rapprochements_calcules} total={total} tone={FT.green} hint="verdict rendu" />
+      </div>
+      <div style={{ fontSize: 11, fontWeight: 800, color: FT.textSub, textTransform: "uppercase", letterSpacing: ".05em", margin: "16px 0 6px" }}>
+        Verdict du rapprochement — cliquez pour filtrer le tableau
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 8 }}>
+        {VERDICTS.map((v) => {
+          const color = STATUT_COLORS[v.statut];
+          const active = activeStatut === v.statut;
+          const n = s ? (s[v.key] as number) : undefined;
+          return (
+            <button
+              key={v.statut}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onStatut(active ? "" : v.statut)}
+              style={{ textAlign: "left", cursor: "pointer", border: `1px solid ${active ? color : FT.border}`, outline: active ? `2px solid ${color}` : "none", background: active ? `${color}12` : FT.card, borderRadius: 10, padding: "8px 10px" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span aria-hidden style={{ width: 8, height: 8, borderRadius: 4, background: color }} />
+                <span style={{ fontSize: 11.5, fontWeight: 800, color: FT.text }}>{STATUT_LABELS[v.statut]}</span>
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 800, color }}>{n === undefined ? "—" : n.toLocaleString("fr-FR")}</div>
+              <div style={{ fontSize: 10.5, color: FT.textSub }}>{v.hint}</div>
+            </button>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+const BLOCAGE_ACTIONS: Record<string, { label: string; target: "referentiel" | "abaque" | "observations" }> = {
+  MAPPAGE_NON_VALIDE: { label: "Valider les plaques", target: "referentiel" },
+  COURBE_NON_ACTIVEE: { label: "Activer les courbes", target: "referentiel" },
+  MAPPAGE_AMBIGU: { label: "Choisir la courbe", target: "referentiel" },
+  GE_HORS_ABAQUE: { label: "Compléter l'abaque", target: "abaque" },
+  OBSERVATION_ABSENTE: { label: "Importer les relevés", target: "observations" },
+  OBSERVATION_INCOMPLETE: { label: "Corriger les relevés", target: "observations" },
+};
+
+function BlocagesPanel({ s, active, onSelect, onAction }: {
+  s: CphSynthesis | undefined; active?: string; onSelect: (code: string) => void; onAction: (target: "referentiel" | "abaque" | "observations") => void;
+}) {
+  const list = s?.blocages ?? [];
+  const max = Math.max(1, ...list.map((b) => b.sites));
+  const section = (etape: "cph" | "rapprochement", title: string) => {
+    const items = list.filter((b) => b.etape === etape);
+    if (items.length === 0) return null;
+    return (
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: FT.textSub, textTransform: "uppercase", letterSpacing: ".05em", margin: "8px 0 6px" }}>{title}</div>
+        <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+          {items.map((b) => {
+            const isActive = active === b.code;
+            const action = BLOCAGE_ACTIONS[b.code];
+            return (
+              <li key={b.code} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  aria-pressed={isActive}
+                  onClick={() => onSelect(isActive ? "" : b.code)}
+                  title="Filtrer le tableau sur ces sites"
+                  style={{ flex: "1 1 220px", minWidth: 0, textAlign: "left", cursor: "pointer", border: `1px solid ${isActive ? FT.blue : FT.border}`, background: isActive ? FT.blueL : FT.card, borderRadius: 8, padding: "6px 9px" }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12, fontWeight: 700, color: FT.text }}>
+                    <span>{b.label}</span>
+                    <span style={{ fontWeight: 800 }}>{b.sites.toLocaleString("fr-FR")} site{b.sites > 1 ? "s" : ""}</span>
+                  </div>
+                  <div aria-hidden style={{ height: 5, borderRadius: 3, background: FT.slateL, marginTop: 4, overflow: "hidden" }}>
+                    <div style={{ width: `${(100 * b.sites) / max}%`, height: "100%", background: etape === "cph" ? FT.violet : FT.orange }} />
+                  </div>
+                </button>
+                {action && (
+                  <button type="button" onClick={() => onAction(action.target)} style={{ ...btn, padding: "5px 9px", fontSize: 11.5 }}>
+                    {action.label} <ChevronRight size={12} aria-hidden />
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  };
+  return (
+    <Card>
+      <h3 style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: FT.text }}>3. Pourquoi des sites ne sont pas contrôlés ?</h3>
+      <div style={{ fontSize: 11.5, color: FT.textMid, marginTop: 3 }}>Premier point bloquant de chaque site, dans l'ordre du calcul. Cliquez pour voir les sites concernés.</div>
+      {!s ? <Skeleton h={140} /> : list.length === 0 ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 12.5, color: FT.green }}>
+          <CheckCircle2 size={16} aria-hidden /> {s.sites > 0 ? "Aucun blocage : tous les sites ont un verdict." : "Aucun site sur ce périmètre."}
+        </div>
+      ) : (
+        <>
+          {section("cph", "Calcul de la consommation théorique")}
+          {section("rapprochement", "Comparaison avec le stock")}
+        </>
+      )}
+    </Card>
   );
 }
 
@@ -697,6 +971,191 @@ function ReferentielModal({ onClose }: { onClose: () => void }) {
 
 // ─── Onglet ──────────────────────────────────────────────────────────────────
 
+// ─── Tableaux ────────────────────────────────────────────────────────────────
+
+function SimpleTable({ rows, onDetail }: { rows: CphSiteRow[]; onDetail: (siteId: string) => void }) {
+  return (
+    <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1080 }}>
+      <caption className="sr-only">Contrôle CPH par site : résultat, consommation théorique et comparaison au stock</caption>
+      <thead>
+        <tr>
+          <th scope="col" style={{ ...th, textAlign: "left" }}>Site</th>
+          <th scope="col" style={{ ...th, textAlign: "left" }}>Résultat</th>
+          <th scope="col" style={th}>Heures GE<HelpTip label="heures de marche" text={HELP.runtime} /></th>
+          <th scope="col" style={th}>CPH (L/h)<HelpTip label="CPH" text={HELP.cph} /></th>
+          <th scope="col" style={th}>Conso théorique (L)<HelpTip label="consommation théorique" text={HELP.conso} /></th>
+          <th scope="col" style={th}>Conso stock (L)<HelpTip label="consommation stock" text={HELP.consoStock} /></th>
+          <th scope="col" style={th}>Écart<HelpTip label="écart" text={HELP.ecart} /></th>
+          <th scope="col" style={th}><span className="sr-only">Détail</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, i) => {
+          const rec = r.rapprochement;
+          return (
+            <tr key={r.site_id} style={{ background: i % 2 === 0 ? "#fff" : FT.cardAlt }}>
+              <td style={{ ...td, textAlign: "left" }}>
+                <div style={{ fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace" }}>{r.site_id}</div>
+                <div style={{ fontSize: 11, color: FT.textSub }}>{r.site_name ?? "—"} · {r.kind === "INDOOR" ? "Indoor" : r.kind === "OUTDOOR" ? "Outdoor" : "type ?"} · {r.ge_label ?? "GE inconnu"}</div>
+              </td>
+              <td style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 240, maxWidth: 340 }}>
+                <StatutBadge statut={r.rapprochement_statut} />
+                {r.blocage && (
+                  <div style={{ fontSize: 11.5, color: r.blocage.etape === "cph" ? FT.violet : FT.orange, marginTop: 3, fontWeight: 700 }} title={r.blocage.detail ?? undefined}>
+                    {r.blocage.label}
+                  </div>
+                )}
+              </td>
+              <td style={td}>
+                <Num value={r.runtime_total_h} digits={1} reason="Aucune source d'heures de marche fiable sur la période." />
+                <div style={{ fontSize: 11, color: FT.textSub }}>{r.runtime_days}/{r.days} j{r.runtime_source_main ? ` · ${RUNTIME_SOURCE_LABELS[r.runtime_source_main]}` : ""}</div>
+              </td>
+              <td style={td}>
+                <Num value={r.cph_moy_l_h} digits={2} reason={r.curve ? "Aucun jour avec heures de marche et puissance GE." : r.curve_reason} />
+                <div style={{ fontSize: 11, color: FT.textSub }}>{r.curve ? r.curve.curve_id : "pas de courbe"}</div>
+              </td>
+              <td style={td}>
+                {r.conso_theorique_l !== null ? <Num value={r.conso_theorique_l} digits={0} /> : r.conso_partielle_l !== null ? (
+                  <span title="Somme partielle : certains jours ne sont pas calculés">
+                    <span style={{ color: FT.textSub }}>—</span>
+                    <div style={{ fontSize: 11, color: FT.orange }}>partiel {nf(r.conso_partielle_l, 0)} L ({r.conso_days}/{r.days} j)</div>
+                  </span>
+                ) : <Num value={null} reason="Aucun jour calculé." />}
+              </td>
+              <td style={td}><Num value={rec?.conso_stock_l} digits={0} reason={rec ? "Non calculée : voir le résultat." : "Aucun relevé de stock sur la période."} /></td>
+              <td style={td}>
+                <Num value={rec?.ecart_l} digits={0} suffix=" L" reason="Pas de comparaison possible (voir le résultat)." />
+                {rec?.ecart_pct !== null && rec?.ecart_pct !== undefined && <div style={{ fontSize: 11, color: FT.textSub }}>{nf(rec.ecart_pct, 1, " %")}</div>}
+              </td>
+              <td style={td}>
+                <button type="button" onClick={() => onDetail(r.site_id)} aria-label={`Voir le détail de ${r.site_id}`} style={{ ...btn, padding: "5px 9px", fontSize: 11.5 }}>
+                  Détail <ChevronRight size={12} aria-hidden />
+                </button>
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+function LegacyTable({ rows, onDetail }: { rows: CphSiteRow[]; onDetail: (siteId: string) => void }) {
+  const setDetailSite = onDetail;
+  return (
+    <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 2050 }}>
+      <thead>
+        <tr>
+          <th scope="col" style={{ ...th, textAlign: "left" }}>Site</th>
+          <th scope="col" style={th}>Dates</th>
+          <th scope="col" style={th}>Runtime (h)<HelpTip label="runtime" text={HELP.runtime} /></th>
+          <th scope="col" style={th}>Source runtime<HelpTip label="disponibilité" text={HELP.disponibilite} /></th>
+          <th scope="col" style={th}>Puissance (kW)<HelpTip label="puissance" text={HELP.puissance} /></th>
+          <th scope="col" style={th}>Courbe<HelpTip label="courbe" text={HELP.courbe} /></th>
+          <th scope="col" style={th}>CPH (L/h)<HelpTip label="CPH" text={HELP.cph} /></th>
+          <th scope="col" style={th}>Conso théorique (L)<HelpTip label="consommation théorique" text={HELP.conso} /></th>
+          <th scope="col" style={th}>Stock initial (L)<HelpTip label="stocks" text={HELP.stock} /></th>
+          <th scope="col" style={th}>Livraisons (L)<HelpTip label="livraisons" text={HELP.livraisons} /></th>
+          <th scope="col" style={th}>Rajouts / retraits / vols / vidanges (L)</th>
+          <th scope="col" style={th}>Stock final (L)</th>
+          <th scope="col" style={th}>Conso stock (L)<HelpTip label="consommation stock" text={HELP.consoStock} /></th>
+          <th scope="col" style={th}>Écart (L / %)<HelpTip label="écart" text={HELP.ecart} /></th>
+          <th scope="col" style={th}>Statut<HelpTip label="statut" text={HELP.statut} /></th>
+          <th scope="col" style={{ ...th, textAlign: "left" }}>Motifs</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r: CphSiteRow, i) => {
+          const rec = r.rapprochement;
+          const motifs = [r.data_issue, ...(r.curve ? [] : [r.curve_reason]), ...r.motifs, ...(rec?.motifs ?? []), ...(!rec ? ["Aucune observation de stock sur la période"] : [])].filter(Boolean) as string[];
+          const moves = rec ? [rec.rajouts_l, rec.retraits_l, rec.vols_l, rec.vidanges_l].map((v) => nf(v, 0) ?? "—").join(" / ") : null;
+          return (
+            <tr key={r.site_id} style={{ background: i % 2 === 0 ? "#fff" : FT.cardAlt }}>
+              <td style={{ ...td, textAlign: "left" }}>
+                <button type="button" onClick={() => setDetailSite(r.site_id)} aria-label={`Détail jour par jour de ${r.site_id}`} style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", color: FT.blue, fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace", textDecoration: "underline" }}>
+                  {r.site_id}
+                </button>
+                <div style={{ fontSize: 11, color: FT.textSub }}>{r.site_name ?? "—"} · {r.kind ?? "type ?"} · {r.zone ?? "zone ?"}</div>
+              </td>
+              <td style={td}>{fmtDate(r.start)} → {fmtDate(r.end)}<div style={{ fontSize: 11, color: FT.textSub }}>{r.days} j</div></td>
+              <td style={td}>
+                <Num value={r.runtime_total_h} digits={1} reason="Aucune source de runtime ne passe les contrôles sur la période." />
+                <div style={{ fontSize: 11, color: FT.textSub }}>{r.runtime_days}/{r.days} j</div>
+              </td>
+              <td style={td} title={Object.entries(r.sources).map(([k, v]) => `${RUNTIME_SOURCE_LABELS[k]} : ${v.availability_pct} %${v.rejection ? ` — ${v.rejection}` : ""}`).join("\n")}>
+                {r.runtime_source_main ? RUNTIME_SOURCE_LABELS[r.runtime_source_main] : "—"}
+                <div style={{ fontSize: 11, color: FT.textSub }}>
+                  {(["DSE", "REDRESSEUR", "DAY_DG_ON", "COMPTEUR_TERRAIN"] as const).map((k) => `${k === "COMPTEUR_TERRAIN" ? "Cpt" : k === "DAY_DG_ON" ? "DGOn" : k === "REDRESSEUR" ? "Red" : "DSE"} ${r.sources[k]?.availability_pct ?? 0}%`).join(" · ")}
+                </div>
+              </td>
+              <td style={td}>
+                <Num value={r.p_ge_moy_kw} digits={2} reason="Aucun jour avec puissance GE qualifiée et CPH calculé." />
+                <div style={{ fontSize: 11, color: FT.textSub }}>{r.power_source_main ? POWER_SOURCE_LABELS[r.power_source_main] : "—"}</div>
+              </td>
+              <td style={td} title={r.curve ? `${r.curve.label} · a=${r.curve.a} b=${r.curve.b} c=${r.curve.c}` : r.curve_reason ?? undefined}>
+                {r.curve ? <Tag tone={FT.green}>{r.curve.curve_id}</Tag> : <Tag tone={FT.orange}>Aucune</Tag>}
+                <div style={{ fontSize: 11, color: FT.textSub }}>{r.ge_label ?? "GE inconnu"}</div>
+              </td>
+              <td style={td}>
+                <Num value={r.cph_moy_l_h} digits={2} reason="Aucun jour avec runtime, puissance et courbe validée." />
+                {r.extrapolated_days > 0 && <div><Tag tone={FT.orange}>{r.extrapolated_days} j &lt; 50 %</Tag></div>}
+              </td>
+              <td style={td}>
+                {r.conso_theorique_l !== null ? (
+                  <Num value={r.conso_theorique_l} digits={1} />
+                ) : r.conso_partielle_l !== null ? (
+                  <span title="Somme partielle : certains jours n'ont pas de consommation calculée">
+                    <span style={{ color: FT.textSub }}>—</span>
+                    <div style={{ fontSize: 11, color: FT.orange }}>partiel {nf(r.conso_partielle_l, 1)} L ({r.conso_days}/{r.days} j)</div>
+                  </span>
+                ) : (
+                  <Num value={null} reason="Aucun jour calculé." />
+                )}
+                <div style={{ fontSize: 11, color: FT.textSub }}>{CPH_STATUS_LABELS[r.cph_status]}</div>
+              </td>
+              <td style={td}><Num value={rec?.stock_initial_l} digits={0} reason={rec ? "Absent du fichier d'observation." : "Aucune observation."} /></td>
+              <td style={td}>
+                <Num value={rec?.livraisons_l} digits={0} reason={rec ? "Absent du fichier d'observation." : "Aucune observation."} />
+                {rec?.livraisons_statut === "LIVRAISONS_ENOC_A_CONTROLER" && <div><Tag tone={FT.orange}>à contrôler</Tag></div>}
+              </td>
+              <td style={td}>{moves ?? <Num value={null} reason="Aucune observation." />}</td>
+              <td style={td}><Num value={rec?.stock_final_l} digits={0} reason={rec ? "Absent du fichier d'observation." : "Aucune observation."} /></td>
+              <td style={td}><Num value={rec?.conso_stock_l} digits={0} reason="Rapprochement non effectué (voir motifs)." /></td>
+              <td style={td}>
+                <Num value={rec?.ecart_l} digits={0} reason="Rapprochement non effectué (voir motifs)." />
+                <div style={{ fontSize: 11 }}><Num value={rec?.ecart_pct} digits={1} suffix=" %" /></div>
+              </td>
+              <td style={td}><StatutBadge statut={r.rapprochement_statut} /></td>
+              <td style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 280, maxWidth: 420, fontSize: 11.5, color: FT.textMid }}>
+                {motifs.length === 0 ? "—" : motifs.slice(0, 3).join(" · ")}
+                {motifs.length > 3 && (
+                  <button type="button" onClick={() => setDetailSite(r.site_id)} style={{ border: "none", background: "transparent", color: FT.blue, cursor: "pointer", fontSize: 11, fontWeight: 800, padding: 0, marginLeft: 4 }}>
+                    +{motifs.length - 3}
+                  </button>
+                )}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+// ─── Écran principal ─────────────────────────────────────────────────────────
+
+function periodPresets() {
+  const y = new Date();
+  y.setDate(y.getDate() - 1);
+  const back = (n: number) => { const d = new Date(y); d.setDate(d.getDate() - n); return isoDate(d); };
+  return [
+    { label: "Mois en cours", start: isoDate(new Date(y.getFullYear(), y.getMonth(), 1)), end: isoDate(y) },
+    { label: "Mois précédent", start: isoDate(new Date(y.getFullYear(), y.getMonth() - 1, 1)), end: isoDate(new Date(y.getFullYear(), y.getMonth(), 0)) },
+    { label: "7 derniers jours", start: back(6), end: isoDate(y) },
+    { label: "30 derniers jours", start: back(29), end: isoDate(y) },
+  ];
+}
+
 export function ControleCphSheet() {
   const qc = useQueryClient();
   const [period, setPeriod] = useState(defaultPeriod);
@@ -708,12 +1167,15 @@ export function ControleCphSheet() {
   const [showImport, setShowImport] = useState(false);
   const [showReferentiel, setShowReferentiel] = useState(false);
   const [showAbaque, setShowAbaque] = useState(false);
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
+  const [detailedView, setDetailedView] = useState(false);
   const [exporting, setExporting] = useState<null | "controle" | "anomalies">(null);
   const [exportError, setExportError] = useState<string | null>(null);
 
   const nbDays = daysBetween(period.start, period.end);
   const periodError = !period.start || !period.end ? "Dates requises." : nbDays < 1 ? "La date de fin précède la date de début." : nbDays > 92 ? "Période limitée à 92 jours." : null;
   const params: CphFilters = { ...period, ...filters, site: siteInput.trim() || undefined };
+  const presets = useMemo(periodPresets, []);
 
   const q = useQuery({
     queryKey: ["cph-period", params, page, limit],
@@ -727,6 +1189,7 @@ export function ControleCphSheet() {
     setFilters((f) => ({ ...f, [key]: value || undefined }));
     setPage(1);
   };
+  const choosePeriod = (start: string, end: string) => { setPeriod({ start, end }); setPage(1); };
 
   async function handleExport(kind: "controle" | "anomalies") {
     setExporting(kind);
@@ -741,147 +1204,128 @@ export function ControleCphSheet() {
     }
   }
 
+  const openTarget = (t: "referentiel" | "abaque" | "observations") => (t === "referentiel" ? setShowReferentiel(true) : t === "abaque" ? setShowAbaque(true) : setShowImport(true));
+
   const data = q.data;
   const s = data?.synthesis;
   const meta = data?.meta;
   const rows = data?.data ?? [];
   const sortedRuntimeSources = useMemo(() => data?.filters.runtime_sources ?? [], [data?.filters.runtime_sources]);
-
-  const kpi = (label: string, value: number | undefined, tone: Parameters<typeof KpiCard>[0]["tone"], sub?: string, statut?: string) => (
-    <button
-      type="button"
-      onClick={() => statut !== undefined && setFilter("statut", filters.statut === statut ? "" : statut)}
-      disabled={statut === undefined}
-      aria-pressed={statut !== undefined ? filters.statut === statut : undefined}
-      style={{ border: "none", padding: 0, background: "transparent", textAlign: "left", cursor: statut !== undefined ? "pointer" : "default", outline: filters.statut && filters.statut === statut ? `2px solid ${FT.blue}` : "none", borderRadius: FT.radius }}
-    >
-      <KpiCard label={label} value={value === undefined ? "—" : value.toLocaleString("fr-FR")} tone={tone} sub={sub} />
-    </button>
-  );
+  const advancedCount = [filters.country, filters.zone, filters.runtime_source, filters.power_source, filters.cph_status].filter(Boolean).length;
+  const blocageLabel = (code: string) => s?.blocages?.find((b) => b.code === code)?.label ?? code;
+  const activeChips: Array<{ key: keyof typeof filters; label: string }> = [
+    ...(filters.statut ? [{ key: "statut" as const, label: `Verdict : ${STATUT_LABELS[filters.statut as CphReconciliationStatus] ?? filters.statut}` }] : []),
+    ...(filters.blocage ? [{ key: "blocage" as const, label: `Blocage : ${blocageLabel(filters.blocage)}` }] : []),
+  ];
+  const presetActive = presets.find((p) => p.start === period.start && p.end === period.end)?.label;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <Card>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 14, flexWrap: "wrap", alignItems: "flex-start" }}>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <div style={{ width: 38, height: 38, borderRadius: 11, background: FT.blueL, display: "grid", placeItems: "center", color: FT.navy }}><Gauge size={17} /></div>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start", maxWidth: 640 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 11, background: FT.blueL, display: "grid", placeItems: "center", color: FT.navy, flexShrink: 0 }}><Gauge size={17} aria-hidden /></div>
             <div>
               <h2 style={{ margin: 0, fontSize: 15.5, fontWeight: 800, color: FT.text }}>Contrôle CPH — consommation théorique et rapprochement</h2>
-              <div style={{ fontSize: 12, color: FT.textSub, marginTop: 3 }}>
-                Calcul site/jour sur les dates exactes choisies · abaque PRP 50 Hz · {meta ? `règle ${meta.rule_version}` : "…"}
-                {meta?.facts_last_date && ` · faits Snowflake jusqu'au ${fmtDate(meta.facts_last_date)}`}
-              </div>
+              <p style={{ fontSize: 12.5, color: FT.textMid, margin: "4px 0 0" }}>
+                Pour chaque site avec GE : combien de gasoil le GE <strong>aurait dû</strong> consommer (heures de marche × CPH de sa courbe),
+                comparé à ce que montre <strong>le stock</strong>.
+              </p>
+              <div style={{ fontSize: 11, color: FT.textSub, marginTop: 3 }}>{meta ? `Règle ${meta.rule_version}` : "…"}</div>
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 7, ...control }}>
-              <CalendarRange size={14} color={FT.textSub} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
+            <div role="group" aria-label="Périodes rapides" style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              {presets.map((p) => (
+                <button key={p.label} type="button" aria-pressed={presetActive === p.label} onClick={() => choosePeriod(p.start, p.end)}
+                  style={{ ...btn, padding: "5px 10px", fontSize: 11.5, ...(presetActive === p.label ? { background: FT.navy, color: "#fff", borderColor: FT.navy } : {}) }}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, ...control, flexWrap: "wrap" }}>
+              <CalendarRange size={14} color={FT.textSub} aria-hidden />
               <label htmlFor="cph-start" style={{ fontSize: 11.5, color: FT.textSub }}>Du</label>
-              <input id="cph-start" type="date" value={period.start} max={period.end} onChange={(e) => { setPeriod((p) => ({ ...p, start: e.target.value })); setPage(1); }} style={{ border: "none", background: "transparent", fontWeight: 700, color: FT.text }} />
+              <input id="cph-start" type="date" value={period.start} max={period.end} onChange={(e) => choosePeriod(e.target.value, period.end)} style={{ border: "none", background: "transparent", fontWeight: 700, color: FT.text }} />
               <label htmlFor="cph-end" style={{ fontSize: 11.5, color: FT.textSub }}>au</label>
-              <input id="cph-end" type="date" value={period.end} min={period.start} onChange={(e) => { setPeriod((p) => ({ ...p, end: e.target.value })); setPage(1); }} style={{ border: "none", background: "transparent", fontWeight: 700, color: FT.text }} />
+              <input id="cph-end" type="date" value={period.end} min={period.start} onChange={(e) => choosePeriod(period.start, e.target.value)} style={{ border: "none", background: "transparent", fontWeight: 700, color: FT.text }} />
               <span style={{ fontSize: 11.5, color: FT.textSub }}>({nbDays > 0 ? nbDays : 0} j)</span>
             </div>
           </div>
         </div>
-        <SetupSteps
-          meta={meta}
-          onAbaque={() => setShowAbaque(true)}
-          onReferentiel={() => setShowReferentiel(true)}
-          onObservations={() => setShowImport(true)}
-        />
         {periodError && <div role="alert" style={{ marginTop: 10, color: FT.red, fontSize: 12.5 }}>{periodError}</div>}
-        {meta && !meta.enoc_deliveries_connected && (
-          <div role="note" style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 12px", borderRadius: 8, background: FT.orangeL, color: FT.orange, fontSize: 12.5 }}>
-            <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
-            <span><strong>LIVRAISONS_ENOC_A_CONTROLER</strong> — les livraisons ENOC réelles ne sont pas encore raccordées : aucun rapprochement ne peut conclure OK / À justifier / À investiguer tant que ce raccordement n'est pas fait.</span>
-          </div>
-        )}
-        {meta && meta.curves_total === 0 ? (
-          <div role="note" style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 12px", borderRadius: 8, background: FT.redL, color: FT.red, fontSize: 12.5 }}>
-            <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
-            <span>
-              <strong>Abaque CPH non importé</strong> — aucune courbe PRP 50 Hz en base, aucun CPH ne peut être calculé.{" "}
-              <button type="button" onClick={() => setShowAbaque(true)} style={{ border: "none", background: "transparent", color: FT.red, fontWeight: 800, textDecoration: "underline", cursor: "pointer", padding: 0 }}>
-                Importer l'abaque CPH
-              </button>{" "}
-              (étape 1 ci-dessus, rôles admin / manager).
-            </span>
-          </div>
-        ) : meta && meta.mappings_validated === 0 ? (
-          <div role="note" style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 12px", borderRadius: 8, background: FT.redL, color: FT.red, fontSize: 12.5 }}>
-            <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
-            <span>
-              Abaque importé ({meta.abaque_file ?? "—"}, {meta.curves_usable}/{meta.curves_total} courbes utilisables) mais aucun des {meta.mappings_total} mappages GE → courbe n'est validé : aucun CPH ne peut être calculé.{" "}
-              <button type="button" onClick={() => setShowReferentiel(true)} style={{ border: "none", background: "transparent", color: FT.red, fontWeight: 800, textDecoration: "underline", cursor: "pointer", padding: 0 }}>
-                Valider les plaques signalétiques
-              </button>
-            </span>
-          </div>
-        ) : null}
-        {meta && !meta.facts_last_date && (
-          <div role="note" style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 12px", borderRadius: 8, background: FT.slateL, color: FT.textMid, fontSize: 12.5 }}>
-            <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
-            <span>
-              <strong>Aucune donnée Snowflake synchronisée</strong> pour le calcul CPH
-              {meta.facts_last_sync ? ` (dernière synchronisation : ${meta.facts_last_sync.status}${meta.facts_last_sync.error ? ` — ${meta.facts_last_sync.error}` : ""})` : " (la synchronisation n'a encore jamais tourné)"}.
-              Elle tourne automatiquement toutes les heures sur J-3 → aujourd'hui ; l'historique se charge avec <code>sync_fuel_daily_facts --start … --end …</code>.
-            </span>
-          </div>
-        )}
+        <HowItWorks />
       </Card>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
-        {kpi("Sites avec GE", s?.sites, "blue", "inventaire SITE_ESCO_CURRENT")}
-        {kpi("CPH calculés", s?.cph_calcules, "green", "sites avec ≥ 1 jour de CPH")}
-        {kpi("Conso théorique complète", s?.conso_theorique_complete, "cyan", "tous les jours calculés")}
-        {kpi("CPH non calculé", s?.cph_non_calcule, "slate", "aucun jour calculé")}
-        {kpi("Rapprochements calculés", s?.rapprochements_calcules, "violet")}
-        {kpi("OK", s?.ok, "green", undefined, "OK")}
-        {kpi("À justifier", s?.a_justifier, "orange", undefined, "A_JUSTIFIER")}
-        {kpi("À investiguer", s?.a_investiguer, "red", undefined, "A_INVESTIGUER")}
-        {kpi("Données incomplètes", s?.donnees_incompletes, "slate", undefined, "DONNEES_INCOMPLETES")}
-        {kpi("Rappr. CPH non calculé", s?.rapprochement_cph_non_calcule, "violet", undefined, "CPH_NON_CALCULE")}
-      </div>
+      <Card>
+        <PreparationPanel meta={meta} onAbaque={() => setShowAbaque(true)} onReferentiel={() => setShowReferentiel(true)} onObservations={() => setShowImport(true)} />
+      </Card>
+
+      {q.isError ? (
+        <Card><div role="alert" style={{ color: FT.red, fontSize: 13 }}>Calcul impossible : {apiError(q.error)}</div></Card>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 460px), 1fr))", gap: 16 }}>
+          <ResultPanel s={s} activeStatut={filters.statut} onStatut={(v) => setFilter("statut", v)} />
+          <BlocagesPanel s={s} active={filters.blocage} onSelect={(v) => setFilter("blocage", v)} onAction={openTarget} />
+        </div>
+      )}
 
       <Card padded={false} style={{ padding: 20 }}>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
-          <select aria-label="Pays" value={filters.country ?? ""} onChange={(e) => setFilter("country", e.target.value)} style={control}>
-            <option value="">Pays : tous</option>
-            {(data?.filters.countries ?? []).map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <select aria-label="Zone" value={filters.zone ?? ""} onChange={(e) => setFilter("zone", e.target.value)} style={control}>
-            <option value="">Zone : toutes</option>
-            {(data?.filters.zones ?? []).map((z) => <option key={z} value={z}>{z}</option>)}
-          </select>
-          <select aria-label="Source runtime" value={filters.runtime_source ?? ""} onChange={(e) => setFilter("runtime_source", e.target.value)} style={control}>
-            <option value="">Source runtime : toutes</option>
-            {sortedRuntimeSources.map((r) => <option key={r} value={r}>{RUNTIME_SOURCE_LABELS[r] ?? r}</option>)}
-          </select>
-          <select aria-label="Source puissance" value={filters.power_source ?? ""} onChange={(e) => setFilter("power_source", e.target.value)} style={control}>
-            <option value="">Source puissance : toutes</option>
-            {(data?.filters.power_sources ?? []).map((p) => <option key={p} value={p}>{POWER_SOURCE_LABELS[p] ?? p}</option>)}
-          </select>
-          <select aria-label="Statut rapprochement" value={filters.statut ?? ""} onChange={(e) => setFilter("statut", e.target.value)} style={control}>
-            <option value="">Statut : tous</option>
-            {(Object.keys(STATUT_LABELS) as CphReconciliationStatus[]).map((k) => <option key={k} value={k}>{STATUT_LABELS[k]}</option>)}
-          </select>
-          <select aria-label="Statut CPH" value={filters.cph_status ?? ""} onChange={(e) => setFilter("cph_status", e.target.value)} style={control}>
-            <option value="">CPH : tous</option>
-            {Object.entries(CPH_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-          <div style={{ display: "flex", alignItems: "center", gap: 7, ...control, minWidth: 200 }}>
-            <Search size={14} color={FT.textSub} />
-            <input aria-label="Rechercher un site" value={siteInput} onChange={(e) => { setSiteInput(e.target.value); setPage(1); }} placeholder="Site ID ou nom…" style={{ border: "none", outline: "none", background: "transparent", flex: 1, fontSize: 12.5 }} />
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+          <h3 style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: FT.text, marginRight: 6 }}>4. Détail par site</h3>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, ...control, minWidth: 200, flex: "0 1 260px" }}>
+            <Search size={14} color={FT.textSub} aria-hidden />
+            <input aria-label="Rechercher un site" value={siteInput} onChange={(e) => { setSiteInput(e.target.value); setPage(1); }} placeholder="Site ID ou nom…" style={{ border: "none", outline: "none", background: "transparent", flex: 1, fontSize: 12.5, minWidth: 0 }} />
           </div>
+          <button type="button" aria-expanded={showMoreFilters || advancedCount > 0} aria-controls="cph-more-filters" onClick={() => setShowMoreFilters((v) => !v)} style={btn}>
+            <SlidersHorizontal size={13} aria-hidden /> Plus de filtres{advancedCount > 0 ? ` (${advancedCount})` : ""}
+          </button>
+          <button type="button" aria-pressed={detailedView} onClick={() => setDetailedView((v) => !v)} style={{ ...btn, ...(detailedView ? { background: FT.navy, color: "#fff", borderColor: FT.navy } : {}) }}>
+            <Columns3 size={13} aria-hidden /> {detailedView ? "Vue simple" : "Toutes les colonnes"}
+          </button>
           <div style={{ flex: 1 }} />
           <button type="button" onClick={() => handleExport("controle")} disabled={!!exporting || !!periodError} style={{ ...btn, opacity: exporting ? 0.6 : 1 }}>
-            <Download size={13} color={FT.blue} /> {exporting === "controle" ? "Export…" : "Contrôle complet"}
+            <Download size={13} color={FT.blue} aria-hidden /> {exporting === "controle" ? "Export…" : "Contrôle complet"}
           </button>
           <button type="button" onClick={() => handleExport("anomalies")} disabled={!!exporting || !!periodError} style={{ ...btn, color: FT.red, borderColor: FT.redL, opacity: exporting ? 0.6 : 1 }}>
-            <Download size={13} /> {exporting === "anomalies" ? "Export…" : "Anomalies Fuel"}
+            <Download size={13} aria-hidden /> {exporting === "anomalies" ? "Export…" : "Anomalies Fuel"}
           </button>
         </div>
+        {(showMoreFilters || advancedCount > 0) && (
+          <div id="cph-more-filters" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10, padding: 10, borderRadius: 10, background: FT.cardAlt, border: `1px solid ${FT.border}` }}>
+            <select aria-label="Pays" value={filters.country ?? ""} onChange={(e) => setFilter("country", e.target.value)} style={control}>
+              <option value="">Pays : tous</option>
+              {(data?.filters.countries ?? []).map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select aria-label="Zone" value={filters.zone ?? ""} onChange={(e) => setFilter("zone", e.target.value)} style={control}>
+              <option value="">Zone : toutes</option>
+              {(data?.filters.zones ?? []).map((z) => <option key={z} value={z}>{z}</option>)}
+            </select>
+            <select aria-label="Source des heures de marche" value={filters.runtime_source ?? ""} onChange={(e) => setFilter("runtime_source", e.target.value)} style={control}>
+              <option value="">Source heures de marche : toutes</option>
+              {sortedRuntimeSources.map((r) => <option key={r} value={r}>{RUNTIME_SOURCE_LABELS[r] ?? r}</option>)}
+            </select>
+            <select aria-label="Source de la puissance" value={filters.power_source ?? ""} onChange={(e) => setFilter("power_source", e.target.value)} style={control}>
+              <option value="">Source puissance : toutes</option>
+              {(data?.filters.power_sources ?? []).map((p) => <option key={p} value={p}>{POWER_SOURCE_LABELS[p] ?? p}</option>)}
+            </select>
+            <select aria-label="Calcul du CPH" value={filters.cph_status ?? ""} onChange={(e) => setFilter("cph_status", e.target.value)} style={control}>
+              <option value="">Calcul CPH : tous</option>
+              {Object.entries(CPH_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+        )}
+        {activeChips.length > 0 && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+            <span style={{ fontSize: 11.5, color: FT.textSub }}>Filtré sur :</span>
+            {activeChips.map((c) => (
+              <button key={c.key} type="button" onClick={() => setFilter(c.key, "")} aria-label={`Retirer le filtre ${c.label}`}
+                style={{ ...btn, padding: "3px 8px", fontSize: 11.5, background: FT.blueL, borderColor: `${FT.blue}55`, color: FT.navy }}>
+                {c.label} <X size={12} aria-hidden />
+              </button>
+            ))}
+          </div>
+        )}
         {exportError && <div role="alert" style={{ color: FT.red, fontSize: 12.5, marginBottom: 10 }}>Export impossible : {exportError}</div>}
 
         {q.isLoading ? (
@@ -889,106 +1333,14 @@ export function ControleCphSheet() {
         ) : q.isError ? (
           <div role="alert" style={{ color: FT.red, fontSize: 13 }}>Calcul impossible : {apiError(q.error)}</div>
         ) : rows.length === 0 ? (
-          <EmptyState icon={<Gauge size={20} />} title="Aucun site" subtitle="Aucun site avec GE ne correspond à ces filtres, ou les faits Snowflake n'ont pas encore été synchronisés (sync_fuel_daily_facts)." />
+          <EmptyState icon={<Gauge size={20} />} title="Aucun site" subtitle={activeChips.length || advancedCount || siteInput ? "Aucun site ne correspond à ces filtres." : "Aucun site avec GE sur ce périmètre, ou les données Snowflake ne sont pas encore synchronisées."} />
         ) : (
           <>
+            <div style={{ fontSize: 11.5, color: FT.textSub, marginBottom: 6 }}>
+              {data?.pagination.total.toLocaleString("fr-FR")} site(s) · « Détail » montre le calcul jour par jour.
+            </div>
             <div style={{ overflow: "auto", maxHeight: 620, borderRadius: 12, border: `1px solid ${FT.border}`, opacity: q.isFetching ? 0.6 : 1 }} aria-busy={q.isFetching}>
-              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 2050 }}>
-                <thead>
-                  <tr>
-                    <th scope="col" style={{ ...th, textAlign: "left" }}>Site</th>
-                    <th scope="col" style={th}>Dates</th>
-                    <th scope="col" style={th}>Runtime (h)<HelpTip label="runtime" text={HELP.runtime} /></th>
-                    <th scope="col" style={th}>Source runtime<HelpTip label="disponibilité" text={HELP.disponibilite} /></th>
-                    <th scope="col" style={th}>Puissance (kW)<HelpTip label="puissance" text={HELP.puissance} /></th>
-                    <th scope="col" style={th}>Courbe<HelpTip label="courbe" text={HELP.courbe} /></th>
-                    <th scope="col" style={th}>CPH (L/h)<HelpTip label="CPH" text={HELP.cph} /></th>
-                    <th scope="col" style={th}>Conso théorique (L)<HelpTip label="consommation théorique" text={HELP.conso} /></th>
-                    <th scope="col" style={th}>Stock initial (L)<HelpTip label="stocks" text={HELP.stock} /></th>
-                    <th scope="col" style={th}>Livraisons (L)<HelpTip label="livraisons" text={HELP.livraisons} /></th>
-                    <th scope="col" style={th}>Rajouts / retraits / vols / vidanges (L)</th>
-                    <th scope="col" style={th}>Stock final (L)</th>
-                    <th scope="col" style={th}>Conso stock (L)<HelpTip label="consommation stock" text={HELP.consoStock} /></th>
-                    <th scope="col" style={th}>Écart (L / %)<HelpTip label="écart" text={HELP.ecart} /></th>
-                    <th scope="col" style={th}>Statut<HelpTip label="statut" text={HELP.statut} /></th>
-                    <th scope="col" style={{ ...th, textAlign: "left" }}>Motifs</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r: CphSiteRow, i) => {
-                    const rec = r.rapprochement;
-                    const motifs = [r.data_issue, ...(r.curve ? [] : [r.curve_reason]), ...r.motifs, ...(rec?.motifs ?? []), ...(!rec ? ["Aucune observation de stock sur la période"] : [])].filter(Boolean) as string[];
-                    const moves = rec ? [rec.rajouts_l, rec.retraits_l, rec.vols_l, rec.vidanges_l].map((v) => nf(v, 0) ?? "—").join(" / ") : null;
-                    return (
-                      <tr key={r.site_id} style={{ background: i % 2 === 0 ? "#fff" : FT.cardAlt }}>
-                        <td style={{ ...td, textAlign: "left" }}>
-                          <button type="button" onClick={() => setDetailSite(r.site_id)} aria-label={`Détail jour par jour de ${r.site_id}`} style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", color: FT.blue, fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace", textDecoration: "underline" }}>
-                            {r.site_id}
-                          </button>
-                          <div style={{ fontSize: 11, color: FT.textSub }}>{r.site_name ?? "—"} · {r.kind ?? "type ?"} · {r.zone ?? "zone ?"}</div>
-                        </td>
-                        <td style={td}>{fmtDate(r.start)} → {fmtDate(r.end)}<div style={{ fontSize: 11, color: FT.textSub }}>{r.days} j</div></td>
-                        <td style={td}>
-                          <Num value={r.runtime_total_h} digits={1} reason="Aucune source de runtime ne passe les contrôles sur la période." />
-                          <div style={{ fontSize: 11, color: FT.textSub }}>{r.runtime_days}/{r.days} j</div>
-                        </td>
-                        <td style={td} title={Object.entries(r.sources).map(([k, v]) => `${RUNTIME_SOURCE_LABELS[k]} : ${v.availability_pct} %${v.rejection ? ` — ${v.rejection}` : ""}`).join("\n")}>
-                          {r.runtime_source_main ? RUNTIME_SOURCE_LABELS[r.runtime_source_main] : "—"}
-                          <div style={{ fontSize: 11, color: FT.textSub }}>
-                            {(["DSE", "REDRESSEUR", "DAY_DG_ON", "COMPTEUR_TERRAIN"] as const).map((k) => `${k === "COMPTEUR_TERRAIN" ? "Cpt" : k === "DAY_DG_ON" ? "DGOn" : k === "REDRESSEUR" ? "Red" : "DSE"} ${r.sources[k]?.availability_pct ?? 0}%`).join(" · ")}
-                          </div>
-                        </td>
-                        <td style={td}>
-                          <Num value={r.p_ge_moy_kw} digits={2} reason="Aucun jour avec puissance GE qualifiée et CPH calculé." />
-                          <div style={{ fontSize: 11, color: FT.textSub }}>{r.power_source_main ? POWER_SOURCE_LABELS[r.power_source_main] : "—"}</div>
-                        </td>
-                        <td style={td} title={r.curve ? `${r.curve.label} · a=${r.curve.a} b=${r.curve.b} c=${r.curve.c}` : r.curve_reason ?? undefined}>
-                          {r.curve ? <Tag tone={FT.green}>{r.curve.curve_id}</Tag> : <Tag tone={FT.orange}>Aucune</Tag>}
-                          <div style={{ fontSize: 11, color: FT.textSub }}>{r.ge_label ?? "GE inconnu"}</div>
-                        </td>
-                        <td style={td}>
-                          <Num value={r.cph_moy_l_h} digits={2} reason="Aucun jour avec runtime, puissance et courbe validée." />
-                          {r.extrapolated_days > 0 && <div><Tag tone={FT.orange}>{r.extrapolated_days} j &lt; 50 %</Tag></div>}
-                        </td>
-                        <td style={td}>
-                          {r.conso_theorique_l !== null ? (
-                            <Num value={r.conso_theorique_l} digits={1} />
-                          ) : r.conso_partielle_l !== null ? (
-                            <span title="Somme partielle : certains jours n'ont pas de consommation calculée">
-                              <span style={{ color: FT.textSub }}>—</span>
-                              <div style={{ fontSize: 11, color: FT.orange }}>partiel {nf(r.conso_partielle_l, 1)} L ({r.conso_days}/{r.days} j)</div>
-                            </span>
-                          ) : (
-                            <Num value={null} reason="Aucun jour calculé." />
-                          )}
-                          <div style={{ fontSize: 11, color: FT.textSub }}>{CPH_STATUS_LABELS[r.cph_status]}</div>
-                        </td>
-                        <td style={td}><Num value={rec?.stock_initial_l} digits={0} reason={rec ? "Absent du fichier d'observation." : "Aucune observation."} /></td>
-                        <td style={td}>
-                          <Num value={rec?.livraisons_l} digits={0} reason={rec ? "Absent du fichier d'observation." : "Aucune observation."} />
-                          {rec?.livraisons_statut === "LIVRAISONS_ENOC_A_CONTROLER" && <div><Tag tone={FT.orange}>à contrôler</Tag></div>}
-                        </td>
-                        <td style={td}>{moves ?? <Num value={null} reason="Aucune observation." />}</td>
-                        <td style={td}><Num value={rec?.stock_final_l} digits={0} reason={rec ? "Absent du fichier d'observation." : "Aucune observation."} /></td>
-                        <td style={td}><Num value={rec?.conso_stock_l} digits={0} reason="Rapprochement non effectué (voir motifs)." /></td>
-                        <td style={td}>
-                          <Num value={rec?.ecart_l} digits={0} reason="Rapprochement non effectué (voir motifs)." />
-                          <div style={{ fontSize: 11 }}><Num value={rec?.ecart_pct} digits={1} suffix=" %" /></div>
-                        </td>
-                        <td style={td}><StatutBadge statut={r.rapprochement_statut} /></td>
-                        <td style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 280, maxWidth: 420, fontSize: 11.5, color: FT.textMid }}>
-                          {motifs.length === 0 ? "—" : motifs.slice(0, 3).join(" · ")}
-                          {motifs.length > 3 && (
-                            <button type="button" onClick={() => setDetailSite(r.site_id)} style={{ border: "none", background: "transparent", color: FT.blue, cursor: "pointer", fontSize: 11, fontWeight: 800, padding: 0, marginLeft: 4 }}>
-                              +{motifs.length - 3}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              {detailedView ? <LegacyTable rows={rows} onDetail={setDetailSite} /> : <SimpleTable rows={rows} onDetail={setDetailSite} />}
             </div>
             {data && (
               <Pager
