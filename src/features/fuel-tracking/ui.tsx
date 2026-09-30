@@ -1,7 +1,8 @@
 // src/features/fuel-tracking/ui.tsx
 // Primitives visuelles partagées du module Suivi Carburant.
 
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { FT, GROUP_PALETTE, toneColors, type Tone } from "./theme";
 
 export function Card({
@@ -289,12 +290,23 @@ export function GroupToggleBar({
 }
 
 export function Modal({ title, onClose, children, maxWidth = 480 }: { title?: string; onClose: () => void; children: ReactNode; maxWidth?: number }) {
-  return (
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return createPortal(
     <div
+      className="fuelbook"
       onClick={onClose}
       style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", display: "grid", placeItems: "center", zIndex: 1000, padding: 20 }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
         onClick={(e) => e.stopPropagation()}
         style={{ background: FT.card, borderRadius: FT.radius, boxShadow: FT.shadow, maxWidth, width: "100%", maxHeight: "80vh", overflow: "auto", padding: 22 }}
       >
@@ -310,7 +322,8 @@ export function Modal({ title, onClose, children, maxWidth = 480 }: { title?: st
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

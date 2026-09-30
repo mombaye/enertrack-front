@@ -8,8 +8,8 @@
 
 import { useState, type CSSProperties } from "react";
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Download, Droplets, Fuel, Gauge, PieChart as PieChartIcon, Search, Users } from "lucide-react";
-import { exportFuelConsommationAnomalies, exportFuelConsommationControle, type FuelConfigurationFilter, type FuelConsommationResponse, type FuelGeDetectionFilter, type FuelRapprochementStatutFilter, type FuelRuntimeAvailabilityFilter, type FuelRuntimeSourceFilter } from "@/services/fuelTracking";
+import { Droplets, Fuel, Gauge, PieChart as PieChartIcon, Search, Users } from "lucide-react";
+import { type FuelConfigurationFilter, type FuelConsommationResponse, type FuelGeDetectionFilter } from "@/services/fuelTracking";
 import { Card, EmptyState, KpiCard, Modal, Pager, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { fmt, monthLabel } from "../helpers";
@@ -64,131 +64,17 @@ function NumCell({ value, digits = 0, suffix, emptyReason }: { value: number | n
   );
 }
 
-function formatL(value: number) {
-  return `${fmt.format(value)} L`;
-}
-
-// Détail énergie CPH (télémétrie GFMS_DATA_TRACKER_NC, agrégat mensuel des
-// jours OK/OVER_CAPACITY de FuelCphGeDaily) — seule source pour Énergie
-// site/Batterie DC/Batterie AC/Énergie GE, absentes de Base GE.xlsx. "Sans
-// donnée inventée" — vide avec une raison précise tant qu'une des
-// conditions de qualité du pipeline CPH n'est pas remplie.
-function cphEnergyEmptyReason(status: string | null): string {
-  switch (status) {
-    case "MISSING_PARAMETER":
-      return "Aucune fiche de paramètres GE (PGE_KVA, cos φ, rendement redresseur, SPC) chargée pour ce site sur cette période.";
-    case "BATTERY_DATA_NOT_READY":
-      return "Moins de 95% des intervalles de fonctionnement GE ont une mesure batterie fiable ce mois-ci.";
-    case "NO_VALID_RUNTIME":
-    case "RUNTIME_NOT_VALIDATED_FOR_INTERVAL_CPH":
-      return "Le temps de marche déduit de la télémétrie ne correspond pas (ou n'a pas pu être comparé) au runtime du contrôleur DSE.";
-    case "MISSING_LOAD_POWER":
-      return "Aucun intervalle de fonctionnement du groupe électrogène détecté ce mois-ci.";
-    default:
-      return "Aucune donnée de télémétrie CPH disponible ce mois-ci pour ce site.";
-  }
-}
-
-// Running Time / Conso estimée — exclusivement le pipeline CPH Snowflake
-// (télémétrie GFMS_DATA_TRACKER_NC), demande explicite : "pour les [colonnes
-// calculées], respecter les informations de Snowflake". Base GE.xlsx n'est
-// PAS utilisé pour ces 2 colonnes : ses colonnes Running Time/Conso estimée
-// ne sont renseignées que pour 5 des 469 sites (valeurs 2,3,4,5,6h,
-// manifestement des lignes d'exemple laissées dans le fichier).
+// Conso mesurée vue : capteur Snowflake en priorité, relevé de gardiennage en
+// repli. Runtime, CPH, conso théorique et rapprochement : onglet Contrôle CPH.
 const SOURCE_LABELS: Record<string, string> = {
-  cph_snowflake: "pipeline CPH Snowflake (télémétrie GFMS_DATA_TRACKER_NC)",
-  snowflake_tracker_5min: "compteur télémétrie 5 min (GFMS_DATA_TRACKER_NC)",
-  snowflake_dse_controller: "contrôleur DSE (GENSET_REPORT) — repli",
-  snowflake_dg_on_calculated: "DG-On calculé (GENSET_REPORT) — repli sites non-hybrides",
-  snowflake_rectifier_status_5min: "redresseur 5 min (RECTIFIER_EFFICIENCY_STATUS) — repli sites hybrides solaire+GE",
   snowflake: "capteur automatisé Snowflake (VW_FUEL_REPORT)",
   gardiennage: "relevé manuel de gardiennage (jauge physique) — repli, pas de capteur Snowflake fiable",
 };
 
-// Étiquette courte affichée directement dans la cellule (pas seulement au
-// survol) — pour voir d'un coup d'œil d'où vient chaque Running Time sans
-// avoir à passer la souris sur chaque ligne.
-const SOURCE_SHORT: Record<string, string> = {
-  cph_snowflake: "CPH",
-  snowflake_tracker_5min: "5 min",
-  snowflake_dse_controller: "DSE",
-  snowflake_dg_on_calculated: "DG-On",
-  snowflake: "Auto",
-  gardiennage: "Gardien.",
-};
-
 function sourceTitle(source: string | null): string | undefined {
-  if (!source) return "Aucune source disponible (pipeline CPH Snowflake sans résultat) pour ce site ce mois-ci.";
+  if (!source) return undefined;
   return `Source : ${SOURCE_LABELS[source] || source}.`;
 }
-
-function SourceBadge({ source }: { source: string | null }) {
-  if (!source) return null;
-  return (
-    <span
-      title={sourceTitle(source)}
-      style={{
-        marginLeft: 5, fontSize: 9.5, fontWeight: 800, color: FT.textSub,
-        background: FT.slateL, border: `1px solid ${FT.border}`, borderRadius: 5,
-        padding: "1px 4px", verticalAlign: "middle", cursor: "help",
-      }}
-    >
-      {SOURCE_SHORT[source] || source}
-    </span>
-  );
-}
-
-
-const RAPPROCHEMENT_STATUT_COLORS: Record<string, string> = {
-  OK: FT.green,
-  A_JUSTIFIER: FT.gold,
-  A_INVESTIGUER: FT.red,
-  DONNEES_INCOMPLETES: FT.textSub,
-  CPH_NON_CALCULE: FT.textSub,
-};
-
-const RAPPROCHEMENT_STATUT_LABELS: Record<string, string> = {
-  OK: "OK",
-  A_JUSTIFIER: "À justifier",
-  A_INVESTIGUER: "À investiguer",
-  DONNEES_INCOMPLETES: "Données incomplètes",
-  CPH_NON_CALCULE: "CPH non calculé",
-};
-
-function RapprochementStatutBadge({ statut }: { statut: string | null }) {
-  if (!statut) return <EmptyCell reason="Rapprochement non encore calculé." />;
-  const color = RAPPROCHEMENT_STATUT_COLORS[statut] ?? FT.textSub;
-  return (
-    <span style={{
-      display: "inline-block", padding: "2px 7px", borderRadius: 999,
-      fontSize: 11, fontWeight: 800, color,
-      background: color + "22", border: `1px solid ${color}44`,
-    }}>
-      {RAPPROCHEMENT_STATUT_LABELS[statut] ?? statut}
-    </span>
-  );
-}
-
-function LivraisonsSourceBadge({ source }: { source: string | null }) {
-  if (!source) return <EmptyCell />;
-  if (source === "LIVRAISONS_ENOC_A_CONTROLER") {
-    return (
-      <span style={{ fontSize: 11, fontWeight: 800, color: FT.orange }} title="ENOC = 0 L ce mois — données à contrôler avant de conclure.">
-        ⚠ À contrôler
-      </span>
-    );
-  }
-  return <span style={{ fontSize: 11, fontWeight: 700, color: FT.green }}>ENOC réel</span>;
-}
-
-const RAPPROCHEMENT_STATUT_OPTIONS: Array<{ key: FuelRapprochementStatutFilter; label: string }> = [
-  { key: "ok", label: "OK" },
-  { key: "a_justifier", label: "À justifier" },
-  { key: "a_investiguer", label: "À investiguer" },
-  { key: "donnees_incompletes", label: "Données incomplètes" },
-  { key: "cph_non_calcule", label: "CPH non calculé" },
-  { key: "livraisons_a_controler", label: "Livraisons à contrôler" },
-];
 
 type GeFilter = "all" | "true" | "false" | "incomplete";
 
@@ -259,22 +145,29 @@ function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
         <KpiCard label="Sites GE validés Stan" value={fmt.format(kpis.sites_ge_valides_stan)} sub="Facturation avec GE = Oui · référentiel Ops" tone="blue" icon={<Users size={14} />} />
         <KpiCard
-          label="Supervision Snowflake des sites GE Stan"
-          value={kpis.supervision_snowflake_pct != null ? `${kpis.supervision_snowflake_pct}%` : "—"}
-          sub={`${fmt.format(kpis.supervision_snowflake)} / ${fmt.format(kpis.sites_ge_valides_stan)} sites · ≥50% jours télémétrie`}
+          label="Sites avec conso mesurée"
+          value={fmt.format(kpis.sites_avec_conso)}
+          sub="filtre strict : chute de niveau détectée (VW_FUEL_REPORT)"
+          tone="green"
+          icon={<Fuel size={14} />}
+        />
+        <KpiCard
+          label="Sites avec relevés bruts"
+          value={fmt.format(kpis.sites_avec_donnees_brutes)}
+          sub="au moins un relevé brut (raw_point_count > 0) ≈ Power BI"
           tone="cyan"
           icon={<Gauge size={14} />}
         />
-        <KpiCard label="CPH calculé" value={fmt.format(kpis.sites_avec_cph_calcule)} sub={`/ ${fmt.format(kpis.sites_ge_valides_stan)} sites GE Stan`} tone="green" icon={<Fuel size={14} />} />
-        <KpiCard label="CPH non calculé" value={fmt.format(kpis.sites_cph_non_calcule)} sub="running time ou paramètres GE absents" tone="slate" icon={<Fuel size={14} />} />
-        {kpis.rapprochement_counts && (
-          <>
-            <KpiCard label="Rapprochement OK" value={fmt.format(kpis.rapprochement_counts.ok)} tone="green" icon={<Fuel size={14} />} />
-            <KpiCard label="À justifier" value={fmt.format(kpis.rapprochement_counts.a_justifier)} tone="gold" icon={<Fuel size={14} />} />
-            <KpiCard label="À investiguer" value={fmt.format(kpis.rapprochement_counts.a_investiguer)} tone="red" icon={<Fuel size={14} />} />
-            <KpiCard label="Données incomplètes" value={fmt.format(kpis.rapprochement_counts.donnees_incompletes)} tone="slate" icon={<Fuel size={14} />} sub="stock initial ou final manquant" />
-          </>
-        )}
+        <KpiCard
+          label="Conso mesurée totale"
+          value={`${fmt.format(kpis.total_conso_snowflake_l)} L`}
+          sub={`${currentLabel} · capteurs Snowflake`}
+          tone="slate"
+          icon={<Droplets size={14} />}
+        />
+      </div>
+      <div style={{ marginTop: 10, fontSize: 11.5, color: FT.textSub }}>
+        Runtime GE, CPH, consommation théorique et rapprochement stock : onglet <strong>Contrôle CPH</strong> (calcul site/jour sur les dates exactes choisies).
       </div>
     </div>
   );
@@ -496,114 +389,43 @@ function GeDetectionPanel({
   );
 }
 
-// "tracker_5min" avait été retiré du sélecteur (2026-09, il paraissait
-// toujours à 0) puis réintégré : c'est en fait le DSE qui est prioritaire
-// sur le tracker (règle métier voulue), pas le tracker qui était cassé —
-// une fois cette priorité correctement respectée, le tracker ne gagne que
-// sur les (rares) jours où le DSE est absent ET le tracker actif. Confirmé
-// non nul sur données réelles (1 à 11 jours-site selon le mois). Retiré à
-// nouveau reviendrait à cacher une source légitime au lieu d'expliquer sa
-// rareté — demande explicite de le "conserver"/"exposer" (2026-09).
-const RUNTIME_SOURCE_OPTIONS: Array<{ key: FuelRuntimeSourceFilter; label: string }> = [
-  { key: "dse_controller", label: "DSE" },
-  { key: "tracker_5min", label: "5 min" },
-  { key: "dg_on_calculated", label: "DG-On" },
-  { key: "rectifier_status_5min", label: "Redresseur" },
-  { key: "none", label: "Sans source" },
-];
-
 const CONFIGURATION_OPTIONS: Array<{ key: FuelConfigurationFilter; label: string }> = [
   { key: "indoor", label: "Indoor" },
   { key: "outdoor", label: "Outdoor" },
   { key: "none", label: "Sans configuration" },
 ];
 
-const RUNTIME_AVAILABILITY_OPTIONS: Array<{ key: FuelRuntimeAvailabilityFilter; label: string }> = [
-  { key: "avec_ge_avec_runtime", label: "Avec GE + Running Time" },
-  { key: "avec_ge_sans_runtime", label: "Avec GE, sans Running Time" },
-  { key: "avec_runtime_sans_cph", label: "Running Time connu, CPH absent" },
-  { key: "sans_ge", label: "Sans GE" },
-];
-
 export function ConsommationSheet({
   data,
   loading,
-  month,
   search,
   onSearchChange,
   geFilter,
   onGeFilterChange,
   detectionFilter,
   onDetectionFilterChange,
-  runtimeSourceFilter,
-  onRuntimeSourceFilterChange,
-  runtimeAvailabilityFilter,
-  onRuntimeAvailabilityFilterChange,
   configurationFilter,
   onConfigurationFilterChange,
-  rapprochementStatutFilter,
-  onRapprochementStatutFilterChange,
   page,
   onPageChange,
   stickyTop = 0,
 }: {
   data: FuelConsommationResponse | undefined;
   loading: boolean;
-  month: string | null | undefined;
   search: string;
   onSearchChange: (v: string) => void;
   geFilter: GeFilter;
   onGeFilterChange: (v: GeFilter) => void;
   detectionFilter: FuelGeDetectionFilter | null;
   onDetectionFilterChange: (v: FuelGeDetectionFilter | null) => void;
-  runtimeSourceFilter: FuelRuntimeSourceFilter | null;
-  onRuntimeSourceFilterChange: (v: FuelRuntimeSourceFilter | null) => void;
-  runtimeAvailabilityFilter: FuelRuntimeAvailabilityFilter | null;
-  onRuntimeAvailabilityFilterChange: (v: FuelRuntimeAvailabilityFilter | null) => void;
   configurationFilter: FuelConfigurationFilter | null;
   onConfigurationFilterChange: (v: FuelConfigurationFilter | null) => void;
-  rapprochementStatutFilter: FuelRapprochementStatutFilter | null;
-  onRapprochementStatutFilterChange: (v: FuelRapprochementStatutFilter | null) => void;
   page: number;
   onPageChange: (p: number) => void;
   stickyTop?: number;
 }) {
   const [activeComment, setActiveComment] = useState<{ siteId: string; siteName: string | null; text: string } | null>(null);
   const [showDetectionModal, setShowDetectionModal] = useState(false);
-  const [exportingControle, setExportingControle] = useState(false);
-  const [exportingAnomalies, setExportingAnomalies] = useState(false);
-
-  function downloadBlob(blob: Blob, filename: string) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
-  async function handleExportControle() {
-    setExportingControle(true);
-    try {
-      const blob = await exportFuelConsommationControle({ month: month ?? undefined, rapprochement_statut: rapprochementStatutFilter ?? undefined });
-      downloadBlob(blob, `fuel_controle_${month ?? "export"}.csv`);
-    } finally {
-      setExportingControle(false);
-    }
-  }
-
-  async function handleExportAnomalies() {
-    setExportingAnomalies(true);
-    try {
-      const blob = await exportFuelConsommationAnomalies({ month: month ?? undefined });
-      downloadBlob(blob, `fuel_anomalies_${month ?? "export"}.csv`);
-    } finally {
-      setExportingAnomalies(false);
-    }
-  }
-
   if (loading) return <Skeleton h={520} />;
 
   const rows = data?.data ?? [];
@@ -648,7 +470,7 @@ export function ConsommationSheet({
             <div>
               <div style={{ fontSize: 15.5, fontWeight: 800, color: FT.text }}>Consommation par site — {currentLabel}</div>
               <div style={{ fontSize: 12.5, color: FT.textSub, marginTop: 3 }}>
-                Automatisé — Snowflake (conso mesurée par capteur + estimation CPH par télémétrie). Aucun upload nécessaire.
+                Automatisé — Snowflake (conso mesurée par capteur) et relevés de gardiennage. Aucun upload nécessaire.
                 {data?.pagination && ` ${fmt.format(data.pagination.total)} site(s).`}
               </div>
               {detectionFilter && (
@@ -675,38 +497,6 @@ export function ConsommationSheet({
               kpis={data?.kpis ?? null}
             />
             <select
-              value={runtimeSourceFilter ?? ""}
-              onChange={(e) => onRuntimeSourceFilterChange((e.target.value || null) as FuelRuntimeSourceFilter | null)}
-              title="Filtrer par source du Running Time"
-              style={{
-                border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px",
-                fontSize: 12.5, color: FT.text, fontWeight: 700, cursor: "pointer",
-              }}
-            >
-              <option value="">Running Time : toutes sources</option>
-              {RUNTIME_SOURCE_OPTIONS.map((o) => (
-                <option key={o.key} value={o.key}>
-                  {o.label}{data?.kpis ? ` (${fmt.format(data.kpis.runtime_source_counts[o.key])})` : ""}
-                </option>
-              ))}
-            </select>
-            <select
-              value={runtimeAvailabilityFilter ?? ""}
-              onChange={(e) => onRuntimeAvailabilityFilterChange((e.target.value || null) as FuelRuntimeAvailabilityFilter | null)}
-              title="Filtrer par disponibilité Running Time / CPH"
-              style={{
-                border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px",
-                fontSize: 12.5, color: FT.text, fontWeight: 700, cursor: "pointer",
-              }}
-            >
-              <option value="">Disponibilité données : toutes</option>
-              {RUNTIME_AVAILABILITY_OPTIONS.map((o) => (
-                <option key={o.key} value={o.key}>
-                  {o.label}{data?.kpis ? ` (${fmt.format(data.kpis.runtime_availability_counts[o.key])})` : ""}
-                </option>
-              ))}
-            </select>
-            <select
               value={configurationFilter ?? ""}
               onChange={(e) => onConfigurationFilterChange((e.target.value || null) as FuelConfigurationFilter | null)}
               title="Filtrer par Configuration (Indoor/Outdoor)"
@@ -722,22 +512,6 @@ export function ConsommationSheet({
                 </option>
               ))}
             </select>
-            <select
-              value={rapprochementStatutFilter ?? ""}
-              onChange={(e) => onRapprochementStatutFilterChange((e.target.value || null) as FuelRapprochementStatutFilter | null)}
-              title="Filtrer par statut de rapprochement stock"
-              style={{
-                border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px",
-                fontSize: 12.5, color: FT.text, fontWeight: 700, cursor: "pointer",
-              }}
-            >
-              <option value="">Rapprochement : tous</option>
-              {RAPPROCHEMENT_STATUT_OPTIONS.map((o) => (
-                <option key={o.key} value={o.key}>
-                  {o.label}{data?.kpis?.rapprochement_counts ? ` (${fmt.format(data.kpis.rapprochement_counts[o.key])})` : ""}
-                </option>
-              ))}
-            </select>
             <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px", minWidth: 220 }}>
               <Search size={14} color={FT.textSub} />
               <input
@@ -747,34 +521,6 @@ export function ConsommationSheet({
                 style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, color: FT.text, flex: 1 }}
               />
             </div>
-            <button
-              onClick={handleExportControle}
-              disabled={exportingControle}
-              title="Exporter toutes les colonnes (y compris rapprochement) pour le mois sélectionné"
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 6, border: `1px solid ${FT.border}`,
-                background: FT.card, color: FT.text, cursor: exportingControle ? "wait" : "pointer",
-                fontSize: 12, fontWeight: 800, borderRadius: 9, padding: "7px 12px",
-                opacity: exportingControle ? 0.6 : 1,
-              }}
-            >
-              <Download size={13} color={FT.blue} />
-              {exportingControle ? "Export…" : "Contrôle complet"}
-            </button>
-            <button
-              onClick={handleExportAnomalies}
-              disabled={exportingAnomalies}
-              title="Exporter uniquement les anomalies fuel (À justifier / À investiguer / Livraisons à contrôler)"
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 6, border: `1px solid ${FT.redL}`,
-                background: FT.card, color: FT.red, cursor: exportingAnomalies ? "wait" : "pointer",
-                fontSize: 12, fontWeight: 800, borderRadius: 9, padding: "7px 12px",
-                opacity: exportingAnomalies ? 0.6 : 1,
-              }}
-            >
-              <Download size={13} />
-              {exportingAnomalies ? "Export…" : "Anomalies Fuel"}
-            </button>
           </div>
         </div>
 
@@ -783,7 +529,7 @@ export function ConsommationSheet({
         ) : (
           <>
             <div style={{ overflow: "auto", maxHeight: 600, borderRadius: 12, border: `1px solid ${FT.border}` }}>
-              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 2400 }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1500 }}>
                 <thead>
                   <tr>
                     <th style={th}>Site ID</th>
@@ -795,28 +541,9 @@ export function ConsommationSheet({
                     <th style={th}>Facturé avec GE</th>
                     <th style={th}>Facturé (mois en cours)</th>
                     <th style={th}>Type de GE</th>
-                    <th style={th}>Running Time (h)</th>
-                    <th style={th}>Énergie site (kWh)</th>
-                    <th style={th}>Batterie DC (kWh)</th>
-                    <th style={th}>Batterie AC (kWh)</th>
-                    <th style={th}>Énergie GE (kWh)</th>
-                    <th style={th}>Puissance GE (kW)</th>
-                    <th style={th}>Charge GE</th>
-                    <th style={th}>CPH (L/h)</th>
-                    <th style={th}>Conso estimée (L)</th>
+                    <th style={th} title="Puissance nominale du GE, fichier Base GE (kVA)">Puissance GE (kVA)</th>
                     <th style={th}>Conso mesurée vue (L)</th>
-                    <th style={th}>Écart (L)</th>
-                    <th style={th}>Écart (%)</th>
                     <th style={{ ...th, textAlign: "left" }}>Commentaire</th>
-                    <th style={th}>Disponibilité RT (%)</th>
-                    <th style={th}>Stock initial (L)</th>
-                    <th style={th}>Livraisons ENOC (L)</th>
-                    <th style={th}>Conso stock (L)</th>
-                    <th style={th}>Écart rappr. (L)</th>
-                    <th style={th}>Écart rappr. (%)</th>
-                    <th style={th}>Statut rappr.</th>
-                    <th style={th}>Livraisons source</th>
-                    <th style={{ ...th, textAlign: "left" }}>Motif rappr.</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -842,43 +569,7 @@ export function ConsommationSheet({
                           title={r.facturation_active_fichier === null ? "Site absent du dernier fichier ESCO SN Facturation par site." : "Statut Facturation du mois en cours — fichier ESCO SN Facturation par site."}
                         />
                       </td>
-                      <td style={td}>{r.type_ge || <EmptyCell reason="Type de GE non trouvé (Base GE.xlsx ni Snowflake SITE_DG) pour ce site." />}</td>
-                      <td style={td}>
-                        <NumCell
-                          value={r.ge_runtime_fichier_h}
-                          digits={1}
-                          emptyReason={sourceTitle(r.ge_runtime_source)}
-                        />
-                        {r.ge_runtime_fichier_h !== null && <SourceBadge source={r.ge_runtime_source} />}
-                      </td>
-                      <td style={td}>
-                        <NumCell
-                          value={r.cph_site_load_energy_kwh}
-                          digits={1}
-                          emptyReason={cphEnergyEmptyReason(r.cph_calculation_status)}
-                        />
-                      </td>
-                      <td style={td}>
-                        <NumCell
-                          value={r.cph_battery_dc_energy_kwh}
-                          digits={1}
-                          emptyReason={cphEnergyEmptyReason(r.cph_calculation_status)}
-                        />
-                      </td>
-                      <td style={td}>
-                        <NumCell
-                          value={r.cph_battery_ac_energy_kwh}
-                          digits={1}
-                          emptyReason={cphEnergyEmptyReason(r.cph_calculation_status)}
-                        />
-                      </td>
-                      <td style={td}>
-                        <NumCell
-                          value={r.cph_total_ge_energy_kwh}
-                          digits={1}
-                          emptyReason={cphEnergyEmptyReason(r.cph_calculation_status)}
-                        />
-                      </td>
+                      <td style={td}>{r.type_ge || <EmptyCell reason="Type de GE non trouvé dans Base GE.xlsx pour ce site." />}</td>
                       <td style={td}>
                         <NumCell
                           value={r.pge_kva_fichier}
@@ -886,48 +577,11 @@ export function ConsommationSheet({
                           emptyReason="Puissance nominale du GE non renseignée dans le fichier de référence (Base GE.xlsx) pour ce site."
                         />
                       </td>
-                      <td style={td}>
-                        <NumCell
-                          value={r.ge_load_pct_fichier}
-                          digits={1}
-                          suffix="%"
-                          emptyReason="Charge GE non renseignée dans le fichier de référence (Base GE.xlsx) pour ce site."
-                        />
-                      </td>
-                      <td style={td}>
-                        <NumCell
-                          value={r.cph_lph_fichier}
-                          digits={2}
-                          emptyReason="CPH (L/h) non renseigné dans le fichier de référence (Base GE.xlsx) pour ce site."
-                        />
-                      </td>
-                      <td style={td} title={r.conso_estimee_fichier_l !== null ? sourceTitle(r.conso_estimee_source) : undefined}>
-                        <NumCell
-                          value={r.conso_estimee_fichier_l}
-                          digits={1}
-                          emptyReason={sourceTitle(r.conso_estimee_source)}
-                        />
-                      </td>
                       <td style={td} title={r.conso_mesuree_source === "gardiennage" && r.gardien_statut ? `Statut gardiennage : ${r.gardien_statut}` : undefined}>
                         <NumCell
                           value={r.conso_mesuree_fichier_l}
                           digits={1}
                           emptyReason={r.conso_mesuree_source ? sourceTitle(r.conso_mesuree_source) : "Aucune baisse de niveau de cuve fiable détectée ce mois-ci (Snowflake VW_FUEL_REPORT), et aucun relevé de gardiennage disponible pour ce site ce mois-ci."}
-                        />
-                      </td>
-                      <td style={td}>
-                        <NumCell
-                          value={r.ecart_fichier_l}
-                          digits={1}
-                          emptyReason="Nécessite à la fois une consommation estimée ET une consommation mesurée dans le fichier de référence pour ce site."
-                        />
-                      </td>
-                      <td style={td}>
-                        <NumCell
-                          value={r.ecart_fichier_pct}
-                          digits={1}
-                          suffix="%"
-                          emptyReason="Nécessite à la fois une consommation estimée ET une consommation mesurée dans le fichier de référence pour ce site."
                         />
                       </td>
                       <td style={{ ...td, textAlign: "left", maxWidth: 260 }}>
@@ -945,64 +599,6 @@ export function ConsommationSheet({
                           </div>
                         ) : (
                           <span style={{ color: FT.green, fontSize: 11.5 }}>Toutes les données disponibles.</span>
-                        )}
-                      </td>
-                      <td style={td}>
-                        <NumCell
-                          value={r.cph_runtime_availability_pct}
-                          digits={1}
-                          suffix="%"
-                          emptyReason="Disponibilité runtime CPH non calculée (sync_fuel_cph non exécutée ou site sans GE)."
-                        />
-                      </td>
-                      <td style={td}>
-                        <NumCell
-                          value={r.rapprochement_stock_initial_l}
-                          digits={0}
-                          emptyReason="Stock initial inconnu — rapprochement non calculable."
-                        />
-                      </td>
-                      <td style={td}>
-                        <NumCell
-                          value={r.rapprochement_livraisons_l}
-                          digits={0}
-                          emptyReason="Aucune livraison ENOC ce mois."
-                        />
-                      </td>
-                      <td style={td}>
-                        <NumCell
-                          value={r.rapprochement_conso_stock_l}
-                          digits={0}
-                          emptyReason="Conso stock non calculable — stock initial ou final absent."
-                        />
-                      </td>
-                      <td style={td}>
-                        {r.rapprochement_ecart_l !== null && r.rapprochement_ecart_l !== undefined ? (
-                          <span style={{
-                            fontFamily: "ui-monospace, Menlo, monospace", fontWeight: 600,
-                            color: Math.abs(r.rapprochement_ecart_l) > 500 ? FT.red : FT.text,
-                          }}>
-                            {r.rapprochement_ecart_l.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                          </span>
-                        ) : <EmptyCell reason="Écart non calculable (données manquantes)." />}
-                      </td>
-                      <td style={td}>
-                        {r.rapprochement_ecart_pct !== null && r.rapprochement_ecart_pct !== undefined ? (
-                          <span style={{
-                            fontFamily: "ui-monospace, Menlo, monospace", fontWeight: 700,
-                            color: Math.abs(r.rapprochement_ecart_pct) > 20 ? FT.red : Math.abs(r.rapprochement_ecart_pct) > 10 ? FT.gold : FT.text,
-                          }}>
-                            {r.rapprochement_ecart_pct > 0 ? "+" : ""}{r.rapprochement_ecart_pct.toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
-                          </span>
-                        ) : <EmptyCell reason="Écart % non calculable." />}
-                      </td>
-                      <td style={td}><RapprochementStatutBadge statut={r.rapprochement_statut} /></td>
-                      <td style={td}><LivraisonsSourceBadge source={r.livraisons_source} /></td>
-                      <td style={{ ...td, textAlign: "left", maxWidth: 300 }}>
-                        {r.rapprochement_motif ? (
-                          <span style={{ fontSize: 11, color: FT.textSub }}>{r.rapprochement_motif}</span>
-                        ) : (
-                          <EmptyCell reason="Rapprochement non encore calculé." />
                         )}
                       </td>
                     </tr>

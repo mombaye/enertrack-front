@@ -13,7 +13,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Calculator, Calendar, Droplets, Fuel, LayoutGrid, RefreshCw, Warehouse } from "lucide-react";
+import { BarChart3, Calculator, Calendar, Droplets, Fuel, Gauge, LayoutGrid, RefreshCw, Warehouse } from "lucide-react";
 
 import {
   getFuelCommandeEstimation,
@@ -23,9 +23,6 @@ import {
   getFuelStock,
   type FuelConfigurationFilter,
   type FuelGeDetectionFilter,
-  type FuelRapprochementStatutFilter,
-  type FuelRuntimeAvailabilityFilter,
-  type FuelRuntimeSourceFilter,
   type FuelSourceStatus,
 } from "@/services/fuelTracking";
 
@@ -36,12 +33,14 @@ import { DashboardSheet } from "./sheets/DashboardSheet";
 import { StockSheet } from "./sheets/StockSheet";
 import { CommandeSheet } from "./sheets/CommandeSheet";
 import { EstimationSheet } from "./sheets/EstimationSheet";
+import { ControleCphSheet } from "./sheets/ControleCphSheet";
 
-export type MainTab = "DASHBOARD" | "CONSOMMATION" | "STOCK" | "COMMANDE" | "ESTIMATION";
+export type MainTab = "DASHBOARD" | "CONSOMMATION" | "CPH" | "STOCK" | "COMMANDE" | "ESTIMATION";
 
 const MAIN_TABS: Array<{ key: MainTab; label: string; icon: ReactNode }> = [
   { key: "DASHBOARD", label: "Dashboard", icon: <LayoutGrid size={14} /> },
   { key: "CONSOMMATION", label: "Suivis Consommations", icon: <Droplets size={14} /> },
+  { key: "CPH", label: "Contrôle CPH", icon: <Gauge size={14} /> },
   { key: "STOCK", label: "Suivis Stock", icon: <Warehouse size={14} /> },
   { key: "COMMANDE", label: "Commandes", icon: <Fuel size={14} /> },
   { key: "ESTIMATION", label: "Estimation commande", icon: <Calculator size={14} /> },
@@ -109,10 +108,7 @@ export default function FuelTrackingPage() {
   // que "Tous" qui noie la table avec les ~2850 sites sans GE.
   const [consoGeFilter, setConsoGeFilter] = useState<"all" | "true" | "false" | "incomplete">("true");
   const [consoDetectionFilter, setConsoDetectionFilter] = useState<FuelGeDetectionFilter | null>(null);
-  const [consoRuntimeSourceFilter, setConsoRuntimeSourceFilter] = useState<FuelRuntimeSourceFilter | null>(null);
   const [consoConfigurationFilter, setConsoConfigurationFilter] = useState<FuelConfigurationFilter | null>(null);
-  const [consoRuntimeAvailabilityFilter, setConsoRuntimeAvailabilityFilter] = useState<FuelRuntimeAvailabilityFilter | null>(null);
-  const [consoRapprochementStatutFilter, setConsoRapprochementStatutFilter] = useState<FuelRapprochementStatutFilter | null>(null);
   const [stockSearch, setStockSearch] = useState("");
   const [stockPage, setStockPage] = useState(1);
   // Même défaut que Suivis Consommations — Avec GE (seuls capables d'avoir
@@ -141,7 +137,7 @@ export default function FuelTrackingPage() {
   // dashboardQ) : le statut des sources (badges du header) et la plage de
   // mois doivent rester à jour même hors de leurs onglets respectifs.
   const consommationQ = useQuery({
-    queryKey: ["fuel-consommation", toMonth, consoSearch, consoPage, consoGeFilter, consoDetectionFilter, consoRuntimeSourceFilter, consoConfigurationFilter, consoRuntimeAvailabilityFilter, consoRapprochementStatutFilter],
+    queryKey: ["fuel-consommation", toMonth, consoSearch, consoPage, consoGeFilter, consoDetectionFilter, consoConfigurationFilter],
     queryFn: () => getFuelConsommation({
       month: toMonth ?? undefined,
       search: consoSearch,
@@ -149,10 +145,7 @@ export default function FuelTrackingPage() {
       limit: 50,
       has_genset: consoDetectionFilter ? undefined : (consoGeFilter === "all" ? undefined : consoGeFilter),
       detection: consoDetectionFilter ?? undefined,
-      runtime_source: consoRuntimeSourceFilter ?? undefined,
       configuration: consoConfigurationFilter ?? undefined,
-      runtime_availability: consoRuntimeAvailabilityFilter ?? undefined,
-      rapprochement_statut: consoRapprochementStatutFilter ?? undefined,
     }),
     staleTime: 60_000,
   });
@@ -230,7 +223,7 @@ export default function FuelTrackingPage() {
   // 2026-09 : dernière ligne le 20/08 alors que la synchro tournait bien
   // tous les jours — sans cette date, ça ressemble à un bug EnerTrack).
   const sources = consommationQ.data?.sources;
-  // CPH (Snowflake) est agrégé au jour — pas d'heure dans la source elle-même,
+  // Les faits Snowflake sont agrégés au jour — pas d'heure dans la source elle-même,
   // afficher une heure inventée (00:00) serait trompeur sur la précision réelle.
   const formatDataDateOnly = (iso: string | null | undefined) =>
     iso ? new Date(iso).toLocaleDateString("fr-FR", { dateStyle: "long" }) : "—";
@@ -275,6 +268,7 @@ export default function FuelTrackingPage() {
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifySelf: "end" }}>
+                {activeTab !== "CPH" && (
                 <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px" }}>
                   <Calendar size={14} color={FT.textSub} />
                   <input
@@ -294,6 +288,7 @@ export default function FuelTrackingPage() {
                     style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, color: FT.text, fontWeight: 700 }}
                   />
                 </div>
+                )}
 
                 <button
                   onClick={() => consommationQ.refetch()}
@@ -331,7 +326,6 @@ export default function FuelTrackingPage() {
             <ConsommationSheet
               data={consommationQ.data}
               loading={consommationQ.isLoading}
-              month={toMonth}
               search={consoSearch}
               onSearchChange={(v) => {
                 setConsoSearch(v);
@@ -347,30 +341,21 @@ export default function FuelTrackingPage() {
                 setConsoDetectionFilter(v);
                 setConsoPage(1);
               }}
-              runtimeSourceFilter={consoRuntimeSourceFilter}
-              onRuntimeSourceFilterChange={(v) => {
-                setConsoRuntimeSourceFilter(v);
-                setConsoPage(1);
-              }}
               configurationFilter={consoConfigurationFilter}
               onConfigurationFilterChange={(v) => {
                 setConsoConfigurationFilter(v);
-                setConsoPage(1);
-              }}
-              runtimeAvailabilityFilter={consoRuntimeAvailabilityFilter}
-              onRuntimeAvailabilityFilterChange={(v) => {
-                setConsoRuntimeAvailabilityFilter(v);
-                setConsoPage(1);
-              }}
-              rapprochementStatutFilter={consoRapprochementStatutFilter}
-              onRapprochementStatutFilterChange={(v) => {
-                setConsoRapprochementStatutFilter(v);
                 setConsoPage(1);
               }}
               page={consoPage}
               onPageChange={setConsoPage}
               stickyTop={headerHeight}
             />
+          </div>
+        )}
+
+        {activeTab === "CPH" && (
+          <div className="ft-fade">
+            <ControleCphSheet />
           </div>
         )}
 

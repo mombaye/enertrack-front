@@ -54,76 +54,24 @@ export type FuelConsommationSite = {
   enoc_qte_ajoutee_l: number;
   enoc_nb_demandes: number;
   ecart_conso_vs_enoc_l: number | null;
-  // Estimation CPH (télémétrie GFMS_DATA_TRACKER_NC) — 3e source, indépendante
-  // des 2 ci-dessus, pour les GE sans capteur de cuve fiable. "Sans litre
-  // inventé" : conso_estimee_cph_l ne compte que les jours au statut OK ;
-  // cph_status_breakdown explique pourquoi les autres jours sont vides.
-  conso_estimee_cph_l: number | null;
-  cph_l_per_h_moy: number | null;
-  cph_nb_jours_ok: number | null;
-  cph_nb_jours_calcules: number | null;
-  cph_calculation_status: string | null;
-  cph_status_breakdown: Record<string, number> | null;
-  cph_runtime_h_total: number | null;
-  cph_runtime_source: "TRACKER_5MIN" | "DSE_CONTROLLER" | "DG_ON_CALCULATED" | "RECTIFIER_STATUS_5MIN" | null;
-  /** Heures cumulées par source sur le mois, ex. {"DSE_CONTROLLER": 45.2, "TRACKER_5MIN": 3.1} — cph_runtime_source est la clé au plus d'heures. */
-  cph_runtime_source_breakdown: Record<string, number> | null;
-  cph_ge_type: string | null;
-  cph_pge_kva: number | null;
-  cph_power_factor: number | null;
-  cph_spc_l_per_kwh: number | null;
   conso_fichier_l: number | null;
   fichier_source: string | null;
-  // Colonnes Suivis Consommation (2026-08) — sourcées de Base GE.xlsx
-  // (identité, running time, CPH L/h, conso estimée/mesurée, charge GE) +
-  // détail énergie du pipeline CPH Snowflake (absent du fichier).
+  // Valeurs brutes Base GE.xlsx (audit) — n'entrent dans aucun calcul CPH.
   pge_kva_fichier: number | null;
   ge_load_pct_fichier: number | null;
   cph_lph_fichier: number | null;
-  // Valeurs résolues — Running Time/Conso estimée : pipeline CPH Snowflake
-  // (télémétrie) exclusivement ; _source indique l'origine précise (ex.
-  // "snowflake_dse_controller", "cph_snowflake"). Conso mesurée vue :
-  // Snowflake (capteur) en priorité, relevé de gardiennage (jauge manuelle)
-  // en repli quand Snowflake n'a rien — voir import_gardien_conso.
-  ge_runtime_fichier_h: number | null;
-  ge_runtime_source: string | null;
-  conso_estimee_fichier_l: number | null;
-  conso_estimee_source: string | null;
+  // Conso mesurée vue : Snowflake (capteur) en priorité, relevé de
+  // gardiennage (jauge manuelle) en repli quand Snowflake n'a rien.
   conso_mesuree_fichier_l: number | null;
   conso_mesuree_source: "snowflake" | "gardiennage" | null;
   gardien_statut: string | null;
-  ecart_fichier_l: number | null;
-  ecart_fichier_pct: number | null;
-  cph_site_load_energy_kwh: number | null;
-  cph_battery_dc_energy_kwh: number | null;
-  cph_battery_ac_energy_kwh: number | null;
-  cph_total_ge_energy_kwh: number | null;
-  // Explique, pour les valeurs manquantes de cette ligne (Running Time,
-  // Conso estimée, Conso mesurée vue), pourquoi aucune source disponible
-  // ne les a fournies. null si tout est renseigné.
+  // Explique pourquoi la conso mesurée est absente. null si renseignée.
   commentaire: string | null;
   // Facturation (ESCO SN — Facturation par site, mensuel) — null si le
   // site n'apparaît pas dans le dernier fichier importé.
   facturation_active_fichier: boolean | null;
   facturation_avec_ge_fichier: boolean | null;
   configuration_fichier: string | null;
-  // Disponibilité runtime CPH (spec B 2026-09)
-  cph_runtime_availability_pct: number | null;
-  cph_runtime_source_availability: Record<string, number> | null;
-  // Rapprochement stock mensuel (spec C 2026-09)
-  rapprochement_stock_initial_l: number | null;
-  rapprochement_livraisons_l: number | null;
-  rapprochement_rajouts_l: number | null;
-  rapprochement_retraits_l: number | null;
-  rapprochement_vols_l: number | null;
-  rapprochement_vidanges_l: number | null;
-  rapprochement_stock_final_l: number | null;
-  rapprochement_conso_stock_l: number | null;
-  rapprochement_ecart_l: number | null;
-  rapprochement_ecart_pct: number | null;
-  rapprochement_statut: "OK" | "A_JUSTIFIER" | "A_INVESTIGUER" | "DONNEES_INCOMPLETES" | "CPH_NON_CALCULE" | null;
-  rapprochement_motif: string | null;
-  livraisons_source: "ENOC_REEL" | "LIVRAISONS_ENOC_A_CONTROLER" | null;
 };
 
 export type FuelConsommationKpis = {
@@ -138,55 +86,22 @@ export type FuelConsommationKpis = {
   total_conso_snowflake_l: number;
   total_enoc_qte_ajoutee_l: number;
   total_enoc_nb_demandes: number;
-  runtime_source_counts: {
-    tracker_5min: number;
-    dse_controller: number;
-    dg_on_calculated: number;
-    rectifier_status_5min: number;
-    none: number;
-  };
   configuration_counts: {
     indoor: number;
     outdoor: number;
     none: number;
   };
-  /** Partition à 4 catégories mutuellement exclusives (spec 2026-09) — le
-   * compteur "Sans source" seul mélangeait les sites sans GE (runtime non
-   * applicable) avec les sites GE sans runtime résolu. */
-  runtime_availability_counts: {
-    sans_ge: number;
-    avec_ge_avec_runtime: number;
-    avec_ge_sans_runtime: number;
-    avec_runtime_sans_cph: number;
-  };
   factures_payees: number;
   factures_impayees: number;
   factures_total: number;
-  rapprochement_counts: {
-    ok: number;
-    a_justifier: number;
-    a_investiguer: number;
-    donnees_incompletes: number;
-    cph_non_calcule: number;
-    livraisons_a_controler: number;
-  };
   // KPIs Stan — dénominateur = "ESCO SN Facturation par site",
   // colonne "Facturation avec GE oui|Non = Oui" (463 en sept. 2026).
   // stan_importe=false → import_facturation_par_site non lancé pour ce mois.
   sites_ge_valides_stan: number;
-  supervision_snowflake: number;
-  supervision_snowflake_pct: number | null;
-  disponibilite_runtime_dse: number;
-  disponibilite_runtime_dse_pct: number | null;
-  sites_avec_cph_calcule: number;
-  sites_cph_non_calcule: number;
   stan_importe: boolean;
 };
 
-export type FuelRuntimeSourceFilter = "tracker_5min" | "dse_controller" | "dg_on_calculated" | "rectifier_status_5min" | "none";
-export type FuelRuntimeAvailabilityFilter = "sans_ge" | "avec_ge_avec_runtime" | "avec_ge_sans_runtime" | "avec_runtime_sans_cph";
 export type FuelConfigurationFilter = "indoor" | "outdoor" | "none";
-export type FuelRapprochementStatutFilter = "ok" | "a_justifier" | "a_investiguer" | "donnees_incompletes" | "cph_non_calcule" | "livraisons_a_controler";
 
 export type FuelSourceStatus = {
   connected: boolean;
@@ -202,11 +117,6 @@ export type FuelSourceStatus = {
 export type FuelConsommationSources = {
   snowflake: FuelSourceStatus;
   enoc: FuelSourceStatus;
-};
-
-export type FuelCphParametersStatus = {
-  sites_configures: number;
-  dernier_import: string | null;
 };
 
 // Recoupement Snowflake/ENOC/fichiers de référence — explique d'où viennent
@@ -234,7 +144,6 @@ export type FuelConsommationResponse = {
   available_months: string[];
   kpis: FuelConsommationKpis | null;
   sources?: FuelConsommationSources;
-  cph_parameters?: FuelCphParametersStatus;
   ge_detection?: FuelGeDetection | null;
 };
 
@@ -256,27 +165,11 @@ export type FuelGeDetectionFilter =
   | "dans_fichier_sans_ge"
   | "ge_hors_fichier";
 
-export async function getFuelConsommation(params?: { month?: string; search?: string; country?: string; has_genset?: "true" | "false" | "incomplete"; detection?: FuelGeDetectionFilter; runtime_source?: FuelRuntimeSourceFilter; runtime_availability?: FuelRuntimeAvailabilityFilter; configuration?: FuelConfigurationFilter; rapprochement_statut?: FuelRapprochementStatutFilter; page?: number; limit?: number }) {
+export async function getFuelConsommation(params?: { month?: string; search?: string; country?: string; has_genset?: "true" | "false" | "incomplete"; detection?: FuelGeDetectionFilter; configuration?: FuelConfigurationFilter; page?: number; limit?: number }) {
   const { data } = await api.get<FuelConsommationResponse>(`${BASE}/consommation/`, {
     params: cleanParams(params ?? {}),
   });
   return data;
-}
-
-export async function exportFuelConsommationControle(params?: { month?: string; search?: string; country?: string; rapprochement_statut?: FuelRapprochementStatutFilter }) {
-  const { data } = await api.get(`${BASE}/consommation/export/controle/`, {
-    params: cleanParams(params ?? {}),
-    responseType: "blob",
-  });
-  return data as Blob;
-}
-
-export async function exportFuelConsommationAnomalies(params?: { month?: string }) {
-  const { data } = await api.get(`${BASE}/consommation/export/anomalies/`, {
-    params: cleanParams(params ?? {}),
-    responseType: "blob",
-  });
-  return data as Blob;
 }
 
 export type FuelConsommationMonthlyPoint = {
@@ -289,8 +182,6 @@ export type FuelConsommationMonthlyPoint = {
   total_enoc_nb_demandes: number;
   nb_sites_enoc_ajoutee: number;
   conso_specifique_moy_l_kwh: number | null;
-  total_conso_estimee_cph_l: number;
-  nb_sites_avec_cph: number;
   nb_sites_incomplet: number;
 };
 
@@ -304,12 +195,6 @@ export type FuelConsommationTopSite = {
 export type FuelConsommationDashboardStanKpis = {
   month_year: string;
   sites_ge_valides_stan: number;
-  supervision_snowflake: number;
-  supervision_snowflake_pct: number | null;
-  disponibilite_runtime_dse: number;
-  disponibilite_runtime_dse_pct: number | null;
-  sites_avec_cph_calcule: number;
-  sites_cph_non_calcule: number;
   stan_importe: boolean;
 };
 
@@ -319,7 +204,6 @@ export type FuelConsommationDashboard = {
   top_sites: FuelConsommationTopSite[];
   total_ge_sites: number;
   available_months: string[];
-  cph_parameters: FuelCphParametersStatus;
   ge_detection: FuelGeDetection | null;
   stan_kpis: FuelConsommationDashboardStanKpis | null;
 };
@@ -503,5 +387,276 @@ export async function getFuelCommandeEstimation(params?: { marge?: number; searc
   const { data } = await api.get<FuelCommandeEstimationResponse>(`${BASE}/commandes/estimation/`, {
     params: cleanParams(params ?? {}),
   });
+  return data;
+}
+
+// ─── Contrôle CPH (instruction Suivi Carburant / CPH, abaque PRP 50 Hz) ─────
+// Calcul au grain site/jour sur la plage EXACTE demandée, côté backend
+// (fuel_tracking/services/cph_engine.py). Toute valeur absente reste null.
+
+export type CphRuntimeSource = "DSE" | "REDRESSEUR" | "DAY_DG_ON" | "COMPTEUR_TERRAIN";
+export type CphPowerSource = "PRODUCTION_GE" | "DC_REDRESSEUR" | "INDOOR_DC_PLUS_AC_HISTORIQUE";
+export type CphPeriodStatus = "COMPLET" | "PARTIEL" | "NON_CALCULE";
+export type CphReconciliationStatus = "OK" | "A_JUSTIFIER" | "A_INVESTIGUER" | "DONNEES_INCOMPLETES" | "CPH_NON_CALCULE";
+export type CphDayStatus =
+  | "CPH_CALCULE" | "GE_A_L_ARRET" | "RUNTIME_ABSENT" | "PUISSANCE_ABSENTE"
+  | "COURBE_ABSENTE" | "PUISSANCE_HORS_PLAFOND" | "CPH_HORS_DOMAINE";
+
+export type CphCurveInfo = {
+  curve_id: string;
+  label: string;
+  status: string;
+  prp_kva: number;
+  prp_kw: number;
+  power_factor: number | null;
+  a: number;
+  b: number;
+  c: number;
+  source: string;
+};
+
+export type CphSourceEval = {
+  availability_pct: number;
+  days_valid: number;
+  exploitable: boolean;
+  rejection: string | null;
+};
+
+export type CphReconciliation = {
+  observation_start: string;
+  observation_end: string;
+  stock_initial_l: number | null;
+  stock_final_l: number | null;
+  livraisons_l: number | null;
+  rajouts_l: number | null;
+  retraits_l: number | null;
+  vols_l: number | null;
+  vidanges_l: number | null;
+  livraisons_statut: "LIVRAISONS_ENOC_A_CONTROLER" | "LIVRAISONS_ENOC_RACCORDEES";
+  observation_status: string | null;
+  import_file: string | null;
+  conso_theorique_l: number | null;
+  jours_conso_calculee: number;
+  jours_observation: number;
+  conso_stock_l: number | null;
+  ecart_l: number | null;
+  ecart_pct: number | null;
+  statut: CphReconciliationStatus;
+  motifs: string[];
+};
+
+export type CphSiteRow = {
+  site_id: string;
+  site_name: string | null;
+  country: string | null;
+  zone: string | null;
+  kind: "INDOOR" | "OUTDOOR" | null;
+  kind_source: string | null;
+  grid_supply: string | null;
+  off_grid: boolean | null;
+  dg_count: number | null;
+  ge_label: string | null;
+  data_issue: string | null;
+  start: string;
+  end: string;
+  days: number;
+  runtime_days: number;
+  runtime_total_h: number | null;
+  runtime_source_main: CphRuntimeSource | null;
+  runtime_source_days: Record<string, number>;
+  sources: Record<CphRuntimeSource, CphSourceEval>;
+  power_source_main: CphPowerSource | null;
+  power_source_days: Record<string, number>;
+  p_ge_moy_kw: number | null;
+  curve: CphCurveInfo | null;
+  curve_reason: string | null;
+  cph_days: number;
+  cph_moy_l_h: number | null;
+  conso_days: number;
+  conso_theorique_l: number | null;
+  conso_partielle_l: number | null;
+  cph_status: CphPeriodStatus;
+  extrapolated_days: number;
+  day_status_counts: Record<string, number>;
+  motifs: string[];
+  rapprochement_statut: CphReconciliationStatus;
+  rapprochement: CphReconciliation | null;
+  observations: number;
+};
+
+export type CphDay = {
+  date: string;
+  runtime_h: number | null;
+  runtime_source: CphRuntimeSource | null;
+  runtime_motifs: string[];
+  raw: Record<CphRuntimeSource, number | null>;
+  p_ge_kw: number | null;
+  power_source: CphPowerSource | null;
+  power_detail: string | null;
+  p_dc_input_kw: number | null;
+  p_ac_aux_kw: number | null;
+  curve_id: string | null;
+  charge_pct: number | null;
+  cph_l_h: number | null;
+  conso_l: number | null;
+  extrapolated: boolean;
+  status: CphDayStatus;
+  motifs: string[];
+};
+
+export type CphSiteDetail = CphSiteRow & {
+  ac_reference: { p_ac_aux_kw: number | null; reference_dates: string[]; reason: string | null } | null;
+  reconciliations: CphReconciliation[];
+  daily: CphDay[];
+};
+
+export type CphSynthesis = {
+  sites: number;
+  cph_calcules: number;
+  conso_theorique_complete: number;
+  cph_non_calcule: number;
+  rapprochements_calcules: number;
+  ok: number;
+  a_justifier: number;
+  a_investiguer: number;
+  donnees_incompletes: number;
+  rapprochement_cph_non_calcule: number;
+};
+
+export type CphMeta = {
+  rule_version: string;
+  enoc_deliveries_connected: boolean;
+  facts_last_date: string | null;
+  facts_last_sync: { status: string; at: string | null; error: string | null } | null;
+  curves_total: number;
+  curves_usable: number;
+  mappings_total: number;
+  mappings_validated: number;
+  max_period_days: number;
+};
+
+export type CphPeriodResponse = {
+  start: string;
+  end: string;
+  days: number;
+  synthesis: CphSynthesis;
+  data: CphSiteRow[];
+  pagination: Pagination;
+  filters: { runtime_sources: string[]; power_sources: string[]; zones: string[]; countries: string[] };
+  meta: CphMeta;
+};
+
+export type CphFilters = {
+  start: string;
+  end: string;
+  country?: string;
+  zone?: string;
+  site?: string;
+  runtime_source?: string;
+  power_source?: string;
+  statut?: string;
+  cph_status?: string;
+};
+
+export async function getCphPeriod(params: CphFilters & { page?: number; limit?: number }) {
+  const { data } = await api.get<CphPeriodResponse>(`${BASE}/cph/`, { params: cleanParams(params) });
+  return data;
+}
+
+export async function getCphSiteDetail(siteId: string, params: { start: string; end: string }) {
+  const { data } = await api.get<CphSiteDetail>(`${BASE}/cph/sites/${encodeURIComponent(siteId)}/`, { params });
+  return data;
+}
+
+export async function exportCph(kind: "controle" | "anomalies", params: CphFilters) {
+  const { data } = await api.get(`${BASE}/cph/export/${kind}/`, { params: cleanParams(params), responseType: "blob" });
+  return data as Blob;
+}
+
+export type CphObservationImportResult = {
+  id: number;
+  file_name: string;
+  rule_version: string;
+  rows_total: number;
+  rows_imported: number;
+  rows_rejected: number;
+  errors: Array<{ line: number; site_id: string | null; error: string }>;
+};
+
+export async function importCphObservations(file: File) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const { data } = await api.post<CphObservationImportResult>(`${BASE}/cph/observations/import/`, fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+}
+
+export type CphReferentielCurve = {
+  curve_id: string;
+  manufacturer: string;
+  model: string;
+  variant: string;
+  prp_kva: number;
+  prp_kw: number;
+  power_factor: number | null;
+  conso_50_l_h: number;
+  conso_75_l_h: number;
+  conso_100_l_h: number;
+  a: number;
+  b: number;
+  c: number;
+  status: string;
+  is_usable: boolean;
+  business_approved: boolean;
+  business_approved_by: string | null;
+  business_approved_at: string | null;
+  source: string;
+  source_url: string;
+  note: string;
+};
+
+export type CphReferentielMapping = {
+  id: number;
+  inventory_label: string;
+  inventory_kva: number | null;
+  site_count: number | null;
+  abaque_status: string;
+  action_required: string;
+  candidates: CphReferentielCurve[];
+  validated_curve_id: string | null;
+  validated_by: string | null;
+  validated_at: string | null;
+  validation_comment: string;
+};
+
+export type CphReferentiel = {
+  can_validate: boolean;
+  curves: CphReferentielCurve[];
+  mappings: CphReferentielMapping[];
+};
+
+export async function getCphReferentiel() {
+  const { data } = await api.get<CphReferentiel>(`${BASE}/cph/referentiel/`);
+  return data;
+}
+
+export async function validateCphMapping(id: number, curveId: string, comment: string) {
+  const { data } = await api.post(`${BASE}/cph/mappings/${id}/validate/`, { curve_id: curveId, comment });
+  return data;
+}
+
+export async function unvalidateCphMapping(id: number) {
+  const { data } = await api.post(`${BASE}/cph/mappings/${id}/unvalidate/`);
+  return data;
+}
+
+export async function approveCphCurve(curveId: string, comment: string) {
+  const { data } = await api.post(`${BASE}/cph/curves/${encodeURIComponent(curveId)}/approve/`, { comment });
+  return data;
+}
+
+export async function revokeCphCurve(curveId: string) {
+  const { data } = await api.post(`${BASE}/cph/curves/${encodeURIComponent(curveId)}/revoke/`);
   return data;
 }
