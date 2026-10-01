@@ -12,6 +12,7 @@ import { Droplets, Fuel, Gauge, PieChart as PieChartIcon, Search, Users } from "
 import { type FuelConfigurationFilter, type FuelConsommationResponse, type FuelGeDetectionFilter } from "@/services/fuelTracking";
 import { Card, EmptyState, KpiCard, Modal, Pager, Skeleton } from "../ui";
 import { FT } from "../theme";
+import { ConsoEstimeeSection } from "./ConsoEstimeeSection";
 import { fmt, monthLabel } from "../helpers";
 
 const th: CSSProperties = {
@@ -167,7 +168,8 @@ function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse 
         />
       </div>
       <div style={{ marginTop: 10, fontSize: 11.5, color: FT.textSub }}>
-        Runtime GE, CPH, consommation théorique et rapprochement stock : onglet <strong>Contrôle CPH</strong> (calcul site/jour sur les dates exactes choisies).
+        Conso estimée (runtime GE × CPH) et comparaison avec la conso mesurée : tableau ci-dessous, sur les dates exactes choisies.
+        Prérequis, correspondances plaque → courbe et rapprochement stock : onglet <strong>Contrôle CPH</strong>.
       </div>
     </div>
   );
@@ -434,6 +436,8 @@ export function ConsommationSheet({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <ConsommationKpis data={data} stickyTop={stickyTop + 14} />
+
+      <ConsoEstimeeSection month={data?.month_year} />
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <button

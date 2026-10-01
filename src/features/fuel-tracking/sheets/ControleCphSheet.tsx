@@ -10,6 +10,7 @@ import { AlertTriangle, BookOpen, CalendarRange, CheckCircle2, ChevronRight, Col
 
 import {
   approveCphCurve,
+  autoMatchCphMappings,
   exportCph,
   getCphPeriod,
   getCphReferentiel,
@@ -32,6 +33,7 @@ import {
 } from "@/services/fuelTracking";
 import { Card, EmptyState, KpiCard, Modal, Pager, Skeleton } from "../ui";
 import { FT } from "../theme";
+import { CorrespondanceCell, CURVE_STATUS_SHORT, CurveStatusBadge, MatchBadge } from "./cphBadges";
 
 // ─── Libellés ────────────────────────────────────────────────────────────────
 
@@ -87,7 +89,7 @@ const HELP: Record<string, string> = {
   runtime: "Runtime GE journalier (h). Priorité stricte : DSE (GENSET_REPORT.DG_RUNTIME_CONTROLLER, 0-24 h, 0 valide) > redresseur actif par créneaux 5 min (sites off-grid) > Day DG On (GENSET_REPORT.DG_RUNTIME_CALCULATED, contrôle de coalescence à 0) > compteur terrain (GFMS_DATA_TRACKER_NC). Une source n'est exploitable que si elle est disponible ≥ 50 % des jours de la période.",
   disponibilite: "Disponibilité d'une source (%) = jours avec une valeur non nulle ÷ jours de la période. Jamais de COALESCE à 0.",
   puissance: "Puissance GE retenue (kW), moyenne pondérée par le runtime des jours calculés. Outdoor : DG_PRODUCTION_KWH ÷ runtime DSE, sinon P_DC ÷ rendement redresseur (charge batterie non ajoutée). Indoor : P_DC pendant GE ÷ rendement + load AC historique (médiane des jours réseau sans GE, AC_METER.ACT_ACTIVE_POWER_AVG ÷ 1 000).",
-  courbe: "Courbe CPH de l'abaque PRP 50 Hz, appliquée seulement si le mappage (libellé GE + kVA) est validé par le métier et que la courbe est VALIDÉ_CONSTRUCTEUR ou activée explicitement.",
+  courbe: "Correspondance libellé GE (Base GE + kVA) → courbe de l'abaque PRP 50 Hz : appliquée si AUTO_VALIDE_COMPATIBLE (candidat unique, score ≥ 70 %, sans contradiction) ou VALIDE_MANUELLEMENT. Le second badge est la qualité de la courbe (VALIDÉ_CONSTRUCTEUR, HISTORIQUE_A_VALIDER, ARCHIVÉ, DISTRIBUTEUR), jamais modifiée par la correspondance.",
   cph: "CPH (L/h) = a·x² + b·x + c, x = puissance GE retenue (kW) ÷ puissance PRP (kW). Refus au-delà de 105 % × kVA × cos φ ; une charge < 50 % est une extrapolation mathématique. Moyenne pondérée par le runtime.",
   conso: "Consommation théorique (L) = Σ runtime GE (h) × CPH (L/h) sur chaque jour de la plage. Affichée uniquement si TOUS les jours sont calculés ; sinon la somme partielle est indiquée à part.",
   stock: "Stocks et mouvements (L) issus du fichier d'observation standard. Une cellule vide reste vide, jamais 0.",
@@ -294,6 +296,14 @@ function CalculationChain({ d }: { d: CphSiteDetail }) {
         })}
       </ol>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap", fontSize: 12.5 }}>
+        <strong>Correspondance :</strong>
+        <MatchBadge statut={d.correspondance?.statut} />
+        {d.correspondance?.score !== null && d.correspondance?.score !== undefined && <span style={{ fontSize: 11.5, color: FT.textSub }}>score {d.correspondance.score} % · {d.correspondance.methode}</span>}
+        {(d.correspondance?.courbe_statut || d.curve?.status) && <>
+          <strong style={{ marginLeft: 6 }}>Qualité courbe :</strong> <CurveStatusBadge status={d.correspondance?.courbe_statut ?? d.curve?.status} />
+        </>}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap", fontSize: 12.5 }}>
         <strong>Verdict :</strong> <StatutBadge statut={d.rapprochement_statut} />
         {d.blocage && (
           <span style={{ color: d.blocage.etape === "cph" ? FT.violet : FT.orange }}>
@@ -462,11 +472,15 @@ function prepItems(meta: CphMeta, h: PrepHandlers): PrepItem[] {
       actions: <button type="button" onClick={h.onAbaque} style={hasAbaque ? btn : primary}><FileUp size={13} aria-hidden /> {hasAbaque ? "Mettre à jour" : "Importer l'abaque CPH"}</button>,
     },
     {
-      key: "plaques", title: "Plaques signalétiques (GE → courbe)", ready: meta.mappings_validated > 0, partial: meta.mappings_validated < meta.mappings_total,
-      short: `Plaques : ${meta.mappings_validated}/${meta.mappings_total} validées`,
+      key: "plaques", title: "Correspondances plaque → courbe", ready: meta.mappings_validated > 0, partial: meta.mappings_validated < meta.mappings_total,
+      short: `Correspondances : ${meta.mappings_validated}/${meta.mappings_total} actives`,
       status: !hasAbaque ? "Disponible après l'import de l'abaque."
-        : <><strong>{meta.mappings_validated}</strong>/{meta.mappings_total} types de GE validés. Un site dont le GE n'est pas validé n'a pas de CPH.</>,
-      actions: <button type="button" onClick={h.onReferentiel} disabled={!hasAbaque} style={{ ...(hasAbaque && meta.mappings_validated === 0 ? primary : btn), opacity: hasAbaque ? 1 : 0.5, cursor: hasAbaque ? "pointer" : "not-allowed" }}><BookOpen size={13} aria-hidden /> Valider les plaques</button>,
+        : <>
+            <strong>{meta.mappings_validated}</strong>/{meta.mappings_total} types de GE avec une courbe appliquée
+            ({meta.mappings_by_status?.AUTO_VALIDE_COMPATIBLE ?? 0} auto, {meta.mappings_by_status?.VALIDE_MANUELLEMENT ?? 0} manuelles).
+            À traiter : {meta.mappings_by_status?.A_VALIDER ?? 0} à valider, {meta.mappings_by_status?.MODELE_AMBIGU ?? 0} ambiguës, {meta.mappings_by_status?.COURBE_CPH_MANQUANTE ?? 0} sans courbe.
+          </>,
+      actions: <button type="button" onClick={h.onReferentiel} disabled={!hasAbaque} style={{ ...(hasAbaque && meta.mappings_validated === 0 ? primary : btn), opacity: hasAbaque ? 1 : 0.5, cursor: hasAbaque ? "pointer" : "not-allowed" }}><BookOpen size={13} aria-hidden /> Traiter les exceptions</button>,
     },
     {
       key: "obs", title: "Relevés de stock (fichier d'observation)", ready: !!obs,
@@ -573,10 +587,9 @@ function HowItWorksModal({ onClose, ruleVersion }: { onClose: () => void; ruleVe
 // ─── Blocages : pourquoi des sites n'ont pas de verdict ─────────────────────
 
 const BLOCAGE_ACTIONS: Record<string, { label: string; target: "referentiel" | "abaque" | "observations" }> = {
-  MAPPAGE_NON_VALIDE: { label: "Valider les plaques", target: "referentiel" },
-  COURBE_NON_ACTIVEE: { label: "Activer les courbes", target: "referentiel" },
+  MAPPAGE_NON_VALIDE: { label: "Valider la correspondance", target: "referentiel" },
   MAPPAGE_AMBIGU: { label: "Choisir la courbe", target: "referentiel" },
-  GE_HORS_ABAQUE: { label: "Compléter l'abaque", target: "abaque" },
+  COURBE_CPH_MANQUANTE: { label: "Compléter l'abaque", target: "abaque" },
   OBSERVATION_ABSENTE: { label: "Importer les relevés", target: "observations" },
   OBSERVATION_INCOMPLETE: { label: "Corriger les relevés", target: "observations" },
 };
@@ -715,43 +728,67 @@ function ObservationImportModal({ onClose, onImported, onOpenAbaque }: { onClose
 // ─── Référentiel : courbes et mappages (validation métier) ──────────────────
 
 function MappingRow({ m, canValidate, onChanged }: { m: CphReferentielMapping; canValidate: boolean; onChanged: () => void }) {
-  const [curveId, setCurveId] = useState(m.candidates.find((c) => c.is_usable)?.curve_id ?? m.candidates[0]?.curve_id ?? "");
+  const [curveId, setCurveId] = useState(m.validated_curve_id ?? m.candidates[0]?.curve_id ?? "");
   const [comment, setComment] = useState("");
+  const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const validate = useMutation({ mutationFn: () => validateCphMapping(m.id, curveId, comment), onSuccess: () => { setError(null); onChanged(); }, onError: (e) => setError(apiError(e)) });
+  const validate = useMutation({ mutationFn: () => validateCphMapping(m.id, curveId, comment), onSuccess: () => { setError(null); setEditing(false); setComment(""); onChanged(); }, onError: (e) => setError(apiError(e)) });
   const unvalidate = useMutation({ mutationFn: () => unvalidateCphMapping(m.id), onSuccess: onChanged, onError: (e) => setError(apiError(e)) });
+  const applied = m.candidates.find((c) => c.curve_id === m.validated_curve_id);
+  const showForm = canValidate && m.candidates.length > 0 && (editing || !m.validated_curve_id);
   return (
     <tr>
       <td style={{ ...td, textAlign: "left" }}><strong>{m.inventory_label}</strong></td>
       <td style={td}>{nf(m.inventory_kva, 0) ?? "—"}</td>
       <td style={td}>{m.site_count ?? "—"}</td>
-      <td style={td}><Tag>{m.abaque_status}</Tag></td>
+      <td style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 250 }}>
+        <span style={{ display: "inline-flex", gap: 5, alignItems: "center" }}>
+          <MatchBadge statut={m.match_status} />
+          {m.match_score !== null && m.match_score !== undefined && <span style={{ fontSize: 10.5, color: FT.textSub }}>score {m.match_score} %</span>}
+        </span>
+        <div style={{ fontSize: 10.5, color: FT.textSub, marginTop: 2 }}>
+          {m.match_method || "—"}{m.matched_at ? ` · ${new Date(m.matched_at).toLocaleDateString("fr-FR")}` : ""}{m.validated_by ? ` · ${m.validated_by}` : ""}
+        </div>
+        {(m.match_reasons ?? []).length > 0 && (
+          <ul style={{ margin: "3px 0 0", paddingLeft: 16, fontSize: 11, color: FT.textMid }}>
+            {(m.match_reasons ?? []).slice(0, 4).map((r) => <li key={r}>{r}</li>)}
+          </ul>
+        )}
+      </td>
       <td style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 220 }}>
-        {m.candidates.length === 0 ? "—" : m.candidates.map((c) => (
-          <div key={c.curve_id} style={{ fontSize: 11.5 }}>
-            {c.curve_id} {c.manufacturer} {c.model} ({nf(c.prp_kva, 0)} kVA / {nf(c.prp_kw, 1)} kW){" "}
-            <Tag tone={c.is_usable ? FT.green : FT.orange}>{c.status}{c.business_approved ? " · activée" : ""}</Tag>
+        {m.candidates.length === 0 ? <span style={{ fontSize: 11.5, color: FT.textSub }}>Aucune courbe dans l'abaque</span> : m.candidates.map((c) => (
+          <div key={c.curve_id} style={{ fontSize: 11.5, marginBottom: 2 }}>
+            <strong style={{ fontWeight: c.curve_id === m.validated_curve_id ? 800 : 500 }}>{c.curve_id}</strong> {c.manufacturer} {c.model} ({nf(c.prp_kva, 0)} kVA / {nf(c.prp_kw, 1)} kW){" "}
+            <CurveStatusBadge status={c.status} />
           </div>
         ))}
       </td>
       <td style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 260 }}>
-        {m.validated_curve_id ? (
+        {applied && !editing && (
           <div style={{ fontSize: 11.5 }}>
-            <Tag tone={FT.green}>Validé : {m.validated_curve_id}</Tag> par {m.validated_by ?? "—"} le {m.validated_at ? new Date(m.validated_at).toLocaleDateString("fr-FR") : "—"}
-            <div style={{ color: FT.textSub }}>{m.validation_comment}</div>
-            {canValidate && <button type="button" onClick={() => unvalidate.mutate()} style={{ ...btn, padding: "3px 8px", marginTop: 4 }}>Retirer la validation</button>}
+            Courbe appliquée : <strong>{applied.curve_id}</strong> <CurveStatusBadge status={applied.status} />
+            {m.validation_comment && <div style={{ color: FT.textSub }}>{m.validation_comment}</div>}
+            {canValidate && (
+              <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
+                <button type="button" onClick={() => setEditing(true)} style={{ ...btn, padding: "3px 8px" }}>Corriger</button>
+                <button type="button" onClick={() => unvalidate.mutate()} style={{ ...btn, padding: "3px 8px" }} title="Le mappage repasse « à valider » et l'automatique ne le réactivera plus">Retirer</button>
+              </div>
+            )}
           </div>
-        ) : canValidate && m.candidates.length > 0 ? (
+        )}
+        {showForm && (
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <select aria-label={`Courbe pour ${m.inventory_label}`} value={curveId} onChange={(e) => setCurveId(e.target.value)} style={{ ...control, padding: "4px 8px" }}>
-              {m.candidates.map((c) => <option key={c.curve_id} value={c.curve_id}>{c.curve_id} — {c.model}{c.is_usable ? "" : " (non activée)"}</option>)}
+              {m.candidates.map((c) => <option key={c.curve_id} value={c.curve_id}>{c.curve_id} — {c.manufacturer} {c.model} ({CURVE_STATUS_SHORT[c.status] ?? c.status})</option>)}
             </select>
             <input aria-label={`Commentaire de validation pour ${m.inventory_label}`} placeholder="Référence plaque signalétique…" value={comment} onChange={(e) => setComment(e.target.value)} style={{ ...control, padding: "4px 8px" }} />
-            <button type="button" disabled={!comment.trim() || validate.isPending} onClick={() => validate.mutate()} style={{ ...btn, padding: "4px 8px", opacity: !comment.trim() ? 0.5 : 1 }}>Valider le mappage</button>
+            <span style={{ display: "flex", gap: 4 }}>
+              <button type="button" disabled={!comment.trim() || validate.isPending} onClick={() => validate.mutate()} style={{ ...btn, padding: "4px 8px", opacity: !comment.trim() ? 0.5 : 1 }}>Valider manuellement</button>
+              {editing && <button type="button" onClick={() => setEditing(false)} style={{ ...btn, padding: "4px 8px" }}>Annuler</button>}
+            </span>
           </div>
-        ) : (
-          <span style={{ fontSize: 11.5, color: FT.textSub }}>{m.candidates.length === 0 ? "Courbe manquante dans l'abaque" : "Non validé"}</span>
         )}
+        {!applied && !showForm && <span style={{ fontSize: 11.5, color: FT.textSub }}>{m.candidates.length === 0 ? "Compléter l'abaque" : "Validation réservée admin / manager"}</span>}
         {error && <div role="alert" style={{ color: FT.red, fontSize: 11.5 }}>{error}</div>}
       </td>
     </tr>
@@ -770,7 +807,7 @@ function AbaqueImport({ onImported }: { onImported: () => void }) {
     <div style={{ border: `1px solid ${FT.border}`, borderRadius: 9, padding: 12 }}>
       <label htmlFor={inputId} style={{ fontSize: 12.5, fontWeight: 800 }}>Importer / mettre à jour l'abaque (ABAQUE_CPH_GE_PRP_50HZ.xlsx)</label>
       <div style={{ fontSize: 11.5, color: FT.textSub, margin: "3px 0 8px" }}>
-        Feuilles « Abaque CPH » et « Mappage inventaire ». Les validations métier déjà saisies sont conservées ; un nouvel import ne valide rien automatiquement.
+        Feuilles « Abaque CPH » et « Mappage inventaire ». Après l'import, les correspondances fiables sont activées automatiquement (AUTO_VALIDE_COMPATIBLE) ; les corrections manuelles déjà saisies sont conservées.
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <input id={inputId} type="file" accept=".xlsx,.xlsm" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setResult(null); }} />
@@ -797,8 +834,8 @@ function AbaqueImportModal({ onClose, canValidate, onOpenReferentiel }: { onClos
   return (
     <Modal title="Importer l'abaque CPH (courbes PRP 50 Hz)" onClose={onClose} maxWidth={640}>
       <p style={{ fontSize: 12.5, color: FT.textMid, marginTop: 0 }}>
-        Fichier de référence des courbes de consommation des GE (<code>ABAQUE_CPH_GE_PRP_50HZ.xlsx</code>). Après l'import, chaque
-        libellé GE doit être <strong>validé</strong> vers sa courbe (plaque signalétique) dans le référentiel avant tout calcul de CPH.
+        Fichier de référence des courbes de consommation des GE (<code>ABAQUE_CPH_GE_PRP_50HZ.xlsx</code>). Après l'import, les correspondances
+        fiables sont activées automatiquement ; les exceptions (à valider, ambiguës, sans courbe) se traitent dans le référentiel.
       </p>
       {canValidate ? <AbaqueImport onImported={refresh} /> : (
         <div role="note" style={{ fontSize: 12.5, color: FT.orange, background: FT.orangeL, padding: "8px 11px", borderRadius: 8 }}>
@@ -807,7 +844,7 @@ function AbaqueImportModal({ onClose, canValidate, onOpenReferentiel }: { onClos
       )}
       {done && (
         <button type="button" onClick={onOpenReferentiel} style={{ ...btn, marginTop: 12 }}>
-          <BookOpen size={13} color={FT.blue} /> Étape suivante : valider les plaques signalétiques
+          <BookOpen size={13} color={FT.blue} /> Étape suivante : voir les correspondances et les exceptions
         </button>
       )}
     </Modal>
@@ -821,21 +858,25 @@ function ReferentielModal({ onClose }: { onClose: () => void }) {
   const [approveTarget, setApproveTarget] = useState<string | null>(null);
   const [approveComment, setApproveComment] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState("");
   const refresh = () => { qc.invalidateQueries({ queryKey: ["cph-referentiel"] }); qc.invalidateQueries({ queryKey: ["cph-period"] }); };
+  const rerun = useMutation({ mutationFn: () => autoMatchCphMappings(false), onSuccess: () => { setError(null); refresh(); }, onError: (e) => setError(apiError(e)) });
   const approve = useMutation({ mutationFn: () => approveCphCurve(approveTarget!, approveComment), onSuccess: () => { setApproveTarget(null); setApproveComment(""); setError(null); refresh(); }, onError: (e) => setError(apiError(e)) });
   const revoke = useMutation({ mutationFn: (id: string) => revokeCphCurve(id), onSuccess: refresh, onError: (e) => setError(apiError(e)) });
   const data = q.data;
-  const mappings = (data?.mappings ?? []).filter((m) => !filter || m.inventory_label.toLowerCase().includes(filter.toLowerCase()));
+  const mappings = (data?.mappings ?? []).filter((m) => (!filter || m.inventory_label.toLowerCase().includes(filter.toLowerCase())) && (!statusFilter || m.match_status === statusFilter));
+  const byStatus = (data?.mappings ?? []).reduce<Record<string, number>>((acc, m) => { const k = m.match_status ?? "A_VALIDER"; acc[k] = (acc[k] ?? 0) + 1; return acc; }, {});
   const nonConstructor = (data?.curves ?? []).filter((c) => c.status !== "VALIDÉ_CONSTRUCTEUR" && (!filter || `${c.curve_id} ${c.manufacturer} ${c.model}`.toLowerCase().includes(filter.toLowerCase())));
   return (
-    <Modal title="Référentiel courbes CPH PRP 50 Hz — validation métier" onClose={onClose} maxWidth={1180}>
+    <Modal title="Référentiel courbes CPH PRP 50 Hz — correspondances plaque → courbe" onClose={onClose} maxWidth={1180}>
       {q.isLoading && <Skeleton h={300} />}
       {data && (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ fontSize: 12.5, color: FT.textMid }}>
-            Un CPH n'est calculé pour un site que si son libellé GE (Base GE, avec son kVA) est <strong>validé</strong> vers une courbe utilisable :
-            VALIDÉ_CONSTRUCTEUR, ou courbe historique / archivée / distributeur <strong>activée explicitement</strong>.
-            {!data.can_validate && " Import de l'abaque et validation réservés aux rôles admin et manager."}
+            Les correspondances fiables sont activées automatiquement (<strong>AUTO_VALIDE_COMPATIBLE</strong> : candidat unique, score ≥ 70 %, sans contradiction de modèle, marque, puissance ou fréquence).
+            Les exceptions restent à traiter ici ; une correction manuelle (<strong>VALIDE_MANUELLEMENT</strong>) prime toujours sur l'automatique.
+            Le statut de qualité de la courbe (VALIDÉ_CONSTRUCTEUR, HISTORIQUE_A_VALIDER, ARCHIVÉ, DISTRIBUTEUR) est affiché à part et n'est jamais modifié par une correspondance.
+            {!data.can_validate && " Import de l'abaque et corrections réservés aux rôles admin et manager."}
           </div>
           {data.can_validate && <AbaqueImport onImported={refresh} />}
           {data.curves.length === 0 && (
@@ -843,9 +884,20 @@ function ReferentielModal({ onClose }: { onClose: () => void }) {
               Aucune courbe en base : l'abaque n'a pas encore été importé{data.can_validate ? " — utilisez l'import ci-dessus." : " — demandez à un admin ou manager de l'importer."}
             </div>
           )}
-          <div style={{ display: "flex", alignItems: "center", gap: 7, ...control, maxWidth: 320 }}>
-            <Search size={14} color={FT.textSub} />
-            <input aria-label="Filtrer le référentiel" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Libellé, modèle ou ID courbe…" style={{ border: "none", outline: "none", background: "transparent", flex: 1, fontSize: 12.5 }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, ...control, maxWidth: 320, flex: "1 1 220px" }}>
+              <Search size={14} color={FT.textSub} aria-hidden />
+              <input aria-label="Filtrer le référentiel" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Libellé, modèle ou ID courbe…" style={{ border: "none", outline: "none", background: "transparent", flex: 1, fontSize: 12.5, minWidth: 0 }} />
+            </div>
+            <select aria-label="Statut de correspondance" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ ...control, cursor: "pointer" }}>
+              <option value="">Correspondance : toutes ({data.mappings.length})</option>
+              {Object.entries(byStatus).map(([k, n]) => <option key={k} value={k}>{k} ({n})</option>)}
+            </select>
+            {data.can_validate && (
+              <button type="button" onClick={() => rerun.mutate()} disabled={rerun.isPending} style={btn} title="Réévalue les mappages non traités par un humain">
+                {rerun.isPending ? "Correspondance en cours…" : "Relancer la correspondance automatique"}
+              </button>
+            )}
           </div>
           {error && <div role="alert" style={{ color: FT.red, fontSize: 12.5 }}>{error}</div>}
           <div style={{ overflow: "auto", maxHeight: 380, border: `1px solid ${FT.border}`, borderRadius: 9 }}>
@@ -853,7 +905,7 @@ function ReferentielModal({ onClose }: { onClose: () => void }) {
               <thead>
                 <tr>
                   <th scope="col" style={{ ...th, textAlign: "left" }}>Libellé inventaire</th><th scope="col" style={th}>kVA</th><th scope="col" style={th}>Sites</th>
-                  <th scope="col" style={th}>Statut abaque</th><th scope="col" style={{ ...th, textAlign: "left" }}>Courbes candidates</th><th scope="col" style={{ ...th, textAlign: "left" }}>Validation métier</th>
+                  <th scope="col" style={{ ...th, textAlign: "left" }}>Correspondance (score, méthode, motifs)</th><th scope="col" style={{ ...th, textAlign: "left" }}>Courbes candidates (qualité)</th><th scope="col" style={{ ...th, textAlign: "left" }}>Courbe appliquée / correction</th>
                 </tr>
               </thead>
               <tbody>
@@ -862,13 +914,13 @@ function ReferentielModal({ onClose }: { onClose: () => void }) {
             </table>
           </div>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 12.5, marginBottom: 6 }}>Courbes non constructeur ({nonConstructor.length}) — activation métier</div>
+            <div style={{ fontWeight: 800, fontSize: 12.5, marginBottom: 6 }}>Courbes non constructeur ({nonConstructor.length}) — vérification métier (information de qualité, sans effet sur le calcul)</div>
             <div style={{ overflow: "auto", maxHeight: 260, border: `1px solid ${FT.border}`, borderRadius: 9 }}>
               <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
                 <thead>
                   <tr>
                     <th scope="col" style={th}>ID</th><th scope="col" style={{ ...th, textAlign: "left" }}>Modèle</th><th scope="col" style={th}>PRP</th>
-                    <th scope="col" style={th}>50 / 75 / 100 % (L/h)</th><th scope="col" style={th}>Statut</th><th scope="col" style={{ ...th, textAlign: "left" }}>Activation</th>
+                    <th scope="col" style={th}>50 / 75 / 100 % (L/h)</th><th scope="col" style={th}>Statut</th><th scope="col" style={{ ...th, textAlign: "left" }}>Vérification</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -878,24 +930,24 @@ function ReferentielModal({ onClose }: { onClose: () => void }) {
                       <td style={{ ...td, textAlign: "left" }}>{c.manufacturer} {c.model} {c.variant}</td>
                       <td style={td}>{nf(c.prp_kva, 0)} kVA / {nf(c.prp_kw, 1)} kW · cos φ {nf(c.power_factor, 2) ?? "—"}</td>
                       <td style={td}>{nf(c.conso_50_l_h, 1)} / {nf(c.conso_75_l_h, 1)} / {nf(c.conso_100_l_h, 1)}</td>
-                      <td style={td}><Tag tone={FT.orange}>{c.status}</Tag></td>
+                      <td style={td}><CurveStatusBadge status={c.status} /></td>
                       <td style={{ ...td, textAlign: "left" }}>
                         {c.business_approved ? (
                           <span style={{ fontSize: 11.5 }}>
-                            <Tag tone={FT.green}>Activée</Tag> par {c.business_approved_by ?? "—"}
-                            {data.can_validate && <button type="button" onClick={() => revoke.mutate(c.curve_id)} style={{ ...btn, padding: "3px 8px", marginLeft: 6 }}>Désactiver</button>}
+                            <Tag tone={FT.green}>Vérifiée</Tag> par {c.business_approved_by ?? "—"}
+                            {data.can_validate && <button type="button" onClick={() => revoke.mutate(c.curve_id)} style={{ ...btn, padding: "3px 8px", marginLeft: 6 }}>Retirer</button>}
                           </span>
                         ) : data.can_validate ? (
                           approveTarget === c.curve_id ? (
                             <span style={{ display: "inline-flex", gap: 4 }}>
-                              <input aria-label={`Justification d'activation ${c.curve_id}`} autoFocus value={approveComment} onChange={(e) => setApproveComment(e.target.value)} placeholder="Justification métier…" style={{ ...control, padding: "3px 8px" }} />
+                              <input aria-label={`Justification de vérification ${c.curve_id}`} autoFocus value={approveComment} onChange={(e) => setApproveComment(e.target.value)} placeholder="Justification métier…" style={{ ...control, padding: "3px 8px" }} />
                               <button type="button" disabled={!approveComment.trim()} onClick={() => approve.mutate()} style={{ ...btn, padding: "3px 8px" }}>Confirmer</button>
                               <button type="button" onClick={() => setApproveTarget(null)} style={{ ...btn, padding: "3px 8px" }}>Annuler</button>
                             </span>
                           ) : (
-                            <button type="button" onClick={() => { setApproveTarget(c.curve_id); setApproveComment(""); }} style={{ ...btn, padding: "3px 8px" }}>Activer…</button>
+                            <button type="button" onClick={() => { setApproveTarget(c.curve_id); setApproveComment(""); }} style={{ ...btn, padding: "3px 8px" }}>Marquer vérifiée…</button>
                           )
-                        ) : "Non activée"}
+                        ) : "Non vérifiée"}
                       </td>
                     </tr>
                   ))}
@@ -913,12 +965,13 @@ function ReferentielModal({ onClose }: { onClose: () => void }) {
 
 function SimpleTable({ rows, onDetail }: { rows: CphSiteRow[]; onDetail: (siteId: string) => void }) {
   return (
-    <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1080 }}>
+    <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1280 }}>
       <caption className="sr-only">Contrôle CPH par site : résultat, consommation théorique et comparaison au stock</caption>
       <thead>
         <tr>
           <th scope="col" style={{ ...th, textAlign: "left" }}>Site</th>
           <th scope="col" style={{ ...th, textAlign: "left" }}>Résultat</th>
+          <th scope="col" style={{ ...th, textAlign: "left" }}>Correspondance / courbe<HelpTip label="correspondance" text={HELP.courbe} /></th>
           <th scope="col" style={th}>Heures GE<HelpTip label="heures de marche" text={HELP.runtime} /></th>
           <th scope="col" style={th}>CPH (L/h)<HelpTip label="CPH" text={HELP.cph} /></th>
           <th scope="col" style={th}>Conso théorique (L)<HelpTip label="consommation théorique" text={HELP.conso} /></th>
@@ -944,13 +997,14 @@ function SimpleTable({ rows, onDetail }: { rows: CphSiteRow[]; onDetail: (siteId
                   </div>
                 )}
               </td>
+              <td style={{ ...td, textAlign: "left" }}><CorrespondanceCell c={r.correspondance} fallbackCurveId={r.curve?.curve_id} /></td>
               <td style={td}>
                 <Num value={r.runtime_total_h} digits={1} reason="Aucune source d'heures de marche fiable sur la période." />
                 <div style={{ fontSize: 11, color: FT.textSub }}>{r.runtime_days}/{r.days} j{r.runtime_source_main ? ` · ${RUNTIME_SOURCE_LABELS[r.runtime_source_main]}` : ""}</div>
               </td>
               <td style={td}>
                 <Num value={r.cph_moy_l_h} digits={2} reason={r.curve ? "Aucun jour avec heures de marche et puissance GE." : r.curve_reason} />
-                <div style={{ fontSize: 11, color: FT.textSub }}>{r.curve ? r.curve.curve_id : "pas de courbe"}</div>
+                <div style={{ fontSize: 11, color: FT.textSub }}>{r.charge_moy_pct !== null && r.charge_moy_pct !== undefined ? `charge ${nf(r.charge_moy_pct, 0)} %` : "—"}</div>
               </td>
               <td style={td}>
                 {r.conso_theorique_l !== null ? <Num value={r.conso_theorique_l} digits={0} /> : r.conso_partielle_l !== null ? (
@@ -1031,7 +1085,7 @@ function LegacyTable({ rows, onDetail }: { rows: CphSiteRow[]; onDetail: (siteId
                 <div style={{ fontSize: 11, color: FT.textSub }}>{r.power_source_main ? POWER_SOURCE_LABELS[r.power_source_main] : "—"}</div>
               </td>
               <td style={td} title={r.curve ? `${r.curve.label} · a=${r.curve.a} b=${r.curve.b} c=${r.curve.c}` : r.curve_reason ?? undefined}>
-                {r.curve ? <Tag tone={FT.green}>{r.curve.curve_id}</Tag> : <Tag tone={FT.orange}>Aucune</Tag>}
+                <CorrespondanceCell c={r.correspondance} fallbackCurveId={r.curve?.curve_id} />
                 <div style={{ fontSize: 11, color: FT.textSub }}>{r.ge_label ?? "GE inconnu"}</div>
               </td>
               <td style={td}>
@@ -1147,7 +1201,7 @@ function CphKpis({ s, meta, onPreparation, handlers }: { s: CphSynthesis | undef
       {meta.curves_total === 0 ? (
         <div role="note" style={warnStyle}>⚠ Abaque CPH non importé — aucun CPH ne peut être calculé. <button type="button" onClick={handlers.onAbaque} style={warnLink}>Importer l'abaque</button></div>
       ) : meta.mappings_validated === 0 ? (
-        <div role="note" style={warnStyle}>⚠ Aucune plaque signalétique validée — aucun CPH ne peut être calculé. <button type="button" onClick={handlers.onReferentiel} style={warnLink}>Valider les plaques</button></div>
+        <div role="note" style={warnStyle}>⚠ Aucune correspondance plaque → courbe active — aucun CPH ne peut être calculé. <button type="button" onClick={handlers.onReferentiel} style={warnLink}>Ouvrir le référentiel</button></div>
       ) : !meta.facts_last_date ? (
         <div role="note" style={warnStyle}>⚠ Aucune donnée Snowflake synchronisée pour le calcul CPH (synchronisation automatique toutes les heures).</div>
       ) : null}

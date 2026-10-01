@@ -484,6 +484,42 @@ export type CphSiteRow = {
   observations: number;
   /** Premier point bloquant (null = site entièrement rapproché). */
   blocage?: CphBlocage | null;
+  runtime_source_availability_pct?: number | null;
+  charge_moy_pct?: number | null;
+  /** Correspondance plaque → courbe (statut distinct de la qualité de la courbe). */
+  correspondance?: CphCorrespondance | null;
+  /** Conso estimée (CPH) vs conso mesurée (capteur) sur les jours communs. */
+  comparaison?: CphComparaison;
+};
+
+export type CphMatchStatus =
+  | "AUTO_VALIDE_COMPATIBLE" | "VALIDE_MANUELLEMENT" | "A_VALIDER" | "COURBE_CPH_MANQUANTE"
+  | "MODELE_AMBIGU" | "SITE_MULTI_GE" | "GE_INCONNU";
+
+export type CphCorrespondance = {
+  statut: CphMatchStatus;
+  score: number | null;
+  methode: string | null;
+  date: string | null;
+  valide_par: string | null;
+  courbe_id: string | null;
+  courbe_statut: string | null;
+  mapping_id: number | null;
+  motif: string | null;
+};
+
+export type CphConsoStatus = "CONSO_ESTIMEE_NON_CALCULEE" | "MESURE_ABSENTE" | "COHERENT" | "ECART_A_JUSTIFIER" | "ECART_A_INVESTIGUER";
+
+export type CphComparaison = {
+  conso_mesuree_l: number | null;
+  jours_mesure: number;
+  jours_communs: number;
+  conso_estimee_communs_l: number | null;
+  conso_mesuree_communs_l: number | null;
+  ecart_l: number | null;
+  ecart_pct: number | null;
+  statut: CphConsoStatus;
+  motif: string | null;
 };
 
 export type CphBlocage = { code: string; etape: "cph" | "rapprochement"; label: string; detail: string | null };
@@ -503,6 +539,7 @@ export type CphDay = {
   charge_pct: number | null;
   cph_l_h: number | null;
   conso_l: number | null;
+  measured_l?: number | null;
   extrapolated: boolean;
   status: CphDayStatus;
   motifs: string[];
@@ -526,6 +563,18 @@ export type CphSynthesis = {
   donnees_incompletes: number;
   rapprochement_cph_non_calcule: number;
   blocages?: Array<{ code: string; etape: "cph" | "rapprochement"; label: string; sites: number }>;
+  conso?: {
+    sites_estimee_complete: number;
+    sites_estimee_partielle: number;
+    sites_estimee_non_calculee: number;
+    total_estimee_complete_l: number | null;
+    sites_mesure: number;
+    total_mesuree_l: number | null;
+    sites_compares: number;
+    statuts: Partial<Record<CphConsoStatus, number>>;
+  };
+  correspondances?: Partial<Record<CphMatchStatus, number>>;
+  courbes_appliquees?: Record<string, number>;
 };
 
 export type CphMeta = {
@@ -541,6 +590,7 @@ export type CphMeta = {
   mappings_validated: number;
   max_period_days: number;
   observations_last_import?: { file_name: string; at: string; rows_imported: number; rows_rejected: number } | null;
+  mappings_by_status?: Partial<Record<CphMatchStatus, number>>;
   can_validate?: boolean;
 };
 
@@ -566,6 +616,8 @@ export type CphFilters = {
   statut?: string;
   cph_status?: string;
   blocage?: string;
+  statut_conso?: string;
+  correspondance?: string;
 };
 
 export async function getCphPeriod(params: CphFilters & { page?: number; limit?: number }) {
@@ -638,6 +690,11 @@ export type CphReferentielMapping = {
   validated_by: string | null;
   validated_at: string | null;
   validation_comment: string;
+  match_status?: CphMatchStatus;
+  match_score?: number | null;
+  match_method?: string;
+  match_reasons?: string[];
+  matched_at?: string | null;
 };
 
 export type CphReferentiel = {
@@ -671,6 +728,11 @@ export async function getCphReferentiel() {
 
 export async function validateCphMapping(id: number, curveId: string, comment: string) {
   const { data } = await api.post(`${BASE}/cph/mappings/${id}/validate/`, { curve_id: curveId, comment });
+  return data;
+}
+
+export async function autoMatchCphMappings(resetRemovals = false) {
+  const { data } = await api.post<{ counts: Record<string, number> }>(`${BASE}/cph/mappings/auto-match/`, { reset_removals: resetRemovals });
   return data;
 }
 
