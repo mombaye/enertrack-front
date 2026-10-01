@@ -23,6 +23,7 @@ export const GLOSSARY = {
   consoMesuree: "Conso mesurée vue (L) : consommation provenant de la source Snowflake de mesure fuel (VW_FUEL_REPORT, QUALITY_STATUS = OK, ≥ 2 points valides). Elle est indépendante de la consommation estimée.",
   ecart: "Écart conso (L) = conso mesurée − conso estimée ; écart (%) = écart ÷ conso estimée × 100. Calculé seulement sur les jours où les deux existent.",
   kva: "Puissance nominale GE (kVA) : puissance apparente nominale du GE dans l'inventaire (Base GE).",
+  sfc: "Consommation spécifique (L/kWh) = conso ÷ énergie GE (Σ puissance GE × runtime). Référence ~0,25-0,30 L/kWh à charge correcte, plus à faible charge. Hors plage [0,20 ; 0,50] = alerte : estimée → vérifier la courbe ou la puissance ; mesurée → perte, vol ou capteur. Jamais bloquant.",
   mapping: "Mapping plaque → courbe : AUTO_VALIDE_COMPATIBLE (candidat unique, score ≥ 70 %, sans contradiction), VALIDE_MANUELLEMENT, ou exception à traiter dans Contrôle CPH. Le second badge est l'origine de la courbe, jamais modifiée par le mapping.",
   energieSite: "Énergie site (kWh) : énergie électrique consommée par les équipements du site sur la période. Ce n'est pas automatiquement la puissance GE.",
   batterieDc: "Batterie DC (kWh) : énergie DC échangée avec la batterie sur la période (préciser si le signe représente une charge, une décharge ou une valeur absolue).",
@@ -228,5 +229,22 @@ export function ConsoStatusBadge({ statut }: { statut: CphConsoStatus }) {
     <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 800, color, background: `${color}1f`, border: `1px solid ${color}44`, whiteSpace: "nowrap" }}>
       {CONSO_STATUS_LABELS[statut] ?? statut}
     </span>
+  );
+}
+
+/** Données Snowflake périmées ou synchro en échec : bandeau d'avertissement commun aux deux écrans. */
+export function FreshnessWarning({ meta }: { meta: { facts_last_date: string | null; facts_age_days?: number | null; facts_stale?: boolean; stale_after_days?: number; last_sync_failed?: boolean; last_sync_error?: string | null } | undefined }) {
+  if (!meta || (!meta.facts_stale && !meta.last_sync_failed)) return null;
+  const parts: string[] = [];
+  if (meta.facts_stale) {
+    parts.push(meta.facts_last_date
+      ? `Données Snowflake périmées : dernière journée disponible ${meta.facts_last_date.split("-").reverse().join("/")} (${meta.facts_age_days} j, seuil ${meta.stale_after_days ?? 3} j). Les jours suivants ne sont pas calculés.`
+      : "Aucune donnée Snowflake synchronisée pour le calcul CPH.");
+  }
+  if (meta.last_sync_failed) parts.push(`Dernière synchronisation Snowflake en échec${meta.last_sync_error ? ` : ${meta.last_sync_error}` : ""}.`);
+  return (
+    <div role="alert" style={{ marginBottom: 10, padding: "8px 12px", borderRadius: 6, background: "#fffbe6", border: "1px solid #ffe58f", color: "#ad6800", fontSize: 12 }}>
+      ⚠ {parts.join(" ")}
+    </div>
   );
 }

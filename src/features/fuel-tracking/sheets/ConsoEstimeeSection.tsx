@@ -16,7 +16,7 @@ import { Card, EmptyState, KpiCard, Pager, Skeleton } from "../ui";
 import { FT } from "../theme";
 import {
   CONSO_STATUS_COLORS, CONSO_STATUS_LABELS, ConsoStatusBadge, CurveStatusBadge, CURVE_SOURCE_LABELS, GLOSSARY, HelpTip,
-  MATCH_LABELS, MatchBadge, MOTIF_LABELS, POWER_SOURCE_LABELS, RUNTIME_SOURCE_LABELS,
+  FreshnessWarning, MATCH_LABELS, MatchBadge, MOTIF_LABELS, POWER_SOURCE_LABELS, RUNTIME_SOURCE_LABELS,
 } from "./cphBadges";
 
 const th: CSSProperties = {
@@ -81,6 +81,7 @@ function motifFor(r: CphSiteRow): { code: CphMotifCode | null; text: string | nu
   const parts: string[] = [];
   if (m) parts.push(`${MOTIF_LABELS[m.code] ?? m.code}${m.jours && r.cph_status !== "NON_CALCULE" ? ` (${m.jours}/${r.days} j)` : ""}${m.detail ? ` — ${m.detail}` : ""}`);
   if (c && c.statut !== "CONSO_ESTIMEE_NON_CALCULEE" && c.motif) parts.push(c.motif);
+  for (const a of r.conso_specifique?.alertes ?? []) parts.push(`⚠ ${a}`);
   return { code: m?.code ?? null, text: parts.join(" · ") || null };
 }
 
@@ -94,7 +95,7 @@ function Th({ children, tip, label, left }: { children: ReactNode; tip?: string;
 
 const CONSO_FILTERS: Array<CphConsoStatus | ""> = ["", "COHERENT", "ECART_A_JUSTIFIER", "ECART_A_INVESTIGUER", "MESURE_ABSENTE", "CONSO_ESTIMEE_NON_CALCULEE"];
 type Filters = Omit<CphFilters, "start" | "end" | "site">;
-const ADVANCED: Array<keyof Filters> = ["country", "zone", "runtime_source", "dispo_runtime", "power_source", "correspondance", "curve_source_status", "cph_status", "statut"];
+const ADVANCED: Array<keyof Filters> = ["country", "zone", "runtime_source", "dispo_runtime", "power_source", "correspondance", "curve_source_status", "cph_status", "statut", "alerte_sfc"];
 
 export function ConsoEstimeeSection({ month }: { month: string | null | undefined }) {
   const [period, setPeriod] = useState(() => monthPeriod(month));
@@ -186,6 +187,7 @@ export function ConsoEstimeeSection({ month }: { month: string | null | undefine
         </div>
       </div>
       {periodError && <div role="alert" style={{ marginBottom: 10, color: FT.red, fontSize: 12.5 }}>{periodError}</div>}
+      <FreshnessWarning meta={data?.meta} />
 
       {conso ? (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginBottom: 14 }}>
@@ -237,6 +239,7 @@ export function ConsoEstimeeSection({ month }: { month: string | null | undefine
           {sel("curve_source_status", "Statut courbe", (Object.keys(CURVE_SOURCE_LABELS) as CphCurveSourceStatus[]).map((k) => [k, `${k}${s?.courbes_appliquees ? ` (${s.courbes_appliquees[k] ?? 0})` : ""}`]))}
           {sel("cph_status", "Statut CPH", Object.entries(CPH_STATUS_LABELS))}
           {sel("statut", "Statut rapprochement", Object.entries(RAPPROCHEMENT_LABELS))}
+          {sel("alerte_sfc", "Alerte L/kWh", [["1", `hors plage${s?.alertes_sfc ? ` (${s.alertes_sfc.estimee} estimée · ${s.alertes_sfc.mesuree} mesurée)` : ""}`]])}
         </div>
       )}
       {exportError && <div role="alert" style={{ color: FT.red, fontSize: 12.5, marginBottom: 10 }}>Export impossible : {exportError}</div>}
@@ -311,7 +314,14 @@ export function ConsoEstimeeSection({ month }: { month: string | null | undefine
                         <Val v={r.charge_moy_pct} digits={0} suffix=" %" reason="Charge non calculée." />
                         {r.extrapolated_days > 0 && <div style={{ ...sub, color: FT.orange }}>{r.extrapolated_days} j &lt; 50 %</div>}
                       </td>
-                      <td style={td}><Val v={r.cph_moy_l_h} digits={2} reason={motif.text} /></td>
+                      <td style={td}>
+                        <Val v={r.cph_moy_l_h} digits={2} reason={motif.text} />
+                        {r.conso_specifique?.estimee_l_kwh !== null && r.conso_specifique?.estimee_l_kwh !== undefined && (
+                          <div style={{ ...sub, color: r.conso_specifique.alerte_estimee ? FT.orange : FT.textSub }} title={GLOSSARY.sfc}>
+                            {nf(r.conso_specifique.estimee_l_kwh, 2)} L/kWh{r.conso_specifique.alerte_estimee ? " ⚠" : ""}
+                          </div>
+                        )}
+                      </td>
                       <td style={td}>
                         {r.conso_theorique_l !== null ? <Val v={r.conso_theorique_l} digits={0} /> : r.conso_partielle_l !== null && !noCph ? (
                           <span title="Somme des jours calculés : certains jours n'ont pas de CPH (motif à droite)">
@@ -323,6 +333,11 @@ export function ConsoEstimeeSection({ month }: { month: string | null | undefine
                       <td style={td}>
                         <Val v={c?.conso_mesuree_l} digits={0} reason="Aucune mesure fuel exploitable sur la période." />
                         {c && c.jours_mesure > 0 && <div style={sub}>{c.jours_mesure}/{r.days} j mesurés</div>}
+                        {r.conso_specifique?.mesuree_l_kwh !== null && r.conso_specifique?.mesuree_l_kwh !== undefined && (
+                          <div style={{ ...sub, color: r.conso_specifique.alerte_mesuree ? FT.red : FT.textSub }} title={GLOSSARY.sfc}>
+                            {nf(r.conso_specifique.mesuree_l_kwh, 2)} L/kWh{r.conso_specifique.alerte_mesuree ? " ⚠" : ""}
+                          </div>
+                        )}
                       </td>
                       <td style={td}>
                         <Val v={c?.ecart_l} digits={0} reason={c?.motif} />

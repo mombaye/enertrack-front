@@ -33,7 +33,7 @@ import {
 } from "@/services/fuelTracking";
 import { Card, EmptyState, KpiCard, Modal, Pager, Skeleton } from "../ui";
 import { FT } from "../theme";
-import { CorrespondanceCell, curveSourceCode, CurveStatusBadge, GLOSSARY, HelpTip, MATCH_LABELS, MatchBadge, MOTIF_LABELS } from "./cphBadges";
+import { CorrespondanceCell, curveSourceCode, CurveStatusBadge, FreshnessWarning, GLOSSARY, HelpTip, MATCH_LABELS, MatchBadge, MOTIF_LABELS } from "./cphBadges";
 
 // ─── Libellés ────────────────────────────────────────────────────────────────
 
@@ -424,7 +424,7 @@ function prepItems(meta: CphMeta, h: PrepHandlers): PrepItem[] {
   const sync = meta.facts_last_sync;
   return [
     {
-      key: "snowflake", title: "Données Snowflake (heures de marche, puissance)", ready: !!meta.facts_last_date,
+      key: "snowflake", title: "Données Snowflake (heures de marche, puissance)", ready: !!meta.facts_last_date && !meta.facts_stale && !meta.last_sync_failed,
       short: meta.facts_last_date ? `Snowflake jusqu'au ${fmtDate(meta.facts_last_date)}` : "Snowflake : aucune donnée",
       status: meta.facts_last_date
         ? <>Disponibles jusqu'au <strong>{fmtDate(meta.facts_last_date)}</strong> · mise à jour automatique toutes les heures.</>
@@ -1191,9 +1191,8 @@ function CphKpis({ s, meta, onPreparation, handlers }: { s: CphSynthesis | undef
         <div role="note" style={warnStyle}>⚠ Abaque CPH non importé — aucun CPH ne peut être calculé. <button type="button" onClick={handlers.onAbaque} style={warnLink}>Importer l'abaque</button></div>
       ) : meta.mappings_validated === 0 ? (
         <div role="note" style={warnStyle}>⚠ Aucune correspondance plaque → courbe active — aucun CPH ne peut être calculé. <button type="button" onClick={handlers.onReferentiel} style={warnLink}>Ouvrir le référentiel</button></div>
-      ) : !meta.facts_last_date ? (
-        <div role="note" style={warnStyle}>⚠ Aucune donnée Snowflake synchronisée pour le calcul CPH (synchronisation automatique toutes les heures).</div>
       ) : null}
+      <FreshnessWarning meta={meta} />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
         <KpiCard label="Sites avec GE" value={s.sites.toLocaleString("fr-FR")} sub="inventaire Snowflake (DG_COUNT > 0)" tone="blue" icon={<Fuel size={14} />} />
         <KpiCard label="CPH calculé" value={s.cph_calcules.toLocaleString("fr-FR")} sub={`${pct(s.cph_calcules)} des sites · ${s.conso_theorique_complete.toLocaleString("fr-FR")} complets sur la période`} tone="violet" icon={<Gauge size={14} />} />

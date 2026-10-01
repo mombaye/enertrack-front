@@ -496,6 +496,11 @@ export type CphSiteRow = {
   ge_kva?: number | null;
   /** Motif précis quand la conso estimée n'est pas complète (null = complète). */
   motif_cph?: { code: CphMotifCode; detail: string | null; jours: number } | null;
+  /** Consommation spécifique (L/kWh) : contrôle de plausibilité, jamais bloquant. */
+  conso_specifique?: {
+    energie_ge_kwh: number | null; estimee_l_kwh: number | null; mesuree_l_kwh: number | null;
+    alerte_estimee: boolean | null; alerte_mesuree: boolean | null; plage_l_kwh: [number, number]; alertes: string[];
+  };
 };
 
 export type CphMatchStatus =
@@ -592,6 +597,7 @@ export type CphSynthesis = {
   correspondances?: Partial<Record<CphMatchStatus, number>>;
   courbes_appliquees?: Partial<Record<CphCurveSourceStatus, number>>;
   motifs_cph?: Partial<Record<CphMotifCode, number>>;
+  alertes_sfc?: { estimee: number; mesuree: number };
 };
 
 export type CphMeta = {
@@ -608,6 +614,11 @@ export type CphMeta = {
   max_period_days: number;
   observations_last_import?: { file_name: string; at: string; rows_imported: number; rows_rejected: number } | null;
   mappings_by_status?: Partial<Record<CphMatchStatus, number>>;
+  facts_age_days?: number | null;
+  facts_stale?: boolean;
+  stale_after_days?: number;
+  last_sync_failed?: boolean;
+  last_sync_error?: string | null;
   can_validate?: boolean;
 };
 
@@ -638,6 +649,7 @@ export type CphFilters = {
   curve_source_status?: string;
   motif_cph?: string;
   dispo_runtime?: string;
+  alerte_sfc?: string;
 };
 
 export async function getCphPeriod(params: CphFilters & { page?: number; limit?: number }) {
