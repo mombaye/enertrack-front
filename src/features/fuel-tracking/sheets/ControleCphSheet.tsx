@@ -33,7 +33,7 @@ import {
 } from "@/services/fuelTracking";
 import { Card, EmptyState, KpiCard, Modal, Pager, Skeleton } from "../ui";
 import { FT } from "../theme";
-import { CorrespondanceCell, CURVE_STATUS_SHORT, CurveStatusBadge, MatchBadge } from "./cphBadges";
+import { CorrespondanceCell, curveSourceCode, CurveStatusBadge, GLOSSARY, HelpTip, MATCH_LABELS, MatchBadge, MOTIF_LABELS } from "./cphBadges";
 
 // ─── Libellés ────────────────────────────────────────────────────────────────
 
@@ -48,7 +48,7 @@ const RUNTIME_SOURCE_LABELS: Record<string, string> = {
 const POWER_SOURCE_LABELS: Record<string, string> = {
   PRODUCTION_GE: "Production GE",
   DC_REDRESSEUR: "P_DC / rendement",
-  INDOOR_DC_PLUS_AC_HISTORIQUE: "Indoor : DC + AC historique",
+  ESTIMATION_HISTORIQUE_LOAD_AC: "ESTIMATION_HISTORIQUE_LOAD_AC (indoor)",
   AUCUNE: "Aucune",
 };
 
@@ -88,9 +88,9 @@ const DAY_STATUS_LABELS: Record<string, string> = {
 const HELP: Record<string, string> = {
   runtime: "Runtime GE journalier (h). Priorité stricte : DSE (GENSET_REPORT.DG_RUNTIME_CONTROLLER, 0-24 h, 0 valide) > redresseur actif par créneaux 5 min (sites off-grid) > Day DG On (GENSET_REPORT.DG_RUNTIME_CALCULATED, contrôle de coalescence à 0) > compteur terrain (GFMS_DATA_TRACKER_NC). Une source n'est exploitable que si elle est disponible ≥ 50 % des jours de la période.",
   disponibilite: "Disponibilité d'une source (%) = jours avec une valeur non nulle ÷ jours de la période. Jamais de COALESCE à 0.",
-  puissance: "Puissance GE retenue (kW), moyenne pondérée par le runtime des jours calculés. Outdoor : DG_PRODUCTION_KWH ÷ runtime DSE, sinon P_DC ÷ rendement redresseur (charge batterie non ajoutée). Indoor : P_DC pendant GE ÷ rendement + load AC historique (médiane des jours réseau sans GE, AC_METER.ACT_ACTIVE_POWER_AVG ÷ 1 000).",
-  courbe: "Correspondance libellé GE (Base GE + kVA) → courbe de l'abaque PRP 50 Hz : appliquée si AUTO_VALIDE_COMPATIBLE (candidat unique, score ≥ 70 %, sans contradiction) ou VALIDE_MANUELLEMENT. Le second badge est la qualité de la courbe (VALIDÉ_CONSTRUCTEUR, HISTORIQUE_A_VALIDER, ARCHIVÉ, DISTRIBUTEUR), jamais modifiée par la correspondance.",
-  cph: "CPH (L/h) = a·x² + b·x + c, x = puissance GE retenue (kW) ÷ puissance PRP (kW). Refus au-delà de 105 % × kVA × cos φ ; une charge < 50 % est une extrapolation mathématique. Moyenne pondérée par le runtime.",
+  puissance: GLOSSARY.puissance,
+  courbe: "mapping_status (correspondance libellé GE Base GE + kVA → courbe de l'abaque PRP 50 Hz) : appliquée si AUTO_VALIDE_COMPATIBLE (candidat unique, score ≥ 70 %, sans contradiction) ou VALIDE_MANUELLEMENT. Le second badge est curve_source_status (VALIDE_CONSTRUCTEUR, HISTORIQUE_A_VALIDER, ARCHIVE, DISTRIBUTEUR), jamais modifié par le mapping.",
+  cph: `${GLOSSARY.cph} ${GLOSSARY.charge} Une charge < 50 % est une extrapolation mathématique. Moyenne pondérée par le runtime.`,
   conso: "Consommation théorique (L) = Σ runtime GE (h) × CPH (L/h) sur chaque jour de la plage. Affichée uniquement si TOUS les jours sont calculés ; sinon la somme partielle est indiquée à part.",
   stock: "Stocks et mouvements (L) issus du fichier d'observation standard. Une cellule vide reste vide, jamais 0.",
   livraisons: "Livraisons ENOC (L). Tant que la source ENOC réelle n'est pas raccordée, elles restent « à contrôler » et bloquent le rapprochement.",
@@ -113,42 +113,6 @@ function Num({ value, digits = 1, suffix = "", reason }: { value: number | null 
     return <span style={{ color: FT.textSub, cursor: reason ? "help" : undefined }} title={reason ?? undefined} aria-label={reason ? `non disponible : ${reason}` : "non disponible"}>—</span>;
   }
   return <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontWeight: 600 }}>{txt}</span>;
-}
-
-function HelpTip({ text, label }: { text: string; label: string }) {
-  const [open, setOpen] = useState(false);
-  const id = useId();
-  return (
-    <span style={{ position: "relative", display: "inline-flex", marginLeft: 4, verticalAlign: "middle" }}>
-      <button
-        type="button"
-        aria-label={`Aide : ${label}`}
-        aria-describedby={open ? id : undefined}
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
-        onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
-        style={{ border: "none", background: "transparent", padding: 0, cursor: "help", color: FT.textSub, display: "inline-flex" }}
-      >
-        <Info size={12} />
-      </button>
-      {open && (
-        <span
-          id={id}
-          role="tooltip"
-          style={{
-            position: "absolute", top: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)", zIndex: 20,
-            width: 300, padding: "9px 11px", borderRadius: 8, background: FT.navy, color: "#fff",
-            fontSize: 11.5, fontWeight: 500, lineHeight: 1.45, textTransform: "none", letterSpacing: 0,
-            textAlign: "left", whiteSpace: "normal", boxShadow: FT.shadowLg,
-          }}
-        >
-          {text}
-        </span>
-      )}
-    </span>
-  );
 }
 
 function StatutBadge({ statut }: { statut: CphReconciliationStatus }) {
@@ -425,7 +389,10 @@ function SiteDetailModal({ siteId, start, end, onClose }: { siteId: string; star
                       </td>
                       <td style={td}><Num value={day.cph_l_h} digits={2} /></td>
                       <td style={td}><Num value={day.conso_l} digits={1} /></td>
-                      <td style={td}><Tag tone={day.status === "CPH_CALCULE" || day.status === "GE_A_L_ARRET" ? FT.green : FT.slate}>{DAY_STATUS_LABELS[day.status] ?? day.status}</Tag></td>
+                      <td style={td}>
+                        <Tag tone={day.status === "CPH_CALCULE" || day.status === "GE_A_L_ARRET" ? FT.green : FT.slate}>{DAY_STATUS_LABELS[day.status] ?? day.status}</Tag>
+                        {day.motif_code && <div style={{ fontSize: 10.5, color: FT.violet, fontFamily: "ui-monospace, Menlo, monospace" }}>{day.motif_code}</div>}
+                      </td>
                       <td style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 280, fontSize: 11.5, color: FT.textMid }}>
                         {[day.power_detail, ...day.motifs].filter(Boolean).join(" · ") || "—"}
                       </td>
@@ -733,7 +700,8 @@ function MappingRow({ m, canValidate, onChanged }: { m: CphReferentielMapping; c
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const validate = useMutation({ mutationFn: () => validateCphMapping(m.id, curveId, comment), onSuccess: () => { setError(null); setEditing(false); setComment(""); onChanged(); }, onError: (e) => setError(apiError(e)) });
-  const unvalidate = useMutation({ mutationFn: () => unvalidateCphMapping(m.id), onSuccess: onChanged, onError: (e) => setError(apiError(e)) });
+  const unvalidate = useMutation({ mutationFn: () => unvalidateCphMapping(m.id, comment), onSuccess: () => { setComment(""); onChanged(); }, onError: (e) => setError(apiError(e)) });
+  const [showHistory, setShowHistory] = useState(false);
   const applied = m.candidates.find((c) => c.curve_id === m.validated_curve_id);
   const showForm = canValidate && m.candidates.length > 0 && (editing || !m.validated_curve_id);
   return (
@@ -754,6 +722,25 @@ function MappingRow({ m, canValidate, onChanged }: { m: CphReferentielMapping; c
             {(m.match_reasons ?? []).slice(0, 4).map((r) => <li key={r}>{r}</li>)}
           </ul>
         )}
+        {(m.history ?? []).length > 0 && (
+          <div style={{ marginTop: 4 }}>
+            <button type="button" aria-expanded={showHistory} onClick={() => setShowHistory((v) => !v)} style={{ border: "none", background: "transparent", color: FT.blue, fontSize: 11, fontWeight: 800, cursor: "pointer", padding: 0 }}>
+              {showHistory ? "Masquer l'historique" : `Historique (${m.history!.length})`}
+            </button>
+            {showHistory && (
+              <ol style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 10.5, color: FT.textMid }}>
+                {m.history!.map((h, i) => (
+                  <li key={`${h.changed_at}-${i}`} style={{ marginBottom: 3 }}>
+                    <strong>{new Date(h.changed_at).toLocaleString("fr-FR")}</strong> · {h.old_status || "∅"} → {h.new_status}
+                    {(h.old_curve_id || h.new_curve_id) && ` · courbe ${h.old_curve_id || "∅"} → ${h.new_curve_id || "∅"}`}
+                    {h.score !== null && ` · score ${h.score} %`} · {h.changed_by ?? "automatique"}
+                    <div style={{ color: FT.textSub }}>{h.rule}{h.comment ? ` — ${h.comment}` : ""}</div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+        )}
       </td>
       <td style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 220 }}>
         {m.candidates.length === 0 ? <span style={{ fontSize: 11.5, color: FT.textSub }}>Aucune courbe dans l'abaque</span> : m.candidates.map((c) => (
@@ -771,7 +758,7 @@ function MappingRow({ m, canValidate, onChanged }: { m: CphReferentielMapping; c
             {canValidate && (
               <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
                 <button type="button" onClick={() => setEditing(true)} style={{ ...btn, padding: "3px 8px" }}>Corriger</button>
-                <button type="button" onClick={() => unvalidate.mutate()} style={{ ...btn, padding: "3px 8px" }} title="Le mappage repasse « à valider » et l'automatique ne le réactivera plus">Retirer</button>
+                <button type="button" onClick={() => unvalidate.mutate()} style={{ ...btn, padding: "3px 8px", color: FT.red }} title="Statut REJETE : l'automatique ne le réactivera plus ; une validation manuelle reste possible">Rejeter</button>
               </div>
             )}
           </div>
@@ -779,7 +766,7 @@ function MappingRow({ m, canValidate, onChanged }: { m: CphReferentielMapping; c
         {showForm && (
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <select aria-label={`Courbe pour ${m.inventory_label}`} value={curveId} onChange={(e) => setCurveId(e.target.value)} style={{ ...control, padding: "4px 8px" }}>
-              {m.candidates.map((c) => <option key={c.curve_id} value={c.curve_id}>{c.curve_id} — {c.manufacturer} {c.model} ({CURVE_STATUS_SHORT[c.status] ?? c.status})</option>)}
+              {m.candidates.map((c) => <option key={c.curve_id} value={c.curve_id}>{c.curve_id} — {c.manufacturer} {c.model} ({curveSourceCode(c.status)})</option>)}
             </select>
             <input aria-label={`Commentaire de validation pour ${m.inventory_label}`} placeholder="Référence plaque signalétique…" value={comment} onChange={(e) => setComment(e.target.value)} style={{ ...control, padding: "4px 8px" }} />
             <span style={{ display: "flex", gap: 4 }}>
@@ -875,7 +862,8 @@ function ReferentielModal({ onClose }: { onClose: () => void }) {
           <div style={{ fontSize: 12.5, color: FT.textMid }}>
             Les correspondances fiables sont activées automatiquement (<strong>AUTO_VALIDE_COMPATIBLE</strong> : candidat unique, score ≥ 70 %, sans contradiction de modèle, marque, puissance ou fréquence).
             Les exceptions restent à traiter ici ; une correction manuelle (<strong>VALIDE_MANUELLEMENT</strong>) prime toujours sur l'automatique.
-            Le statut de qualité de la courbe (VALIDÉ_CONSTRUCTEUR, HISTORIQUE_A_VALIDER, ARCHIVÉ, DISTRIBUTEUR) est affiché à part et n'est jamais modifié par une correspondance.
+            Le statut d'origine de la courbe (VALIDE_CONSTRUCTEUR, HISTORIQUE_A_VALIDER, ARCHIVE, DISTRIBUTEUR) est affiché à part et n'est jamais modifié par un mapping.
+            Tolérance puissance : 15 % entre le kVA inventaire et le kVA de la courbe (configurable). Rejet : statut REJETE, jamais réactivé automatiquement ; chaque changement est historisé.
             {!data.can_validate && " Import de l'abaque et corrections réservés aux rôles admin et manager."}
           </div>
           {data.can_validate && <AbaqueImport onImported={refresh} />}
@@ -1003,7 +991,8 @@ function SimpleTable({ rows, onDetail }: { rows: CphSiteRow[]; onDetail: (siteId
                 <div style={{ fontSize: 11, color: FT.textSub }}>{r.runtime_days}/{r.days} j{r.runtime_source_main ? ` · ${RUNTIME_SOURCE_LABELS[r.runtime_source_main]}` : ""}</div>
               </td>
               <td style={td}>
-                <Num value={r.cph_moy_l_h} digits={2} reason={r.curve ? "Aucun jour avec heures de marche et puissance GE." : r.curve_reason} />
+                <Num value={r.cph_moy_l_h} digits={2} reason={r.motif_cph ? `${r.motif_cph.code}${r.motif_cph.detail ? ` — ${r.motif_cph.detail}` : ""}` : null} />
+                {r.cph_moy_l_h === null && r.motif_cph && <div style={{ fontSize: 10.5, color: FT.violet, fontFamily: "ui-monospace, Menlo, monospace" }}>{r.motif_cph.code}</div>}
                 <div style={{ fontSize: 11, color: FT.textSub }}>{r.charge_moy_pct !== null && r.charge_moy_pct !== undefined ? `charge ${nf(r.charge_moy_pct, 0)} %` : "—"}</div>
               </td>
               <td style={td}>
@@ -1379,6 +1368,22 @@ export function ControleCphSheet() {
             <select aria-label="Calcul du CPH" value={filters.cph_status ?? ""} onChange={(e) => setFilter("cph_status", e.target.value)} style={control}>
               <option value="">Calcul CPH : tous</option>
               {Object.entries(CPH_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+            <select aria-label="Disponibilité runtime" value={filters.dispo_runtime ?? ""} onChange={(e) => setFilter("dispo_runtime", e.target.value)} style={control}>
+              <option value="">Disponibilité runtime : toutes</option>
+              <option value="90+">≥ 90 %</option><option value="50+">≥ 50 %</option><option value="lt50">&lt; 50 %</option><option value="aucune">aucune source retenue</option>
+            </select>
+            <select aria-label="Statut mapping" value={filters.correspondance ?? ""} onChange={(e) => setFilter("correspondance", e.target.value)} style={control}>
+              <option value="">Statut mapping : tous</option>
+              {Object.keys(MATCH_LABELS).map((k) => <option key={k} value={k}>{k}{s?.correspondances ? ` (${s.correspondances[k as keyof typeof MATCH_LABELS] ?? 0})` : ""}</option>)}
+            </select>
+            <select aria-label="Statut courbe" value={filters.curve_source_status ?? ""} onChange={(e) => setFilter("curve_source_status", e.target.value)} style={control}>
+              <option value="">Statut courbe : tous</option>
+              {["VALIDE_CONSTRUCTEUR", "HISTORIQUE_A_VALIDER", "ARCHIVE", "DISTRIBUTEUR"].map((k) => <option key={k} value={k}>{k}</option>)}
+            </select>
+            <select aria-label="Motif CPH" value={filters.motif_cph ?? ""} onChange={(e) => setFilter("motif_cph", e.target.value)} style={control}>
+              <option value="">Motif CPH : tous</option>
+              {Object.keys(MOTIF_LABELS).map((k) => <option key={k} value={k}>{k}{s?.motifs_cph ? ` (${s.motifs_cph[k as keyof typeof MOTIF_LABELS] ?? 0})` : ""}</option>)}
             </select>
           </div>
         )}

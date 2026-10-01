@@ -490,14 +490,29 @@ export type CphSiteRow = {
   correspondance?: CphCorrespondance | null;
   /** Conso estimée (CPH) vs conso mesurée (capteur) sur les jours communs. */
   comparaison?: CphComparaison;
+  mapping_status?: CphMatchStatus | null;
+  curve_source_status?: CphCurveSourceStatus | null;
+  /** Puissance nominale du GE dans l'inventaire (Base GE, kVA). */
+  ge_kva?: number | null;
+  /** Motif précis quand la conso estimée n'est pas complète (null = complète). */
+  motif_cph?: { code: CphMotifCode; detail: string | null; jours: number } | null;
 };
 
 export type CphMatchStatus =
-  | "AUTO_VALIDE_COMPATIBLE" | "VALIDE_MANUELLEMENT" | "A_VALIDER" | "COURBE_CPH_MANQUANTE"
-  | "MODELE_AMBIGU" | "SITE_MULTI_GE" | "GE_INCONNU";
+  | "AUTO_VALIDE_COMPATIBLE" | "VALIDE_MANUELLEMENT" | "A_VALIDER" | "MODELE_AMBIGU" | "COURBE_CPH_MANQUANTE"
+  | "TYPE_GE_ABSENT" | "SITE_MULTI_GE" | "REJETE";
+
+export type CphCurveSourceStatus = "VALIDE_CONSTRUCTEUR" | "HISTORIQUE_A_VALIDER" | "ARCHIVE" | "DISTRIBUTEUR";
+
+export type CphMotifCode =
+  | "RUNTIME_INDISPONIBLE" | "RUNTIME_NON_QUALIFIE" | "PUISSANCE_INDISPONIBLE" | "PUISSANCE_HORS_LIMITE"
+  | "PUISSANCE_NOMINALE_ABSENTE" | "RENDEMENT_REDRESSEUR_INVALIDE" | "COURBE_CPH_MANQUANTE" | "MAPPING_GE_A_VALIDER"
+  | "MODELE_GE_AMBIGU" | "SITE_MULTI_GE" | "TYPE_GE_ABSENT";
 
 export type CphCorrespondance = {
   statut: CphMatchStatus;
+  mapping_status?: CphMatchStatus;
+  curve_source_status?: CphCurveSourceStatus | null;
   score: number | null;
   methode: string | null;
   date: string | null;
@@ -540,6 +555,7 @@ export type CphDay = {
   cph_l_h: number | null;
   conso_l: number | null;
   measured_l?: number | null;
+  motif_code?: CphMotifCode | null;
   extrapolated: boolean;
   status: CphDayStatus;
   motifs: string[];
@@ -574,7 +590,8 @@ export type CphSynthesis = {
     statuts: Partial<Record<CphConsoStatus, number>>;
   };
   correspondances?: Partial<Record<CphMatchStatus, number>>;
-  courbes_appliquees?: Record<string, number>;
+  courbes_appliquees?: Partial<Record<CphCurveSourceStatus, number>>;
+  motifs_cph?: Partial<Record<CphMotifCode, number>>;
 };
 
 export type CphMeta = {
@@ -618,6 +635,9 @@ export type CphFilters = {
   blocage?: string;
   statut_conso?: string;
   correspondance?: string;
+  curve_source_status?: string;
+  motif_cph?: string;
+  dispo_runtime?: string;
 };
 
 export async function getCphPeriod(params: CphFilters & { page?: number; limit?: number }) {
@@ -669,6 +689,7 @@ export type CphReferentielCurve = {
   b: number;
   c: number;
   status: string;
+  curve_source_status?: CphCurveSourceStatus;
   is_usable: boolean;
   business_approved: boolean;
   business_approved_by: string | null;
@@ -695,6 +716,10 @@ export type CphReferentielMapping = {
   match_method?: string;
   match_reasons?: string[];
   matched_at?: string | null;
+  history?: Array<{
+    old_status: string; new_status: string; old_curve_id: string; new_curve_id: string; score: number | null;
+    rule: string; changed_by: string | null; changed_at: string; comment: string;
+  }>;
 };
 
 export type CphReferentiel = {
@@ -736,8 +761,8 @@ export async function autoMatchCphMappings(resetRemovals = false) {
   return data;
 }
 
-export async function unvalidateCphMapping(id: number) {
-  const { data } = await api.post(`${BASE}/cph/mappings/${id}/unvalidate/`);
+export async function unvalidateCphMapping(id: number, comment = "") {
+  const { data } = await api.post(`${BASE}/cph/mappings/${id}/unvalidate/`, { comment });
   return data;
 }
 
