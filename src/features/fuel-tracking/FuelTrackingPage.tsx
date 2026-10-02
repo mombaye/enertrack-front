@@ -21,8 +21,6 @@ import {
   getFuelConsommation,
   getFuelConsommationDashboard,
   getFuelStock,
-  type FuelConfigurationFilter,
-  type FuelGeDetectionFilter,
   type FuelSourceStatus,
 } from "@/services/fuelTracking";
 
@@ -101,14 +99,6 @@ export default function FuelTrackingPage() {
   // dès la 1ère réponse du Dashboard (voir useEffect plus bas).
   const [fromMonth, setFromMonth] = useState<string | null>(null);
   const [toMonth, setToMonth] = useState<string | null>(null);
-  const [consoSearch, setConsoSearch] = useState("");
-  const [consoPage, setConsoPage] = useState(1);
-  // Par défaut, Suivis Consommations n'affiche que les sites Avec GE (seuls
-  // capables d'avoir une conso fuel) — demande explicite (2026-08), plutôt
-  // que "Tous" qui noie la table avec les ~2850 sites sans GE.
-  const [consoGeFilter, setConsoGeFilter] = useState<"all" | "true" | "false" | "incomplete">("true");
-  const [consoDetectionFilter, setConsoDetectionFilter] = useState<FuelGeDetectionFilter | null>(null);
-  const [consoConfigurationFilter, setConsoConfigurationFilter] = useState<FuelConfigurationFilter | null>(null);
   const [stockSearch, setStockSearch] = useState("");
   const [stockPage, setStockPage] = useState(1);
   // Même défaut que Suivis Consommations — Avec GE (seuls capables d'avoir
@@ -136,16 +126,16 @@ export default function FuelTrackingPage() {
   // Pas de `enabled` sur l'onglet actif (ni pour consommationQ ni pour
   // dashboardQ) : le statut des sources (badges du header) et la plage de
   // mois doivent rester à jour même hors de leurs onglets respectifs.
+  // Suivis Consommations n'affiche plus le tableau mensuel paginé : seuls les
+  // indicateurs du mois (sites Avec GE), la détection GE et le statut des sources
+  // sont lus ici (1 ligne suffit). Le tableau unique est servi par /cph/.
   const consommationQ = useQuery({
-    queryKey: ["fuel-consommation", toMonth, consoSearch, consoPage, consoGeFilter, consoDetectionFilter, consoConfigurationFilter],
+    queryKey: ["fuel-consommation", toMonth],
     queryFn: () => getFuelConsommation({
       month: toMonth ?? undefined,
-      search: consoSearch,
-      page: consoPage,
-      limit: 50,
-      has_genset: consoDetectionFilter ? undefined : (consoGeFilter === "all" ? undefined : consoGeFilter),
-      detection: consoDetectionFilter ?? undefined,
-      configuration: consoConfigurationFilter ?? undefined,
+      page: 1,
+      limit: 1,
+      has_genset: "true",
     }),
     staleTime: 60_000,
   });
@@ -326,28 +316,6 @@ export default function FuelTrackingPage() {
             <ConsommationSheet
               data={consommationQ.data}
               loading={consommationQ.isLoading}
-              search={consoSearch}
-              onSearchChange={(v) => {
-                setConsoSearch(v);
-                setConsoPage(1);
-              }}
-              geFilter={consoGeFilter}
-              onGeFilterChange={(v) => {
-                setConsoGeFilter(v);
-                setConsoPage(1);
-              }}
-              detectionFilter={consoDetectionFilter}
-              onDetectionFilterChange={(v) => {
-                setConsoDetectionFilter(v);
-                setConsoPage(1);
-              }}
-              configurationFilter={consoConfigurationFilter}
-              onConfigurationFilterChange={(v) => {
-                setConsoConfigurationFilter(v);
-                setConsoPage(1);
-              }}
-              page={consoPage}
-              onPageChange={setConsoPage}
               stickyTop={headerHeight}
             />
           </div>

@@ -395,7 +395,40 @@ export async function getFuelCommandeEstimation(params?: { marge?: number; searc
 // (fuel_tracking/services/cph_engine.py). Toute valeur absente reste null.
 
 export type CphRuntimeSource = "DSE" | "REDRESSEUR" | "DAY_DG_ON" | "COMPTEUR_TERRAIN";
-export type CphPowerSource = "PRODUCTION_GE" | "DC_REDRESSEUR" | "INDOOR_DC_PLUS_AC_HISTORIQUE";
+export type CphPowerSource = "PRODUCTION_GE" | "DC_REDRESSEUR" | "ESTIMATION_HISTORIQUE_LOAD_AC";
+/** Méthodes de la chaîne de repli puissance, dans l'ordre de tentative. */
+export type CphPowerMethod = "DIRECT_DSE_PRODUCTION" | "PDC_REDRESSEUR" | "INDOOR_PDC_LOAD_AC";
+export type CphStatutCph = "CPH_CALCULE" | "CPH_PARTIEL" | "CPH_NON_CALCULE";
+export type CphStatutRapprochement =
+  | "RAPPROCHEMENT_CALCULE" | "RAPPROCHEMENT_NON_CALCULE_STOCK_ABSENT"
+  | "RAPPROCHEMENT_NON_CALCULE_MOUVEMENTS_ABSENTS" | "RAPPROCHEMENT_NON_CALCULE_CPH_INCOMPLET";
+export type CphAcStatus =
+  | "LOAD_AC_QUALIFIE" | "LOAD_AC_MESURE_ZERO" | "LOAD_AC_INDISPONIBLE" | "LOAD_AC_INCOHERENT" | "LOAD_AC_UNITE_SUSPECTE";
+export type CphMethodAttempt = {
+  tentee: boolean;
+  statut: "RETENUE" | "REJETEE" | "ABSENTE" | "NON_APPLICABLE" | "NON_TENTEE";
+  valeur_kw: number | null;
+  code: string | null;
+  motif: string | null;
+  detail: string | null;
+};
+export type CphAcReference = {
+  statut: CphAcStatus;
+  p_ac_aux_kw: number | null;
+  reason: string | null;
+  jours_reference: number;
+  mesures: number | null;
+  reference_dates: string[];
+  mediane_ac_brut: number | null;
+  mediane_ac_kw: number | null;
+  mediane_p_dc_entree_kw: number | null;
+  mediane_ecart_brut_kw: number | null;
+  jours_ecart_negatif: number;
+  unite_brute: string;
+  unite_convertie: string;
+  diviseur: number;
+  candidats: Array<{ date: string; ac_brut: number | null; ac_kw: number | null; p_dc_entree_kw: number | null; points: number | null }>;
+};
 export type CphPeriodStatus = "COMPLET" | "PARTIEL" | "NON_CALCULE";
 export type CphReconciliationStatus = "OK" | "A_JUSTIFIER" | "A_INVESTIGUER" | "DONNEES_INCOMPLETES" | "CPH_NON_CALCULE";
 export type CphDayStatus =
@@ -496,6 +529,21 @@ export type CphSiteRow = {
   ge_kva?: number | null;
   /** Motif précis quand la conso estimée n'est pas complète (null = complète). */
   motif_cph?: { code: CphMotifCode; detail: string | null; jours: number } | null;
+  /** Statuts séparés : un CPH calculé sans relevé de stock reste CPH_CALCULE. */
+  statut_cph?: CphStatutCph;
+  statut_rapprochement_calcul?: CphStatutRapprochement;
+  facture_avec_ge?: boolean | null;
+  /** On-Grid / Off-Grid (Base GE, sinon Snowflake). */
+  site_type?: string | null;
+  configuration?: "INDOOR" | "OUTDOOR" | null;
+  configuration_fichier?: string | null;
+  running_days?: number;
+  power_method_main?: CphPowerMethod | null;
+  power_method_days?: Partial<Record<CphPowerMethod, number>>;
+  blocked_days?: Record<string, { jours: number; runtime_h: number | null; mesuree_l: number | null }>;
+  diag_codes?: string[];
+  ac_statut?: CphAcStatus | null;
+  p_ac_aux_kw?: number | null;
   /** Consommation spécifique (L/kWh) : contrôle de plausibilité, jamais bloquant. */
   conso_specifique?: {
     energie_ge_kwh: number | null; estimee_l_kwh: number | null; mesuree_l_kwh: number | null;
@@ -512,7 +560,7 @@ export type CphCurveSourceStatus = "VALIDE_CONSTRUCTEUR" | "HISTORIQUE_A_VALIDER
 export type CphMotifCode =
   | "RUNTIME_INDISPONIBLE" | "RUNTIME_NON_QUALIFIE" | "PUISSANCE_INDISPONIBLE" | "PUISSANCE_HORS_LIMITE"
   | "PUISSANCE_NOMINALE_ABSENTE" | "RENDEMENT_REDRESSEUR_INVALIDE" | "COURBE_CPH_MANQUANTE" | "MAPPING_GE_A_VALIDER"
-  | "MODELE_GE_AMBIGU" | "SITE_MULTI_GE" | "TYPE_GE_ABSENT";
+  | "MODELE_GE_AMBIGU" | "SITE_MULTI_GE" | "TYPE_GE_ABSENT" | "PERIODE_INCOMPLETE" | "CONFIGURATION_INCONNUE";
 
 export type CphCorrespondance = {
   statut: CphMatchStatus;
@@ -564,10 +612,20 @@ export type CphDay = {
   extrapolated: boolean;
   status: CphDayStatus;
   motifs: string[];
+  /** Chaîne de repli puissance du jour : chaque méthode tentée, retenue ou rejetée. */
+  power_method?: CphPowerMethod | null;
+  power_trace?: Record<CphPowerMethod, CphMethodAttempt> | null;
+  power_raw?: { production_kwh: number | null; p_dse_kw: number | null; p_dc_kw: number | null; rendement: number | null; ac_avg_brut: number | null } | null;
+  power_rejection_codes?: string[];
+  power_cap_kw?: number | null;
+  selected_power_kw?: number | null;
+  rejection_reasons?: string[];
 };
 
 export type CphSiteDetail = CphSiteRow & {
-  ac_reference: { p_ac_aux_kw: number | null; reference_dates: string[]; reason: string | null } | null;
+  ac_reference: CphAcReference | null;
+  batterie?: string;
+  periode?: CphPeriodeInfo;
   reconciliations: CphReconciliation[];
   daily: CphDay[];
 };
@@ -598,7 +656,39 @@ export type CphSynthesis = {
   courbes_appliquees?: Partial<Record<CphCurveSourceStatus, number>>;
   motifs_cph?: Partial<Record<CphMotifCode, number>>;
   alertes_sfc?: { estimee: number; mesuree: number };
+  couvertures?: CphCouverture[];
+  diagnostic_blocages?: CphDiagnosticBlocage[];
+  statuts_cph?: Partial<Record<CphStatutCph, number>>;
+  statuts_rapprochement_calcul?: Partial<Record<CphStatutRapprochement, number>>;
+  methodes_puissance?: Partial<Record<CphPowerMethod, number>>;
+  load_ac_statuts?: Partial<Record<CphAcStatus, number>>;
 };
+
+/** KPI de couverture : jamais un « taux de couverture » unique et ambigu. */
+export type CphCouverture = {
+  code: "conso_mesuree" | "runtime" | "mapping" | "puissance" | "cph" | "rapprochement";
+  label: string;
+  numerateur: number;
+  denominateur: number;
+  pct: number | null;
+  definition: string;
+};
+
+export type CphDiagnosticBlocage = {
+  code: string;
+  label: string;
+  type: "jour" | "site";
+  bloquant: boolean;
+  sites: number;
+  jours: number;
+  runtime_h: number | null;
+  conso_mesuree_l: number | null;
+  volume_potentiel_l: number | null;
+  sites_volume_potentiel: number;
+  filtre: { diag: string };
+};
+
+export type CphPeriodeInfo = { incomplete: boolean; donnees_jusqu_au: string | null; jours_sans_donnees: number };
 
 export type CphMeta = {
   abaque_file: string | null;
@@ -629,8 +719,9 @@ export type CphPeriodResponse = {
   synthesis: CphSynthesis;
   data: CphSiteRow[];
   pagination: Pagination;
-  filters: { runtime_sources: string[]; power_sources: string[]; zones: string[]; countries: string[] };
+  filters: { runtime_sources: string[]; power_sources: string[]; power_methods?: string[]; zones: string[]; countries: string[] };
   meta: CphMeta;
+  periode?: CphPeriodeInfo;
 };
 
 export type CphFilters = {
@@ -650,6 +741,11 @@ export type CphFilters = {
   motif_cph?: string;
   dispo_runtime?: string;
   alerte_sfc?: string;
+  statut_cph?: string;
+  statut_rapprochement_calcul?: string;
+  power_method?: string;
+  configuration?: string;
+  diag?: string;
 };
 
 export async function getCphPeriod(params: CphFilters & { page?: number; limit?: number }) {

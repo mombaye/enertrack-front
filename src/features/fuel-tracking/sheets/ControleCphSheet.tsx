@@ -34,6 +34,7 @@ import {
 import { Card, EmptyState, KpiCard, Modal, Pager, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { CorrespondanceCell, curveSourceCode, CurveStatusBadge, FreshnessWarning, GLOSSARY, HelpTip, MATCH_LABELS, MatchBadge, MOTIF_LABELS } from "./cphBadges";
+import { AcReferencePanel, BlocageDiagnostic, CoverageKpis, PeriodeIncompleteBanner, POWER_METHOD_LABELS, PowerTrace, StatutCphBadge, StatutRapproBadge } from "./cphDiagnostics";
 
 // ─── Libellés ────────────────────────────────────────────────────────────────
 
@@ -268,7 +269,10 @@ function CalculationChain({ d }: { d: CphSiteDetail }) {
         </>}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap", fontSize: 12.5 }}>
-        <strong>Verdict :</strong> <StatutBadge statut={d.rapprochement_statut} />
+        <strong>Calcul CPH :</strong> <StatutCphBadge statut={d.statut_cph} />
+        <span style={{ fontSize: 11.5, color: FT.textSub }}>{d.conso_days}/{d.days} j calculés</span>
+        <strong style={{ marginLeft: 6 }}>Stock :</strong> <StatutRapproBadge statut={d.statut_rapprochement_calcul} />
+        <strong style={{ marginLeft: 6 }}>Verdict :</strong> <StatutBadge statut={d.rapprochement_statut} />
         {d.blocage && (
           <span style={{ color: d.blocage.etape === "cph" ? FT.violet : FT.orange }}>
             Point bloquant : <strong>{d.blocage.label}</strong>{d.blocage.detail ? ` — ${d.blocage.detail}` : ""}
@@ -334,17 +338,14 @@ function SiteDetailModal({ siteId, start, end, onClose }: { siteId: string; star
             </table>
           </div>
 
+          <PeriodeIncompleteBanner periode={d.periode} />
           {d.ac_reference && (
             <div style={{ border: `1px solid ${FT.border}`, borderRadius: 9, padding: 12 }}>
-              <strong>Load AC historique (indoor)</strong> :{" "}
-              {d.ac_reference.p_ac_aux_kw !== null ? `${nf(d.ac_reference.p_ac_aux_kw, 3)} kW — médiane de ${d.ac_reference.reference_dates.length} jour(s) réseau sans GE` : <span style={{ color: FT.orange }}>{d.ac_reference.reason}</span>}
-              {d.ac_reference.reference_dates.length > 0 && (
-                <div style={{ fontSize: 11.5, color: FT.textSub, marginTop: 4 }}>
-                  Dates de référence : {d.ac_reference.reference_dates.map(fmtDate).join(", ")}
-                </div>
-              )}
+              <div style={{ fontWeight: 800, marginBottom: 8 }}>Load AC historique (indoor) — jours réseau sans GE</div>
+              <AcReferencePanel ac={d.ac_reference} />
             </div>
           )}
+          <div style={{ fontSize: 11.5, color: FT.textSub }}>{d.batterie ?? "BATTERIE_NON_INTEGREE — validation du sens énergétique requise"} : aucune puissance batterie n'est ajoutée à P_DC.</div>
 
           <div>
             <div style={{ fontWeight: 800, marginBottom: 6 }}>Rapprochement stock</div>
@@ -382,7 +383,7 @@ function SiteDetailModal({ siteId, start, end, onClose }: { siteId: string; star
                         {(["DSE", "REDRESSEUR", "DAY_DG_ON", "COMPTEUR_TERRAIN"] as const).map((s) => nf(day.raw[s], 2) ?? "—").join(" / ")}
                       </td>
                       <td style={td}><Num value={day.p_ge_kw} digits={2} /></td>
-                      <td style={td}>{day.power_source ? POWER_SOURCE_LABELS[day.power_source] : "—"}</td>
+                      <td style={td}>{day.power_method ? POWER_METHOD_LABELS[day.power_method] : day.power_source ? POWER_SOURCE_LABELS[day.power_source] : "—"}</td>
                       <td style={td}>
                         <Num value={day.charge_pct} digits={1} suffix=" %" />
                         {day.extrapolated && <> <Tag tone={FT.orange}>&lt; 50 % extrapolé</Tag></>}
@@ -394,7 +395,12 @@ function SiteDetailModal({ siteId, start, end, onClose }: { siteId: string; star
                         {day.motif_code && <div style={{ fontSize: 10.5, color: FT.violet, fontFamily: "ui-monospace, Menlo, monospace" }}>{day.motif_code}</div>}
                       </td>
                       <td style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 280, fontSize: 11.5, color: FT.textMid }}>
-                        {[day.power_detail, ...day.motifs].filter(Boolean).join(" · ") || "—"}
+                        {day.power_trace ? (
+                          <details>
+                            <summary style={{ cursor: "pointer" }}>{[day.power_detail, ...day.motifs].filter(Boolean).join(" · ") || "Méthodes de puissance tentées"}</summary>
+                            <div style={{ marginTop: 6 }}><PowerTrace day={day} /></div>
+                          </details>
+                        ) : [day.power_detail, ...day.motifs].filter(Boolean).join(" · ") || "—"}
                       </td>
                     </tr>
                   ))}
@@ -561,8 +567,8 @@ const BLOCAGE_ACTIONS: Record<string, { label: string; target: "referentiel" | "
   OBSERVATION_INCOMPLETE: { label: "Corriger les relevés", target: "observations" },
 };
 
-function BlocagesModal({ s, active, onSelect, onAction, onClose }: {
-  s: CphSynthesis; active?: string; onSelect: (code: string) => void;
+function BlocagesModal({ s, active, onSelect, onAction, onClose, activeDiag, onDiag }: {
+  s: CphSynthesis; active?: string; onSelect: (code: string) => void; activeDiag?: string; onDiag: (code: string) => void;
   onAction: (target: "referentiel" | "abaque" | "observations") => void; onClose: () => void;
 }) {
   const list = s.blocages ?? [];
@@ -607,7 +613,7 @@ function BlocagesModal({ s, active, onSelect, onAction, onClose }: {
     );
   };
   return (
-    <Modal title="Pourquoi des sites n'ont pas de verdict ?" onClose={onClose} maxWidth={760}>
+    <Modal title="Pourquoi des sites n'ont pas de verdict ?" onClose={onClose} maxWidth={960}>
       <div style={{ fontSize: 12.5, color: FT.textMid }}>
         Premier point bloquant de chaque site, dans l'ordre du calcul. Cliquez sur une ligne pour afficher ces sites dans le tableau.
       </div>
@@ -621,6 +627,10 @@ function BlocagesModal({ s, active, onSelect, onAction, onClose }: {
           {section("rapprochement", "Comparaison avec le stock")}
         </>
       )}
+      <div style={{ fontSize: 11, fontWeight: 800, color: FT.textSub, textTransform: "uppercase", letterSpacing: ".05em", margin: "16px 0 6px" }}>
+        Synthèse détaillée des blocages (chaque méthode échouée compte)
+      </div>
+      <BlocageDiagnostic items={s.diagnostic_blocages} active={activeDiag} onSelect={(code) => { onDiag(code ?? ""); onClose(); }} />
     </Modal>
   );
 }
@@ -1199,6 +1209,7 @@ function CphKpis({ s, meta, onPreparation, handlers }: { s: CphSynthesis | undef
         <KpiCard label="Comparés au stock" value={s.rapprochements_calcules.toLocaleString("fr-FR")} sub={`${s.ok} OK · ${s.a_justifier} à justifier · ${s.a_investiguer} à investiguer`} tone="green" icon={<Scale size={14} />} />
         <KpiCard label="Sans verdict" value={sansVerdict.toLocaleString("fr-FR")} sub={`${s.donnees_incompletes} données incomplètes · ${s.rapprochement_cph_non_calcule} CPH non calculé`} tone="slate" icon={<HelpCircle size={14} />} />
       </div>
+      {s.couvertures && <div style={{ marginTop: 12 }}><CoverageKpis items={s.couvertures} /></div>}
       <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", fontSize: 11.5, color: FT.textSub }}>
         <span>Préparation :</span>
         {items.map((i) => (
@@ -1419,7 +1430,7 @@ export function ControleCphSheet() {
       {detailSite && <SiteDetailModal siteId={detailSite} start={period.start} end={period.end} onClose={() => setDetailSite(null)} />}
       {modal === "preparation" && meta && <PreparationModal meta={meta} handlers={handlers} onClose={() => setModal(null)} />}
       {modal === "blocages" && s && (
-        <BlocagesModal s={s} active={filters.blocage} onSelect={(v) => setFilter("blocage", v)} onAction={(t) => setModal(t === "observations" ? "import" : t)} onClose={() => setModal(null)} />
+        <BlocagesModal s={s} active={filters.blocage} onSelect={(v) => setFilter("blocage", v)} activeDiag={filters.diag} onDiag={(v) => setFilter("diag", v)} onAction={(t) => setModal(t === "observations" ? "import" : t)} onClose={() => setModal(null)} />
       )}
       {modal === "how" && <HowItWorksModal onClose={() => setModal(null)} ruleVersion={meta?.rule_version} />}
       {modal === "import" && (

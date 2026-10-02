@@ -16,7 +16,13 @@ import { FT } from "../theme";
 export const GLOSSARY = {
   runtime: "Runtime GE (h) : heures de marche du GE retenues jour par jour sur les dates exactes. Priorité stricte : DSE / contrôleur GE, redresseur (sites off-grid uniquement), Day DG On, compteur horaire terrain. Une source n'est utilisable que si elle est disponible ≥ 50 % des jours ; DSE = 0 est une valeur valide, une valeur absente reste vide.",
   dispo: "Disponibilité runtime (%) : jours où la source retenue a une valeur (0 compris) ÷ jours de la période. Une valeur absente n'est jamais comptée comme 0.",
-  puissance: "Puissance GE (kW) : puissance électrique retenue pour calculer la charge GE. Source : DSE / production GE (DG_PRODUCTION_KWH ÷ runtime), redresseur (P_DC ÷ rendement, sans courant batterie) ou ESTIMATION_HISTORIQUE_LOAD_AC pour les sites indoor (P_DC pendant GE + load AC historique ; ACT_ACTIVE_POWER_AVG n'est jamais une puissance GE directe).",
+  puissance: "Puissance GE retenue (kW) : moyenne pondérée par le runtime des jours calculés. Chaîne de repli tentée chaque jour : 1) DSE / production GE (DG_PRODUCTION_KWH ÷ runtime) ; 2) outdoor : P_DC pendant GE ÷ rendement ; 3) indoor : P_DC pendant GE ÷ rendement + load AC historique. Chaque méthode est rejetée au-delà de 1,05 × kVA × 0,8. Jamais de courant batterie ajouté ; ACT_ACTIVE_POWER_AVG n'est jamais une puissance GE directe.",
+  sourcePuissance: "Source puissance : méthode retenue sur le plus de jours (le détail jour par jour, avec les méthodes rejetées et leur motif, est dans Contrôle CPH).",
+  configuration: "Configuration Indoor / Outdoor : inventaire site (core), à défaut fichier ESCO Facturation par site. Inconnue = la méthode redresseur ne peut pas être choisie (CONFIGURATION_INCONNUE).",
+  typeSite: "Type de site : On-Grid / Off-Grid (Base GE, à défaut Snowflake).",
+  factureGe: "Facturé avec GE : fichier ESCO SN Facturation par site (Oui / Non), information non bloquante pour le calcul.",
+  score: "Score de compatibilité du mapping : modèle (60, variante 40) + marque (20) + puissance à ± 15 % du kVA de la courbe (20). Auto-validation seulement si candidat unique, score ≥ 70 % et aucune contradiction.",
+  origineCourbe: "Qualité / origine de la courbe : VALIDE_CONSTRUCTEUR, HISTORIQUE_A_VALIDER, ARCHIVE ou DISTRIBUTEUR. Jamais modifiée par le mapping.",
   charge: "Charge GE (%) : puissance GE retenue ÷ puissance active nominale estimée (kVA × 0,8). Au-delà de 1,05 × kVA × 0,8, le CPH n'est pas calculé (PUISSANCE_HORS_LIMITE).",
   cph: "CPH (L/h) : consommation horaire calculée depuis la courbe CPH du GE au taux de charge retenu : a × charge² + b × charge + c.",
   consoEstimee: "Conso estimée (L) : Runtime GE × CPH, jour par jour. C'est la consommation théorique calculée. « partielle » : certains jours n'ont pas de CPH (motif affiché).",
@@ -203,6 +209,8 @@ export const MOTIF_LABELS: Record<CphMotifCode, string> = {
   MODELE_GE_AMBIGU: "Plusieurs courbes candidates (modèle ambigu)",
   SITE_MULTI_GE: "Site multi-GE",
   TYPE_GE_ABSENT: "Type de GE absent de la Base GE",
+  PERIODE_INCOMPLETE: "PÉRIODE INCOMPLÈTE : jours après la dernière donnée Snowflake",
+  CONFIGURATION_INCONNUE: "Configuration Indoor/Outdoor inconnue",
 };
 
 // ─── Comparaison estimée / mesurée ───────────────────────────────────────────

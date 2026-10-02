@@ -1,122 +1,18 @@
 // src/features/fuel-tracking/sheets/ConsommationSheet.tsx
-// Onglet CONSOMMATION — automatisé (pas d'upload) : jointure Snowflake
-// (DB_GFMS_PROD.GOLD, conso mesurée par capteur) + ENOC (quantités validées
-// par le fuel manager, lues directement depuis la base MongoDB d'ENOC —
-// l'API REST est bloquée par filtrage IP côté ENOC, voir
-// fuel_tracking/services/enoc_mongo_service.py). Les fichiers gardiens
-// rejoindront ce tableau plus tard, une fois leur format défini.
+// Onglet SUIVIS CONSOMMATIONS — un seul tableau opérationnel : conso estimée CPH et
+// conso mesurée par site sur les dates exactes (ConsoEstimeeSection). Au-dessus, les
+// indicateurs mensuels de référence (fichier Stan, mesure capteur VW_FUEL_REPORT) et,
+// à la demande, l'audit de détection GE Snowflake / ENOC. L'ancien tableau mensuel
+// « Consommation par site » (filtres, pagination et compteurs propres) est supprimé.
 
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Droplets, Fuel, Gauge, PieChart as PieChartIcon, Search, Users } from "lucide-react";
-import { type FuelConfigurationFilter, type FuelConsommationResponse, type FuelGeDetectionFilter } from "@/services/fuelTracking";
-import { Card, EmptyState, KpiCard, Modal, Pager, Skeleton } from "../ui";
+import { Droplets, Fuel, Gauge, PieChart as PieChartIcon, Users } from "lucide-react";
+import { type FuelConsommationResponse, type FuelGeDetectionFilter } from "@/services/fuelTracking";
+import { KpiCard, Modal, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { ConsoEstimeeSection } from "./ConsoEstimeeSection";
 import { fmt, monthLabel } from "../helpers";
-
-const th: CSSProperties = {
-  position: "sticky",
-  top: 0,
-  zIndex: 1,
-  background: FT.slateL,
-  color: FT.text,
-  fontSize: 10.5,
-  fontWeight: 800,
-  textTransform: "uppercase",
-  letterSpacing: ".04em",
-  textAlign: "center",
-  padding: "9px 10px",
-  borderBottom: `1px solid ${FT.borderStrong}`,
-  whiteSpace: "nowrap",
-};
-
-const td: CSSProperties = {
-  padding: "8px 10px",
-  borderBottom: `1px solid ${FT.border}`,
-  fontSize: 12.5,
-  textAlign: "center",
-  whiteSpace: "nowrap",
-};
-
-function EmptyCell({ reason }: { reason?: string }) {
-  return (
-    <span style={{ color: FT.textSub, cursor: reason ? "help" : undefined }} title={reason}>—</span>
-  );
-}
-
-function OuiNonCell({ value, title }: { value: boolean | null; title?: string }) {
-  if (value === null || value === undefined) return <EmptyCell reason={title} />;
-  return (
-    <span style={{ fontWeight: 800, color: value ? FT.green : FT.textSub }} title={title}>
-      {value ? "Oui" : "Non"}
-    </span>
-  );
-}
-
-function NumCell({ value, digits = 0, suffix, emptyReason }: { value: number | null; digits?: number; suffix?: string; emptyReason?: string }) {
-  if (value === null || value === undefined) return <EmptyCell reason={emptyReason} />;
-  if (value === 0) return <EmptyCell reason={emptyReason} />;
-  return (
-    <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontWeight: 600 }}>
-      {value.toLocaleString("fr-FR", { minimumFractionDigits: digits, maximumFractionDigits: digits })}
-      {suffix ? ` ${suffix}` : ""}
-    </span>
-  );
-}
-
-// Conso mesurée vue : capteur Snowflake en priorité, relevé de gardiennage en
-// repli. Runtime, CPH, conso théorique et rapprochement : onglet Contrôle CPH.
-const SOURCE_LABELS: Record<string, string> = {
-  snowflake: "capteur automatisé Snowflake (VW_FUEL_REPORT)",
-  gardiennage: "relevé manuel de gardiennage (jauge physique) — repli, pas de capteur Snowflake fiable",
-};
-
-function sourceTitle(source: string | null): string | undefined {
-  if (!source) return undefined;
-  return `Source : ${SOURCE_LABELS[source] || source}.`;
-}
-
-type GeFilter = "all" | "true" | "false" | "incomplete";
-
-function GeFilterButtons({
-  value,
-  onChange,
-  kpis,
-}: {
-  value: GeFilter;
-  onChange: (v: GeFilter) => void;
-  kpis: FuelConsommationResponse["kpis"];
-}) {
-  const options: Array<{ key: GeFilter; label: string }> = [
-    { key: "all", label: `Tous${kpis ? ` (${fmt.format(kpis.sites_avec_ge + kpis.sites_sans_ge)})` : ""}` },
-    { key: "true", label: `Avec GE${kpis ? ` (${fmt.format(kpis.sites_avec_ge)})` : ""}` },
-    { key: "false", label: `Sans GE${kpis ? ` (${fmt.format(kpis.sites_sans_ge)})` : ""}` },
-    { key: "incomplete", label: `Avec GE mais aucune donnée${kpis ? ` (${fmt.format(kpis.sites_avec_ge_incomplet)})` : ""}` },
-  ];
-
-  return (
-    <div style={{ display: "inline-flex", gap: 3, padding: 4, borderRadius: 10, background: FT.slateL, border: `1px solid ${FT.border}` }}>
-      {options.map((opt) => {
-        const active = opt.key === value;
-        return (
-          <button
-            key={opt.key}
-            onClick={() => onChange(opt.key)}
-            style={{
-              padding: "6px 11px", borderRadius: 7, border: "none",
-              background: active ? "#fff" : "transparent", color: active ? FT.navy : FT.textMid,
-              boxShadow: active ? FT.shadow : "none", fontSize: 11.5, fontWeight: 800, cursor: "pointer",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse | undefined; stickyTop: number }) {
   const kpis = data?.kpis;
@@ -146,9 +42,9 @@ function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
         <KpiCard label="Sites GE validés Stan" value={fmt.format(kpis.sites_ge_valides_stan)} sub="Facturation avec GE = Oui · référentiel Ops" tone="blue" icon={<Users size={14} />} />
         <KpiCard
-          label="Sites avec conso mesurée"
+          label="Sites avec conso mesurée (mois)"
           value={fmt.format(kpis.sites_avec_conso)}
-          sub="filtre strict : chute de niveau détectée (VW_FUEL_REPORT)"
+          sub="mesure capteur, filtre strict : chute de niveau détectée (VW_FUEL_REPORT) — ce n'est pas une couverture CPH"
           tone="green"
           icon={<Fuel size={14} />}
         />
@@ -168,8 +64,8 @@ function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse 
         />
       </div>
       <div style={{ marginTop: 10, fontSize: 11.5, color: FT.textSub }}>
-        Conso estimée (runtime GE × CPH) et comparaison avec la conso mesurée : tableau ci-dessous, sur les dates exactes choisies.
-        Prérequis, correspondances plaque → courbe et rapprochement stock : onglet <strong>Contrôle CPH</strong>.
+        Indicateurs mensuels ({currentLabel}) de mesure capteur. Conso estimée CPH, couvertures distinctes et comparaison avec la
+        conso mesurée : tableau ci-dessous, sur les dates exactes choisies. Audit jour par jour : onglet <strong>Contrôle CPH</strong>.
       </div>
     </div>
   );
@@ -336,7 +232,6 @@ function GeDetectionPanel({
       <div style={{ fontSize: 11, color: FT.textSub, marginBottom: 14 }}>
         Ces chiffres reflètent uniquement Snowflake/ENOC, sans la règle Typo simple appliquée ailleurs sur cette page
         (où tout site du fichier dont Typo simple mentionne GE compte Avec GE, même si Snowflake/ENOC disent le contraire).
-        Cliquez sur une part ou une légende pour voir ces sites dans le tableau ci-dessous.
       </div>
 
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 10 }}>
@@ -391,56 +286,26 @@ function GeDetectionPanel({
   );
 }
 
-const CONFIGURATION_OPTIONS: Array<{ key: FuelConfigurationFilter; label: string }> = [
-  { key: "indoor", label: "Indoor" },
-  { key: "outdoor", label: "Outdoor" },
-  { key: "none", label: "Sans configuration" },
-];
-
 export function ConsommationSheet({
   data,
   loading,
-  search,
-  onSearchChange,
-  geFilter,
-  onGeFilterChange,
-  detectionFilter,
-  onDetectionFilterChange,
-  configurationFilter,
-  onConfigurationFilterChange,
-  page,
-  onPageChange,
   stickyTop = 0,
 }: {
   data: FuelConsommationResponse | undefined;
   loading: boolean;
-  search: string;
-  onSearchChange: (v: string) => void;
-  geFilter: GeFilter;
-  onGeFilterChange: (v: GeFilter) => void;
-  detectionFilter: FuelGeDetectionFilter | null;
-  onDetectionFilterChange: (v: FuelGeDetectionFilter | null) => void;
-  configurationFilter: FuelConfigurationFilter | null;
-  onConfigurationFilterChange: (v: FuelConfigurationFilter | null) => void;
-  page: number;
-  onPageChange: (p: number) => void;
   stickyTop?: number;
 }) {
-  const [activeComment, setActiveComment] = useState<{ siteId: string; siteName: string | null; text: string } | null>(null);
   const [showDetectionModal, setShowDetectionModal] = useState(false);
+  const [activeDetection, setActiveDetection] = useState<FuelGeDetectionFilter | null>(null);
   if (loading) return <Skeleton h={520} />;
-
-  const rows = data?.data ?? [];
-  const currentLabel = monthLabel(data?.month_year);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <ConsommationKpis data={data} stickyTop={stickyTop + 14} />
 
-      <ConsoEstimeeSection month={data?.month_year} />
-
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <button
+          type="button"
           onClick={() => setShowDetectionModal(true)}
           style={{
             display: "inline-flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`,
@@ -448,188 +313,17 @@ export function ConsommationSheet({
             borderRadius: 10, padding: "9px 14px", boxShadow: FT.shadow,
           }}
         >
-          <PieChartIcon size={14} color={FT.blue} /> Voir informations Détection GE
+          <PieChartIcon size={14} color={FT.blue} aria-hidden /> Voir informations Détection GE
         </button>
       </div>
 
       {showDetectionModal && (
         <Modal title="Détection GE — Snowflake / ENOC seuls" onClose={() => setShowDetectionModal(false)} maxWidth={900}>
-          <GeDetectionPanel
-            detection={data?.ge_detection}
-            activeDetection={detectionFilter}
-            onDetectionChange={(v) => {
-              onDetectionFilterChange(v);
-              onGeFilterChange("all");
-            }}
-          />
+          <GeDetectionPanel detection={data?.ge_detection} activeDetection={activeDetection} onDetectionChange={setActiveDetection} />
         </Modal>
       )}
 
-      <Card padded={false} style={{ padding: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 11, background: FT.blueL, display: "grid", placeItems: "center", color: FT.navy, flexShrink: 0 }}>
-              <Droplets size={17} />
-            </div>
-            <div>
-              <div style={{ fontSize: 15.5, fontWeight: 800, color: FT.text }}>Consommation par site — {currentLabel}</div>
-              <div style={{ fontSize: 12.5, color: FT.textSub, marginTop: 3 }}>
-                Automatisé — Snowflake (conso mesurée par capteur) et relevés de gardiennage. Aucun upload nécessaire.
-                {data?.pagination && ` ${fmt.format(data.pagination.total)} site(s).`}
-              </div>
-              {detectionFilter && (
-                <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 7, background: FT.blueL, color: FT.blue, borderRadius: 999, padding: "4px 10px", fontSize: 11, fontWeight: 800 }}>
-                  Filtre détection : {DETECTION_LABELS[detectionFilter]}
-                  <button
-                    onClick={() => onDetectionFilterChange(null)}
-                    style={{ border: "none", background: "transparent", color: FT.blue, cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0, fontWeight: 900 }}
-                  >
-                    ×
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <GeFilterButtons
-              value={geFilter}
-              onChange={(v) => {
-                onGeFilterChange(v);
-                onDetectionFilterChange(null);
-              }}
-              kpis={data?.kpis ?? null}
-            />
-            <select
-              value={configurationFilter ?? ""}
-              onChange={(e) => onConfigurationFilterChange((e.target.value || null) as FuelConfigurationFilter | null)}
-              title="Filtrer par Configuration (Indoor/Outdoor)"
-              style={{
-                border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px",
-                fontSize: 12.5, color: FT.text, fontWeight: 700, cursor: "pointer",
-              }}
-            >
-              <option value="">Configuration : toutes</option>
-              {CONFIGURATION_OPTIONS.map((o) => (
-                <option key={o.key} value={o.key}>
-                  {o.label}{data?.kpis ? ` (${fmt.format(data.kpis.configuration_counts[o.key])})` : ""}
-                </option>
-              ))}
-            </select>
-            <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px", minWidth: 220 }}>
-              <Search size={14} color={FT.textSub} />
-              <input
-                value={search}
-                onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Site ID ou nom..."
-                style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, color: FT.text, flex: 1 }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {rows.length === 0 ? (
-          <EmptyState icon={<Droplets size={20} />} title="Aucune donnée" subtitle="La synchronisation automatique n'a pas encore tourné pour ce mois." />
-        ) : (
-          <>
-            <div style={{ overflow: "auto", maxHeight: 600, borderRadius: 12, border: `1px solid ${FT.border}` }}>
-              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1500 }}>
-                <thead>
-                  <tr>
-                    <th style={th}>Site ID</th>
-                    <th style={th}>Nom du site</th>
-                    <th style={th}>Typologie réelle</th>
-                    <th style={th}>Typologie simple</th>
-                    <th style={th}>Type de site</th>
-                    <th style={th}>Configuration</th>
-                    <th style={th}>Facturé avec GE</th>
-                    <th style={th}>Facturé (mois en cours)</th>
-                    <th style={th}>Type de GE</th>
-                    <th style={th} title="Puissance nominale du GE, fichier Base GE (kVA)">Puissance GE (kVA)</th>
-                    <th style={th}>Conso mesurée vue (L)</th>
-                    <th style={{ ...th, textAlign: "left" }}>Commentaire</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r, i) => (
-                    <tr key={r.site_id} style={{ background: i % 2 === 0 ? "#fff" : FT.cardAlt }}>
-                      <td style={{ ...td, fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace" }}>{r.site_id}</td>
-                      <td style={td}>{r.site_name || "—"}</td>
-                      <td style={td}>{r.typology || "—"}</td>
-                      <td style={td}>{r.typologie_simple || "—"}</td>
-                      <td style={td}>{r.site_type || "—"}</td>
-                      <td style={td}>
-                        {r.configuration_fichier || <EmptyCell reason="Configuration (Indoor/Outdoor) non trouvée — site absent du dernier fichier ESCO SN Facturation par site." />}
-                      </td>
-                      <td style={td}>
-                        <OuiNonCell
-                          value={r.facturation_avec_ge_fichier}
-                          title={r.facturation_avec_ge_fichier === null ? "Site absent du dernier fichier ESCO SN Facturation par site." : "Facturation avec GE — fichier ESCO SN Facturation par site (déjà calculé par Ops)."}
-                        />
-                      </td>
-                      <td style={td}>
-                        <OuiNonCell
-                          value={r.facturation_active_fichier}
-                          title={r.facturation_active_fichier === null ? "Site absent du dernier fichier ESCO SN Facturation par site." : "Statut Facturation du mois en cours — fichier ESCO SN Facturation par site."}
-                        />
-                      </td>
-                      <td style={td}>{r.type_ge || <EmptyCell reason="Type de GE non trouvé dans Base GE.xlsx pour ce site." />}</td>
-                      <td style={td}>
-                        <NumCell
-                          value={r.pge_kva_fichier}
-                          digits={1}
-                          emptyReason="Puissance nominale du GE non renseignée dans le fichier de référence (Base GE.xlsx) pour ce site."
-                        />
-                      </td>
-                      <td style={td} title={r.conso_mesuree_source === "gardiennage" && r.gardien_statut ? `Statut gardiennage : ${r.gardien_statut}` : undefined}>
-                        <NumCell
-                          value={r.conso_mesuree_fichier_l}
-                          digits={1}
-                          emptyReason={r.conso_mesuree_source ? sourceTitle(r.conso_mesuree_source) : "Aucune baisse de niveau de cuve fiable détectée ce mois-ci (Snowflake VW_FUEL_REPORT), et aucun relevé de gardiennage disponible pour ce site ce mois-ci."}
-                        />
-                      </td>
-                      <td style={{ ...td, textAlign: "left", maxWidth: 260 }}>
-                        {r.commentaire ? (
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 11.5, color: FT.textSub, minWidth: 0 }}>
-                              {r.commentaire}
-                            </span>
-                            <button
-                              onClick={() => setActiveComment({ siteId: r.site_id, siteName: r.site_name, text: r.commentaire! })}
-                              style={{ flexShrink: 0, border: "none", background: "transparent", color: FT.blue, fontSize: 11, fontWeight: 800, cursor: "pointer", padding: 0, textDecoration: "underline" }}
-                            >
-                              Voir plus
-                            </button>
-                          </div>
-                        ) : (
-                          <span style={{ color: FT.green, fontSize: 11.5 }}>Toutes les données disponibles.</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {data?.pagination && (
-              <Pager
-                page={data.pagination.page}
-                totalPages={data.pagination.totalPages}
-                hasPrev={data.pagination.hasPrev}
-                hasNext={data.pagination.hasNext}
-                onPrev={() => onPageChange(Math.max(1, page - 1))}
-                onNext={() => onPageChange(page + 1)}
-              />
-            )}
-          </>
-        )}
-      </Card>
-
-      {activeComment && (
-        <Modal title={`${activeComment.siteId}${activeComment.siteName ? ` — ${activeComment.siteName}` : ""}`} onClose={() => setActiveComment(null)}>
-          <p style={{ fontSize: 13, lineHeight: 1.6, color: FT.text, margin: 0, whiteSpace: "pre-wrap" }}>{activeComment.text}</p>
-        </Modal>
-      )}
+      <ConsoEstimeeSection month={data?.month_year} />
     </div>
   );
 }

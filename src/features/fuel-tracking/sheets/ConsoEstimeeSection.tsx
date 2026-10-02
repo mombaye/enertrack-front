@@ -1,23 +1,27 @@
 // src/features/fuel-tracking/sheets/ConsoEstimeeSection.tsx
-// « Suivis Consommations » — résultat principal du calcul CPH : conso estimée
-// (runtime GE × CPH) par site sur les dates EXACTES choisies, puis comparaison avec
-// la conso mesurée vue (capteur, VW_FUEL_REPORT) quand elle existe. Calcul 100 % backend
+// « Suivis Consommations » — tableau UNIQUE de l'onglet : conso estimée (runtime GE × CPH)
+// par site sur les dates EXACTES choisies (calcul site × jour puis agrégation), comparée à la
+// conso mesurée vue (capteur, VW_FUEL_REPORT) quand elle existe. Calcul 100 % backend
 // (GET /fuel-tracking/cph/) ; une valeur absente reste « — » avec son motif, jamais 0.
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { CalendarRange, Download, Droplets, Fuel, Gauge, Scale, Search, SlidersHorizontal } from "lucide-react";
+import { CalendarRange, Download, Gauge, ListChecks, Search, SlidersHorizontal } from "lucide-react";
 
 import {
   exportCph, getCphPeriod,
-  type CphConsoStatus, type CphCurveSourceStatus, type CphFilters, type CphMatchStatus, type CphMotifCode, type CphSiteRow,
+  type CphConsoStatus, type CphCurveSourceStatus, type CphFilters, type CphMatchStatus, type CphMotifCode, type CphPowerMethod, type CphSiteRow,
 } from "@/services/fuelTracking";
-import { Card, EmptyState, KpiCard, Pager, Skeleton } from "../ui";
+import { Card, EmptyState, Pager, Skeleton } from "../ui";
 import { FT } from "../theme";
 import {
   CONSO_STATUS_COLORS, CONSO_STATUS_LABELS, ConsoStatusBadge, CurveStatusBadge, CURVE_SOURCE_LABELS, GLOSSARY, HelpTip,
-  FreshnessWarning, MATCH_LABELS, MatchBadge, MOTIF_LABELS, POWER_SOURCE_LABELS, RUNTIME_SOURCE_LABELS,
+  FreshnessWarning, MATCH_LABELS, MatchBadge, MOTIF_LABELS, RUNTIME_SOURCE_LABELS,
 } from "./cphBadges";
+import {
+  BlocageDiagnostic, CoverageKpis, PeriodeIncompleteBanner, POWER_METHOD_FORMULAS, POWER_METHOD_LABELS, STATUT_CPH_LABELS,
+  STATUT_RAPPRO_LABELS, StatutCphBadge,
+} from "./cphDiagnostics";
 
 const th: CSSProperties = {
   position: "sticky", top: 0, zIndex: 2, background: FT.slateL, color: FT.text, fontSize: 10.5, fontWeight: 800,
@@ -29,10 +33,7 @@ const sub: CSSProperties = { fontSize: 11, color: FT.textSub };
 const control: CSSProperties = { border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px", fontSize: 12.5, color: FT.text, fontWeight: 700 };
 const btn: CSSProperties = { display: "inline-flex", alignItems: "center", gap: 6, border: `1px solid ${FT.border}`, background: FT.card, color: FT.text, cursor: "pointer", fontSize: 12, fontWeight: 800, borderRadius: 9, padding: "7px 12px" };
 
-const CPH_STATUS_LABELS: Record<string, string> = { COMPLET: "Complet", PARTIEL: "Partiel", NON_CALCULE: "Non calculé" };
-const RAPPROCHEMENT_LABELS: Record<string, string> = {
-  OK: "OK", A_JUSTIFIER: "À justifier", A_INVESTIGUER: "À investiguer", DONNEES_INCOMPLETES: "Données incomplètes", CPH_NON_CALCULE: "CPH non calculé",
-};
+const KIND_LABELS: Record<string, string> = { INDOOR: "Indoor", OUTDOOR: "Outdoor", INCONNUE: "Inconnue" };
 
 function nf(v: number | null | undefined, digits = 1) {
   if (v === null || v === undefined) return null;
@@ -79,7 +80,7 @@ function motifFor(r: CphSiteRow): { code: CphMotifCode | null; text: string | nu
   const m = r.motif_cph;
   const c = r.comparaison;
   const parts: string[] = [];
-  if (m) parts.push(`${MOTIF_LABELS[m.code] ?? m.code}${m.jours && r.cph_status !== "NON_CALCULE" ? ` (${m.jours}/${r.days} j)` : ""}${m.detail ? ` — ${m.detail}` : ""}`);
+  if (m) parts.push(`${MOTIF_LABELS[m.code] ?? m.code}${m.jours && r.statut_cph !== "CPH_NON_CALCULE" ? ` (${m.jours}/${r.days} j)` : ""}${m.detail ? ` — ${m.detail}` : ""}`);
   if (c && c.statut !== "CONSO_ESTIMEE_NON_CALCULEE" && c.motif) parts.push(c.motif);
   for (const a of r.conso_specifique?.alertes ?? []) parts.push(`⚠ ${a}`);
   return { code: m?.code ?? null, text: parts.join(" · ") || null };
@@ -95,13 +96,17 @@ function Th({ children, tip, label, left }: { children: ReactNode; tip?: string;
 
 const CONSO_FILTERS: Array<CphConsoStatus | ""> = ["", "COHERENT", "ECART_A_JUSTIFIER", "ECART_A_INVESTIGUER", "MESURE_ABSENTE", "CONSO_ESTIMEE_NON_CALCULEE"];
 type Filters = Omit<CphFilters, "start" | "end" | "site">;
-const ADVANCED: Array<keyof Filters> = ["country", "zone", "runtime_source", "dispo_runtime", "power_source", "correspondance", "curve_source_status", "cph_status", "statut", "alerte_sfc"];
+const ADVANCED: Array<keyof Filters> = [
+  "country", "zone", "configuration", "runtime_source", "dispo_runtime", "power_method", "correspondance", "curve_source_status",
+  "statut_cph", "statut_rapprochement_calcul", "diag", "alerte_sfc",
+];
 
 export function ConsoEstimeeSection({ month }: { month: string | null | undefined }) {
   const [period, setPeriod] = useState(() => monthPeriod(month));
   const [filters, setFilters] = useState<Filters>({});
   const [search, setSearch] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [showDiag, setShowDiag] = useState(false);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(50);
   const [exporting, setExporting] = useState<null | "controle" | "anomalies">(null);
@@ -124,6 +129,7 @@ export function ConsoEstimeeSection({ month }: { month: string | null | undefine
   const data = q.data;
   const s = data?.synthesis;
   const conso = s?.conso;
+  const diagLabel = s?.diagnostic_blocages?.find((b) => b.code === filters.diag)?.label;
   const rows = data?.data ?? [];
   const advancedCount = ADVANCED.filter((k) => filters[k]).length;
 
@@ -168,10 +174,10 @@ export function ConsoEstimeeSection({ month }: { month: string | null | undefine
           </div>
           <div>
             <h2 style={{ margin: 0, fontSize: 15.5, fontWeight: 800, color: FT.text }}>
-              Conso estimée (CPH) et conso mesurée — {fmtDate(period.start)} → {fmtDate(period.end)}
+              Consommation estimée CPH et consommation mesurée — {fmtDate(period.start)} au {fmtDate(period.end)}
             </h2>
             <div style={{ fontSize: 12.5, color: FT.textSub, marginTop: 3 }}>
-              Conso estimée = runtime GE × CPH, jour par jour sur les dates exactes ; comparée à la conso mesurée vue quand elle existe.
+              Calcul site × jour (runtime GE × CPH) agrégé sur les dates exactes, comparé à la conso mesurée vue quand elle existe.
               {data?.pagination && ` ${data.pagination.total.toLocaleString("fr-FR")} site(s).`}
             </div>
           </div>
@@ -189,14 +195,18 @@ export function ConsoEstimeeSection({ month }: { month: string | null | undefine
       {periodError && <div role="alert" style={{ marginBottom: 10, color: FT.red, fontSize: 12.5 }}>{periodError}</div>}
       <FreshnessWarning meta={data?.meta} />
 
-      {conso ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginBottom: 14 }}>
-          <KpiCard label="CPH calculé" value={`${(s?.cph_calcules ?? 0).toLocaleString("fr-FR")} site(s)`}
-            sub={`${conso.sites_estimee_complete} complet(s) · ${conso.sites_estimee_partielle} partiel(s) · ${conso.sites_estimee_non_calculee} non calculé(s)`} tone="violet" icon={<Gauge size={14} />} />
-          <KpiCard label="Conso estimée totale" value={fmtL(conso.total_estimee_complete_l)} sub="sites à conso estimée complète" tone="cyan" icon={<Fuel size={14} />} />
-          <KpiCard label="Conso mesurée vue totale" value={fmtL(conso.total_mesuree_l)} sub={`${conso.sites_mesure} site(s) avec mesure fuel`} tone="slate" icon={<Droplets size={14} />} />
-          <KpiCard label="Estimée vs mesurée comparées" value={`${conso.sites_compares.toLocaleString("fr-FR")} site(s)`}
-            sub={`${conso.statuts.COHERENT ?? 0} cohérents · ${conso.statuts.ECART_A_JUSTIFIER ?? 0} à justifier · ${conso.statuts.ECART_A_INVESTIGUER ?? 0} à investiguer`} tone="green" icon={<Scale size={14} />} />
+      <PeriodeIncompleteBanner periode={data?.periode} />
+
+      {s?.couvertures ? (
+        <div style={{ marginBottom: 14 }}>
+          <CoverageKpis items={s.couvertures} />
+          {conso && (
+            <div style={{ marginTop: 8, fontSize: 12, color: FT.textMid, display: "flex", gap: 14, flexWrap: "wrap" }}>
+              <span>Conso estimée (sites complets) : <strong>{fmtL(conso.total_estimee_complete_l)}</strong> · {conso.sites_estimee_complete} complet(s) · {s.statuts_cph?.CPH_PARTIEL ?? 0} partiel(s) · {s.statuts_cph?.CPH_NON_CALCULE ?? 0} non calculé(s)</span>
+              <span>Conso mesurée vue : <strong>{fmtL(conso.total_mesuree_l)}</strong> ({conso.sites_mesure} site(s))</span>
+              <span>Estimée vs mesurée comparées : <strong>{conso.sites_compares}</strong> site(s)</span>
+            </div>
+          )}
         </div>
       ) : q.isLoading ? <div style={{ marginBottom: 14 }}><Skeleton h={96} /></div> : null}
 
@@ -220,6 +230,9 @@ export function ConsoEstimeeSection({ month }: { month: string | null | undefine
         <button type="button" aria-expanded={showFilters || advancedCount > 0} aria-controls="ce-filters" onClick={() => setShowFilters((v) => !v)} style={btn}>
           <SlidersHorizontal size={13} aria-hidden /> Filtres{advancedCount > 0 ? ` (${advancedCount})` : ""}
         </button>
+        <button type="button" aria-expanded={showDiag} aria-controls="ce-diag" onClick={() => setShowDiag((v) => !v)} style={btn}>
+          <ListChecks size={13} aria-hidden /> Synthèse des blocages
+        </button>
         <div style={{ flex: 1 }} />
         <button type="button" onClick={() => handleExport("controle")} disabled={!!exporting || !!periodError} style={{ ...btn, opacity: exporting ? 0.6 : 1 }} title="Toutes les colonnes, sources, statuts et motifs (site × jour)">
           <Download size={13} color={FT.blue} aria-hidden /> {exporting === "controle" ? "Export…" : "Contrôle complet"}
@@ -234,12 +247,29 @@ export function ConsoEstimeeSection({ month }: { month: string | null | undefine
           {sel("zone", "Zone", (data?.filters.zones ?? []).map((z) => [z, z]))}
           {sel("runtime_source", "Source runtime", (data?.filters.runtime_sources ?? []).map((r) => [r, RUNTIME_SOURCE_LABELS[r] ?? r]))}
           {sel("dispo_runtime", "Disponibilité runtime", [["90+", "≥ 90 %"], ["50+", "≥ 50 %"], ["lt50", "< 50 %"], ["aucune", "aucune source retenue"]])}
-          {sel("power_source", "Source puissance", (data?.filters.power_sources ?? []).map((p) => [p, POWER_SOURCE_LABELS[p] ?? p]))}
+          {sel("configuration", "Configuration", [["INDOOR", "Indoor"], ["OUTDOOR", "Outdoor"], ["INCONNUE", "Inconnue"]])}
+          {sel("power_method", "Source puissance", (data?.filters.power_methods ?? []).map((p) => [p, POWER_METHOD_LABELS[p as CphPowerMethod] ?? "Aucune puissance qualifiée"]))}
           {sel("correspondance", "Statut mapping", (Object.keys(MATCH_LABELS) as CphMatchStatus[]).map((k) => [k, `${k}${s?.correspondances ? ` (${s.correspondances[k] ?? 0})` : ""}`]))}
           {sel("curve_source_status", "Statut courbe", (Object.keys(CURVE_SOURCE_LABELS) as CphCurveSourceStatus[]).map((k) => [k, `${k}${s?.courbes_appliquees ? ` (${s.courbes_appliquees[k] ?? 0})` : ""}`]))}
-          {sel("cph_status", "Statut CPH", Object.entries(CPH_STATUS_LABELS))}
-          {sel("statut", "Statut rapprochement", Object.entries(RAPPROCHEMENT_LABELS))}
+          {sel("statut_cph", "Statut CPH", Object.entries(STATUT_CPH_LABELS).map(([k, l]) => [k, `${l}${s?.statuts_cph ? ` (${s.statuts_cph[k as keyof typeof s.statuts_cph] ?? 0})` : ""}`]))}
+          {sel("statut_rapprochement_calcul", "Statut stock", Object.entries(STATUT_RAPPRO_LABELS).map(([k, l]) => [k, `${l}${s?.statuts_rapprochement_calcul ? ` (${s.statuts_rapprochement_calcul[k as keyof typeof s.statuts_rapprochement_calcul] ?? 0})` : ""}`]))}
+          {sel("diag", "Motif de blocage", (s?.diagnostic_blocages ?? []).filter((b) => b.sites > 0).map((b) => [b.code, `${b.label} (${b.sites})`]))}
           {sel("alerte_sfc", "Alerte L/kWh", [["1", `hors plage${s?.alertes_sfc ? ` (${s.alertes_sfc.estimee} estimée · ${s.alertes_sfc.mesuree} mesurée)` : ""}`]])}
+        </div>
+      )}
+      {filters.diag && (
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 10, background: FT.blueL, color: FT.blue, borderRadius: 999, padding: "4px 10px", fontSize: 11.5, fontWeight: 800 }}>
+          Blocage : {diagLabel ?? filters.diag}
+          <button type="button" aria-label="Retirer le filtre de blocage" onClick={() => setFilter("diag", "")} style={{ border: "none", background: "transparent", color: FT.blue, cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0, fontWeight: 900 }}>×</button>
+        </div>
+      )}
+      {showDiag && (
+        <div id="ce-diag" style={{ marginBottom: 12, padding: 12, borderRadius: 10, background: FT.cardAlt, border: `1px solid ${FT.border}` }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: FT.text, marginBottom: 8 }}>
+            Synthèse des blocages — {fmtDate(period.start)} au {fmtDate(period.end)}
+            <span style={{ fontWeight: 500, color: FT.textSub, marginLeft: 6 }}>(un jour non calculé compte dans chaque méthode qui a échoué)</span>
+          </div>
+          <BlocageDiagnostic items={s?.diagnostic_blocages} active={filters.diag} onSelect={(code) => setFilter("diag", code ?? "")} />
         </div>
       )}
       {exportError && <div role="alert" style={{ color: FT.red, fontSize: 12.5, marginBottom: 10 }}>Export impossible : {exportError}</div>}
@@ -253,28 +283,34 @@ export function ConsoEstimeeSection({ month }: { month: string | null | undefine
       ) : (
         <>
           <div style={{ overflow: "auto", maxHeight: 620, borderRadius: 12, border: `1px solid ${FT.border}`, opacity: q.isFetching ? 0.6 : 1 }} aria-busy={q.isFetching}>
-            <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 2350 }}>
-              <caption className="sr-only">Conso estimée par le calcul CPH et conso mesurée vue, par site</caption>
+            <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 3000 }}>
+              <caption className="sr-only">Consommation estimée par le calcul CPH et consommation mesurée vue, par site sur la période</caption>
               <thead>
                 <tr>
                   <Th left>Site ID</Th>
                   <Th left>Nom du site</Th>
-                  <Th left>Pays / zone</Th>
-                  <Th left>Type de site / configuration</Th>
-                  <Th left tip={GLOSSARY.mapping} label="type de GE et mapping">Type de GE</Th>
+                  <Th left>Pays</Th>
+                  <Th left>Zone</Th>
+                  <Th left tip={GLOSSARY.typeSite} label="type de site">Type de site</Th>
+                  <Th tip={GLOSSARY.configuration} label="configuration">Configuration</Th>
+                  <Th tip={GLOSSARY.factureGe} label="facturé avec GE">Facturé avec GE</Th>
+                  <Th left>Type de GE</Th>
                   <Th tip={GLOSSARY.kva} label="puissance nominale">Puissance nominale GE (kVA)</Th>
+                  <Th left tip={GLOSSARY.mapping} label="statut mapping">Statut mapping GE → courbe</Th>
+                  <Th tip={GLOSSARY.score} label="score mapping">Score compatibilité (%)</Th>
+                  <Th left tip={GLOSSARY.origineCourbe} label="origine de courbe">Qualité / origine courbe</Th>
                   <Th tip={GLOSSARY.runtime} label="runtime">Runtime GE (h)</Th>
                   <Th>Source runtime</Th>
                   <Th tip={GLOSSARY.dispo} label="disponibilité runtime">Disponibilité runtime (%)</Th>
                   <Th tip={GLOSSARY.puissance} label="puissance GE">Puissance GE retenue (kW)</Th>
-                  <Th>Source puissance</Th>
+                  <Th tip={GLOSSARY.sourcePuissance} label="source puissance">Source puissance</Th>
                   <Th tip={GLOSSARY.charge} label="charge GE">Charge GE (%)</Th>
                   <Th tip={GLOSSARY.cph} label="CPH">CPH (L/h)</Th>
                   <Th tip={GLOSSARY.consoEstimee} label="conso estimée">Conso estimée (L)</Th>
                   <Th tip={GLOSSARY.consoMesuree} label="conso mesurée vue">Conso mesurée vue (L)</Th>
                   <Th tip={GLOSSARY.ecart} label="écart conso">Écart conso (L)</Th>
                   <Th tip={GLOSSARY.ecart} label="écart conso en pourcentage">Écart conso (%)</Th>
-                  <Th left>Statut</Th>
+                  <Th left>Statut de comparaison</Th>
                   <Th left>Motif / commentaire</Th>
                 </tr>
               </thead>
@@ -283,25 +319,37 @@ export function ConsoEstimeeSection({ month }: { month: string | null | undefine
                   const c = r.comparaison;
                   const motif = motifFor(r);
                   const corr = r.correspondance;
-                  const noCph = r.cph_moy_l_h === null;
+                  const kind = r.configuration ?? r.kind ?? null;
+                  const method = r.power_method_main ?? null;
+                  const partial = r.statut_cph === "CPH_PARTIEL";
+                  const methodDays = Object.entries(r.power_method_days ?? {}).map(([m, n]) => `${POWER_METHOD_LABELS[m as CphPowerMethod] ?? m} : ${n} j`).join(" · ");
                   return (
                     <tr key={r.site_id} style={{ background: i % 2 === 0 ? "#fff" : FT.cardAlt }}>
                       <td style={{ ...td, textAlign: "left", fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace" }}>{r.site_id}</td>
                       <td style={{ ...td, textAlign: "left" }}>{r.site_name ?? "—"}</td>
-                      <td style={{ ...td, textAlign: "left" }}>{r.country ?? "—"}<div style={sub}>{r.zone ?? "zone —"}</div></td>
+                      <td style={{ ...td, textAlign: "left" }}>{r.country ?? "—"}</td>
+                      <td style={{ ...td, textAlign: "left" }}>{r.zone ?? "—"}</td>
                       <td style={{ ...td, textAlign: "left" }}>
-                        {r.kind === "INDOOR" ? "Indoor" : r.kind === "OUTDOOR" ? "Outdoor" : "—"}
-                        <div style={sub}>{r.off_grid === true ? "off-grid" : r.off_grid === false ? "on-grid" : (r.grid_supply ?? "réseau inconnu")}</div>
+                        {r.site_type ?? (r.off_grid === true ? "Off-Grid" : r.off_grid === false ? "On-Grid" : <Val v={null} reason="Type de site absent de la Base GE et de Snowflake." />)}
                       </td>
-                      <td style={{ ...td, textAlign: "left" }}>
-                        <div>{r.ge_label ?? "—"}</div>
-                        <div style={{ display: "flex", gap: 4, alignItems: "center", marginTop: 3, flexWrap: "wrap" }}>
-                          <MatchBadge statut={corr?.statut} title={[corr?.statut ? MATCH_LABELS[corr.statut] : null, corr?.score !== null && corr?.score !== undefined ? `score ${corr.score} %` : null, corr?.methode, corr?.motif].filter(Boolean).join(" · ")} />
-                          {corr?.score !== null && corr?.score !== undefined && <span style={sub}>{corr.score} %</span>}
-                          <CurveStatusBadge status={corr?.curve_source_status ?? corr?.courbe_statut} />
-                        </div>
+                      <td style={td} title={r.kind_source ? `Source : ${r.kind_source}${r.configuration_fichier ? ` · fichier facturation : ${r.configuration_fichier}` : ""}` : "Configuration inconnue : méthode redresseur non applicable"}>
+                        {kind ? KIND_LABELS[kind] : <span style={{ color: FT.orange, fontWeight: 700 }}>Inconnue</span>}
                       </td>
+                      <td style={td}>
+                        {r.facture_avec_ge === true ? <span style={{ fontWeight: 800, color: FT.green }}>Oui</span>
+                          : r.facture_avec_ge === false ? <span style={{ fontWeight: 800, color: FT.textSub }}>Non</span>
+                            : <Val v={null} reason="Site absent du fichier ESCO SN Facturation par site." />}
+                      </td>
+                      <td style={{ ...td, textAlign: "left" }}>{r.ge_label ?? <Val v={null} reason="Type de GE absent de la Base GE." />}</td>
                       <td style={td}><Val v={r.ge_kva} digits={0} reason="Puissance nominale absente de la Base GE." /></td>
+                      <td style={{ ...td, textAlign: "left" }}>
+                        <MatchBadge statut={corr?.statut} title={[corr?.statut ? MATCH_LABELS[corr.statut] : null, corr?.methode, corr?.motif].filter(Boolean).join(" · ")} />
+                      </td>
+                      <td style={td}><Val v={corr?.score} digits={0} suffix=" %" reason="Pas de score (type de GE absent, multi-GE ou aucune courbe candidate)." /></td>
+                      <td style={{ ...td, textAlign: "left" }}>
+                        {(corr?.curve_source_status ?? corr?.courbe_statut) ? <CurveStatusBadge status={corr?.curve_source_status ?? corr?.courbe_statut} /> : <Val v={null} reason={r.curve_reason ?? "Aucune courbe appliquée."} />}
+                        {(r.curve?.curve_id ?? corr?.courbe_id) && <div style={{ ...sub, fontFamily: "ui-monospace, Menlo, monospace" }}>{r.curve?.curve_id ?? corr?.courbe_id}</div>}
+                      </td>
                       <td style={td}>
                         <Val v={r.runtime_total_h} reason="Aucune source de runtime qualifiée sur la période." />
                         <div style={sub}>{r.runtime_days}/{r.days} j</div>
@@ -309,7 +357,10 @@ export function ConsoEstimeeSection({ month }: { month: string | null | undefine
                       <td style={td}>{r.runtime_source_main ? RUNTIME_SOURCE_LABELS[r.runtime_source_main] ?? r.runtime_source_main : <span style={{ color: FT.textSub }}>—</span>}</td>
                       <td style={td}><Val v={r.runtime_source_availability_pct} digits={0} suffix=" %" reason="Aucune source retenue." /></td>
                       <td style={td}><Val v={r.p_ge_moy_kw} digits={2} reason="Aucun jour avec puissance GE qualifiée et CPH calculé." /></td>
-                      <td style={td}>{r.power_source_main ? POWER_SOURCE_LABELS[r.power_source_main] ?? r.power_source_main : <span style={{ color: FT.textSub }}>—</span>}</td>
+                      <td style={td} title={method ? `${POWER_METHOD_FORMULAS[method]}${methodDays ? ` — ${methodDays}` : ""}` : undefined}>
+                        {method ? POWER_METHOD_LABELS[method] : <Val v={null} reason="Aucune méthode de puissance n'a abouti (voir Synthèse des blocages / Contrôle CPH)." />}
+                        {method && r.running_days ? <div style={sub}>{r.power_method_days?.[method] ?? 0}/{r.running_days} j en marche</div> : null}
+                      </td>
                       <td style={td}>
                         <Val v={r.charge_moy_pct} digits={0} suffix=" %" reason="Charge non calculée." />
                         {r.extrapolated_days > 0 && <div style={{ ...sub, color: FT.orange }}>{r.extrapolated_days} j &lt; 50 %</div>}
@@ -323,10 +374,11 @@ export function ConsoEstimeeSection({ month }: { month: string | null | undefine
                         )}
                       </td>
                       <td style={td}>
-                        {r.conso_theorique_l !== null ? <Val v={r.conso_theorique_l} digits={0} /> : r.conso_partielle_l !== null && !noCph ? (
-                          <span title="Somme des jours calculés : certains jours n'ont pas de CPH (motif à droite)">
+                        {r.conso_theorique_l !== null ? <Val v={r.conso_theorique_l} digits={0} /> : partial && r.conso_partielle_l !== null ? (
+                          <span title="Somme des seuls jours calculés : ce n'est pas la consommation complète de la période (motif à droite)">
                             <Val v={r.conso_partielle_l} digits={0} />
-                            <div style={{ ...sub, color: FT.orange }}>partielle ({r.conso_days}/{r.days} j)</div>
+                            <div style={{ ...sub, color: FT.orange, fontWeight: 800 }}>PÉRIODE INCOMPLÈTE</div>
+                            <div style={{ ...sub, color: FT.orange }}>{r.conso_days}/{r.days} j calculés</div>
                           </span>
                         ) : <Val v={null} reason={motif.text} />}
                       </td>
@@ -345,9 +397,8 @@ export function ConsoEstimeeSection({ month }: { month: string | null | undefine
                       </td>
                       <td style={td}><Val v={c?.ecart_pct} digits={1} suffix=" %" reason={c?.motif} /></td>
                       <td style={{ ...td, textAlign: "left" }}>
-                        {noCph ? (
-                          <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 800, color: FT.violet, background: `${FT.violet}1f`, border: `1px solid ${FT.violet}44` }}>CPH non calculé</span>
-                        ) : c ? <ConsoStatusBadge statut={c.statut} /> : null}
+                        {c ? <ConsoStatusBadge statut={c.statut} /> : null}
+                        <div style={{ marginTop: 3 }}><StatutCphBadge statut={r.statut_cph} /></div>
                         {motif.code && <div style={{ ...sub, fontFamily: "ui-monospace, Menlo, monospace", marginTop: 3 }}>{motif.code}</div>}
                       </td>
                       <td style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 260, maxWidth: 380, fontSize: 11.5, color: FT.textMid }}>

@@ -439,11 +439,11 @@ function OverviewCircles({
     <Card padded={false} style={{ padding: "20px 18px" }}>
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "space-around" }}>
         <RingStat
-          title={`Consommation — ${monthLabel(last)}`}
+          title={`Conso mesurée (capteur) — ${monthLabel(last)}`}
           pct={couverture}
           centerValue={`${fmt.format(totalConso)} L`}
-          centerSub={`${couverture}% couverture`}
-          caption={`${fmt.format(lastStats?.nb_sites_avec_conso ?? 0)} / ${fmt.format(lastStats?.nb_sites_ge ?? 0)} sites GE avec donnée`}
+          centerSub={`${couverture}% couv. conso mesurée`}
+          caption={`${fmt.format(lastStats?.nb_sites_avec_conso ?? 0)} / ${fmt.format(lastStats?.nb_sites_ge ?? 0)} sites GE avec conso mesurée (VW_FUEL_REPORT) — couverture CPH : onglet Suivis Consommations`}
           color={FT.green}
           icon={<Droplets size={15} />}
           onClick={onNavigateTab ? () => onNavigateTab("CONSOMMATION") : undefined}
