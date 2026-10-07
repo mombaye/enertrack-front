@@ -211,6 +211,8 @@ export const MOTIF_LABELS: Record<CphMotifCode, string> = {
   TYPE_GE_ABSENT: "Type de GE absent de la Base GE",
   PERIODE_INCOMPLETE: "PÉRIODE INCOMPLÈTE : jours après la dernière donnée Snowflake",
   CONFIGURATION_INCONNUE: "Configuration Indoor/Outdoor inconnue",
+  SITE_SANS_GE: "Site sans GE : hors calcul carburant",
+  GE_NON_CONFIRME_SNOWFLAKE: "GE déclaré par Ops mais non confirmé par Snowflake : hors calcul, à vérifier",
 };
 
 // ─── Comparaison estimée / mesurée ───────────────────────────────────────────
@@ -221,6 +223,7 @@ export const CONSO_STATUS_LABELS: Record<CphConsoStatus, string> = {
   COHERENT: "Cohérent",
   ECART_A_JUSTIFIER: "Écart à justifier",
   ECART_A_INVESTIGUER: "Écart à investiguer",
+  NON_CONCERNE_SANS_GE: "Hors calcul (sans GE)",
 };
 
 export const CONSO_STATUS_COLORS: Record<CphConsoStatus, string> = {
@@ -229,6 +232,7 @@ export const CONSO_STATUS_COLORS: Record<CphConsoStatus, string> = {
   COHERENT: FT.green,
   ECART_A_JUSTIFIER: FT.orange,
   ECART_A_INVESTIGUER: FT.red,
+  NON_CONCERNE_SANS_GE: FT.slate,
 };
 
 export function ConsoStatusBadge({ statut }: { statut: CphConsoStatus }) {

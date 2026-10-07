@@ -57,8 +57,11 @@ const ATTEMPT_LABELS: Record<CphMethodAttempt["statut"], string> = {
 
 export const STATUT_CPH_LABELS: Record<CphStatutCph, string> = {
   CPH_CALCULE: "CPH calculé", CPH_PARTIEL: "CPH partiel", CPH_NON_CALCULE: "CPH non calculé",
+  NON_CONCERNE_SANS_GE: "Hors calcul : sans GE confirmé",
 };
-const STATUT_CPH_COLORS: Record<CphStatutCph, string> = { CPH_CALCULE: FT.green, CPH_PARTIEL: FT.orange, CPH_NON_CALCULE: FT.violet };
+const STATUT_CPH_COLORS: Record<CphStatutCph, string> = {
+  CPH_CALCULE: FT.green, CPH_PARTIEL: FT.orange, CPH_NON_CALCULE: FT.violet, NON_CONCERNE_SANS_GE: FT.slate,
+};
 
 export const STATUT_RAPPRO_LABELS: Record<CphStatutRapprochement, string> = {
   RAPPROCHEMENT_CALCULE: "Rapprochement calculé",

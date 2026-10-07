@@ -59,6 +59,7 @@ const STATUT_LABELS: Record<CphReconciliationStatus, string> = {
   A_INVESTIGUER: "À investiguer",
   DONNEES_INCOMPLETES: "Données incomplètes",
   CPH_NON_CALCULE: "CPH non calculé",
+  NON_CONCERNE: "Hors calcul (sans GE)",
 };
 
 const STATUT_COLORS: Record<CphReconciliationStatus, string> = {
@@ -67,6 +68,7 @@ const STATUT_COLORS: Record<CphReconciliationStatus, string> = {
   A_INVESTIGUER: FT.red,
   DONNEES_INCOMPLETES: FT.slate,
   CPH_NON_CALCULE: FT.violet,
+  NON_CONCERNE: FT.slate,
 };
 
 const CPH_STATUS_LABELS: Record<string, string> = {
@@ -1226,7 +1228,7 @@ function CphKpis({ s, meta, onPreparation, handlers }: { s: CphSynthesis | undef
 export function ControleCphSheet() {
   const qc = useQueryClient();
   const [period, setPeriod] = useState(defaultPeriod);
-  const [filters, setFilters] = useState<Omit<CphFilters, "start" | "end">>({});
+  const [filters, setFilters] = useState<Omit<CphFilters, "start" | "end">>({ perimetre: "GE" });
   const [siteInput, setSiteInput] = useState("");
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(50);
@@ -1333,6 +1335,11 @@ export function ControleCphSheet() {
         {periodError && <div role="alert" style={{ marginBottom: 10, color: FT.red, fontSize: 12.5 }}>{periodError}</div>}
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+          <select aria-label="Périmètre" value={filters.perimetre ?? ""} onChange={(e) => setFilter("perimetre", e.target.value)} style={{ ...control, cursor: "pointer" }}>
+            <option value="GE">Sites avec GE (calculés){s ? ` (${s.sites})` : ""}</option>
+            <option value="SANS_GE">Sans GE confirmé (hors calcul){s?.sites_sans_ge !== undefined ? ` (${s.sites_sans_ge})` : ""}</option>
+            <option value="">Tout le parc{s?.sites_total !== undefined ? ` (${s.sites_total})` : ""}</option>
+          </select>
           <VerdictButtons value={filters.statut ?? ""} onChange={(v) => setFilter("statut", v)} s={s} />
           <select aria-label="Point bloquant" value={filters.blocage ?? ""} onChange={(e) => setFilter("blocage", e.target.value)} style={{ ...control, cursor: "pointer", maxWidth: 300 }}>
             <option value="">Point bloquant : tous</option>

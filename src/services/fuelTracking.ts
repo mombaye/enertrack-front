@@ -398,7 +398,7 @@ export type CphRuntimeSource = "DSE" | "REDRESSEUR" | "DAY_DG_ON" | "COMPTEUR_TE
 export type CphPowerSource = "PRODUCTION_GE" | "DC_REDRESSEUR" | "ESTIMATION_HISTORIQUE_LOAD_AC";
 /** Méthodes de la chaîne de repli puissance, dans l'ordre de tentative. */
 export type CphPowerMethod = "DIRECT_DSE_PRODUCTION" | "PDC_REDRESSEUR" | "INDOOR_PDC_LOAD_AC";
-export type CphStatutCph = "CPH_CALCULE" | "CPH_PARTIEL" | "CPH_NON_CALCULE";
+export type CphStatutCph = "CPH_CALCULE" | "CPH_PARTIEL" | "CPH_NON_CALCULE" | "NON_CONCERNE_SANS_GE";
 export type CphStatutRapprochement =
   | "RAPPROCHEMENT_CALCULE" | "RAPPROCHEMENT_NON_CALCULE_STOCK_ABSENT"
   | "RAPPROCHEMENT_NON_CALCULE_MOUVEMENTS_ABSENTS" | "RAPPROCHEMENT_NON_CALCULE_CPH_INCOMPLET";
@@ -430,7 +430,9 @@ export type CphAcReference = {
   candidats: Array<{ date: string; ac_brut: number | null; ac_kw: number | null; p_dc_entree_kw: number | null; points: number | null }>;
 };
 export type CphPeriodStatus = "COMPLET" | "PARTIEL" | "NON_CALCULE";
-export type CphReconciliationStatus = "OK" | "A_JUSTIFIER" | "A_INVESTIGUER" | "DONNEES_INCOMPLETES" | "CPH_NON_CALCULE";
+export type CphReconciliationStatus = "OK" | "A_JUSTIFIER" | "A_INVESTIGUER" | "DONNEES_INCOMPLETES" | "CPH_NON_CALCULE" | "NON_CONCERNE";
+/** GE = calculé (DG_COUNT Snowflake > 0) ; SANS_GE = affiché hors calcul carburant, avec motif. */
+export type CphPerimetre = "GE" | "SANS_GE";
 export type CphDayStatus =
   | "CPH_CALCULE" | "GE_A_L_ARRET" | "RUNTIME_ABSENT" | "PUISSANCE_ABSENTE"
   | "COURBE_ABSENTE" | "PUISSANCE_HORS_PLAFOND" | "CPH_HORS_DOMAINE";
@@ -531,6 +533,7 @@ export type CphSiteRow = {
   motif_cph?: { code: CphMotifCode; detail: string | null; jours: number } | null;
   /** Statuts séparés : un CPH calculé sans relevé de stock reste CPH_CALCULE. */
   statut_cph?: CphStatutCph;
+  perimetre?: CphPerimetre;
   statut_rapprochement_calcul?: CphStatutRapprochement;
   facture_avec_ge?: boolean | null;
   /** On-Grid / Off-Grid (Base GE, sinon Snowflake). */
@@ -560,7 +563,8 @@ export type CphCurveSourceStatus = "VALIDE_CONSTRUCTEUR" | "HISTORIQUE_A_VALIDER
 export type CphMotifCode =
   | "RUNTIME_INDISPONIBLE" | "RUNTIME_NON_QUALIFIE" | "PUISSANCE_INDISPONIBLE" | "PUISSANCE_HORS_LIMITE"
   | "PUISSANCE_NOMINALE_ABSENTE" | "RENDEMENT_REDRESSEUR_INVALIDE" | "COURBE_CPH_MANQUANTE" | "MAPPING_GE_A_VALIDER"
-  | "MODELE_GE_AMBIGU" | "SITE_MULTI_GE" | "TYPE_GE_ABSENT" | "PERIODE_INCOMPLETE" | "CONFIGURATION_INCONNUE";
+  | "MODELE_GE_AMBIGU" | "SITE_MULTI_GE" | "TYPE_GE_ABSENT" | "PERIODE_INCOMPLETE" | "CONFIGURATION_INCONNUE"
+  | "SITE_SANS_GE" | "GE_NON_CONFIRME_SNOWFLAKE";
 
 export type CphCorrespondance = {
   statut: CphMatchStatus;
@@ -576,7 +580,7 @@ export type CphCorrespondance = {
   motif: string | null;
 };
 
-export type CphConsoStatus = "CONSO_ESTIMEE_NON_CALCULEE" | "MESURE_ABSENTE" | "COHERENT" | "ECART_A_JUSTIFIER" | "ECART_A_INVESTIGUER";
+export type CphConsoStatus = "CONSO_ESTIMEE_NON_CALCULEE" | "MESURE_ABSENTE" | "COHERENT" | "ECART_A_JUSTIFIER" | "ECART_A_INVESTIGUER" | "NON_CONCERNE_SANS_GE";
 
 export type CphComparaison = {
   conso_mesuree_l: number | null;
@@ -631,7 +635,11 @@ export type CphSiteDetail = CphSiteRow & {
 };
 
 export type CphSynthesis = {
+  /** Sites avec GE confirmé (base de tous les indicateurs CPH). */
   sites: number;
+  sites_total?: number;
+  sites_sans_ge?: number;
+  sites_ge_a_confirmer?: number;
   cph_calcules: number;
   conso_theorique_complete: number;
   cph_non_calcule: number;
@@ -719,7 +727,7 @@ export type CphPeriodResponse = {
   synthesis: CphSynthesis;
   data: CphSiteRow[];
   pagination: Pagination;
-  filters: { runtime_sources: string[]; power_sources: string[]; power_methods?: string[]; zones: string[]; countries: string[] };
+  filters: { perimetres?: Partial<Record<CphPerimetre, number>>; runtime_sources: string[]; power_sources: string[]; power_methods?: string[]; zones: string[]; countries: string[] };
   meta: CphMeta;
   periode?: CphPeriodeInfo;
 };
@@ -746,6 +754,7 @@ export type CphFilters = {
   power_method?: string;
   configuration?: string;
   diag?: string;
+  perimetre?: string;
 };
 
 export async function getCphPeriod(params: CphFilters & { page?: number; limit?: number }) {

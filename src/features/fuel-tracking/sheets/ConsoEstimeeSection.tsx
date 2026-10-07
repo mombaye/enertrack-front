@@ -95,6 +95,7 @@ function Th({ children, tip, label, left }: { children: ReactNode; tip?: string;
 }
 
 const CONSO_FILTERS: Array<CphConsoStatus | ""> = ["", "COHERENT", "ECART_A_JUSTIFIER", "ECART_A_INVESTIGUER", "MESURE_ABSENTE", "CONSO_ESTIMEE_NON_CALCULEE"];
+const PERIMETRES: Array<["" | "GE" | "SANS_GE", string]> = [["", "Tout le parc"], ["GE", "Avec GE (calculés)"], ["SANS_GE", "Sans GE confirmé (hors calcul)"]];
 type Filters = Omit<CphFilters, "start" | "end" | "site">;
 const ADVANCED: Array<keyof Filters> = [
   "country", "zone", "configuration", "runtime_source", "dispo_runtime", "power_method", "correspondance", "curve_source_status",
@@ -200,6 +201,13 @@ export function ConsoEstimeeSection({ month }: { month: string | null | undefine
       {s?.couvertures ? (
         <div style={{ marginBottom: 14 }}>
           <CoverageKpis items={s.couvertures} />
+          {s.sites_sans_ge !== undefined && s.sites_sans_ge > 0 && (
+            <div style={{ marginTop: 6, fontSize: 11.5, color: FT.textSub }}>
+              Indicateurs calculés sur les {s.sites.toLocaleString("fr-FR")} sites avec GE confirmé par Snowflake. Les {s.sites_sans_ge.toLocaleString("fr-FR")} autres
+              sites du parc ({s.sites_total?.toLocaleString("fr-FR")} au total) sont listés hors calcul, sans valeur ni 0 L
+              {s.sites_ge_a_confirmer ? `, dont ${s.sites_ge_a_confirmer} avec un GE déclaré par Ops à confirmer` : ""}.
+            </div>
+          )}
           {conso && (
             <div style={{ marginTop: 8, fontSize: 12, color: FT.textMid, display: "flex", gap: 14, flexWrap: "wrap" }}>
               <span>Conso estimée (sites complets) : <strong>{fmtL(conso.total_estimee_complete_l)}</strong> · {conso.sites_estimee_complete} complet(s) · {s.statuts_cph?.CPH_PARTIEL ?? 0} partiel(s) · {s.statuts_cph?.CPH_NON_CALCULE ?? 0} non calculé(s)</span>
@@ -210,6 +218,20 @@ export function ConsoEstimeeSection({ month }: { month: string | null | undefine
         </div>
       ) : q.isLoading ? <div style={{ marginBottom: 14 }}><Skeleton h={96} /></div> : null}
 
+      <div role="group" aria-label="Périmètre des sites" style={{ display: "inline-flex", flexWrap: "wrap", gap: 3, padding: 4, borderRadius: 10, background: FT.slateL, border: `1px solid ${FT.border}`, marginBottom: 10 }}>
+        {PERIMETRES.map(([k, label]) => {
+          const active = (filters.perimetre ?? "") === k;
+          const n = k === "" ? s?.sites_total : k === "GE" ? s?.sites : s?.sites_sans_ge;
+          return (
+            <button key={k || "all"} type="button" aria-pressed={active} onClick={() => setFilter("perimetre", k)}
+              title={k === "SANS_GE" ? `DG_COUNT Snowflake ≤ 0 ou absent : affichés sans calcul ni 0 L.${s?.sites_ge_a_confirmer ? ` Dont ${s.sites_ge_a_confirmer} avec GE déclaré par Ops à confirmer.` : ""}` : undefined}
+              style={{ padding: "6px 11px", borderRadius: 7, border: "none", background: active ? "#fff" : "transparent", color: active ? FT.navy : FT.textMid, boxShadow: active ? FT.shadow : "none", fontSize: 11.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>
+              {label}{n !== undefined ? ` (${n.toLocaleString("fr-FR")})` : ""}
+            </button>
+          );
+        })}
+      </div>
+
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
         <div role="group" aria-label="Statut de la comparaison" style={{ display: "inline-flex", flexWrap: "wrap", gap: 3, padding: 4, borderRadius: 10, background: FT.slateL, border: `1px solid ${FT.border}` }}>
           {CONSO_FILTERS.map((k) => {
@@ -218,7 +240,7 @@ export function ConsoEstimeeSection({ month }: { month: string | null | undefine
               <button key={k || "all"} type="button" aria-pressed={active} onClick={() => setFilter("statut_conso", k)}
                 style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px", borderRadius: 7, border: "none", background: active ? "#fff" : "transparent", color: active ? FT.navy : FT.textMid, boxShadow: active ? FT.shadow : "none", fontSize: 11.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>
                 {k && <span aria-hidden style={{ width: 7, height: 7, borderRadius: 4, background: CONSO_STATUS_COLORS[k] }} />}
-                {k ? CONSO_STATUS_LABELS[k] : "Tous"}{k ? count(conso?.statuts[k] ?? (conso ? 0 : undefined)) : count(s?.sites)}
+                {k ? CONSO_STATUS_LABELS[k] : "Tous"}{k ? count(conso?.statuts[k] ?? (conso ? 0 : undefined)) : count(data?.pagination.total)}
               </button>
             );
           })}
