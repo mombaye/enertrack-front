@@ -19,7 +19,7 @@ import {
   FreshnessWarning, MATCH_LABELS, MatchBadge, MOTIF_LABELS, RUNTIME_SOURCE_LABELS,
 } from "./cphBadges";
 import {
-  BlocageDiagnostic, CoverageKpis, PeriodeIncompleteBanner, POWER_METHOD_FORMULAS, POWER_METHOD_LABELS, STATUT_CPH_LABELS,
+  BlocageDiagnostic, CoverageKpis, HorsReferentielTag, PeriodeIncompleteBanner, POWER_METHOD_FORMULAS, POWER_METHOD_LABELS, STATUT_CPH_LABELS,
   STATUT_RAPPRO_LABELS, StatutCphBadge,
 } from "./cphDiagnostics";
 
@@ -99,7 +99,7 @@ const PERIMETRES: Array<["" | "GE" | "SANS_GE", string]> = [["", "Tout le parc"]
 type Filters = Omit<CphFilters, "start" | "end" | "site">;
 const ADVANCED: Array<keyof Filters> = [
   "country", "zone", "configuration", "runtime_source", "dispo_runtime", "power_method", "correspondance", "curve_source_status",
-  "statut_cph", "statut_rapprochement_calcul", "diag", "alerte_sfc",
+  "statut_cph", "statut_rapprochement_calcul", "diag", "alerte_sfc", "hors_referentiel",
 ];
 
 export function ConsoEstimeeSection({ month }: { month: string | null | undefined }) {
@@ -276,6 +276,7 @@ export function ConsoEstimeeSection({ month }: { month: string | null | undefine
           {sel("statut_cph", "Statut CPH", Object.entries(STATUT_CPH_LABELS).map(([k, l]) => [k, `${l}${s?.statuts_cph ? ` (${s.statuts_cph[k as keyof typeof s.statuts_cph] ?? 0})` : ""}`]))}
           {sel("statut_rapprochement_calcul", "Statut stock", Object.entries(STATUT_RAPPRO_LABELS).map(([k, l]) => [k, `${l}${s?.statuts_rapprochement_calcul ? ` (${s.statuts_rapprochement_calcul[k as keyof typeof s.statuts_rapprochement_calcul] ?? 0})` : ""}`]))}
           {sel("diag", "Motif de blocage", (s?.diagnostic_blocages ?? []).filter((b) => b.sites > 0).map((b) => [b.code, `${b.label} (${b.sites})`]))}
+          {sel("hors_referentiel", "Gestion des sites", [["1", `hors Gestion des sites${data?.sites_hors_referentiel !== undefined ? ` (${data.sites_hors_referentiel})` : ""}`]])}
           {sel("alerte_sfc", "Alerte L/kWh", [["1", `hors plage${s?.alertes_sfc ? ` (${s.alertes_sfc.estimee} estimée · ${s.alertes_sfc.mesuree} mesurée)` : ""}`]])}
         </div>
       )}
@@ -347,7 +348,10 @@ export function ConsoEstimeeSection({ month }: { month: string | null | undefine
                   const methodDays = Object.entries(r.power_method_days ?? {}).map(([m, n]) => `${POWER_METHOD_LABELS[m as CphPowerMethod] ?? m} : ${n} j`).join(" · ");
                   return (
                     <tr key={r.site_id} style={{ background: i % 2 === 0 ? "#fff" : FT.cardAlt }}>
-                      <td style={{ ...td, textAlign: "left", fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace" }}>{r.site_id}</td>
+                      <td style={{ ...td, textAlign: "left", fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace" }}>
+                        {r.site_id}
+                        {r.hors_referentiel && <div><HorsReferentielTag /></div>}
+                      </td>
                       <td style={{ ...td, textAlign: "left" }}>{r.site_name ?? "—"}</td>
                       <td style={{ ...td, textAlign: "left" }}>{r.country ?? "—"}</td>
                       <td style={{ ...td, textAlign: "left" }}>{r.zone ?? "—"}</td>

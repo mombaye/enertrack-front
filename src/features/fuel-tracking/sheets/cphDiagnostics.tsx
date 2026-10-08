@@ -305,13 +305,23 @@ export function AcReferencePanel({ ac }: { ac: CphAcReference | null | undefined
 
 // ─── Base de sites unique ────────────────────────────────────────────────────
 
-/** Sites hors référentiel (Gestion des sites) : non affichés, à importer pour apparaître partout. */
+/** Sites affichés mais absents de Gestion des sites : signalés pour être importés. */
 export function HorsReferentielBanner({ count, what = "site(s)" }: { count: number | undefined; what?: string }) {
   if (!count) return null;
   return (
     <div role="status" style={{ marginBottom: 10, padding: "8px 12px", borderRadius: 6, background: FT.blueL, border: `1px solid ${FT.blue}40`, color: FT.navy, fontSize: 12 }}>
-      Base de sites unique : seuls les sites de <strong>Gestion des sites</strong> sont affichés. {count.toLocaleString("fr-FR")} {what}
-      {" "}connu(s) de Snowflake / ENOC / fichiers Ops n'y figure(nt) pas — importez-les dans Gestion des sites (Import Sites) pour les voir ici.
+      {count.toLocaleString("fr-FR")} {what} affiché(s) ne figure(nt) pas dans <strong>Gestion des sites</strong> (connus de Snowflake / ENOC / fichiers Ops) :
+      {" "}ils portent la mention « Hors Gestion des sites ». Importez-les dans Gestion des sites (Import Sites) pour les rattacher à toute la plateforme.
     </div>
+  );
+}
+
+/** Mention sur la ligne d'un site absent de Gestion des sites. */
+export function HorsReferentielTag() {
+  return (
+    <span title="Site connu de Snowflake / ENOC / fichiers Ops mais absent de Gestion des sites : à importer."
+      style={{ display: "inline-block", marginTop: 3, padding: "1px 6px", borderRadius: 6, fontSize: 9.5, fontWeight: 800, color: FT.orange, background: `${FT.orange}14`, border: `1px solid ${FT.orange}40`, whiteSpace: "nowrap", fontFamily: "inherit" }}>
+      Hors Gestion des sites
+    </span>
   );
 }

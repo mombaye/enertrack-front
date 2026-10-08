@@ -143,7 +143,7 @@ export type FuelConsommationResponse = {
   pagination: Pagination | null;
   available_months: string[];
   kpis: FuelConsommationKpis | null;
-  /** Sites connus de Snowflake / ENOC / fichiers Ops mais absents de Gestion des sites : non affichés. */
+  /** Sites affichés mais absents de Gestion des sites (connus de Snowflake / ENOC / fichiers Ops). */
   sites_hors_referentiel?: number;
   sources?: FuelConsommationSources;
   ge_detection?: FuelGeDetection | null;
@@ -536,6 +536,8 @@ export type CphSiteRow = {
   /** Statuts séparés : un CPH calculé sans relevé de stock reste CPH_CALCULE. */
   statut_cph?: CphStatutCph;
   perimetre?: CphPerimetre;
+  /** Site affiché mais absent de Gestion des sites (connu de Snowflake / ENOC / fichiers Ops). */
+  hors_referentiel?: boolean;
   statut_rapprochement_calcul?: CphStatutRapprochement;
   facture_avec_ge?: boolean | null;
   /** On-Grid / Off-Grid (Base GE, sinon Snowflake). */
@@ -732,7 +734,7 @@ export type CphPeriodResponse = {
   filters: { perimetres?: Partial<Record<CphPerimetre, number>>; runtime_sources: string[]; power_sources: string[]; power_methods?: string[]; zones: string[]; countries: string[] };
   meta: CphMeta;
   periode?: CphPeriodeInfo;
-  /** Sites avec GE (Snowflake) absents de Gestion des sites : non affichés, à importer. */
+  /** Sites affichés mais absents de Gestion des sites (à importer). */
   sites_hors_referentiel?: number;
 };
 
@@ -759,6 +761,7 @@ export type CphFilters = {
   configuration?: string;
   diag?: string;
   perimetre?: string;
+  hors_referentiel?: string;
 };
 
 export async function getCphPeriod(params: CphFilters & { page?: number; limit?: number }) {

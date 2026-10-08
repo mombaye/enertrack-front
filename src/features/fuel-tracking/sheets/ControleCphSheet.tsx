@@ -34,7 +34,7 @@ import {
 import { Card, EmptyState, KpiCard, Modal, Pager, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { CorrespondanceCell, curveSourceCode, CurveStatusBadge, FreshnessWarning, GLOSSARY, HelpTip, MATCH_LABELS, MatchBadge, MOTIF_LABELS } from "./cphBadges";
-import { AcReferencePanel, BlocageDiagnostic, CoverageKpis, PeriodeIncompleteBanner, POWER_METHOD_LABELS, PowerTrace, StatutCphBadge, StatutRapproBadge } from "./cphDiagnostics";
+import { AcReferencePanel, BlocageDiagnostic, HorsReferentielTag, CoverageKpis, PeriodeIncompleteBanner, POWER_METHOD_LABELS, PowerTrace, StatutCphBadge, StatutRapproBadge } from "./cphDiagnostics";
 
 // ─── Libellés ────────────────────────────────────────────────────────────────
 
@@ -987,6 +987,7 @@ function SimpleTable({ rows, onDetail }: { rows: CphSiteRow[]; onDetail: (siteId
             <tr key={r.site_id} style={{ background: i % 2 === 0 ? "#fff" : FT.cardAlt }}>
               <td style={{ ...td, textAlign: "left" }}>
                 <div style={{ fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace" }}>{r.site_id}</div>
+                {r.hors_referentiel && <HorsReferentielTag />}
                 <div style={{ fontSize: 11, color: FT.textSub }}>{r.site_name ?? "—"} · {r.kind === "INDOOR" ? "Indoor" : r.kind === "OUTDOOR" ? "Outdoor" : "type ?"} · {r.ge_label ?? "GE inconnu"}</div>
               </td>
               <td style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 240, maxWidth: 340 }}>
