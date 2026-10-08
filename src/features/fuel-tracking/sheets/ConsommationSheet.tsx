@@ -12,6 +12,7 @@ import { type FuelConsommationResponse, type FuelGeDetectionFilter } from "@/ser
 import { KpiCard, Modal, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { ConsoEstimeeSection } from "./ConsoEstimeeSection";
+import { HorsReferentielBanner } from "./cphDiagnostics";
 import { fmt, monthLabel } from "../helpers";
 
 function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse | undefined; stickyTop: number }) {
@@ -323,6 +324,7 @@ export function ConsommationSheet({
         </Modal>
       )}
 
+      <HorsReferentielBanner count={data?.sites_hors_referentiel} />
       <ConsoEstimeeSection month={data?.month_year} />
     </div>
   );

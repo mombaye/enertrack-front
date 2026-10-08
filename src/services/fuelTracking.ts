@@ -143,6 +143,8 @@ export type FuelConsommationResponse = {
   pagination: Pagination | null;
   available_months: string[];
   kpis: FuelConsommationKpis | null;
+  /** Sites connus de Snowflake / ENOC / fichiers Ops mais absents de Gestion des sites : non affichés. */
+  sites_hors_referentiel?: number;
   sources?: FuelConsommationSources;
   ge_detection?: FuelGeDetection | null;
 };
@@ -730,6 +732,8 @@ export type CphPeriodResponse = {
   filters: { perimetres?: Partial<Record<CphPerimetre, number>>; runtime_sources: string[]; power_sources: string[]; power_methods?: string[]; zones: string[]; countries: string[] };
   meta: CphMeta;
   periode?: CphPeriodeInfo;
+  /** Sites avec GE (Snowflake) absents de Gestion des sites : non affichés, à importer. */
+  sites_hors_referentiel?: number;
 };
 
 export type CphFilters = {
