@@ -805,7 +805,8 @@ export default function SuiviConsoPage() {
       // chacun tout le calcul depuis zéro (jusqu'à ~60 requêtes séquentielles
       // avant ce correctif). Le serveur plafonne à 20000 lignes par appel.
       const chartPageSize = 20000;
-      const res = await api.get<ApiListResponse<ConsoRow>>("/financial/suivi-conso/", { params: { ...baseParams, page: 1, page_size: chartPageSize } });
+      // Graphiques : seulement les site×mois avec une donnée (le tableau liste tous les sites de Gestion des sites).
+      const res = await api.get<ApiListResponse<ConsoRow>>("/financial/suivi-conso/", { params: { ...baseParams, page: 1, page_size: chartPageSize, avec_sites_sans_donnees: 0 } });
       const all = res.data.results || [];
       if ((res.data.count || 0) > chartPageSize) setChartLimited(true);
       setChartRows(all);
