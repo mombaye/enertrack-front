@@ -662,6 +662,9 @@ export default function AdminSitesPage() {
     try {
       const res = await importMutation.mutateAsync(file);
       toast.success(res?.message || "Import terminé avec succès.");
+      if (res?.normalized_ids?.length) {
+        toast.info(`Identifiants normalisés : ${res.normalized_ids.slice(0, 5).join(", ")}${res.normalized_ids.length > 5 ? "…" : ""}`);
+      }
       if (res?.errors_count) {
         toast.info(`${res.errors_count} ligne(s) en erreur détectée(s).`);
       }
@@ -744,6 +747,7 @@ export default function AdminSitesPage() {
               <button
                 onClick={handleImportClick}
                 disabled={importMutation.isPending}
+                title="Référentiel sites, ou fichier Ops « Proposition de load » (Site_ID, Site_Name, typologies, Configuration, Average_Load) : crée les sites manquants, complète les existants sans rien effacer et charge le load du mois."
                 className="inline-flex items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/15 disabled:opacity-70"
               >
                 {importMutation.isPending ? (

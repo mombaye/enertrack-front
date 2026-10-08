@@ -48,7 +48,8 @@ export function useImportSites() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: importSitesExcel,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["sites"] }),
+    // Le référentiel sites alimente tous les modules : toutes les données en cache sont rafraîchies.
+    onSuccess: () => qc.invalidateQueries(),
   });
 }
 
