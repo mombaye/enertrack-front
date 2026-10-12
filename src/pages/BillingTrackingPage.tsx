@@ -163,7 +163,8 @@ interface StatsResponse {
 
 interface SiteOption {
   id: number;
-  numero_compte_contrat: string;
+  numero_compte_contrat: string | null;
+  site_name?: string | null;
   site_id: string;
   site_pk: number;
 }
@@ -218,7 +219,8 @@ async function fetchStats(
 }
 
 async function searchSites(q: string): Promise<SiteOption[]> {
-  const { data } = await api.get("/sonatel-billing/contract-site-links/", {
+  // Base de sites commune : recherche dans Gestion des sites (un site sans contrat Senelec reste sélectionnable).
+  const { data } = await api.get("/sonatel-billing/sites-search/", {
     params: { search: q, limit: 20 },
   });
   const list = Array.isArray(data) ? data : (data.results ?? []);
@@ -627,7 +629,9 @@ function SiteSearchBar({
                 <div style={{ fontSize: 12, fontWeight: 900, color: C.blue[950], overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {site.site_id}
                 </div>
-                <div style={{ fontSize: 11, color: C.slate[400], marginTop: 1 }}>{site.numero_compte_contrat}</div>
+                <div style={{ fontSize: 11, color: C.slate[400], marginTop: 1 }}>
+                  {[site.site_name, site.numero_compte_contrat ?? "sans contrat Senelec"].filter(Boolean).join(" · ")}
+                </div>
               </div>
             </button>
           ))}
