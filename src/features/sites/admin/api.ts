@@ -95,6 +95,37 @@ export const fetchSites = async (params?: Record<string, any>): Promise<Site[]> 
   return all;
 };
 
+export type SitesPageParams = {
+  page: number;
+  page_size: number;
+  search?: string;
+  zone?: string;
+  site_type?: string;
+  invoice_payment?: string;
+  scope_status?: string;
+};
+
+export type SitesPage = { count: number; results: Site[] };
+
+/** Une page de sites, filtrée côté serveur (Gestion des sites). */
+export const fetchSitesPage = async (params: SitesPageParams): Promise<SitesPage> => {
+  const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== "" && v !== "all"));
+  const { data } = await api.get<SitesPage | Site[]>("/core/sites/", { params: clean });
+  return Array.isArray(data) ? { count: data.length, results: data } : data;
+};
+
+export type SitesStats = {
+  total: number;
+  modernized: number;
+  solar_pending: number;
+  indoor: number;
+  in_scope: number;
+  zones: string[];
+};
+
+/** Compteurs de la page, calculés en base. */
+export const fetchSitesStats = () => api.get<SitesStats>("/core/sites/stats/").then((res) => res.data);
+
 export const fetchSiteById = (id: number) =>
   api.get<Site>(`/core/sites/${id}/`).then((res) => res.data);
 

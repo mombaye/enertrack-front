@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createGridTargetRule,
   createSite,
@@ -6,6 +6,9 @@ import {
   deleteSite,
   fetchGridTargetRules,
   fetchSites,
+  fetchSitesPage,
+  fetchSitesStats,
+  type SitesPageParams,
   importGridTargetRulesExcel,
   importSitesExcel,
   patchGridTargetRule,
@@ -17,6 +20,24 @@ export function useSites() {
   return useQuery({
     queryKey: ["sites"],
     queryFn: () => fetchSites(),
+  });
+}
+
+/** Page de sites filtrée côté serveur ; la page précédente reste affichée pendant le chargement. */
+export function useSitesPage(params: SitesPageParams) {
+  return useQuery({
+    queryKey: ["sites", "page", params],
+    queryFn: () => fetchSitesPage(params),
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+}
+
+export function useSitesStats() {
+  return useQuery({
+    queryKey: ["sites", "stats"],
+    queryFn: fetchSitesStats,
+    staleTime: 30_000,
   });
 }
 

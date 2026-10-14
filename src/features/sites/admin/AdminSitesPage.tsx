@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Building2,
   Search,
@@ -26,7 +26,8 @@ import {
   useDeleteSite,
   useImportGridTargetRules,
   useImportSites,
-  useSites,
+  useSitesPage,
+  useSitesStats,
   useUpdateSite,
 } from "./hooks";
 
@@ -540,7 +541,27 @@ export default function AdminSitesPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const gridFileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const { data: rows = [], isLoading, isFetching, refetch } = useSites();
+  // Pagination et filtres côté serveur : seule la page affichée est chargée (plus les compteurs).
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState(1);
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+  useEffect(() => setPage(1), [debouncedQuery, zone, type, payment, scope]);
+
+  const pageQ = useSitesPage({
+    page, page_size: PAGE_SIZE, search: debouncedQuery,
+    zone, site_type: type, invoice_payment: payment, scope_status: scope,
+  });
+  const statsQ = useSitesStats();
+  const isLoading = pageQ.isLoading;
+  const isFetching = pageQ.isFetching;
+  const refetch = () => { pageQ.refetch(); statsQ.refetch(); };
+  const filtered = pageQ.data?.results ?? [];
+  const totalCount = pageQ.data?.count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   const createMutation = useCreateSite();
   const updateMutation = useUpdateSite();
@@ -548,38 +569,13 @@ export default function AdminSitesPage() {
   const importMutation = useImportSites();
   const importGridMutation = useImportGridTargetRules();
 
-  const filtered = useMemo(() => {
-    return rows.filter((site) => {
-      const q = query.trim().toLowerCase();
-
-      const matchQuery =
-        !q ||
-        site.site_id.toLowerCase().includes(q) ||
-        site.name.toLowerCase().includes(q) ||
-        (site.contract_number || "").toLowerCase().includes(q) ||
-        (site.meter_number || "").toLowerCase().includes(q) ||
-        (site.installed_typology || "").toLowerCase().includes(q) ||
-        (site.configuration || "").toLowerCase().includes(q);
-
-      const matchZone = zone === "all" || (site.zone || "").toUpperCase() === zone;
-      const matchType = type === "all" || (site.site_type || "").toLowerCase() === type.toLowerCase();
-      const matchPayment =
-        payment === "all" || (site.invoice_payment || "").toLowerCase() === payment.toLowerCase();
-      const matchScope = scope === "all" || (site.scope_status || "") === scope;
-
-      return matchQuery && matchZone && matchType && matchPayment && matchScope;
-    });
-  }, [rows, query, zone, type, payment, scope]);
-
-  const stats = useMemo(() => {
-    const total = rows.length;
-    const modernized = rows.filter((s) => s.modernized === true).length;
-    const solarPending = rows.filter((s) => s.not_yet_solarized === true).length;
-    const indoor = rows.filter((s) => (s.site_type || "").toLowerCase() === "indoor").length;
-    const inScope = rows.filter((s) => s.scope_status === "IN_SCOPE").length;
-
-    return { total, modernized, solarPending, indoor, inScope };
-  }, [rows]);
+  const stats = {
+    total: statsQ.data?.total ?? 0,
+    modernized: statsQ.data?.modernized ?? 0,
+    solarPending: statsQ.data?.solar_pending ?? 0,
+    indoor: statsQ.data?.indoor ?? 0,
+    inScope: statsQ.data?.in_scope ?? 0,
+  };
 
   useEffect(() => {
     if (!modalOpen) {
@@ -834,7 +830,7 @@ export default function AdminSitesPage() {
                 className="h-12 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
               >
                 <option value="all">Toutes les zones</option>
-                {Array.from(new Set(rows.map((r) => r.zone).filter(Boolean) as string[]))
+                {(statsQ.data?.zones ?? [])
                   .sort()
                   .map((z) => (
                     <option key={z} value={z}>
@@ -886,7 +882,7 @@ export default function AdminSitesPage() {
                   Référentiel des sites
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  {filtered.length} site(s) affiché(s)
+                  {totalCount.toLocaleString("fr-FR")} site(s){totalPages > 1 ? ` · page ${page}/${totalPages}` : ""}
                   {isFetching && !isLoading ? " • rafraîchissement..." : ""}
                 </p>
               </div>
@@ -1042,6 +1038,24 @@ export default function AdminSitesPage() {
                 </tbody>
               </table>
             </div>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-5 py-3 text-sm text-slate-600">
+                <span>
+                  {((page - 1) * PAGE_SIZE + 1).toLocaleString("fr-FR")}–{Math.min(page * PAGE_SIZE, totalCount).toLocaleString("fr-FR")} sur {totalCount.toLocaleString("fr-FR")}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => setPage(1)} disabled={page === 1}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 font-semibold disabled:opacity-40">«</button>
+                  <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 font-semibold disabled:opacity-40">Précédent</button>
+                  <span className="px-2 font-semibold text-slate-800">{page} / {totalPages}</span>
+                  <button type="button" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 font-semibold disabled:opacity-40">Suivant</button>
+                  <button type="button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 font-semibold disabled:opacity-40">»</button>
+                </div>
+              </div>
+            )}
         </div>
 
         <SiteFormModal
