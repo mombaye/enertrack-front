@@ -899,3 +899,320 @@ export async function revokeCphCurve(curveId: string) {
   const { data } = await api.post(`${BASE}/cph/curves/${encodeURIComponent(curveId)}/revoke/`);
   return data;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Registre unifié de stock carburant (Phase 1) — /fuel-tracking/stock/registre/…
+// Stock retenu = relevé VALIDÉ, converti en litres (cuve validée), contrôlé contre
+// la capacité. Une valeur absente reste null (jamais 0). Snowflake = information
+// technique, jamais retenu.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type StockSource = "ENOC" | "LOLIFORCE" | "SCSS" | "SNOWFLAKE" | "CLOSING";
+export type ConversionMethod = "DIRECT_LITERS" | "TANK_CURVE" | "GEOMETRIC_CALCULATION" | "NONE";
+export type ConversionStatus = "VALID" | "PENDING_TANK_MAPPING" | "INVALID";
+export type ObsValidationStatus = "PENDING" | "VALIDATED" | "REJECTED";
+export type RegistryStatut = "RETENU" | "INDISPONIBLE" | "AUCUNE_DONNEE";
+export type RegistryMessage = { code: string; message: string };
+
+export type RegistryMovementSummary = {
+  id: number;
+  movement_type: string | null;
+  movement_datetime: string | null;
+  quantity_l: number | null;
+  requested_quantity_l: number | null;
+  status: string;
+  proof_reference: string | null;
+  ticket_reference: string | null;
+  source_type: string;
+};
+
+export type StockRegistryRow = {
+  site_id: string;
+  site_name: string | null;
+  typologie: string | null;
+  zone: string | null;
+  gardiennage_attendu: string | null;
+  stock_l: number | null;
+  source: StockSource | null;
+  observation_id: number | null;
+  observation_datetime: string | null;
+  age_hours: number | null;
+  level_raw: string | null;
+  level_unit: "L" | "CM" | null;
+  conversion_method: ConversionMethod | null;
+  conversion_status: ConversionStatus | null;
+  validation_status: ObsValidationStatus | null;
+  capacity_l: number | null;
+  fill_pct: number | null;
+  statut: RegistryStatut;
+  unavailable_reason: string | null;
+  alerts: string[];
+  pending_count: number;
+  tanks_total: number;
+  tanks_validated: number;
+  last_validated_movement: RegistryMovementSummary | null;
+  last_movement: RegistryMovementSummary | null;
+};
+
+export type StockRegistryKpis = {
+  sites_total: number;
+  sites_stock_retenu: number;
+  sites_indisponible: number;
+  sites_sans_donnee: number;
+  releves_a_valider: number;
+  sites_conflit: number;
+  cuves_validees: number;
+  cuves_a_valider: number;
+  imports_a_valider: number;
+};
+
+export type StockRegistryResponse = {
+  data: StockRegistryRow[];
+  pagination: Pagination;
+  kpis: StockRegistryKpis;
+  alert_labels: Record<string, string>;
+  can_validate: boolean;
+  regles: { tolerance_capacite_pct: number; comparaison: string; snowflake: string };
+};
+
+export type StockRegistryParams = {
+  search?: string;
+  statut?: RegistryStatut | "";
+  alerte?: string;
+  source?: string;
+  gardiennage?: string;
+  page?: number;
+  limit?: number;
+};
+
+export async function getStockRegistry(params: StockRegistryParams) {
+  const { data } = await api.get<StockRegistryResponse>(`${BASE}/stock/registre/`, { params: cleanParams(params) });
+  return data;
+}
+
+export type StockObservation = {
+  id: number;
+  source_type: StockSource;
+  source_event_id: string;
+  tank_id: string | null;
+  observation_datetime: string;
+  level_raw: string | null;
+  level_value: number | null;
+  level_unit: "L" | "CM" | null;
+  level_liters: number | null;
+  conversion_method: ConversionMethod;
+  conversion_status: ConversionStatus;
+  conversion_message: string | null;
+  capacity_l: number | null;
+  hour_meter: number | null;
+  source_user: string | null;
+  source_reference: string | null;
+  guard_scope_status: string | null;
+  comment: string | null;
+  proof_reference: string | null;
+  validation_status: ObsValidationStatus;
+  validation_reason: string | null;
+  review_flags: string[];
+  validated_by: string | null;
+  validated_at: string | null;
+  batch_id: number | null;
+};
+
+export type StockMovement = {
+  id: number;
+  source_type: string;
+  source_event_id: string;
+  movement_type: string | null;
+  movement_datetime: string | null;
+  requested_quantity_l: number | null;
+  quantity_l: number | null;
+  counterpart_site_id: string | null;
+  tank_id: string | null;
+  level_before_raw: string | null;
+  level_after_raw: string | null;
+  hour_meter_before: number | null;
+  hour_meter_after: number | null;
+  supplier: string | null;
+  ticket_reference: string | null;
+  delivery_note: string | null;
+  proof_reference: string | null;
+  source_user: string | null;
+  source_status: string | null;
+  status: "DECLARED" | "CLOSED" | "VALIDATED" | "REJECTED";
+  alerts: RegistryMessage[];
+  comment: string | null;
+  validation_reason: string | null;
+  validated_by: string | null;
+  validated_at: string | null;
+  batch_id: number | null;
+};
+
+export type TankShape = "HORIZONTAL_CYLINDER" | "VERTICAL_CYLINDER" | "RECTANGULAR" | "HORIZONTAL_ELLIPTICAL" | "CUSTOM_CURVE";
+
+export type StockTank = {
+  id: number;
+  site_id: string;
+  tank_id: string;
+  shape: TankShape | null;
+  length_m: number | null;
+  width_m: number | null;
+  height_m: number | null;
+  diameter_m: number | null;
+  capacity_l: number | null;
+  geometric_capacity_l: number | null;
+  physical_height_cm: number | null;
+  calibration_curve: Array<[number, number]> | null;
+  calibration_validated: boolean;
+  source_type: string;
+  source_batch_id: number | null;
+  validation_status: "PENDING" | "VALIDATED" | "REJECTED";
+  validated_by: string | null;
+  validated_at: string | null;
+  active: boolean;
+  comment: string | null;
+};
+
+export type GuardComparison = {
+  status: "COHERENT" | "STOCK_CONFLICT" | "NOT_COMPARABLE";
+  reason: string | null;
+  ecart_l?: number;
+  tolerance_l?: number;
+  tank_id: string | null;
+  loliforce: { id: number; datetime: string; level_l: number | null; raw: string | null };
+  scss: { id: number; datetime: string; level_l: number | null; raw: string | null };
+};
+
+export type RetainedStock = {
+  stock_l: number | null;
+  source_type: StockSource | null;
+  observation_datetime: string | null;
+  age_hours: number | null;
+  level_raw: string | null;
+  level_unit: string | null;
+  conversion_method: ConversionMethod | null;
+  validation_status: ObsValidationStatus | null;
+  capacity_l: number | null;
+  fill_pct: number | null;
+  unavailable_reason: string | null;
+};
+
+export type StockSiteHistory = {
+  site: { site_id: string; name: string | null; installed_typology?: string | null; zone?: string | null };
+  retenu: RetainedStock | null;
+  observations: StockObservation[];
+  mouvements: StockMovement[];
+  comparaisons: GuardComparison[];
+  cuves: StockTank[];
+  gardiennage: Array<{ id: number; provider: string; active_from: string; active_to: string | null; comment: string | null }>;
+  snowflake_technique: { stock_l: number | null; capacity_l: number | null; date: string | null; quality_status: string | null; note: string } | null;
+  corrections: Array<{
+    id: number; entity: string; entity_id: number; action: string; field: string | null;
+    old_value: string | null; new_value: string | null; reason: string; author: string | null; created_at: string;
+  }>;
+  can_validate: boolean;
+};
+
+export async function getStockSiteHistory(siteId: string) {
+  const { data } = await api.get<StockSiteHistory>(`${BASE}/stock/registre/${encodeURIComponent(siteId)}/`);
+  return data;
+}
+
+export async function decideStockObservation(id: number, decision: "valider" | "rejeter", reason: string) {
+  const { data } = await api.post<StockObservation>(`${BASE}/stock/observations/${id}/${decision}/`, { reason });
+  return data;
+}
+
+export async function decideStockMovement(id: number, decision: "valider" | "rejeter", reason: string) {
+  const { data } = await api.post<StockMovement>(`${BASE}/stock/mouvements/${id}/${decision}/`, { reason });
+  return data;
+}
+
+export type TankPatch = Partial<Pick<StockTank, "shape" | "length_m" | "width_m" | "height_m" | "diameter_m" | "capacity_l" | "comment">> & {
+  validate?: boolean;
+  reason: string;
+};
+
+export async function patchStockTank(id: number, patch: TankPatch) {
+  const { data } = await api.patch<StockTank & { releves_reconvertis: number }>(`${BASE}/stock/cuves/${id}/`, patch);
+  return data;
+}
+
+export async function createStockTank(body: TankPatch & { site_id: string; tank_id: string }) {
+  const { data } = await api.post<StockTank>(`${BASE}/stock/cuves/`, body);
+  return data;
+}
+
+export async function createGuardScope(body: { site_id: string; provider: "LOLIFORCE" | "SCSS"; active_from: string; active_to?: string; reason: string }) {
+  const { data } = await api.post(`${BASE}/stock/gardiennage/`, body);
+  return data;
+}
+
+export type ImportSourceType = "ENOC" | "LOLIFORCE" | "SCSS" | "CLOSING" | "HISTORICAL_REFUELING";
+export type ImportBatchStatus = "RECEIVED" | "PROCESSING" | "VALIDATION_REQUIRED" | "ACCEPTED" | "REJECTED" | "FAILED";
+
+export type StockImportBatch = {
+  id: number;
+  source_type: ImportSourceType;
+  file_name: string;
+  file_hash: string;
+  file_size: number | null;
+  origin: string;
+  status: ImportBatchStatus;
+  status_message: string | null;
+  duplicate_of: number | null;
+  relaunch_of: number | null;
+  relaunch_reason: string | null;
+  rows_total: number;
+  rows_accepted: number;
+  rows_warning: number;
+  rows_rejected: number;
+  rows_pending: number;
+  rows_duplicate: number;
+  summary: Record<string, unknown>;
+  received_at: string;
+  processed_at: string | null;
+  received_by: string | null;
+};
+
+export type StockImportListResponse = {
+  data: StockImportBatch[];
+  pagination: Pagination;
+  repertoire: { monte: boolean; sous_dossiers: string[] };
+};
+
+export async function getStockImports(params: { page?: number; limit?: number; source_type?: string; statut?: string }) {
+  const { data } = await api.get<StockImportListResponse>(`${BASE}/stock/imports/`, { params: cleanParams(params) });
+  return data;
+}
+
+export async function uploadStockImport(file: File, sourceType: Exclude<ImportSourceType, "ENOC">) {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("source_type", sourceType);
+  const { data } = await api.post<StockImportBatch>(`${BASE}/stock/imports/`, fd, { headers: { "Content-Type": "multipart/form-data" } });
+  return data;
+}
+
+export type StockImportRow = {
+  id: number;
+  sheet_name: string | null;
+  row_number: number;
+  site_id_raw: string | null;
+  site_id_resolved: string | null;
+  event_datetime: string | null;
+  validation_status: "ACCEPTED" | "WARNING" | "REJECTED" | "PENDING";
+  messages: RegistryMessage[];
+  raw_payload: Record<string, unknown>;
+};
+
+export async function getStockImportRows(id: number, params: { page?: number; limit?: number; statut?: string }) {
+  const { data } = await api.get<{ batch: StockImportBatch; data: StockImportRow[]; pagination: Pagination }>(
+    `${BASE}/stock/imports/${id}/lignes/`, { params: cleanParams(params) },
+  );
+  return data;
+}
+
+export async function relaunchStockImport(id: number, reason: string) {
+  const { data } = await api.post<StockImportBatch>(`${BASE}/stock/imports/${id}/relancer/`, { reason });
+  return data;
+}

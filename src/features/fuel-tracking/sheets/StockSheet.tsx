@@ -14,6 +14,7 @@ import type { FuelStockResponse } from "@/services/fuelTracking";
 import { Card, EmptyState, KpiCard, Modal, Pager, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { fmt, STOCK_AGING_DAYS, STOCK_FILL_CRITICAL, STOCK_FILL_WARNING, STOCK_STALE_DAYS } from "../helpers";
+import { StockRegistrySection } from "./StockRegistrySection";
 
 const th: CSSProperties = {
   position: "sticky",
@@ -136,18 +137,13 @@ function GeFilterButtons({ value, onChange, kpis }: { value: GeFilter; onChange:
   );
 }
 
-function StockKpis({ data, stickyTop }: { data: FuelStockResponse | undefined; stickyTop: number }) {
+function StockKpis({ data }: { data: FuelStockResponse | undefined }) {
   const kpis = data?.kpis;
   if (!kpis) return null;
   const couverture = kpis.sites_avec_ge > 0 ? Math.round((kpis.sites_avec_stock_snowflake / kpis.sites_avec_ge) * 100) : 0;
 
   return (
-    <div
-      style={{
-        position: "sticky", top: stickyTop, zIndex: 9, background: FT.card, borderRadius: FT.radius,
-        border: `1px solid ${FT.border}`, boxShadow: FT.shadow, padding: 14,
-      }}
-    >
+    <div style={{ marginBottom: 16 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
         <KpiCard label="Sites avec GE" value={fmt.format(kpis.sites_avec_ge)} sub="Seuls capables de stocker du fuel" tone="gold" icon={<Fuel size={14} />} />
         <KpiCard label="Sites avec stock connu (Snowflake)" value={`${fmt.format(kpis.sites_avec_stock_snowflake)} / ${fmt.format(kpis.sites_avec_ge)}`} sub={`${couverture}% de couverture`} tone="blue" icon={<Users size={14} />} />
@@ -181,24 +177,24 @@ export function StockSheet({
 }) {
   const [activeComment, setActiveComment] = useState<{ siteId: string; siteName: string | null; text: string } | null>(null);
 
-  if (loading) return <Skeleton h={520} />;
-
   const rows = data?.data ?? [];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <StockKpis data={data} stickyTop={stickyTop + 14} />
+      <StockRegistrySection stickyTop={stickyTop + 14} />
 
+      {loading ? <Skeleton h={520} /> : (
       <Card padded={false} style={{ padding: 20 }}>
+        <StockKpis data={data} />
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 38, height: 38, borderRadius: 11, background: FT.blueL, display: "grid", placeItems: "center", color: FT.navy, flexShrink: 0 }}>
               <Warehouse size={17} />
             </div>
             <div>
-              <div style={{ fontSize: 15.5, fontWeight: 800, color: FT.text }}>Stock carburant actuel par site</div>
+              <div style={{ fontSize: 15.5, fontWeight: 800, color: FT.text }}>Sources techniques — Snowflake / ENOC (information, non retenue)</div>
               <div style={{ fontSize: 12.5, color: FT.textSub, marginTop: 3 }}>
-                Automatisé — Snowflake (dernier relevé de cuve, fenêtre 30j) + ENOC (dernier relevé historique). Aucun upload nécessaire.
+                Automatisé — Snowflake (dernier relevé de cuve, fenêtre 30j) + ENOC (dernier relevé historique). Valeurs techniques affichées pour information : le stock retenu est celui du registre ci-dessus.
                 {data?.pagination && ` ${fmt.format(data.pagination.total)} site(s).`}
               </div>
             </div>
@@ -298,6 +294,7 @@ export function StockSheet({
           </>
         )}
       </Card>
+      )}
 
       {activeComment && (
         <Modal title={`${activeComment.siteId}${activeComment.siteName ? ` — ${activeComment.siteName}` : ""}`} onClose={() => setActiveComment(null)}>
