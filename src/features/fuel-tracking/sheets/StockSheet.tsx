@@ -163,7 +163,6 @@ export function StockSheet({
   onGeFilterChange,
   page,
   onPageChange,
-  stickyTop = 0,
 }: {
   data: FuelStockResponse | undefined;
   loading: boolean;
@@ -173,6 +172,7 @@ export function StockSheet({
   onGeFilterChange: (v: GeFilter) => void;
   page: number;
   onPageChange: (p: number) => void;
+  /** Conservé pour compatibilité d'appel (la vue simple n'a plus de bandeau collant). */
   stickyTop?: number;
 }) {
   const [showTech, setShowTech] = useState(false);
@@ -182,135 +182,139 @@ export function StockSheet({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <StockRegistrySection stickyTop={stickyTop + 14} />
-
-      <button
-        type="button"
-        aria-expanded={showTech}
-        onClick={() => setShowTech(!showTech)}
-        style={{ display: "flex", alignItems: "center", gap: 8, background: FT.card, border: `1px solid ${FT.border}`, borderRadius: FT.radius, padding: "12px 16px", cursor: "pointer", textAlign: "left" }}
-      >
-        {showTech ? <ChevronDown size={18} color={FT.textMid} /> : <ChevronRight size={18} color={FT.textMid} />}
-        <span>
-          <span style={{ display: "block", fontSize: 14.5, fontWeight: 800, color: FT.text }}>Historique technique / sources non retenues</span>
-          <span style={{ display: "block", fontSize: 12, color: FT.textSub }}>
-            Dernier relevé technique Snowflake / ENOC par site — information seulement, jamais le stock officiel (détails dans l'historique de chaque site).
-          </span>
-        </span>
-      </button>
-
-      {showTech && (loading ? <Skeleton h={520} /> : (
-      <Card padded={false} style={{ padding: 20 }}>
-        <StockKpis data={data} />
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 11, background: FT.blueL, display: "grid", placeItems: "center", color: FT.navy, flexShrink: 0 }}>
-              <Warehouse size={17} />
-            </div>
-            <div>
-              <div style={{ fontSize: 15.5, fontWeight: 800, color: FT.text }}>Historique technique / sources non retenues — une ligne par site</div>
-              <div style={{ fontSize: 12.5, color: FT.textSub, marginTop: 3 }}>
-                Automatisé — Snowflake (dernier relevé de cuve, fenêtre 30j) + ENOC (dernier relevé historique). Valeurs techniques affichées pour information : le stock retenu est celui du registre ci-dessus.
-                {data?.pagination && ` ${fmt.format(data.pagination.total)} site(s).`}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <GeFilterButtons value={geFilter} onChange={onGeFilterChange} kpis={data?.kpis} />
-            <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px", minWidth: 220 }}>
-              <Search size={14} color={FT.textSub} />
-              <input
-                value={search}
-                onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Site ID ou nom..."
-                style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, color: FT.text, flex: 1 }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {rows.length === 0 ? (
-          <EmptyState icon={<Warehouse size={20} />} title="Aucune donnée" subtitle="La synchronisation automatique n'a pas encore tourné." />
-        ) : (
+      <StockRegistrySection
+        technical={
           <>
-            <div style={{ overflow: "auto", maxHeight: 600, borderRadius: 12, border: `1px solid ${FT.border}` }}>
-              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1550 }}>
-                <thead>
-                  <tr>
-                    <th style={th}>Site ID</th>
-                    <th style={th}>Nom du site</th>
-                    <th style={th}>Typologie</th>
-                    <th style={th}>Source GE</th>
-                    <th style={th}>Stock Snowflake (L)</th>
-                    <th style={th}>Capacité (L)</th>
-                    <th style={th}>% plein</th>
-                    <th style={th}>Relevé Snowflake</th>
-                    <th style={th}>Stock ENOC (L)</th>
-                    <th style={th}>Relevé ENOC</th>
-                    <th style={{ ...th, textAlign: "left" }}>Commentaire</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r, i) => (
-                    <tr key={r.site_id} style={{ background: i % 2 === 0 ? "#fff" : FT.cardAlt }}>
-                      <td style={{ ...td, fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace" }}>{r.site_id}</td>
-                      <td style={td}>{r.site_name || "—"}</td>
-                      <td style={td}>{r.typology || "—"}</td>
-                      <td style={td}><GeSourceBadge snowflake={r.has_genset_snowflake} enoc={r.has_genset_enoc} /></td>
-                      <td style={td}>
-                        <NumCell
-                          value={r.stock_snowflake_l}
-                          emptyReason="Aucun relevé de niveau de cuve physiquement valide sur les 30 derniers jours pour ce site (Snowflake VW_FUEL_REPORT)."
-                        />
-                      </td>
-                      <td style={td}><NumCell value={r.capacity_snowflake_l} /></td>
-                      <td style={td}><FillBar pct={r.stock_snowflake_pct} /></td>
-                      <td style={td}><DateCell date={r.stock_snowflake_date} /></td>
-                      <td style={td}>
-                        <NumCell
-                          value={r.stock_enoc_l}
-                          emptyReason="Aucun relevé ENOC exploitable pour ce site (collecte historique ponctuelle, pas un flux continu)."
-                        />
-                      </td>
-                      <td style={td}><DateCell date={r.stock_enoc_date} /></td>
-                      <td style={{ ...td, textAlign: "left", maxWidth: 260 }}>
-                        {r.commentaire ? (
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 11.5, color: FT.textSub, minWidth: 0 }}>
-                              {r.commentaire}
-                            </span>
-                            <button
-                              onClick={() => setActiveComment({ siteId: r.site_id, siteName: r.site_name, text: r.commentaire! })}
-                              style={{ flexShrink: 0, border: "none", background: "transparent", color: FT.blue, fontSize: 11, fontWeight: 800, cursor: "pointer", padding: 0, textDecoration: "underline" }}
-                            >
-                              Voir plus
-                            </button>
-                          </div>
-                        ) : (
-                          <span style={{ color: FT.green, fontSize: 11.5 }}>Toutes les données disponibles.</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <button
+              type="button"
+              aria-expanded={showTech}
+              onClick={() => setShowTech(!showTech)}
+              style={{ display: "flex", alignItems: "center", gap: 8, background: FT.card, border: `1px solid ${FT.border}`, borderRadius: FT.radius, padding: "12px 16px", cursor: "pointer", textAlign: "left" }}
+            >
+              {showTech ? <ChevronDown size={18} color={FT.textMid} /> : <ChevronRight size={18} color={FT.textMid} />}
+              <span>
+                <span style={{ display: "block", fontSize: 14.5, fontWeight: 800, color: FT.text }}>Historique technique / sources non retenues</span>
+                <span style={{ display: "block", fontSize: 12, color: FT.textSub }}>
+                  Dernier relevé technique Snowflake / ENOC par site — information seulement, jamais le stock officiel (détails dans l'historique de chaque site).
+                </span>
+              </span>
+            </button>
 
-            {data?.pagination && (
-              <Pager
-                page={data.pagination.page}
-                totalPages={data.pagination.totalPages}
-                hasPrev={data.pagination.hasPrev}
-                hasNext={data.pagination.hasNext}
-                onPrev={() => onPageChange(Math.max(1, page - 1))}
-                onNext={() => onPageChange(page + 1)}
-              />
-            )}
+            {showTech && (loading ? <Skeleton h={520} /> : (
+            <Card padded={false} style={{ padding: 20 }}>
+              <StockKpis data={data} />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 11, background: FT.blueL, display: "grid", placeItems: "center", color: FT.navy, flexShrink: 0 }}>
+                    <Warehouse size={17} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 15.5, fontWeight: 800, color: FT.text }}>Historique technique / sources non retenues — une ligne par site</div>
+                    <div style={{ fontSize: 12.5, color: FT.textSub, marginTop: 3 }}>
+                      Automatisé — Snowflake (dernier relevé de cuve, fenêtre 30j) + ENOC (dernier relevé historique). Valeurs techniques affichées pour information : le stock retenu est celui du registre ci-dessus.
+                      {data?.pagination && ` ${fmt.format(data.pagination.total)} site(s).`}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <GeFilterButtons value={geFilter} onChange={onGeFilterChange} kpis={data?.kpis} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px", minWidth: 220 }}>
+                    <Search size={14} color={FT.textSub} />
+                    <input
+                      value={search}
+                      onChange={(e) => onSearchChange(e.target.value)}
+                      placeholder="Site ID ou nom..."
+                      style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, color: FT.text, flex: 1 }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {rows.length === 0 ? (
+                <EmptyState icon={<Warehouse size={20} />} title="Aucune donnée" subtitle="La synchronisation automatique n'a pas encore tourné." />
+              ) : (
+                <>
+                  <div style={{ overflow: "auto", maxHeight: 600, borderRadius: 12, border: `1px solid ${FT.border}` }}>
+                    <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1550 }}>
+                      <thead>
+                        <tr>
+                          <th style={th}>Site ID</th>
+                          <th style={th}>Nom du site</th>
+                          <th style={th}>Typologie</th>
+                          <th style={th}>Source GE</th>
+                          <th style={th}>Stock Snowflake (L)</th>
+                          <th style={th}>Capacité (L)</th>
+                          <th style={th}>% plein</th>
+                          <th style={th}>Relevé Snowflake</th>
+                          <th style={th}>Stock ENOC (L)</th>
+                          <th style={th}>Relevé ENOC</th>
+                          <th style={{ ...th, textAlign: "left" }}>Commentaire</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((r, i) => (
+                          <tr key={r.site_id} style={{ background: i % 2 === 0 ? "#fff" : FT.cardAlt }}>
+                            <td style={{ ...td, fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace" }}>{r.site_id}</td>
+                            <td style={td}>{r.site_name || "—"}</td>
+                            <td style={td}>{r.typology || "—"}</td>
+                            <td style={td}><GeSourceBadge snowflake={r.has_genset_snowflake} enoc={r.has_genset_enoc} /></td>
+                            <td style={td}>
+                              <NumCell
+                                value={r.stock_snowflake_l}
+                                emptyReason="Aucun relevé de niveau de cuve physiquement valide sur les 30 derniers jours pour ce site (Snowflake VW_FUEL_REPORT)."
+                              />
+                            </td>
+                            <td style={td}><NumCell value={r.capacity_snowflake_l} /></td>
+                            <td style={td}><FillBar pct={r.stock_snowflake_pct} /></td>
+                            <td style={td}><DateCell date={r.stock_snowflake_date} /></td>
+                            <td style={td}>
+                              <NumCell
+                                value={r.stock_enoc_l}
+                                emptyReason="Aucun relevé ENOC exploitable pour ce site (collecte historique ponctuelle, pas un flux continu)."
+                              />
+                            </td>
+                            <td style={td}><DateCell date={r.stock_enoc_date} /></td>
+                            <td style={{ ...td, textAlign: "left", maxWidth: 260 }}>
+                              {r.commentaire ? (
+                                <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 11.5, color: FT.textSub, minWidth: 0 }}>
+                                    {r.commentaire}
+                                  </span>
+                                  <button
+                                    onClick={() => setActiveComment({ siteId: r.site_id, siteName: r.site_name, text: r.commentaire! })}
+                                    style={{ flexShrink: 0, border: "none", background: "transparent", color: FT.blue, fontSize: 11, fontWeight: 800, cursor: "pointer", padding: 0, textDecoration: "underline" }}
+                                  >
+                                    Voir plus
+                                  </button>
+                                </div>
+                              ) : (
+                                <span style={{ color: FT.green, fontSize: 11.5 }}>Toutes les données disponibles.</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {data?.pagination && (
+                    <Pager
+                      page={data.pagination.page}
+                      totalPages={data.pagination.totalPages}
+                      hasPrev={data.pagination.hasPrev}
+                      hasNext={data.pagination.hasNext}
+                      onPrev={() => onPageChange(Math.max(1, page - 1))}
+                      onNext={() => onPageChange(page + 1)}
+                    />
+                  )}
+                </>
+              )}
+            </Card>
+            ))}
           </>
-        )}
-      </Card>
-      ))}
+        }
+      />
 
       {activeComment && (
         <Modal title={`${activeComment.siteId}${activeComment.siteName ? ` — ${activeComment.siteName}` : ""}`} onClose={() => setActiveComment(null)}>

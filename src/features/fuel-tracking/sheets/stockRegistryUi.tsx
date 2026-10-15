@@ -72,7 +72,7 @@ export const STATUT_LABEL: Record<string, { label: string; tone: Tone }> = {
 export const MOVEMENT_LABEL: Record<string, string> = {
   DELIVERY: "Livraison confirmée",
   DELIVERY_EYDON: "Livraison Eydon",
-  DELIVERY_TOTAL_CARD: "Livraison carte Total",
+  DELIVERY_TOTAL_CARD: "Carte Total (contrôle)",
   ADD: "Appoint",
   TRANSFER_IN: "Transfert entrant",
   TRANSFER_OUT: "Transfert sortant",
