@@ -11,15 +11,20 @@ import {
   decideStockObservation,
   getStockSiteHistory,
   patchStockTank,
+  type StockObservation,
   type StockSiteHistory as StockSiteHistoryData,
   type StockTank,
-  type TankShape,
+  type TankPatch,
 } from "@/services/fuelTracking";
 import { EmptyState, Modal, SegmentedTabs, Skeleton } from "../ui";
 import { FT } from "../theme";
 import {
   actionBtn,
   ageLabel,
+  CATEGORY_LABEL,
+  FAMILY_DIMS,
+  FAMILY_LABEL,
+  PROFILE_LABEL,
   CONVERSION_LABEL,
   Dash,
   Field,
@@ -29,7 +34,6 @@ import {
   MOVEMENT_LABEL,
   Num,
   ReasonDialog,
-  SHAPE_LABEL,
   SOURCE_LABEL,
   StatusPill,
   tdStyle,
@@ -44,6 +48,7 @@ export function StockSiteHistory({ siteId, initialTab = "RELEVES", onClose }: { 
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>(initialTab);
   const [pending, setPending] = useState<Pending>(null);
+  const [explain, setExplain] = useState<StockObservation | null>(null);
   const q = useQuery({ queryKey: ["stock-registry-site", siteId], queryFn: () => getStockSiteHistory(siteId) });
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["stock-registry-site", siteId] });
@@ -78,52 +83,69 @@ export function StockSiteHistory({ siteId, initialTab = "RELEVES", onClose }: { 
           {tab === "RELEVES" && (
             <Table
               empty="Aucun relevé pour ce site."
-              head={["Date", "Source", "Cuve", "Niveau brut", "Litres", "Méthode", "Conversion", "Statut", "Motif / contrôles", "Saisi par", "Preuve", "Actions"]}
-              rows={d.observations.map((o) => [
-                fmtDateTime(o.observation_datetime, o.source_type === "ENOC") ?? <Dash />,
-                SOURCE_LABEL[o.source_type] ?? o.source_type,
-                o.tank_id ?? <Dash reason="Cuve non précisée" />,
-                o.level_raw ? `${o.level_raw}${o.level_unit && !/[a-z]/i.test(o.level_raw) ? ` ${o.level_unit === "CM" ? "cm" : "L"}` : ""}` : <Dash />,
-                <Num value={o.level_liters} reason={o.conversion_message} />,
-                METHOD_LABEL[o.conversion_method] ?? o.conversion_method,
-                <StatusPill status={o.conversion_status} map={CONVERSION_LABEL} />,
-                <StatusPill status={o.validation_status} />,
-                <Wrap>{[o.validation_reason, o.conversion_message].filter(Boolean).join(" · ") || "—"}</Wrap>,
-                o.validated_by ? `${o.source_user ?? "—"} (validé par ${o.validated_by})` : o.source_user ?? <Dash />,
-                o.proof_reference ? <ProofLink value={o.proof_reference} /> : <Dash reason="Aucune preuve" />,
-                can ? (
+              head={["Date", "Source", "Cuve", "Niveau brut", "Volume géométrique", "Volume calibré", "Volume retenu", "Méthode", "Statut", "Anomalie → action", "Saisi par", "Preuve", "Actions"]}
+              rows={d.observations.map((o) => {
+                const geoOnly = o.conversion_status === "GEOMETRIC_ONLY" && o.volume_geometric_l !== null;
+                const canValidate = o.validation_status !== "VALIDATED" && (o.level_liters !== null && o.conversion_status === "VALID" || geoOnly);
+                return [
+                  fmtDateTime(o.observation_datetime, o.source_type === "ENOC") ?? <Dash />,
+                  SOURCE_LABEL[o.source_type] ?? o.source_type,
+                  o.tank_id ?? <Dash reason="Cuve non précisée" />,
+                  rawLevel(o),
+                  <Num value={o.volume_geometric_l} unit="L" digits={1} reason="Pas de géométrie validée" />,
+                  <Num value={o.volume_calibrated_l} unit="L" digits={1} reason="Capacité de plaque non confirmée" />,
+                  <strong><Num value={o.level_liters} unit="L" digits={1} reason={o.conversion_message} /></strong>,
+                  <span title={o.conversion_rule ?? undefined}>{METHOD_LABEL[o.conversion_method] ?? o.conversion_method}</span>,
+                  <StatusPill status={o.statut_releve} />,
+                  <Wrap>
+                    {o.issues.length
+                      ? o.issues.map((x) => <div key={x.code}><b>{x.anomalie}</b> → {x.action}</div>)
+                      : o.validation_reason ?? "—"}
+                  </Wrap>,
+                  o.validated_by ? `${o.source_user ?? "—"} (validé par ${o.validated_by})` : o.source_user ?? <Dash />,
+                  o.proof_reference ? <ProofLink value={o.proof_reference} /> : <Dash reason="Aucune preuve" />,
                   <div style={{ display: "flex", gap: 5, justifyContent: "center" }}>
-                    <button
-                      type="button"
-                      disabled={o.validation_status === "VALIDATED" || o.level_liters === null}
-                      title={o.level_liters === null ? "Relevé non converti en litres : référencer / valider la cuve d'abord." : undefined}
-                      onClick={() => setPending({ kind: "obs", id: o.id, decision: "valider", label: `relevé #${o.id}` })}
-                      style={actionBtn("green", o.validation_status === "VALIDATED" || o.level_liters === null)}
-                    >
-                      Valider
+                    <button type="button" onClick={() => setExplain(o)} style={actionBtn("blue")} aria-label={`Expliquer la conversion du relevé ${o.id}`}>
+                      Conversion
                     </button>
-                    <button
-                      type="button"
-                      disabled={o.validation_status === "REJECTED"}
-                      onClick={() => setPending({ kind: "obs", id: o.id, decision: "rejeter", label: `relevé #${o.id}` })}
-                      style={actionBtn("red", o.validation_status === "REJECTED")}
-                    >
-                      Rejeter
-                    </button>
-                  </div>
-                ) : <Dash reason="Réservé aux rôles admin et manager" />,
-              ])}
+                    {can && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={!canValidate}
+                          title={!canValidate && o.validation_status !== "VALIDATED" ? "Relevé non convertible en litres : traiter la cuve d'abord." : geoOnly ? "Retient le volume géométrique (validation explicite, tracée)." : undefined}
+                          onClick={() => setPending({ kind: "obs", id: o.id, decision: "valider", label: `relevé #${o.id}${geoOnly ? " (volume géométrique)" : ""}` })}
+                          style={actionBtn("green", !canValidate)}
+                        >
+                          Valider
+                        </button>
+                        <button
+                          type="button"
+                          disabled={o.validation_status === "REJECTED"}
+                          onClick={() => setPending({ kind: "obs", id: o.id, decision: "rejeter", label: `relevé #${o.id}` })}
+                          style={actionBtn("red", o.validation_status === "REJECTED")}
+                        >
+                          Rejeter
+                        </button>
+                      </>
+                    )}
+                  </div>,
+                ];
+              })}
             />
           )}
 
           {tab === "MOUVEMENTS" && (
             <Table
               empty="Aucun mouvement pour ce site."
-              head={["Date", "Source", "Type", "Qté demandée", "Qté réalisée", "Fournisseur", "Ticket / bon", "Preuve", "Niveaux avant → après", "Statut", "Alertes", "Actions"]}
+              head={["Date", "Source", "Valeur brute", "Classification", "Type", "Retenu stock", "Qté demandée", "Qté réalisée", "Fournisseur", "Ticket / bon", "Preuve", "Niveaux avant → après", "Statut", "Alertes", "Actions"]}
               rows={d.mouvements.map((m) => [
                 fmtDateTime(m.movement_datetime) ?? <Dash />,
                 SOURCE_LABEL[m.source_type] ?? m.source_type,
-                m.movement_type ? MOVEMENT_LABEL[m.movement_type] ?? m.movement_type : <Dash reason="Type non déterminé" />,
+                m.raw_operation_type ?? <Dash />,
+                <span title={m.mapping_rule ?? undefined}>{m.source_category ? CATEGORY_LABEL[m.source_category] ?? m.source_category : <Dash />}</span>,
+                m.movement_type ? MOVEMENT_LABEL[m.movement_type] ?? m.movement_type : <Dash reason="Type non classifié" />,
+                m.retained_in_stock ? "Oui" : <span style={{ color: FT.textSub }} title="Demande, carte Total, type inconnu, quantité ou preuve manquante">Non</span>,
                 <Num value={m.requested_quantity_l} unit="L" />,
                 <Num value={m.quantity_l} unit="L" reason="Quantité réalisée non déclarée" />,
                 m.supplier ?? <Dash />,
@@ -203,6 +225,7 @@ export function StockSiteHistory({ siteId, initialTab = "RELEVES", onClose }: { 
         </div>
       )}
 
+      {explain && d && <ConversionExplanation o={explain} tanks={d.cuves} onClose={() => setExplain(null)} />}
       {pending && (
         <ReasonDialog
           title={`${pending.decision === "valider" ? "Valider" : "Rejeter"} le ${pending.label}`}
@@ -270,17 +293,19 @@ function TanksPanel({
       </Note>
       <Table
         empty="Aucune cuve référencée pour ce site : les relevés en cm ne peuvent pas être convertis."
-        head={["Cuve", "Forme", "L × l × H / Ø (m)", "Capacité", "Capacité géométrique", "Hauteur physique", "Source", "Statut", "Commentaire", "Actions"]}
+        head={["Cuve", "Statut", "Famille", "Cotes (cm)", "Fonds", "Capacité de plaque", "Géométrie pleine", "k / écart", "Modèle", "Source", "Motif", "Actions"]}
         rows={tanks.map((t) => [
           t.tank_id,
-          t.shape ? SHAPE_LABEL[t.shape] : <Dash reason="Forme manquante" />,
-          [t.length_m, t.width_m, t.height_m].map((v) => v ?? "—").join(" × ") + (t.diameter_m ? ` / Ø ${t.diameter_m}` : ""),
-          <Num value={t.capacity_l} unit="L" />,
-          <Num value={t.geometric_capacity_l} unit="L" reason="Dimensions incomplètes" />,
-          <Num value={t.physical_height_cm} unit="cm" />,
-          t.source_type,
           <StatusPill status={t.validation_status} />,
-          <Wrap>{t.comment ?? "—"}</Wrap>,
+          t.shape_family ? FAMILY_LABEL[t.shape_family] : <Dash reason="Forme manquante" />,
+          t.shape_family ? FAMILY_DIMS[t.shape_family].map((lbl, i) => (lbl ? `${lbl.split(" · ")[0]} ${[t.dimension_1_cm, t.dimension_2_cm, t.dimension_3_cm][i] ?? "?"}` : null)).filter(Boolean).join(" · ") : "—",
+          `${PROFILE_LABEL[t.bottom_profile ?? "plat"] ?? t.bottom_profile}${t.bottom_z_cm ? ` (Z ${t.bottom_z_cm})` : ""}`,
+          t.capacity_plate_l ? <span title={t.capacity_plate_source ?? undefined}><Num value={t.capacity_plate_l} unit="L" /></span> : <Dash reason={t.capacity_l ? `Capacité déclarée ${t.capacity_l} L (non plaque)` : "Inconnue"} />,
+          <Num value={t.geometric_capacity_l} unit="L" reason="Géométrie non reconnue" />,
+          t.calibration_k ? <span style={{ color: t.plate_coherent ? FT.green : FT.orange, fontWeight: 700 }}>{t.calibration_k.toFixed(3)} / {t.plate_gap_pct} %</span> : <Dash />,
+          t.tank_model_id ? <span title={t.tank_model_label ?? undefined}>{t.tank_model_id} <StatusPill status={t.model_match_status} /></span> : <Dash />,
+          <Wrap>{[t.source_type, t.source_file, t.source_row ? `ligne ${t.source_row}` : null].filter(Boolean).join(" · ")}</Wrap>,
+          <Wrap>{t.validation_reason ?? "—"}</Wrap>,
           can ? (
             <button type="button" onClick={() => setEditing(t)} style={actionBtn("violet")}>
               Corriger / valider
@@ -317,40 +342,49 @@ function TanksPanel({
 }
 
 function numOrNull(v: string) {
-  const s = v.trim().replace(",", ".");
-  return s === "" ? null : Number(s);
+  const t = v.trim().replace(",", ".");
+  return t === "" ? null : Number(t);
 }
 
 function TankEditor({ siteId, tank, onClose, onSaved }: { siteId: string; tank: StockTank | null; onClose: () => void; onSaved: () => void }) {
   const [tankId, setTankId] = useState(tank?.tank_id ?? "");
-  const [shape, setShape] = useState<TankShape | "">(tank?.shape ?? "");
+  const [family, setFamily] = useState<string>(tank?.shape_family ?? "");
   const [dims, setDims] = useState({
-    length_m: tank?.length_m?.toString() ?? "",
-    width_m: tank?.width_m?.toString() ?? "",
-    height_m: tank?.height_m?.toString() ?? "",
-    diameter_m: tank?.diameter_m?.toString() ?? "",
-    capacity_l: tank?.capacity_l?.toString() ?? "",
+    d1: tank?.dimension_1_cm?.toString() ?? "",
+    d2: tank?.dimension_2_cm?.toString() ?? "",
+    d3: tank?.dimension_3_cm?.toString() ?? "",
+    bz: tank?.bottom_z_cm?.toString() ?? "",
+    plate: tank?.capacity_plate_l?.toString() ?? "",
   });
+  const [bottom, setBottom] = useState(tank?.bottom_profile ?? "plat");
+  const [plateSource, setPlateSource] = useState(tank?.capacity_plate_source ?? "");
+  const [proof, setProof] = useState(tank?.proof_reference ?? "");
   const [comment, setComment] = useState(tank?.comment ?? "");
+  const [modelAction, setModelAction] = useState<"" | "CONFIRMED" | "REJECTED">("");
   const [validate, setValidate] = useState<"" | "true" | "false">("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const labels = family ? FAMILY_DIMS[family] : [null, null, null];
   const m = useMutation({
     mutationFn: async () => {
       if (!reason.trim()) throw new Error("Le motif est obligatoire.");
-      const body = {
-        shape: (shape || null) as TankShape | null,
-        length_m: numOrNull(dims.length_m),
-        width_m: numOrNull(dims.width_m),
-        height_m: numOrNull(dims.height_m),
-        diameter_m: numOrNull(dims.diameter_m),
-        capacity_l: numOrNull(dims.capacity_l),
+      const body: TankPatch = {
+        shape_family: (family || null) as StockTank["shape_family"],
+        dimension_1_cm: numOrNull(dims.d1),
+        dimension_2_cm: labels[1] ? numOrNull(dims.d2) : null,
+        dimension_3_cm: labels[2] ? numOrNull(dims.d3) : null,
+        bottom_profile: bottom,
+        bottom_z_cm: numOrNull(dims.bz),
+        capacity_plate_l: numOrNull(dims.plate),
+        capacity_plate_source: plateSource || null,
+        proof_reference: proof || null,
         comment: comment || null,
         reason: reason.trim(),
+        ...(modelAction ? { model_match_status: modelAction } : {}),
         ...(validate ? { validate: validate === "true" } : {}),
       };
       if (tank) return patchStockTank(tank.id, body);
-      if (!tankId.trim()) throw new Error("Identifiant de cuve obligatoire.");
+      if (!tankId.trim()) throw new Error("Identifiant de cuve obligatoire (jamais attribué automatiquement).");
       return createStockTank({ ...body, site_id: siteId, tank_id: tankId.trim() });
     },
     onSuccess: () => {
@@ -363,37 +397,57 @@ function TankEditor({ siteId, tank, onClose, onSaved }: { siteId: string; tank: 
     },
   });
   return (
-    <Modal title={tank ? `Cuve ${tank.tank_id} — correction / validation` : "Nouvelle cuve"} onClose={onClose} maxWidth={560}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+    <Modal title={tank ? `Cuve ${tank.tank_id} — correction / validation` : "Nouvelle cuve"} onClose={onClose} maxWidth={640}>
+      <Note>
+        Cotes intérieures en cm, selon la famille du calculateur. La capacité de plaque sert au volume calibré (écart ≤ 5 % avec la géométrie) ;
+        sans plaque confirmée, le volume géométrique reste une valeur technique. Chaque modification est tracée.
+      </Note>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
         {!tank && (
           <Field label="Identifiant de cuve (1, 2…)">
             <input value={tankId} onChange={(e) => setTankId(e.target.value)} style={inputStyle} />
           </Field>
         )}
-        <Field label="Forme">
-          <select value={shape} onChange={(e) => setShape(e.target.value as TankShape)} style={inputStyle}>
+        <Field label="Famille de cuve">
+          <select value={family} onChange={(e) => setFamily(e.target.value)} style={inputStyle}>
             <option value="">—</option>
-            {Object.entries(SHAPE_LABEL).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
+            {Object.entries(FAMILY_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </Field>
-        {(
-          [
-            ["length_m", "Longueur (m)"],
-            ["width_m", "Largeur (m)"],
-            ["height_m", "Hauteur (m)"],
-            ["diameter_m", "Diamètre (m)"],
-            ["capacity_l", "Capacité (L)"],
-          ] as const
-        ).map(([k, label]) => (
-          <Field key={k} label={label}>
-            <input inputMode="decimal" value={dims[k]} onChange={(e) => setDims({ ...dims, [k]: e.target.value })} style={inputStyle} />
+        {labels.map((lbl, i) => lbl && (
+          <Field key={lbl} label={`${lbl} (cm)`}>
+            <input inputMode="decimal" value={[dims.d1, dims.d2, dims.d3][i]} onChange={(e) => setDims({ ...dims, [["d1", "d2", "d3"][i]]: e.target.value })} style={inputStyle} />
           </Field>
         ))}
+        <Field label="Profil des fonds">
+          <select value={bottom} onChange={(e) => setBottom(e.target.value)} style={inputStyle}>
+            {Object.entries(PROFILE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </Field>
+        <Field label="Flèche Z du fond (cm)">
+          <input inputMode="decimal" value={dims.bz} onChange={(e) => setDims({ ...dims, bz: e.target.value })} style={inputStyle} />
+        </Field>
+        <Field label="Capacité de plaque (L)">
+          <input inputMode="decimal" value={dims.plate} onChange={(e) => setDims({ ...dims, plate: e.target.value })} style={inputStyle} />
+        </Field>
+        <Field label="Source de la capacité de plaque">
+          <input value={plateSource} onChange={(e) => setPlateSource(e.target.value)} placeholder="Plaque lue sur site, photo…" style={inputStyle} />
+        </Field>
+        <Field label="Preuve (référence / lien photo)">
+          <input value={proof} onChange={(e) => setProof(e.target.value)} style={inputStyle} />
+        </Field>
+        {tank?.tank_model_id && tank.model_match_status === "PROPOSED" && (
+          <Field label={`Modèle proposé ${tank.tank_model_id}`}>
+            <select value={modelAction} onChange={(e) => setModelAction(e.target.value as "" | "CONFIRMED" | "REJECTED")} style={inputStyle}>
+              <option value="">Laisser proposé</option>
+              <option value="CONFIRMED">Confirmer (géométrie + plaque du modèle)</option>
+              <option value="REJECTED">Écarter le modèle</option>
+            </select>
+          </Field>
+        )}
         <Field label="Validation">
           <select value={validate} onChange={(e) => setValidate(e.target.value as "" | "true" | "false")} style={inputStyle}>
-            <option value="">Inchangée ({tank?.validation_status ?? "à valider"})</option>
+            <option value="">Inchangée ({tank?.validation_status ?? "nouvelle"})</option>
             <option value="true">Valider la cuve</option>
             <option value="false">Rejeter la cuve</option>
           </select>
@@ -409,11 +463,7 @@ function TankEditor({ siteId, tank, onClose, onSaved }: { siteId: string; tank: 
           <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} style={{ ...inputStyle, height: "auto", padding: 8 }} />
         </Field>
       </div>
-      {error && (
-        <div role="alert" style={{ color: FT.red, fontSize: 12, marginTop: 8 }}>
-          {error}
-        </div>
-      )}
+      {error && <div role="alert" style={{ color: FT.red, fontSize: 12, marginTop: 8 }}>{error}</div>}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
         <button type="button" onClick={onClose} style={actionBtn("slate")}>Annuler</button>
         <button type="button" onClick={() => { setError(null); m.mutate(); }} disabled={m.isPending} style={actionBtn("violet", m.isPending)}>
@@ -510,4 +560,54 @@ function ProofLink({ value }: { value: string }) {
     );
   }
   return <span title={value}>{value.length > 18 ? `${value.slice(0, 18)}…` : value}</span>;
+}
+
+
+function rawLevel(o: StockObservation) {
+  if (!o.level_raw) return <Dash />;
+  const unit = o.level_unit === "CM" ? "cm" : o.level_unit === "L" ? "L" : "";
+  const txt = /[a-z]/i.test(o.level_raw) || !unit ? o.level_raw : `${o.level_raw} ${unit}`;
+  return o.level_cm !== null && o.level_unit === "L" ? `${txt} (+ ${o.level_cm} cm)` : txt;
+}
+
+/** Explication pas à pas d'une conversion : niveau brut → cuve → géométrie → calibration → contrôle → statut. */
+function ConversionExplanation({ o, tanks, onClose }: { o: StockObservation; tanks: StockTank[]; onClose: () => void }) {
+  const t = tanks.find((x) => x.tank_id === o.tank_id) ?? (tanks.length === 1 ? tanks[0] : undefined);
+  const dims = t?.shape_family ? FAMILY_DIMS[t.shape_family] : null;
+  const steps: Array<[string, ReactNode]> = [
+    ["Relevé source", <>{SOURCE_LABEL[o.source_type] ?? o.source_type} du {fmtDateTime(o.observation_datetime, true)} — {o.source_reference ?? "—"}</>],
+    ["Niveau brut / unité", <>{rawLevel(o)} — unité {o.level_unit ?? "inconnue"}{o.declared_liters !== null && o.level_unit === "L" ? " (litres déclarés : valeur brute conservée)" : ""}</>],
+    ["Cuve du site", t ? (
+      <>
+        Cuve {t.tank_id} — <StatusPill status={t.validation_status} /> {FAMILY_LABEL[t.shape_family ?? ""] ?? "forme inconnue"}
+        {dims && ` — ${dims.map((lbl, i) => (lbl ? `${lbl.split(" · ")[0]} ${[t.dimension_1_cm, t.dimension_2_cm, t.dimension_3_cm][i] ?? "?"} cm` : null)).filter(Boolean).join(", ")}`}
+        {t.bottom_profile && ` — fonds ${PROFILE_LABEL[t.bottom_profile] ?? t.bottom_profile}${t.bottom_z_cm ? ` (Z ${t.bottom_z_cm} cm)` : ""}`}
+        {t.tank_model_id && ` — modèle ${t.tank_model_id} (${t.model_match_status === "CONFIRMED" ? "confirmé" : "proposé"})`}
+      </>
+    ) : "Aucune cuve validée pour ce site : conversion cm → L interdite."],
+    ["Volume géométrique", o.volume_geometric_l !== null ? <><Num value={o.volume_geometric_l} unit="L" digits={1} /> — calculateur universel (cotes mesurées, valeur physique)</> : "—"],
+    ["Capacité de plaque", t?.capacity_plate_l ? <><Num value={t.capacity_plate_l} unit="L" /> ({t.capacity_plate_source ?? "source non précisée"}) — géométrie pleine <Num value={t.geometric_capacity_l} unit="L" />, k = {t.calibration_k?.toFixed(4) ?? "—"}, écart {t.plate_gap_pct ?? "—"} % {t.plate_coherent ? "(cohérent ≤ 5 %)" : "(incohérent > 5 %)"}</> : "Non confirmée : le volume géométrique reste une valeur technique."],
+    ["Volume calibré", o.volume_calibrated_l !== null ? <><Num value={o.volume_calibrated_l} unit="L" digits={1} /> = géométrique × k</> : "—"],
+    ["Volume retenu", o.level_liters !== null ? <strong><Num value={o.level_liters} unit="L" digits={1} /></strong> : <span style={{ color: FT.orange }}>Aucun (NULL, jamais 0)</span>],
+    ["Contrôle de capacité", o.capacity_l ? <>capacité {o.capacity_l.toLocaleString("fr-FR")} L — remplissage {o.fill_pct ?? "—"} %</> : "Impossible (capacité inconnue)"],
+    ["Écart cm / litres déclarés", o.cm_liters_gap_l !== null ? <Num value={o.cm_liters_gap_l} unit="L" digits={1} /> : "—"],
+    ["Règle appliquée", o.conversion_rule ?? o.conversion_message ?? "—"],
+    ["Statut", <><StatusPill status={o.statut_releve} /> {o.validation_reason}</>],
+  ];
+  return (
+    <Modal title={`Conversion du relevé #${o.id} — ${o.source_type}`} onClose={onClose} maxWidth={760}>
+      <ol style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 8 }}>
+        {steps.map(([label, value]) => (
+          <li key={label} style={{ fontSize: 12.5, color: FT.text, lineHeight: 1.5 }}>
+            <span style={{ fontWeight: 800, color: FT.textMid }}>{label} : </span>{value}
+          </li>
+        ))}
+      </ol>
+      {o.issues.length > 0 && (
+        <div style={{ marginTop: 12, background: FT.orangeL, borderRadius: 8, padding: "8px 10px", fontSize: 12.5 }}>
+          {o.issues.map((x) => <div key={x.code}><b>{x.anomalie}</b> — règle : {x.regle}. <b>Action : {x.action}.</b></div>)}
+        </div>
+      )}
+    </Modal>
+  );
 }

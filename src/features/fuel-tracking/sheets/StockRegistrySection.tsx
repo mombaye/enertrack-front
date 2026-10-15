@@ -31,6 +31,8 @@ import {
 } from "./stockRegistryUi";
 import { StockSiteHistory } from "./StockSiteHistory";
 import { StockImportsSection } from "./StockImportsSection";
+import { EnocTypeConfig, TankModelLibrary } from "./StockReferences";
+import { StockWorkQueue, type QueueTarget } from "./StockWorkQueue";
 
 function useDebounced<T>(value: T, ms = 300) {
   const [v, setV] = useState(value);
@@ -55,9 +57,17 @@ function Fill({ pct }: { pct: number | null }) {
 }
 
 const HEAD = [
-  "Site ID", "Nom", "Typologie", "Gardiennage attendu", "Stock retenu", "Source", "Date / heure", "Âge", "Niveau brut", "Unité",
-  "Méthode", "Capacité", "Remplissage", "Statut", "Alertes", "Dernier mouvement validé", "Quantité", "Preuve", "Actions",
+  "Site ID", "Nom site", "Pays", "Zone", "Typologie site", "Environnement", "Raccordement", "GE", "Solaire", "Profil énergétique",
+  "Gardiennage attendu", "Stock retenu (L)", "Source retenue", "Date / heure", "Âge", "Niveau brut", "Unité brute", "Méthode de conversion",
+  "Modèle de cuve", "Capacité cuve (L)", "Remplissage (%)", "Statut", "Alertes", "Dernier mouvement connu", "Statut mouvement",
+  "Quantité", "Preuve", "Actions",
 ];
+
+const MOVEMENT_STATUS: Record<string, string> = { DECLARED: "Déclaré", CLOSED: "Clôturé source", VALIDATED: "Validé", REJECTED: "Rejeté" };
+
+function Profile({ v }: { v: string }) {
+  return v === "Inconnu" ? <span style={{ color: FT.textSub, fontSize: 11.5 }} title="Source vide : jamais déduit de la typologie">Inconnu</span> : <>{v}</>;
+}
 
 type Decision = { row: StockRegistryRow; decision: "valider" | "rejeter" } | null;
 
@@ -69,7 +79,8 @@ export function StockRegistrySection({ stickyTop = 0 }: { stickyTop?: number }) 
   const [gardiennage, setGardiennage] = useState("");
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
-  const [history, setHistory] = useState<{ siteId: string; tab?: "RELEVES" | "CUVES" } | null>(null);
+  const [history, setHistory] = useState<QueueTarget | null>(null);
+  const [mapRequest, setMapRequest] = useState<string | null>(null);
   const [decision, setDecision] = useState<Decision>(null);
   const debounced = useDebounced(search);
 
@@ -85,13 +96,14 @@ export function StockRegistrySection({ stickyTop = 0 }: { stickyTop?: number }) 
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <StockWorkQueue onOpen={setHistory} onMapEnoc={setMapRequest} />
       {k && (
         <div style={{ position: "sticky", top: stickyTop, zIndex: 9, background: FT.card, borderRadius: FT.radius, border: `1px solid ${FT.border}`, boxShadow: FT.shadow, padding: 14 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(175px, 1fr))", gap: 12 }}>
-            <KpiCard label="Sites avec stock retenu" value={`${fmt.format(k.sites_stock_retenu)} / ${fmt.format(k.sites_total)}`} sub="Relevé validé, en litres, capacité contrôlée" tone="green" icon={<ShieldCheck size={14} />} />
-            <KpiCard label="Sites sans stock retenu" value={fmt.format(k.sites_indisponible + k.sites_sans_donnee)} sub={`${fmt.format(k.sites_indisponible)} à traiter · ${fmt.format(k.sites_sans_donnee)} sans relevé`} tone="orange" icon={<Gauge size={14} />} />
-            <KpiCard label="Relevés à valider" value={fmt.format(k.releves_a_valider)} sub={`${fmt.format(k.sites_conflit)} site(s) en conflit Loliforce / SCSS`} tone="violet" icon={<ClipboardCheck size={14} />} />
-            <KpiCard label="Cuves validées" value={`${fmt.format(k.cuves_validees)} / ${fmt.format(k.cuves_validees + k.cuves_a_valider)}`} sub="Conversion cm → L impossible sans cuve validée" tone="blue" icon={<Database size={14} />} />
+            <KpiCard label="Sites avec stock retenu" value={`${fmt.format(k.sites_stock_retenu)} / ${fmt.format(k.sites_total)}`} sub={`Dénominateur : ${k.denominateur}`} tone="green" icon={<ShieldCheck size={14} />} />
+            <KpiCard label="Sites avec cuve validée" value={`${fmt.format(k.sites_cuve_validee)} / ${fmt.format(k.sites_total)}`} sub="Sans cuve validée, aucun stock réel retenu (avec ou sans GE)" tone="blue" icon={<Database size={14} />} />
+            <KpiCard label="Sites sans stock retenu" value={fmt.format(k.sites_indisponible + k.sites_sans_donnee)} sub={`${fmt.format(k.sites_indisponible)} avec action requise · ${fmt.format(k.sites_sans_donnee)} sans relevé`} tone="orange" icon={<Gauge size={14} />} />
+            <KpiCard label="Relevés à traiter" value={fmt.format(k.releves_a_valider)} sub={`${fmt.format(k.sites_conflit)} site(s) en conflit Loliforce / SCSS — voir « À traiter »`} tone="violet" icon={<ClipboardCheck size={14} />} />
             <KpiCard label="Imports à valider" value={fmt.format(k.imports_a_valider)} tone="slate" icon={<AlertTriangle size={14} />} />
           </div>
         </div>
@@ -102,7 +114,7 @@ export function StockRegistrySection({ stickyTop = 0 }: { stickyTop?: number }) 
           <SheetTitle
             icon={<Warehouse size={17} />}
             title="Registre de stock — une ligne par site"
-            subtitle={`Stock retenu : relevé validé (ENOC, Loliforce ou SCSS) le plus récent, converti avec une cuve validée et contrôlé contre sa capacité (tolérance ${d?.regles.tolerance_capacite_pct ?? 5} %). Snowflake reste une information technique.${d ? ` ${fmt.format(d.pagination.total)} site(s).` : ""}`}
+            subtitle={`Stock officiel. ${d?.regles.stock_retenu ?? ""} Snowflake n'est jamais retenu (historique technique replié plus bas).${d ? ` ${fmt.format(d.pagination.total)} site(s).` : ""}`}
           />
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "0 10px", height: 32, minWidth: 200 }}>
@@ -146,7 +158,7 @@ export function StockRegistrySection({ stickyTop = 0 }: { stickyTop?: number }) 
         {d && d.data.length > 0 && (
           <>
             <div style={{ overflow: "auto", maxHeight: 620, borderRadius: 12, border: `1px solid ${FT.border}`, opacity: q.isFetching ? 0.7 : 1 }}>
-              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 2200 }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 3300 }}>
                 <thead>
                   <tr>
                     {HEAD.map((h) => (
@@ -156,14 +168,22 @@ export function StockRegistrySection({ stickyTop = 0 }: { stickyTop?: number }) 
                 </thead>
                 <tbody>
                   {d.data.map((r, i) => {
-                    const mv = r.last_validated_movement;
+                    const mv = r.last_movement;
                     const canAct = d.can_validate && r.observation_id !== null;
-                    const canValidateObs = canAct && r.validation_status !== "VALIDATED" && r.conversion_status === "VALID";
+                    const canValidateObs = canAct && r.validation_status !== "VALIDATED"
+                      && (r.conversion_status === "VALID" || (r.conversion_status === "GEOMETRIC_ONLY" && r.volume_geometric_l !== null));
                     return (
                       <tr key={r.site_id} style={{ background: i % 2 === 0 ? "#fff" : FT.cardAlt }}>
                         <th scope="row" style={{ ...tdStyle, fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace" }}>{r.site_id}</th>
                         <td style={tdStyle}>{r.site_name ?? <Dash />}</td>
+                        <td style={tdStyle}>{r.pays ?? <Dash />}</td>
+                        <td style={tdStyle}>{r.zone ?? <Dash />}</td>
                         <td style={tdStyle}>{r.typologie ?? <Dash />}</td>
+                        <td style={tdStyle}><Profile v={r.environnement} /></td>
+                        <td style={tdStyle}><Profile v={r.raccordement} /></td>
+                        <td style={tdStyle}><Profile v={r.ge} /></td>
+                        <td style={tdStyle}><Profile v={r.solaire} /></td>
+                        <td style={tdStyle}>{r.profil_energetique.startsWith("Incomplet") ? <span style={{ color: FT.textSub, fontSize: 11.5 }}>{r.profil_energetique}</span> : r.profil_energetique}</td>
                         <td style={tdStyle}>{r.gardiennage_attendu ?? <span style={{ color: FT.textSub, fontSize: 11.5 }}>Non configuré</span>}</td>
                         <td style={{ ...tdStyle, fontWeight: 800 }}><Num value={r.stock_l} unit="L" reason={r.unavailable_reason} /></td>
                         <td style={tdStyle}>{r.source ? SOURCE_LABEL[r.source] : <Dash />}</td>
@@ -171,26 +191,30 @@ export function StockRegistrySection({ stickyTop = 0 }: { stickyTop?: number }) 
                         <td style={tdStyle}>{ageLabel(r.age_hours) ?? <Dash />}</td>
                         <td style={tdStyle}>{r.level_raw ?? <Dash />}</td>
                         <td style={tdStyle}>{r.level_unit ? (r.level_unit === "CM" ? "cm" : "L") : <Dash />}</td>
-                        <td style={tdStyle}>
+                        <td style={tdStyle} title={r.conversion_rule ?? undefined}>
                           {r.conversion_method ? METHOD_LABEL[r.conversion_method] : <Dash />}
                           {r.conversion_status && r.conversion_status !== "VALID" && (
                             <div><StatusPill status={r.conversion_status} map={CONVERSION_LABEL} /></div>
                           )}
                         </td>
+                        <td style={tdStyle}>{r.modele_cuve ?? <Dash reason="Aucun modèle de la bibliothèque relié" />}{r.modele_statut === "PROPOSED" && <div style={{ fontSize: 10.5, color: FT.violet, fontWeight: 700 }}>proposé</div>}</td>
                         <td style={tdStyle}><Num value={r.capacity_l} unit="L" reason="Capacité de cuve non validée" /></td>
                         <td style={tdStyle}><Fill pct={r.fill_pct} /></td>
                         <td style={tdStyle} title={r.unavailable_reason ?? undefined}>
                           <StatusPill status={r.statut} map={STATUT_LABEL} />
-                          {r.pending_count > 0 && <div style={{ fontSize: 10.5, color: FT.orange, fontWeight: 700, marginTop: 3 }}>{r.pending_count} à valider</div>}
+                          {r.statut_releve && <div style={{ marginTop: 3 }}><StatusPill status={r.statut_releve} /></div>}
+                          {r.pending_count > 0 && <div style={{ fontSize: 10.5, color: FT.orange, fontWeight: 700, marginTop: 3 }}>{r.pending_count} relevé(s) à traiter</div>}
                         </td>
                         <td style={{ ...tdStyle, whiteSpace: "normal", minWidth: 200 }}><AlertPills alerts={r.alerts} labels={d.alert_labels} /></td>
                         <td style={tdStyle}>
-                          {mv ? `${MOVEMENT_LABEL[mv.movement_type ?? ""] ?? mv.movement_type ?? "—"} · ${fmtDateTime(mv.movement_datetime) ?? "—"}` : (
-                            <Dash reason={r.last_movement ? `Dernier mouvement non validé : ${MOVEMENT_LABEL[r.last_movement.movement_type ?? ""] ?? "type inconnu"} du ${fmtDateTime(r.last_movement.movement_datetime) ?? "—"} (${r.last_movement.status})` : "Aucun mouvement"} />
-                          )}
+                          {mv ? `${MOVEMENT_LABEL[mv.movement_type ?? ""] ?? "Type non classifié"} · ${fmtDateTime(mv.movement_datetime) ?? "—"}` : <Dash reason="Aucun mouvement" />}
                         </td>
-                        <td style={tdStyle}><Num value={mv?.quantity_l} unit="L" /></td>
-                        <td style={tdStyle}>{mv?.proof_reference || mv?.ticket_reference ? (mv.proof_reference ? "Photo / pièce" : `Ticket ${mv.ticket_reference}`) : <Dash />}</td>
+                        <td style={tdStyle}>{mv ? MOVEMENT_STATUS[mv.status] ?? mv.status : <Dash />}</td>
+                        <td style={tdStyle}>
+                          {mv ? (mv.quantity_l !== null ? <Num value={mv.quantity_l} unit="L" /> : mv.requested_quantity_l !== null
+                            ? <span title="Quantité réalisée non déclarée">demandée <Num value={mv.requested_quantity_l} unit="L" /></span> : <Dash reason="Quantité non déclarée" />) : <Dash />}
+                        </td>
+                        <td style={tdStyle}>{mv?.proof_reference ? "Photo / pièce" : mv?.ticket_reference ? `Ticket ${mv.ticket_reference}` : <Dash reason="Aucune preuve" />}</td>
                         <td style={tdStyle}>
                           <div style={{ display: "flex", gap: 5, justifyContent: "center" }}>
                             <button type="button" onClick={() => setHistory({ siteId: r.site_id })} style={actionBtn("blue")} aria-label={`Historique ${r.site_id}`}>
@@ -201,7 +225,7 @@ export function StockRegistrySection({ stickyTop = 0 }: { stickyTop?: number }) 
                                 <button
                                   type="button"
                                   disabled={!canValidateObs}
-                                  title={canAct && r.conversion_status !== "VALID" ? "Relevé non converti en litres : référencer / valider la cuve d'abord (Corriger cuve)." : undefined}
+                                  title={canAct && !canValidateObs && r.validation_status !== "VALIDATED" ? "Relevé non convertible en litres : traiter la cuve d'abord (Corriger cuve)." : undefined}
                                   onClick={() => setDecision({ row: r, decision: "valider" })}
                                   style={actionBtn("green", !canValidateObs)}
                                   aria-label={`Valider le relevé affiché pour ${r.site_id}`}
@@ -246,6 +270,8 @@ export function StockRegistrySection({ stickyTop = 0 }: { stickyTop?: number }) 
       </Card>
 
       <StockImportsSection canValidate={!!d?.can_validate} />
+      <TankModelLibrary />
+      <EnocTypeConfig mapRequest={mapRequest} onMapDone={() => setMapRequest(null)} />
 
       {history && <StockSiteHistory siteId={history.siteId} initialTab={history.tab} onClose={() => setHistory(null)} />}
       {decision && decision.row.observation_id !== null && (

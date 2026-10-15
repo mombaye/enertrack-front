@@ -9,7 +9,7 @@
 // jamais fusionnées.
 
 import { useState, type CSSProperties } from "react";
-import { Droplets, Fuel, Gauge, Search, Users, Warehouse } from "lucide-react";
+import { ChevronDown, ChevronRight, Droplets, Fuel, Gauge, Search, Users, Warehouse } from "lucide-react";
 import type { FuelStockResponse } from "@/services/fuelTracking";
 import { Card, EmptyState, KpiCard, Modal, Pager, Skeleton } from "../ui";
 import { FT } from "../theme";
@@ -145,7 +145,7 @@ function StockKpis({ data }: { data: FuelStockResponse | undefined }) {
   return (
     <div style={{ marginBottom: 16 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
-        <KpiCard label="Sites avec GE" value={fmt.format(kpis.sites_avec_ge)} sub="Seuls capables de stocker du fuel" tone="gold" icon={<Fuel size={14} />} />
+        <KpiCard label="Sites avec GE (source technique)" value={fmt.format(kpis.sites_avec_ge)} sub="Un site sans GE peut aussi avoir une cuve" tone="gold" icon={<Fuel size={14} />} />
         <KpiCard label="Sites avec stock connu (Snowflake)" value={`${fmt.format(kpis.sites_avec_stock_snowflake)} / ${fmt.format(kpis.sites_avec_ge)}`} sub={`${couverture}% de couverture`} tone="blue" icon={<Users size={14} />} />
         <KpiCard label="Sites avec stock connu (ENOC)" value={fmt.format(kpis.sites_avec_stock_enoc)} sub="Relevés historiques" tone="green" icon={<Droplets size={14} />} />
         <KpiCard label="Sites sans GE" value={fmt.format(kpis.sites_sans_ge)} tone="slate" icon={<Fuel size={14} />} />
@@ -175,6 +175,7 @@ export function StockSheet({
   onPageChange: (p: number) => void;
   stickyTop?: number;
 }) {
+  const [showTech, setShowTech] = useState(false);
   const [activeComment, setActiveComment] = useState<{ siteId: string; siteName: string | null; text: string } | null>(null);
 
   const rows = data?.data ?? [];
@@ -183,7 +184,22 @@ export function StockSheet({
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <StockRegistrySection stickyTop={stickyTop + 14} />
 
-      {loading ? <Skeleton h={520} /> : (
+      <button
+        type="button"
+        aria-expanded={showTech}
+        onClick={() => setShowTech(!showTech)}
+        style={{ display: "flex", alignItems: "center", gap: 8, background: FT.card, border: `1px solid ${FT.border}`, borderRadius: FT.radius, padding: "12px 16px", cursor: "pointer", textAlign: "left" }}
+      >
+        {showTech ? <ChevronDown size={18} color={FT.textMid} /> : <ChevronRight size={18} color={FT.textMid} />}
+        <span>
+          <span style={{ display: "block", fontSize: 14.5, fontWeight: 800, color: FT.text }}>Historique technique / sources non retenues</span>
+          <span style={{ display: "block", fontSize: 12, color: FT.textSub }}>
+            Dernier relevé technique Snowflake / ENOC par site — information seulement, jamais le stock officiel (détails dans l'historique de chaque site).
+          </span>
+        </span>
+      </button>
+
+      {showTech && (loading ? <Skeleton h={520} /> : (
       <Card padded={false} style={{ padding: 20 }}>
         <StockKpis data={data} />
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
@@ -192,7 +208,7 @@ export function StockSheet({
               <Warehouse size={17} />
             </div>
             <div>
-              <div style={{ fontSize: 15.5, fontWeight: 800, color: FT.text }}>Sources techniques — Snowflake / ENOC (information, non retenue)</div>
+              <div style={{ fontSize: 15.5, fontWeight: 800, color: FT.text }}>Historique technique / sources non retenues — une ligne par site</div>
               <div style={{ fontSize: 12.5, color: FT.textSub, marginTop: 3 }}>
                 Automatisé — Snowflake (dernier relevé de cuve, fenêtre 30j) + ENOC (dernier relevé historique). Valeurs techniques affichées pour information : le stock retenu est celui du registre ci-dessus.
                 {data?.pagination && ` ${fmt.format(data.pagination.total)} site(s).`}
@@ -294,7 +310,7 @@ export function StockSheet({
           </>
         )}
       </Card>
-      )}
+      ))}
 
       {activeComment && (
         <Modal title={`${activeComment.siteId}${activeComment.siteName ? ` — ${activeComment.siteName}` : ""}`} onClose={() => setActiveComment(null)}>

@@ -22,6 +22,7 @@ const UPLOAD_TYPES: Array<{ key: Exclude<ImportSourceType, "ENOC">; label: strin
   { key: "SCSS", label: "SCSS (relevés)" },
   { key: "CLOSING", label: "Closing (référentiel cuves)" },
   { key: "HISTORICAL_REFUELING", label: "Historique refueling" },
+  { key: "TANK_MODELS", label: "Modèles de cuves (calculateur)" },
 ];
 
 export function StockImportsSection({ canValidate }: { canValidate: boolean }) {

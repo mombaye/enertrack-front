@@ -12,17 +12,21 @@ export const SOURCE_LABEL: Record<string, string> = {
   SNOWFLAKE: "Snowflake (technique)",
   CLOSING: "Closing",
   HISTORICAL_REFUELING: "Historique refueling",
+  TANK_MODELS: "Modèles de cuves (calculateur)",
+  MANUAL: "Saisie manuelle",
 };
 
 export const METHOD_LABEL: Record<string, string> = {
   DIRECT_LITERS: "Relevé direct (L)",
   TANK_CURVE: "Abaque cuve",
-  GEOMETRIC_CALCULATION: "Calcul géométrique",
+  GEOMETRIC_CALCULATION: "Volume géométrique",
+  CALIBRATED: "Volume calibré (plaque)",
   NONE: "Aucune",
 };
 
 export const CONVERSION_LABEL: Record<string, { label: string; tone: Tone }> = {
   VALID: { label: "Conversion valide", tone: "green" },
+  GEOMETRIC_ONLY: { label: "Géométrique seul (plaque à confirmer)", tone: "orange" },
   PENDING_TANK_MAPPING: { label: "Cuve à référencer", tone: "orange" },
   INVALID: { label: "Invalide", tone: "red" },
 };
@@ -39,6 +43,24 @@ export const VALIDATION_LABEL: Record<string, { label: string; tone: Tone }> = {
   PROCESSING: { label: "En traitement", tone: "blue" },
   VALIDATION_REQUIRED: { label: "Validation requise", tone: "orange" },
   FAILED: { label: "Échec technique", tone: "red" },
+  NON_EXPLOITABLE: { label: "Non exploitable", tone: "slate" },
+  // Statuts affichés d'un relevé
+  AUTO_VALIDE: { label: "Auto-validé", tone: "green" },
+  VALIDE_MANUELLEMENT: { label: "Validé manuellement", tone: "blue" },
+  A_TRAITER: { label: "À traiter", tone: "orange" },
+  REJETE: { label: "Rejeté", tone: "red" },
+  // Statuts d'affectation d'une cuve site
+  VALIDEE: { label: "Cuve validée", tone: "green" },
+  PROPOSEE: { label: "Cuve proposée", tone: "violet" },
+  A_CONFIRMER: { label: "Cuve à confirmer", tone: "orange" },
+  INCOMPLETE: { label: "Cuve incomplète", tone: "slate" },
+  PLUSIEURS_CUVES_A_IDENTIFIER: { label: "Plusieurs cuves à identifier", tone: "orange" },
+  REJETEE: { label: "Cuve rejetée", tone: "red" },
+  // Modèles de la bibliothèque
+  COMPLET: { label: "Modèle complet", tone: "green" },
+  INCOMPLET: { label: "Modèle incomplet", tone: "slate" },
+  PROPOSED: { label: "Modèle proposé", tone: "violet" },
+  CONFIRMED: { label: "Modèle confirmé", tone: "green" },
 };
 
 export const STATUT_LABEL: Record<string, { label: string; tone: Tone }> = {
@@ -48,6 +70,7 @@ export const STATUT_LABEL: Record<string, { label: string; tone: Tone }> = {
 };
 
 export const MOVEMENT_LABEL: Record<string, string> = {
+  DELIVERY: "Livraison confirmée",
   DELIVERY_EYDON: "Livraison Eydon",
   DELIVERY_TOTAL_CARD: "Livraison carte Total",
   ADD: "Appoint",
@@ -59,6 +82,50 @@ export const MOVEMENT_LABEL: Record<string, string> = {
   CORRECTION: "Correction",
 };
 
+export const CATEGORY_LABEL: Record<string, string> = {
+  RELEVE_STOCK: "Relevé de stock",
+  LIVRAISON_CONFIRMEE: "Livraison confirmée",
+  DEMANDE_LIVRAISON: "Demande de livraison",
+  AJOUT: "Ajout",
+  TRANSFERT_ENTRANT: "Transfert entrant",
+  TRANSFERT_SORTANT: "Transfert sortant",
+  RETRAIT: "Retrait",
+  VOL: "Vol",
+  VIDANGE: "Vidange",
+  CARTE_TOTAL: "Carte Total (contrôle)",
+  INCONNU: "Inconnu",
+};
+
+export const FAMILY_LABEL: Record<string, string> = {
+  "h-circ": "Horizontale circulaire",
+  "h-elli": "Horizontale elliptique",
+  "h-oblo": "Horizontale oblongue",
+  "v-cyl": "Verticale cylindrique",
+  "v-tronc": "Verticale tronconique",
+  rect: "Rectangulaire",
+};
+
+/** Cotes attendues par famille (calculateur universel) : libellé ou null si non utilisée. */
+export const FAMILY_DIMS: Record<string, [string | null, string | null, string | null]> = {
+  "h-circ": ["D · diamètre intérieur", null, "L · longueur de virole"],
+  "h-elli": ["W · largeur", "H · hauteur", "L · longueur de virole"],
+  "h-oblo": ["W · largeur", "H · hauteur", "L · longueur de virole"],
+  "v-cyl": ["D · diamètre", "Hv · hauteur de virole", null],
+  "v-tronc": ["D1 · diamètre au fond", "D2 · diamètre au sommet", "H · hauteur"],
+  rect: ["A · largeur", "B · hauteur", "L · longueur"],
+};
+
+export const PROFILE_LABEL: Record<string, string> = {
+  plat: "Plat",
+  ellip: "Bombé ellipsoïdal",
+  toris: "Bombé torisphérique",
+  cap: "Calotte sphérique",
+  hemi: "Hémisphérique",
+  cone: "Conique",
+  klop: "Klöpper",
+  korb: "Korbbogen",
+};
+
 export const SHAPE_LABEL: Record<string, string> = {
   HORIZONTAL_CYLINDER: "Cylindre horizontal",
   VERTICAL_CYLINDER: "Cylindre vertical",
@@ -68,6 +135,8 @@ export const SHAPE_LABEL: Record<string, string> = {
 };
 
 const ALERT_TONE: Record<string, Tone> = {
+  TANK_INCOMPLETE: "slate",
+  PLATE_MISSING: "orange",
   STOCK_CONFLICT: "red",
   LOW_STOCK_CRITICAL: "red",
   LOW_STOCK: "orange",

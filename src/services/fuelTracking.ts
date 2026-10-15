@@ -908,9 +908,9 @@ export async function revokeCphCurve(curveId: string) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type StockSource = "ENOC" | "LOLIFORCE" | "SCSS" | "SNOWFLAKE" | "CLOSING";
-export type ConversionMethod = "DIRECT_LITERS" | "TANK_CURVE" | "GEOMETRIC_CALCULATION" | "NONE";
-export type ConversionStatus = "VALID" | "PENDING_TANK_MAPPING" | "INVALID";
-export type ObsValidationStatus = "PENDING" | "VALIDATED" | "REJECTED";
+export type ConversionMethod = "DIRECT_LITERS" | "TANK_CURVE" | "GEOMETRIC_CALCULATION" | "CALIBRATED" | "NONE";
+export type ConversionStatus = "VALID" | "GEOMETRIC_ONLY" | "PENDING_TANK_MAPPING" | "INVALID";
+export type ObsValidationStatus = "PENDING" | "VALIDATED" | "REJECTED" | "NON_EXPLOITABLE";
 export type RegistryStatut = "RETENU" | "INDISPONIBLE" | "AUCUNE_DONNEE";
 export type RegistryMessage = { code: string; message: string };
 
@@ -926,11 +926,29 @@ export type RegistryMovementSummary = {
   source_type: string;
 };
 
+export type DisplayStatus = "AUTO_VALIDE" | "VALIDE_MANUELLEMENT" | "A_TRAITER" | "REJETE" | "NON_EXPLOITABLE";
+export type TankAssignmentStatus = "VALIDEE" | "PROPOSEE" | "A_CONFIRMER" | "INCOMPLETE" | "PLUSIEURS_CUVES_A_IDENTIFIER" | "REJETEE";
+export type IssueDetail = { code: string; anomalie: string; regle: string; action: string; action_type: string };
+
 export type StockRegistryRow = {
   site_id: string;
   site_name: string | null;
+  pays: string | null;
   typologie: string | null;
   zone: string | null;
+  environnement: string;
+  raccordement: string;
+  ge: string;
+  solaire: string;
+  profil_energetique: string;
+  conversion_rule: string | null;
+  volume_geometric_l: number | null;
+  volume_calibrated_l: number | null;
+  statut_releve: DisplayStatus | null;
+  issue_codes: string[];
+  modele_cuve: string | null;
+  modele_statut: string | null;
+  tank_statuses: TankAssignmentStatus[];
   gardiennage_attendu: string | null;
   stock_l: number | null;
   source: StockSource | null;
@@ -956,6 +974,9 @@ export type StockRegistryRow = {
 
 export type StockRegistryKpis = {
   sites_total: number;
+  denominateur: string;
+  sites_cuve_validee: number;
+  cuves_par_statut: Record<string, number>;
   sites_stock_retenu: number;
   sites_indisponible: number;
   sites_sans_donnee: number;
@@ -971,8 +992,9 @@ export type StockRegistryResponse = {
   pagination: Pagination;
   kpis: StockRegistryKpis;
   alert_labels: Record<string, string>;
+  statut_labels: Record<string, string>;
   can_validate: boolean;
-  regles: { tolerance_capacite_pct: number; comparaison: string; snowflake: string };
+  regles: { tolerance_capacite_pct: number; comparaison: string; snowflake: string; stock_retenu: string; profil_energetique: string };
 };
 
 export type StockRegistryParams = {
@@ -1012,10 +1034,20 @@ export type StockObservation = {
   proof_reference: string | null;
   validation_status: ObsValidationStatus;
   validation_reason: string | null;
-  review_flags: string[];
+  review_flags: RegistryMessage[];
   validated_by: string | null;
   validated_at: string | null;
   batch_id: number | null;
+  statut_releve: DisplayStatus;
+  issues: IssueDetail[];
+  volume_geometric_l: number | null;
+  volume_calibrated_l: number | null;
+  declared_liters: number | null;
+  level_cm: number | null;
+  cm_liters_gap_l: number | null;
+  fill_pct: number | null;
+  conversion_rule: string | null;
+  tank_model_ref: string | null;
 };
 
 export type StockMovement = {
@@ -1045,27 +1077,57 @@ export type StockMovement = {
   validated_by: string | null;
   validated_at: string | null;
   batch_id: number | null;
+  raw_operation_type: string | null;
+  source_category: string | null;
+  mapping_rule: string | null;
+  retained_in_stock: boolean;
 };
 
 export type TankShape = "HORIZONTAL_CYLINDER" | "VERTICAL_CYLINDER" | "RECTANGULAR" | "HORIZONTAL_ELLIPTICAL" | "CUSTOM_CURVE";
+
+export type TankFamily = "h-circ" | "h-elli" | "h-oblo" | "v-cyl" | "v-tronc" | "rect";
 
 export type StockTank = {
   id: number;
   site_id: string;
   tank_id: string;
   shape: TankShape | null;
+  shape_family: TankFamily | null;
+  dimension_1_cm: number | null;
+  dimension_2_cm: number | null;
+  dimension_3_cm: number | null;
+  bottom_profile: string | null;
+  bottom_z_cm: number | null;
+  top_profile: string | null;
+  top_z_cm: number | null;
   length_m: number | null;
   width_m: number | null;
   height_m: number | null;
   diameter_m: number | null;
   capacity_l: number | null;
+  capacity_plate_l: number | null;
+  capacity_plate_source: string | null;
   geometric_capacity_l: number | null;
+  calibration_k: number | null;
+  plate_gap_pct: number | null;
+  plate_coherent: boolean | null;
   physical_height_cm: number | null;
   calibration_curve: Array<[number, number]> | null;
   calibration_validated: boolean;
   source_type: string;
   source_batch_id: number | null;
-  validation_status: "PENDING" | "VALIDATED" | "REJECTED";
+  source_file: string | null;
+  source_sheet: string | null;
+  source_row: number | null;
+  proof_reference: string | null;
+  serial_number: string | null;
+  number_of_tanks_on_site: number | null;
+  observed_at: string | null;
+  tank_model_id: string | null;
+  tank_model_label: string | null;
+  model_match_status: "NONE" | "PROPOSED" | "CONFIRMED" | "REJECTED";
+  validation_status: TankAssignmentStatus;
+  validation_reason: string | null;
   validated_by: string | null;
   validated_at: string | null;
   active: boolean;
@@ -1127,7 +1189,10 @@ export async function decideStockMovement(id: number, decision: "valider" | "rej
   return data;
 }
 
-export type TankPatch = Partial<Pick<StockTank, "shape" | "length_m" | "width_m" | "height_m" | "diameter_m" | "capacity_l" | "comment">> & {
+export type TankPatch = Partial<Pick<StockTank, "shape_family" | "dimension_1_cm" | "dimension_2_cm" | "dimension_3_cm" | "bottom_profile"
+  | "bottom_z_cm" | "top_profile" | "top_z_cm" | "capacity_plate_l" | "capacity_plate_source" | "serial_number" | "number_of_tanks_on_site"
+  | "proof_reference" | "comment" | "model_match_status">> & {
+  tank_model?: string | null;
   validate?: boolean;
   reason: string;
 };
@@ -1147,7 +1212,7 @@ export async function createGuardScope(body: { site_id: string; provider: "LOLIF
   return data;
 }
 
-export type ImportSourceType = "ENOC" | "LOLIFORCE" | "SCSS" | "CLOSING" | "HISTORICAL_REFUELING";
+export type ImportSourceType = "ENOC" | "LOLIFORCE" | "SCSS" | "CLOSING" | "HISTORICAL_REFUELING" | "TANK_MODELS";
 export type ImportBatchStatus = "RECEIVED" | "PROCESSING" | "VALIDATION_REQUIRED" | "ACCEPTED" | "REJECTED" | "FAILED";
 
 export type StockImportBatch = {
@@ -1214,5 +1279,94 @@ export async function getStockImportRows(id: number, params: { page?: number; li
 
 export async function relaunchStockImport(id: number, reason: string) {
   const { data } = await api.post<StockImportBatch>(`${BASE}/stock/imports/${id}/relancer/`, { reason });
+  return data;
+}
+
+// « À traiter — actions requises »
+export type WorkQueueCounter = { key: string; label: string; description: string; count: number };
+export type WorkQueueItem = {
+  site_id: string;
+  date: string | null;
+  source: string;
+  anomalie: string;
+  valeur_brute: string;
+  attendu: string;
+  regle: string;
+  action: string;
+  action_type: "OPEN_TANK" | "OPEN_HISTORY" | "VALIDATE_OBS" | "SET_GUARD" | "MAP_ENOC";
+  ref: { observation_id?: number; tank_id?: number; tank?: string; movement_id?: number; raw_value?: string };
+  count: number;
+  message: string;
+};
+
+export async function getStockWorkQueueCounters() {
+  const { data } = await api.get<{ counters: WorkQueueCounter[]; can_validate: boolean }>(`${BASE}/stock/a-traiter/`);
+  return data;
+}
+
+export async function getStockWorkQueue(categorie: string, params: { page?: number; limit?: number; search?: string }) {
+  const { data } = await api.get<{ categorie: string; label: string; data: WorkQueueItem[]; pagination: Pagination; can_validate: boolean }>(
+    `${BASE}/stock/a-traiter/`, { params: cleanParams({ categorie, ...params }) },
+  );
+  return data;
+}
+
+// Classification versionnée des types d'opération ENOC
+export type EnocTypeRow = {
+  raw_value: string;
+  count: number;
+  statuts: Record<string, number>;
+  avec_operation: number;
+  suggestion: string | null;
+  exemples: string[];
+  categorie: string;
+  version: number | null;
+  configure: boolean;
+  versions: number;
+  commentaire: string | null;
+};
+
+export async function getEnocTypes() {
+  const { data } = await api.get<{ data: EnocTypeRow[]; categories: Array<{ key: string; label: string }>; can_validate: boolean; regles: string[] }>(
+    `${BASE}/stock/enoc/types/`,
+  );
+  return data;
+}
+
+export async function setEnocType(raw_value: string, category: string, reason: string) {
+  const { data } = await api.post(`${BASE}/stock/enoc/types/`, { raw_value, category, reason });
+  return data;
+}
+
+// Bibliothèque des modèles de cuves (calculateur de Steve)
+export type TankModelRow = {
+  tank_model_id: string;
+  country: string | null;
+  source_file: string | null;
+  source_sheet: string | null;
+  source_row: number | null;
+  source_label: string | null;
+  shape_code: TankFamily | null;
+  shape_label: string | null;
+  nominal_capacity_l: number | null;
+  dimension_1_cm: number | null;
+  dimension_2_cm: number | null;
+  dimension_3_cm: number | null;
+  bottom_profile: string | null;
+  bottom_z_cm: number | null;
+  top_profile: string | null;
+  geometric_full_l: number | null;
+  calibration_k: number | null;
+  plate_gap_pct: number | null;
+  model_status: "COMPLET" | "A_CONFIRMER" | "INCOMPLET";
+  status_reason: string | null;
+  geometric_formula_version: string | null;
+  sites: number;
+};
+
+export async function getTankModels() {
+  const { data } = await api.get<{ data: TankModelRow[]; familles: Record<string, string>; profils: Record<string, string>; version_moteur: string }>(
+    `${BASE}/stock/modeles-cuves/`,
+  );
   return data;
 }
