@@ -39,6 +39,7 @@ export function TankModelLibrary() {
       subtitle="Calculateur universel de Steve (onglet Tank DB) : modèles et formules seulement — un modèle n'est jamais une cuve installée sur un site."
     >
       {q.isLoading && <Skeleton h={120} />}
+      {q.isError && <div role="alert" style={{ fontSize: 12.5, color: FT.red }}>Bibliothèque indisponible (serveur API à mettre à jour ou erreur de chargement).</div>}
       {q.data && q.data.data.length === 0 && (
         <div style={{ fontSize: 12.5, color: FT.textMid }}>Aucun modèle importé : déposer le calculateur dans incoming/modeles_cuves ou l'importer (type « Modèles de cuves »).</div>
       )}
@@ -124,6 +125,7 @@ export function EnocTypeConfig({ mapRequest, onMapDone }: { mapRequest: string |
         subtitle="Dictionnaire réel des valeurs ENOC (connecteur existant), classification administrable et versionnée. Un type non configuré reste « Inconnu » et n'est jamais un mouvement réel."
       >
         {q.isLoading && <Skeleton h={100} />}
+        {q.isError && <div role="alert" style={{ fontSize: 12.5, color: FT.red }}>Classification indisponible (serveur API à mettre à jour ou erreur de chargement).</div>}
         {q.data && (
           <>
             <ul style={{ margin: "0 0 10px", paddingLeft: 18, fontSize: 12, color: FT.textMid }}>

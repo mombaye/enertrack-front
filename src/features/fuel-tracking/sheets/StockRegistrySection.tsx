@@ -97,6 +97,8 @@ export function StockRegistrySection({ technical }: { technical?: ReactNode }) {
   const [mapRequest, setMapRequest] = useState<string | null>(null);
   const counters = useQuery({ queryKey: ["stock-queue-counters"], queryFn: getStockWorkQueueCounters });
   const toTreat = (counters.data?.counters ?? []).reduce((a, c) => a + c.count, 0);
+  // Backend plus ancien que le frontend (routes absentes → 404) : le dire clairement plutôt qu'afficher des écrans vides.
+  const backendOutdated = (counters.error as { response?: { status?: number } } | null)?.response?.status === 404;
   const [canValidate, setCanValidate] = useState(false);
 
   return (
@@ -117,6 +119,13 @@ export function StockRegistrySection({ technical }: { technical?: ReactNode }) {
           {view === "SETTINGS" && "Fichiers reçus, modèles de cuves, types ENOC et sources techniques."}
         </span>
       </div>
+
+      {backendOutdated && (
+        <div role="alert" style={{ padding: "10px 14px", borderRadius: 10, background: FT.orangeL, color: FT.text, fontSize: 12.5, border: `1px solid ${FT.orange}` }}>
+          <b>Serveur API pas à jour.</b> L'interface est plus récente que le backend : « À traiter », la bibliothèque des modèles de cuves et
+          la classification ENOC ne sont pas encore disponibles. Redéployer le backend (dernière version + migrations) pour les activer.
+        </div>
+      )}
 
       {view === "SITES" && <SitesView onOpen={setHistory} onCanValidate={setCanValidate} />}
       {view === "QUEUE" && (
@@ -170,7 +179,9 @@ function SitesView({ onOpen, onCanValidate }: { onOpen: (t: QueueTarget) => void
 
   useEffect(() => setPage(1), [debounced, quick, alerte, gardiennage, limit]);
 
-  const statut: RegistryStatut | "" = quick === "RETENU" || quick === "AUCUNE_DONNEE" ? quick : "";
+  // Backend sans « prochaine action » (version antérieure) : le filtre « Action requise » retombe sur le statut Indisponible.
+  const [legacyApi, setLegacyApi] = useState(false);
+  const statut: RegistryStatut | "" = quick === "RETENU" || quick === "AUCUNE_DONNEE" ? quick : quick === "ACTION" && legacyApi ? "INDISPONIBLE" : "";
   const q = useQuery({
     queryKey: ["stock-registry", debounced, quick, alerte, gardiennage, detailed, page, limit],
     queryFn: () => getStockRegistry({ search: debounced, statut, alerte, gardiennage, action_requise: quick === "ACTION" || undefined, tri: detailed ? undefined : "priorite", page, limit }),
@@ -178,7 +189,11 @@ function SitesView({ onOpen, onCanValidate }: { onOpen: (t: QueueTarget) => void
   });
   const d = q.data;
   const k = d?.kpis;
-  useEffect(() => { if (d) onCanValidate(d.can_validate); }, [d, onCanValidate]);
+  useEffect(() => {
+    if (!d) return;
+    onCanValidate(d.can_validate);
+    setLegacyApi(d.kpis.sites_action_requise === undefined);
+  }, [d, onCanValidate]);
 
   const act = (r: StockRegistryRow) => {
     const t = r.prochaine_action_type;
@@ -192,7 +207,7 @@ function SitesView({ onOpen, onCanValidate }: { onOpen: (t: QueueTarget) => void
           <QuickFilter active={quick === "TOUS"} onClick={() => setQuick("TOUS")} tone={FT.navy} label="Tous les sites" count={fmt.format(k.sites_total)} hint={k.denominateur} />
           <QuickFilter active={quick === "RETENU"} onClick={() => setQuick("RETENU")} tone={FT.green} label="Stock connu" count={fmt.format(k.sites_stock_retenu)}
                        hint="Relevé validé, converti avec une cuve validée" />
-          <QuickFilter active={quick === "ACTION"} onClick={() => setQuick("ACTION")} tone={FT.orange} label="Action requise" count={fmt.format(k.sites_action_requise)}
+          <QuickFilter active={quick === "ACTION"} onClick={() => setQuick("ACTION")} tone={FT.orange} label="Action requise" count={fmt.format(k.sites_action_requise ?? k.sites_indisponible)}
                        hint="Un relevé existe mais quelque chose bloque" />
           <QuickFilter active={quick === "AUCUNE_DONNEE"} onClick={() => setQuick("AUCUNE_DONNEE")} tone={FT.textSub} label="Aucun relevé" count={fmt.format(k.sites_sans_donnee)}
                        hint="Aucun relevé reçu pour ce site" />
@@ -349,6 +364,11 @@ function CompactTable({ d, isFetching, onOpen, onAct }: {
                     </>
                   ) : r.statut === "AUCUNE_DONNEE" ? (
                     <span style={{ color: FT.textSub, fontSize: 12 }}>En attente d'un relevé (Loliforce, SCSS ou ENOC)</span>
+                  ) : r.statut === "INDISPONIBLE" ? (
+                    <>
+                      <div style={{ fontSize: 11.5, color: FT.orange, fontWeight: 700 }}>{r.unavailable_reason ?? "Stock non retenu"}</div>
+                      <div style={{ fontWeight: 700 }}>Ouvrir le détail du site</div>
+                    </>
                   ) : (
                     <span style={{ color: FT.green, fontSize: 12 }}>Rien à faire</span>
                   )}

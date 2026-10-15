@@ -60,7 +60,7 @@ export function StockWorkQueue({ onOpen, onMapEnoc }: { onOpen: (t: QueueTarget)
         subtitle={counters.data ? `${total.toLocaleString("fr-FR")} élément(s) à traiter. Chaque ligne indique l'anomalie et l'action à faire.` : "Chargement des anomalies…"}
       />
       {counters.isLoading && <Skeleton h={90} />}
-      {counters.isError && <div role="alert" style={{ color: FT.red, fontSize: 13 }}>Compteurs indisponibles.</div>}
+      {counters.isError && <div role="alert" style={{ color: FT.red, fontSize: 13 }}>Compteurs indisponibles (serveur API à mettre à jour ou erreur de chargement).</div>}
       {counters.data && (
         <div role="tablist" aria-label="Catégories à traiter" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8, marginTop: 12 }}>
           {nonEmpty.map((c) => {

@@ -971,9 +971,9 @@ export type StockRegistryRow = {
   last_validated_movement: RegistryMovementSummary | null;
   last_movement: RegistryMovementSummary | null;
   /** Vue compacte : anomalie principale et prochaine action en clair (null = rien à faire / aucun relevé). */
-  anomalie: string | null;
-  prochaine_action: string | null;
-  prochaine_action_type: "OPEN_TANK" | "OPEN_HISTORY" | "VALIDATE_OBS" | "SET_GUARD" | "MAP_ENOC" | null;
+  anomalie?: string | null;
+  prochaine_action?: string | null;
+  prochaine_action_type?: "OPEN_TANK" | "OPEN_HISTORY" | "VALIDATE_OBS" | "SET_GUARD" | "MAP_ENOC" | null;
 };
 
 export type StockRegistryKpis = {
@@ -989,7 +989,8 @@ export type StockRegistryKpis = {
   cuves_validees: number;
   cuves_a_valider: number;
   imports_a_valider: number;
-  sites_action_requise: number;
+  /** Absent sur un backend antérieur (repli : sites_indisponible). */
+  sites_action_requise?: number;
 };
 
 export type StockRegistryResponse = {
