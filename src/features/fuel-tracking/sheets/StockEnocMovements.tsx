@@ -12,6 +12,7 @@ import {
   reconcileEnocMovement,
   type EnocExecutionState,
   type EnocMovementParams,
+  type EnocMovementRow,
 } from "@/services/fuelTracking";
 import { Card, EmptyState, Modal, Pager, SheetTitle, Skeleton } from "../ui";
 import { FT } from "../theme";
@@ -27,13 +28,26 @@ export const ETAT_LABEL: Record<EnocExecutionState, { label: string; bg: string;
   ELIGIBLE_STOCK_REEL: { label: "Éligible stock réel", bg: FT.greenL, fg: FT.green },
   REJETEE: { label: "Rejetée", bg: FT.redL, fg: FT.red },
   NATURE_A_QUALIFIER: { label: "Nature à qualifier", bg: FT.slateL, fg: FT.textMid },
+  TRANSFERT_A_COMPLETER: { label: "Transfert à compléter", bg: FT.orangeL, fg: FT.orange },
 };
+const TRANSFER_LABEL: Record<string, string> = {
+  COMPTABILISE: "Comptabilisé", TRANSFERT_A_COMPLETER: "À compléter", REJETE: "Rejeté", NON_APPLICABLE: "—",
+};
+const FM_LABEL: Record<string, { label: string; color: string }> = {
+  AUCUNE: { label: "Aucune", color: FT.textSub }, EN_ATTENTE: { label: "En attente Fuel Manager", color: FT.red },
+  TRAITEE: { label: "Traitée", color: FT.green },
+};
+const PONCTION_FILTERS: Array<[NonNullable<EnocMovementParams["ponction"]>, string]> = [
+  ["comptabilisees", "Ponctions comptabilisées"], ["a_completer", "Ponctions à compléter"],
+  ["avec_ecart", "Ponctions avec écart"], ["attente_fm", "Ponctions en attente Fuel Manager"],
+];
 const RAPPROCHEMENT_LABEL: Record<string, string> = {
   NON_REQUIS: "Non requis", A_RAPPROCHER: "À rapprocher", RAPPROCHE: "Rapproché", CERTIFIE: "Certifié", REJETE: "Rejeté",
 };
-const TOTAL_ORDER = ["demandes", "declares", "eligibles", "certifies", "a_qualifier", "rejetes"] as const;
+const TOTAL_ORDER = ["demandes", "declares", "eligibles", "certifies", "transferts", "transferts_a_completer", "a_qualifier", "rejetes"] as const;
 const TOTAL_TONE: Record<string, string> = {
-  demandes: FT.textMid, declares: FT.orange, eligibles: FT.green, certifies: FT.green, a_qualifier: FT.textSub, rejetes: FT.red,
+  demandes: FT.textMid, declares: FT.orange, eligibles: FT.green, certifies: FT.green, transferts: FT.navy,
+  transferts_a_completer: FT.orange, a_qualifier: FT.textSub, rejetes: FT.red,
 };
 
 function useList(params: EnocMovementParams) {
@@ -104,7 +118,7 @@ export function StockEnocMovements({ openId, onOpened }: { openId?: number | nul
                 <div style={{ fontSize: 20, fontWeight: 800, color: TOTAL_TONE[k], fontFamily: "ui-monospace, Menlo, monospace" }}>{t.count.toLocaleString("fr-FR")}</div>
                 <div style={{ fontSize: 11.5, fontWeight: 800, color: FT.text }}>{t.label}</div>
                 <div style={{ fontSize: 10.5, color: FT.textSub }}>
-                  {t.quantite_reelle_l !== null ? `${t.quantite_reelle_l.toLocaleString("fr-FR")} L réels déclarés` : "quantité réelle : —"}
+                  {t.quantite_reelle_l !== null ? `${t.quantite_reelle_l.toLocaleString("fr-FR")} L (${t.base ?? "quantité réelle"})` : `${t.base ?? "quantité réelle"} : —`}
                   {t.sans_quantite ? ` · ${t.sans_quantite} sans quantité` : ""}
                 </div>
               </div>
@@ -135,6 +149,17 @@ export function StockEnocMovements({ openId, onOpened }: { openId?: number | nul
           <SlidersHorizontal size={12} style={{ verticalAlign: -2, marginRight: 4 }} />Plus de filtres
         </button>
       </div>
+      <div role="group" aria-label="Filtres Ponction" style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+        {PONCTION_FILTERS.map(([k, label]) => {
+          const active = p.ponction === k;
+          return (
+            <button key={k} type="button" aria-pressed={active} onClick={() => set({ ponction: active ? undefined : k })}
+                    style={{ ...actionBtn(active ? "violet" : "blue"), background: active ? FT.violetL : undefined }}>
+              {label}
+            </button>
+          );
+        })}
+      </div>
       {more && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 10 }}>
           {sel("Anomalie", p.anomalie, [["1", "Avec au moins une anomalie"], ...(d?.facettes.anomalies ?? []).map((a) => [a, a] as [string, string])],
@@ -151,6 +176,7 @@ export function StockEnocMovements({ openId, onOpened }: { openId?: number | nul
       {d && d.data.length === 0 && <EmptyState icon={<Truck size={20} />} title="Aucun mouvement ENOC pour ces filtres" />}
       {d && d.data.length > 0 && (
         <>
+          {(p.ponction || p.type_brut === "PONCTION") ? <PonctionTable rows={d.data} fetching={q.isFetching} onOpen={setDetail} /> : (
           <div style={{ overflow: "auto", maxHeight: 560, borderRadius: 12, border: `1px solid ${FT.border}`, opacity: q.isFetching ? 0.7 : 1 }}>
             <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1700 }}>
               <thead>
@@ -192,6 +218,7 @@ export function StockEnocMovements({ openId, onOpened }: { openId?: number | nul
               </tbody>
             </table>
           </div>
+          )}
           <Pager
             page={d.pagination.page}
             totalPages={d.pagination.totalPages}
@@ -225,7 +252,7 @@ function EnocMovementDetailModal({ id, onClose }: { id: number; onClose: () => v
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["stock-enoc-movement", id], queryFn: () => getEnocMovement(id) });
   const [showRaw, setShowRaw] = useState(false);
-  const [decision, setDecision] = useState<"rapprocher" | "rejeter" | null>(null);
+  const [decision, setDecision] = useState<"rapprocher" | "rejeter" | "acquitter" | null>(null);
   const [reason, setReason] = useState("");
   const [evidence, setEvidence] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -276,6 +303,8 @@ function EnocMovementDetailModal({ id, onClose }: { id: number; onClose: () => v
               {d.alertes.map((a, i) => <li key={i} style={{ color: a.blocking ? FT.red : FT.textMid }}>{a.blocking ? "Bloquant — " : ""}{a.message}</li>)}
             </ul>
           )}
+
+          {d.type_famille === "PONCTION" && <PonctionSection d={d} />}
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
             <Info label="Site">{d.site_id} {d.site_name ? `· ${d.site_name}` : ""}{!d.site_connu && <span style={{ color: FT.orange }}> (non reconnu)</span>}</Info>
@@ -332,9 +361,14 @@ function EnocMovementDetailModal({ id, onClose }: { id: number; onClose: () => v
           {d.can_validate && !["REJETEE"].includes(d.etat) && (
             <div style={{ border: `1px solid ${FT.border}`, borderRadius: 10, padding: 12 }}>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {d.alerte_fuel_manager === "EN_ATTENTE" && (
+                  <button type="button" onClick={() => setDecision("acquitter")} style={actionBtn("violet")}>Acquitter l'alerte Fuel Manager</button>
+                )}
+                {d.type_famille !== "PONCTION" && (
                 <button type="button" disabled={d.etat !== "A_RAPPROCHER" || d.bloquant} onClick={() => setDecision("rapprocher")}
                         title={d.etat !== "A_RAPPROCHER" ? "Seul un mouvement « À rapprocher » peut devenir éligible au stock réel." : undefined}
                         style={actionBtn("green", d.etat !== "A_RAPPROCHER" || d.bloquant)}>Rapprocher (→ éligible stock réel)</button>
+                )}
                 {d.etat !== "ELIGIBLE_STOCK_REEL" && (
                   <button type="button" onClick={() => setDecision("rejeter")} style={actionBtn("red")}>Rejeter</button>
                 )}
@@ -352,8 +386,8 @@ function EnocMovementDetailModal({ id, onClose }: { id: number; onClose: () => v
                   </Field>
                   {error && <div role="alert" style={{ color: FT.red, fontSize: 12 }}>{error}</div>}
                   <div style={{ display: "flex", gap: 8 }}>
-                    <button type="button" disabled={busy} onClick={submit} style={actionBtn(decision === "rapprocher" ? "green" : "red", busy)}>
-                      {busy ? "Enregistrement…" : decision === "rapprocher" ? "Confirmer le rapprochement" : "Confirmer le rejet"}
+                    <button type="button" disabled={busy} onClick={submit} style={actionBtn(decision === "rejeter" ? "red" : "green", busy)}>
+                      {busy ? "Enregistrement…" : decision === "rapprocher" ? "Confirmer le rapprochement" : decision === "acquitter" ? "Confirmer le contrôle" : "Confirmer le rejet"}
                     </button>
                     <button type="button" onClick={() => { setDecision(null); setError(null); }} style={actionBtn("blue")}>Annuler</button>
                   </div>
@@ -390,3 +424,75 @@ function EnocMovementDetailModal({ id, onClose }: { id: number; onClose: () => v
 
 const pre: CSSProperties = { margin: 0, maxHeight: 320, overflow: "auto", background: FT.slateL, borderRadius: 8, padding: 10, fontSize: 11 };
 
+
+
+function signed(v: number | null) {
+  if (v === null) return <Dash />;
+  return <span style={{ fontWeight: 800, color: v < 0 ? FT.red : FT.green, fontFamily: "ui-monospace, Menlo, monospace" }}>{v > 0 ? "+" : ""}{v.toLocaleString("fr-FR")} L</span>;
+}
+
+/** Ponctions : site_id de la demande = DESTINATAIRE, « Site source » = SOURCE ; volume comptable = quantité approuvée. */
+function PonctionTable({ rows, fetching, onOpen }: { rows: EnocMovementRow[]; fetching: boolean; onOpen: (id: number) => void }) {
+  return (
+    <div style={{ overflow: "auto", maxHeight: 560, borderRadius: 12, border: `1px solid ${FT.border}`, opacity: fetching ? 0.7 : 1 }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1900 }}>
+        <thead>
+          <tr>
+            {["Réf. ENOC", "transfer_id", "Site source", "Site destinataire", "Qté approuvée", "Niveau source av. → ap.", "Variation observée",
+              "Écart de contrôle", "Statut transfert", "Impact source", "Impact destinataire", "Alerte Fuel Manager", "Bon de transfert",
+              "Validé par / le", "Motif"].map((h) => <th key={h} scope="col" style={{ ...thStyle, textAlign: "left" }}>{h}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={r.id} onClick={() => onOpen(r.id)} style={{ background: i % 2 ? FT.cardAlt : "#fff", cursor: "pointer" }}>
+              <th scope="row" style={{ ...cell, fontFamily: "ui-monospace, Menlo, monospace" }}>{r.enoc_reference ?? "—"}</th>
+              <td style={{ ...cell, fontSize: 11 }}>{r.transfer_id ?? <Dash />}</td>
+              <td style={cell}>{r.site_source ?? <Dash reason="Site source absent" />}{r.site_source && !r.site_source_connu && <div style={{ fontSize: 10.5, color: FT.orange }}>inconnu</div>}</td>
+              <td style={cell}>{r.site_destinataire ?? <Dash reason="site_id absent" />}</td>
+              <td style={cell}><Num value={r.quantite_approuvee_l} unit="L" reason="Quantité approuvée absente" /></td>
+              <td style={cell}>{r.niveau_source_avant_l !== null || r.niveau_source_apres_l !== null
+                ? pair(r.niveau_source_avant_l, r.niveau_source_apres_l, "L") : pair(r.niveau_source_avant_cm, r.niveau_source_apres_cm, "cm")}</td>
+              <td style={cell}>{signed(r.variation_source_l)}</td>
+              <td style={cell}><Num value={r.ecart_controle_l} unit="L" reason="Niveaux source en litres absents" /></td>
+              <td style={cell}>{TRANSFER_LABEL[r.statut_transfert] ?? r.statut_transfert}</td>
+              <td style={cell}>{signed(r.impact_source_l)}</td>
+              <td style={cell}>{signed(r.impact_destinataire_l)}</td>
+              <td style={{ ...cell, color: FM_LABEL[r.alerte_fuel_manager]?.color, fontWeight: 700 }}>{FM_LABEL[r.alerte_fuel_manager]?.label}</td>
+              <td style={cell}>{r.bon_transfert ?? <Dash reason="Bon de transfert absent" />}</td>
+              <td style={cell}>{r.valideur ?? "—"}<div style={{ fontSize: 11, color: FT.textSub }}>{fmtDateTime(r.date_approbation, true) ?? "—"}</div></td>
+              <td style={{ ...cell, minWidth: 280, fontSize: 11.5 }}>{r.motif}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PonctionSection({ d }: { d: EnocMovementRow }) {
+  return (
+    <div style={{ border: `1px solid ${FT.border}`, borderRadius: 10, padding: 12, background: FT.slateL }}>
+      <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 8 }}>
+        Ponction — {TRANSFER_LABEL[d.statut_transfert]} {d.transfer_id ? `· ${d.transfer_id}` : ""}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
+        <Info label="Site source (fournit)">{d.site_source}</Info>
+        <Info label="Site destinataire (reçoit)">{d.site_destinataire}</Info>
+        <Info label="Quantité approuvée (comptable)"><Num value={d.quantite_approuvee_l} unit="L" /></Info>
+        <Info label="Impact source / destinataire"><>{signed(d.impact_source_l)} / {signed(d.impact_destinataire_l)}</></Info>
+        <Info label="Niveau source avant → après">{pair(d.niveau_source_avant_l, d.niveau_source_apres_l, "L")} · {pair(d.niveau_source_avant_cm, d.niveau_source_apres_cm, "cm")}</Info>
+        <Info label="Variation observée / écart de contrôle"><>{signed(d.variation_source_l)} / <Num value={d.ecart_controle_l} unit="L" /></></Info>
+        <Info label="Bon de transfert">{d.bon_transfert}</Info>
+        <Info label="Validé par / le">{`${d.valideur ?? "—"} / ${fmtDateTime(d.date_approbation, true) ?? "—"}`}</Info>
+        <Info label="Alerte Fuel Manager">
+          <span style={{ color: FM_LABEL[d.alerte_fuel_manager]?.color, fontWeight: 700 }}>{FM_LABEL[d.alerte_fuel_manager]?.label}</span>
+          {d.fm_traite_par && <div style={{ fontSize: 11 }}>par {d.fm_traite_par} le {fmtDateTime(d.fm_traite_le, true)} — {d.fm_commentaire}</div>}
+        </Info>
+      </div>
+      <div style={{ fontSize: 11, color: FT.textSub, marginTop: 6 }}>
+        Le volume approuvé fait foi pour la comptabilisation ; la variation de niveau n'est qu'un contrôle (alerte au-delà de max(20 L ; 10 %)).
+      </div>
+    </div>
+  );
+}

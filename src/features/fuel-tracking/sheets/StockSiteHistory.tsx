@@ -142,7 +142,7 @@ export function StockSiteHistory({ siteId, initialTab = "RELEVES", onClose }: { 
           {tab === "MOUVEMENTS" && (
             <Table
               empty="Aucun mouvement pour ce site."
-              head={["Date", "Source", "Valeur brute", "Classification", "Type", "Retenu stock", "Qté demandée", "Qté réalisée", "Fournisseur", "Ticket / bon", "Preuve", "Niveaux avant → après", "Statut", "Alertes", "Actions"]}
+              head={["Date", "Source", "Valeur brute", "Classification", "Type", "Retenu stock", "Sens / impact", "Transfert", "Qté demandée", "Qté réalisée", "Fournisseur", "Ticket / bon", "Preuve", "Niveaux avant → après", "Statut", "Alertes", "Actions"]}
               rows={d.mouvements.map((m) => [
                 fmtDateTime(m.movement_datetime) ?? <Dash />,
                 SOURCE_LABEL[m.source_type] ?? m.source_type,
@@ -150,6 +150,13 @@ export function StockSiteHistory({ siteId, initialTab = "RELEVES", onClose }: { 
                 <span title={m.mapping_rule ?? undefined}>{m.source_category ? CATEGORY_LABEL[m.source_category] ?? m.source_category : <Dash />}</span>,
                 m.movement_type ? MOVEMENT_LABEL[m.movement_type] ?? m.movement_type : <Dash reason="Type non classifié" />,
                 m.retained_in_stock ? "Oui" : <span style={{ color: FT.textSub }} title="Demande, carte Total, type inconnu, quantité ou preuve manquante">Non</span>,
+                m.movement_direction && m.impact_stock_l !== null ? (
+                  <span style={{ color: m.movement_direction === "OUT" ? FT.red : FT.green, fontWeight: 600 }}>
+                    {m.movement_direction === "OUT" ? "Sortie " : "Entrée "}
+                    <Num value={m.impact_stock_l} unit="L" />
+                  </span>
+                ) : <Dash reason="Pas d'impact signé (hors transfert inter-sites)" />,
+                m.transfer_id ? <span title="Les deux écritures d'un transfert partagent cet identifiant ; leur somme vaut 0 L.">{m.transfer_id}</span> : <Dash />,
                 <Num value={m.requested_quantity_l} unit="L" />,
                 <Num value={m.quantity_l} unit="L" reason="Quantité réalisée non déclarée" />,
                 m.supplier ?? <Dash />,
