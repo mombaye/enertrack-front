@@ -1,0 +1,392 @@
+// src/features/fuel-tracking/sheets/StockEnocMovements.tsx
+// Mouvements Fuel & GE ENOC qualifiés : type brut ≠ impact stock. Totaux séparés (demandes, déclarés,
+// éligibles, certifiés…), filtres, détail avec données brutes ENOC et rapprochement tracé (seule voie vers
+// « Éligible stock réel »). Une valeur absente reste « — » (jamais 0).
+
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ExternalLink, Search, SlidersHorizontal, Truck } from "lucide-react";
+import {
+  getEnocMovement,
+  getEnocMovements,
+  reconcileEnocMovement,
+  type EnocExecutionState,
+  type EnocMovementParams,
+} from "@/services/fuelTracking";
+import { Card, EmptyState, Modal, Pager, SheetTitle, Skeleton } from "../ui";
+import { FT } from "../theme";
+import { actionBtn, Dash, Field, fmtDateTime, inputStyle, Num, tdStyle, thStyle } from "./stockRegistryUi";
+
+export const ETAT_LABEL: Record<EnocExecutionState, { label: string; bg: string; fg: string }> = {
+  DEMANDE: { label: "Demande", bg: FT.slateL, fg: FT.textMid },
+  APPROUVEE: { label: "Approuvée", bg: FT.blueL, fg: FT.navy },
+  TERMINEE: { label: "Terminée (incomplète)", bg: FT.orangeL, fg: FT.orange },
+  QUANTITE_REELLE_MANQUANTE: { label: "Quantité réelle manquante", bg: FT.orangeL, fg: FT.orange },
+  PREUVE_MANQUANTE: { label: "Preuve manquante", bg: FT.orangeL, fg: FT.orange },
+  A_RAPPROCHER: { label: "À rapprocher", bg: FT.violetL, fg: FT.violet },
+  ELIGIBLE_STOCK_REEL: { label: "Éligible stock réel", bg: FT.greenL, fg: FT.green },
+  REJETEE: { label: "Rejetée", bg: FT.redL, fg: FT.red },
+  NATURE_A_QUALIFIER: { label: "Nature à qualifier", bg: FT.slateL, fg: FT.textMid },
+};
+const RAPPROCHEMENT_LABEL: Record<string, string> = {
+  NON_REQUIS: "Non requis", A_RAPPROCHER: "À rapprocher", RAPPROCHE: "Rapproché", CERTIFIE: "Certifié", REJETE: "Rejeté",
+};
+const TOTAL_ORDER = ["demandes", "declares", "eligibles", "certifies", "a_qualifier", "rejetes"] as const;
+const TOTAL_TONE: Record<string, string> = {
+  demandes: FT.textMid, declares: FT.orange, eligibles: FT.green, certifies: FT.green, a_qualifier: FT.textSub, rejetes: FT.red,
+};
+
+function useList(params: EnocMovementParams) {
+  return useQuery({ queryKey: ["stock-enoc-movements", params], queryFn: () => getEnocMovements(params), placeholderData: (p) => p });
+}
+
+function EtatBadge({ etat }: { etat: EnocExecutionState }) {
+  const t = ETAT_LABEL[etat] ?? { label: etat, bg: FT.slateL, fg: FT.textMid };
+  return <span style={{ display: "inline-block", padding: "3px 9px", borderRadius: 999, fontSize: 10.5, fontWeight: 800, background: t.bg, color: t.fg, whiteSpace: "nowrap" }}>{t.label}</span>;
+}
+
+function Impact({ yes }: { yes: boolean }) {
+  return (
+    <span style={{ fontWeight: 800, fontSize: 11, color: yes ? FT.green : FT.textSub }} aria-label={`Impact stock : ${yes ? "oui" : "non"}`}>
+      {yes ? "OUI" : "NON"}
+    </span>
+  );
+}
+
+function pair(a: number | null, b: number | null, unit: string) {
+  if (a === null && b === null) return <Dash />;
+  return (
+    <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11.5 }}>
+      {a === null ? "—" : a.toLocaleString("fr-FR")} → {b === null ? "—" : b.toLocaleString("fr-FR")} {unit}
+    </span>
+  );
+}
+
+export function StockEnocMovements({ openId, onOpened }: { openId?: number | null; onOpened?: () => void }) {
+  const [p, setP] = useState<EnocMovementParams>({ page: 1, limit: 25 });
+  const [more, setMore] = useState(false);
+  const [search, setSearch] = useState("");
+  const [detail, setDetail] = useState<number | null>(null);
+  useEffect(() => {
+    const t = setTimeout(() => setP((x) => ({ ...x, site: search || undefined, page: 1 })), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+  useEffect(() => {
+    if (openId) {
+      setDetail(openId);
+      onOpened?.();
+    }
+  }, [openId, onOpened]);
+  const q = useList(p);
+  const d = q.data;
+  const set = (patch: Partial<EnocMovementParams>) => setP((x) => ({ ...x, ...patch, page: 1 }));
+  const sel = (label: string, value: string | undefined, options: Array<[string, string]>, onChange: (v: string) => void) => (
+    <select aria-label={label} value={value ?? ""} onChange={(e) => onChange(e.target.value)} style={inputStyle}>
+      <option value="">{label} : tous</option>
+      {options.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+    </select>
+  );
+
+  return (
+    <Card padded={false} style={{ padding: 18 }}>
+      <SheetTitle
+        icon={<Truck size={17} />}
+        title="Mouvements ENOC (Fuel & GE)"
+        subtitle="Type brut ENOC ≠ impact stock : aucun mouvement n'entre automatiquement dans le stock réel. Seul un rapprochement tracé le rend « Éligible stock réel »."
+      />
+
+      {d && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8, margin: "12px 0" }}>
+          {TOTAL_ORDER.map((k) => {
+            const t = d.totaux[k];
+            return (
+              <div key={k} style={{ border: `1px solid ${FT.border}`, borderRadius: 10, padding: "8px 12px", background: FT.slateL }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: TOTAL_TONE[k], fontFamily: "ui-monospace, Menlo, monospace" }}>{t.count.toLocaleString("fr-FR")}</div>
+                <div style={{ fontSize: 11.5, fontWeight: 800, color: FT.text }}>{t.label}</div>
+                <div style={{ fontSize: 10.5, color: FT.textSub }}>
+                  {t.quantite_reelle_l !== null ? `${t.quantite_reelle_l.toLocaleString("fr-FR")} L réels déclarés` : "quantité réelle : —"}
+                  {t.sans_quantite ? ` · ${t.sans_quantite} sans quantité` : ""}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "0 10px", height: 32, minWidth: 220 }}>
+          <Search size={14} color={FT.textSub} aria-hidden />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Site, nom ou référence ENOC…" aria-label="Rechercher"
+                 style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, flex: 1 }} />
+        </div>
+        {sel("Type brut", p.type_brut, [["TOTAL_CARD", "Carte Total"], ["PONCTION", "Ponction"], ["TRUCK", "Truck"], ["AUTRE", "Autre"],
+          ...(d?.facettes.types_bruts ?? []).filter((t) => !["TOTAL_CARD", "PONCTION", "TRUCK"].includes(t)).map((t) => [t, t] as [string, string])],
+          (v) => set({ type_brut: v || undefined }))}
+        {sel("Statut ENOC", p.statut_enoc, [...(d?.facettes.statuts_enoc ?? []).map((s) => [s, s] as [string, string]), ["(aucun)", "Sans statut (opération seule)"]],
+          (v) => set({ statut_enoc: v || undefined }))}
+        {sel("Qualification", p.qualification, (d?.facettes.qualifications ?? []).map((x) => [x.key, x.label] as [string, string]),
+          (v) => set({ qualification: v || undefined }))}
+        {sel("Impact stock", p.impact, [["OUI", "Oui"], ["NON", "Non"]], (v) => set({ impact: (v || "") as "" | "OUI" | "NON" }))}
+        {sel("Preuve", p.preuve, [["AVEC", "Avec preuve"], ["SANS", "Sans preuve"]], (v) => set({ preuve: (v || "") as "" | "AVEC" | "SANS" }))}
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: FT.text }}>
+          <input type="checkbox" checked={!!p.a_rapprocher} onChange={(e) => set({ a_rapprocher: e.target.checked })} /> À rapprocher
+        </label>
+        <button type="button" aria-expanded={more} onClick={() => setMore(!more)} style={actionBtn("blue")}>
+          <SlidersHorizontal size={12} style={{ verticalAlign: -2, marginRight: 4 }} />Plus de filtres
+        </button>
+      </div>
+      {more && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 10 }}>
+          {sel("Anomalie", p.anomalie, [["1", "Avec au moins une anomalie"], ...(d?.facettes.anomalies ?? []).map((a) => [a, a] as [string, string])],
+            (v) => set({ anomalie: v || undefined }))}
+          <Field label="Du"><input type="date" value={p.date_debut ?? ""} onChange={(e) => set({ date_debut: e.target.value || undefined })} style={inputStyle} /></Field>
+          <Field label="Au"><input type="date" value={p.date_fin ?? ""} onChange={(e) => set({ date_fin: e.target.value || undefined })} style={inputStyle} /></Field>
+          {sel("Pays", p.pays, (d?.facettes.pays ?? []).map((x) => [x, x] as [string, string]), (v) => set({ pays: v || undefined }))}
+          {sel("Zone", p.zone, (d?.facettes.zones ?? []).map((x) => [x, x] as [string, string]), (v) => set({ zone: v || undefined }))}
+        </div>
+      )}
+
+      {q.isLoading && <Skeleton h={300} />}
+      {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 13 }}>Mouvements ENOC indisponibles (serveur API à mettre à jour ou erreur de chargement).</div>}
+      {d && d.data.length === 0 && <EmptyState icon={<Truck size={20} />} title="Aucun mouvement ENOC pour ces filtres" />}
+      {d && d.data.length > 0 && (
+        <>
+          <div style={{ overflow: "auto", maxHeight: 560, borderRadius: 12, border: `1px solid ${FT.border}`, opacity: q.isFetching ? 0.7 : 1 }}>
+            <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1700 }}>
+              <thead>
+                <tr>
+                  {["Réf. ENOC", "Site", "Type brut", "Statut ENOC", "Qualification eGrid", "Date réelle", "Quantité réelle", "Niveau av. → ap. (L)",
+                    "Niveau av. → ap. (cm)", "Compteur GE av. → ap.", "Preuves", "Rapprochement", "Impact stock", "Motif"].map((h) => (
+                    <th key={h} scope="col" style={{ ...thStyle, textAlign: "left" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {d.data.map((r, i) => (
+                  <tr key={r.id} onClick={() => setDetail(r.id)} style={{ background: i % 2 ? FT.cardAlt : "#fff", cursor: "pointer" }}>
+                    <th scope="row" style={cell}>
+                      <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontWeight: 800 }}>{r.enoc_reference ?? "—"}</span>
+                      {r.lien_enoc && (
+                        <a href={r.lien_enoc} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} aria-label={`Ouvrir ${r.enoc_reference} dans ENOC`}
+                           style={{ marginLeft: 4, color: FT.blue }}><ExternalLink size={12} /></a>
+                      )}
+                    </th>
+                    <td style={cell}>
+                      <div style={{ fontWeight: 700 }}>{r.site_id ?? <Dash reason="site_id absent" />}</div>
+                      <div style={{ fontSize: 11, color: r.site_connu ? FT.textSub : FT.orange }}>{r.site_connu ? r.site_name ?? "" : "site non reconnu"}</div>
+                    </td>
+                    <td style={cell}>{r.type_brut ?? <Dash />}</td>
+                    <td style={cell}>{r.statut_brut ?? <span style={{ color: FT.textSub, fontSize: 11 }}>aucun (opération seule)</span>}</td>
+                    <td style={cell}><EtatBadge etat={r.etat} /><div style={{ fontSize: 10.5, color: FT.textSub, marginTop: 2 }}>{r.qualification}</div></td>
+                    <td style={cell}>{fmtDateTime(r.date_reelle, true) ?? <Dash reason="Date réelle absente (pas d'opération)" />}</td>
+                    <td style={cell}>{r.quantite_reelle_l !== null ? <><Num value={r.quantite_reelle_l} /> {r.unite ?? "?"}</> : <Dash reason="Quantité réelle absente" />}</td>
+                    <td style={cell}>{pair(r.niveau_avant_l, r.niveau_apres_l, "L")}</td>
+                    <td style={cell}>{pair(r.niveau_avant_cm, r.niveau_apres_cm, "cm")}</td>
+                    <td style={cell}>{pair(r.compteur_avant_h, r.compteur_apres_h, "h")}</td>
+                    <td style={cell}>{r.nb_preuves ? <strong>{r.nb_preuves}</strong> : <span style={{ color: FT.orange, fontWeight: 700 }}>0</span>}</td>
+                    <td style={cell}>{RAPPROCHEMENT_LABEL[r.rapprochement] ?? r.rapprochement}</td>
+                    <td style={cell}><Impact yes={r.impact_stock} /></td>
+                    <td style={{ ...cell, minWidth: 260, fontSize: 11.5 }}>{r.motif}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pager
+            page={d.pagination.page}
+            totalPages={d.pagination.totalPages}
+            hasPrev={d.pagination.hasPrev}
+            hasNext={d.pagination.hasNext}
+            onPrev={() => setP((x) => ({ ...x, page: Math.max(1, (x.page ?? 1) - 1) }))}
+            onNext={() => setP((x) => ({ ...x, page: (x.page ?? 1) + 1 }))}
+          />
+          <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 11.5, color: FT.textSub }}>
+            {d.regles.map((r) => <li key={r}>{r}</li>)}
+          </ul>
+        </>
+      )}
+      {detail !== null && <EnocMovementDetailModal id={detail} onClose={() => setDetail(null)} />}
+    </Card>
+  );
+}
+
+const cell: CSSProperties = { ...tdStyle, textAlign: "left", whiteSpace: "normal", verticalAlign: "top", padding: "9px 10px" };
+
+function Info({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div style={{ minWidth: 150 }}>
+      <div style={{ fontSize: 10.5, fontWeight: 800, color: FT.textSub, textTransform: "uppercase", letterSpacing: ".03em" }}>{label}</div>
+      <div style={{ fontSize: 12.5, color: FT.text }}>{children ?? <Dash />}</div>
+    </div>
+  );
+}
+
+function EnocMovementDetailModal({ id, onClose }: { id: number; onClose: () => void }) {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["stock-enoc-movement", id], queryFn: () => getEnocMovement(id) });
+  const [showRaw, setShowRaw] = useState(false);
+  const [decision, setDecision] = useState<"rapprocher" | "rejeter" | null>(null);
+  const [reason, setReason] = useState("");
+  const [evidence, setEvidence] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const d = q.data;
+
+  const submit = async () => {
+    if (!decision) return;
+    if (!reason.trim()) return setError("Le motif est obligatoire.");
+    if (decision === "rapprocher" && !evidence.trim()) return setError("L'élément de rapprochement est obligatoire (relevé terrain, stock, bon fournisseur…).");
+    setBusy(true);
+    setError(null);
+    try {
+      await reconcileEnocMovement(id, decision, reason.trim(), evidence.trim());
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["stock-enoc-movement", id] }),
+        qc.invalidateQueries({ queryKey: ["stock-enoc-movements"] }),
+        qc.invalidateQueries({ queryKey: ["stock-queue-counters"] }),
+        qc.invalidateQueries({ queryKey: ["stock-queue"] }),
+      ]);
+      setDecision(null);
+      setReason("");
+      setEvidence("");
+    } catch (e: unknown) {
+      setError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "Action impossible.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title={`Mouvement ENOC ${d?.enoc_reference ?? ""}`} onClose={onClose} maxWidth={1100}>
+      {q.isLoading && <Skeleton h={260} />}
+      {q.isError && <div role="alert" style={{ color: FT.red }}>Détail indisponible.</div>}
+      {d && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <EtatBadge etat={d.etat} />
+            <span style={{ fontSize: 12, fontWeight: 700 }}>{d.qualification}</span>
+            <span style={{ fontSize: 12 }}>Impact stock : <Impact yes={d.impact_stock} /></span>
+            <span style={{ fontSize: 12 }}>Rapprochement : {RAPPROCHEMENT_LABEL[d.rapprochement]}</span>
+            {d.lien_enoc && <a href={d.lien_enoc} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: FT.blue }}>Ouvrir dans ENOC <ExternalLink size={11} /></a>}
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: d.impact_stock ? FT.green : FT.orange }}>{d.motif}</div>
+          {d.conditions_manquantes.length > 0 && <div style={{ fontSize: 12, color: FT.orange }}>Conditions manquantes : {d.conditions_manquantes.join(", ")}</div>}
+          {d.alertes.length > 0 && (
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
+              {d.alertes.map((a, i) => <li key={i} style={{ color: a.blocking ? FT.red : FT.textMid }}>{a.blocking ? "Bloquant — " : ""}{a.message}</li>)}
+            </ul>
+          )}
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
+            <Info label="Site">{d.site_id} {d.site_name ? `· ${d.site_name}` : ""}{!d.site_connu && <span style={{ color: FT.orange }}> (non reconnu)</span>}</Info>
+            <Info label="Pays / zone">{[d.country, d.zone].filter(Boolean).join(" · ") || null}</Info>
+            <Info label="Type brut / statut brut">{`${d.type_brut ?? "—"} / ${d.statut_brut ?? "—"}`}</Info>
+            <Info label="Demandé / approuvé / réel">
+              {[d.quantite_demandee_l, d.quantite_approuvee_l, d.quantite_reelle_l].map((v) => (v === null ? "—" : v.toLocaleString("fr-FR"))).join(" / ")} {d.unite ?? ""}
+            </Info>
+            <Info label="Date prévue / réelle">{`${fmtDateTime(d.date_prevue) ?? "—"} / ${fmtDateTime(d.date_reelle, true) ?? "—"}`}</Info>
+            <Info label="Demande / approbation / clôture">
+              {[d.date_demande, d.date_approbation, d.date_cloture].map((v) => fmtDateTime(v) ?? "—").join(" / ")}
+            </Info>
+            <Info label="Niveau avant → après">{pair(d.niveau_avant_l, d.niveau_apres_l, "L")} · {pair(d.niveau_avant_cm, d.niveau_apres_cm, "cm")}</Info>
+            <Info label="Compteur GE">{pair(d.compteur_avant_h, d.compteur_apres_h, "h")}</Info>
+            <Info label="Technicien / valideur / clôture">{[d.technicien, d.valideur, d.cloture_par].map((v) => v ?? "—").join(" / ")}</Info>
+            <Info label="Fournisseur / BL / camion">{[d.fournisseur, d.bon_livraison, d.camion].map((v) => v ?? "—").join(" / ")}</Info>
+            <Info label="Opérations ENOC liées">{d.nb_operations}</Info>
+            <Info label="Commentaire">{d.commentaire}</Info>
+          </div>
+
+          <div>
+            <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 4 }}>Preuves ({d.nb_preuves})</div>
+            {d.preuves.length === 0 ? <span style={{ fontSize: 12, color: FT.orange }}>Aucune photo ni pièce jointe dans ENOC.</span> : (
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
+                {d.preuves.map((u) => <li key={u}>{/^https?:\/\//.test(u) ? <a href={u} target="_blank" rel="noreferrer" style={{ color: FT.blue }}>{u}</a> : u}</li>)}
+              </ul>
+            )}
+          </div>
+
+          <div>
+            <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 4 }}>Éléments de rapprochement (relevés terrain à ± 72 h)</div>
+            {d.contexte_rapprochement.releves_terrain.length === 0 ? (
+              <span style={{ fontSize: 12, color: FT.textSub }}>Aucun relevé terrain autour de la date réelle.</span>
+            ) : (
+              <table style={{ borderCollapse: "collapse", fontSize: 12 }}>
+                <thead><tr>{["Position", "Source", "Date", "Brut", "Litres", "Statut"].map((h) => <th key={h} style={{ ...thStyle, fontSize: 10 }}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {d.contexte_rapprochement.releves_terrain.map((o) => (
+                    <tr key={o.id}>
+                      <td style={tdStyle}>{o.position}</td><td style={tdStyle}>{o.source}</td><td style={tdStyle}>{fmtDateTime(o.date, true)}</td>
+                      <td style={tdStyle}>{o.brut ?? "—"}</td><td style={tdStyle}><Num value={o.litres} unit="L" /></td><td style={tdStyle}>{o.statut}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {d.rapproche_par && (
+              <div style={{ fontSize: 12, marginTop: 6 }}>
+                Rapproché par <b>{d.rapproche_par}</b> le {fmtDateTime(d.rapproche_le, true)} — {d.motif_rapprochement} ({d.element_rapprochement})
+              </div>
+            )}
+          </div>
+
+          {d.can_validate && !["REJETEE"].includes(d.etat) && (
+            <div style={{ border: `1px solid ${FT.border}`, borderRadius: 10, padding: 12 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button type="button" disabled={d.etat !== "A_RAPPROCHER" || d.bloquant} onClick={() => setDecision("rapprocher")}
+                        title={d.etat !== "A_RAPPROCHER" ? "Seul un mouvement « À rapprocher » peut devenir éligible au stock réel." : undefined}
+                        style={actionBtn("green", d.etat !== "A_RAPPROCHER" || d.bloquant)}>Rapprocher (→ éligible stock réel)</button>
+                {d.etat !== "ELIGIBLE_STOCK_REEL" && (
+                  <button type="button" onClick={() => setDecision("rejeter")} style={actionBtn("red")}>Rejeter</button>
+                )}
+              </div>
+              {decision && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
+                  {decision === "rapprocher" && (
+                    <Field label="Élément de rapprochement (obligatoire)">
+                      <input value={evidence} onChange={(e) => setEvidence(e.target.value)} placeholder="Ex. relevé Loliforce du 02/10 : +200 L ; BL Eydon 4512"
+                             style={{ ...inputStyle, width: "100%" }} />
+                    </Field>
+                  )}
+                  <Field label="Motif (obligatoire)">
+                    <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} style={{ ...inputStyle, width: "100%", height: "auto" }} />
+                  </Field>
+                  {error && <div role="alert" style={{ color: FT.red, fontSize: 12 }}>{error}</div>}
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button type="button" disabled={busy} onClick={submit} style={actionBtn(decision === "rapprocher" ? "green" : "red", busy)}>
+                      {busy ? "Enregistrement…" : decision === "rapprocher" ? "Confirmer le rapprochement" : "Confirmer le rejet"}
+                    </button>
+                    <button type="button" onClick={() => { setDecision(null); setError(null); }} style={actionBtn("blue")}>Annuler</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div>
+            <button type="button" aria-expanded={showRaw} onClick={() => setShowRaw(!showRaw)} style={actionBtn("blue")}>
+              {showRaw ? "Masquer" : "Voir"} la donnée brute ENOC et la source de chaque champ
+            </button>
+            {showRaw && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 10, marginTop: 8 }}>
+                <pre style={pre}>{JSON.stringify(d.sources_champs, null, 2)}</pre>
+                <pre style={pre}>{JSON.stringify({ demande: d.brut.demande, operations: d.brut.operations ?? d.brut.operation }, null, 2)}</pre>
+              </div>
+            )}
+          </div>
+
+          {d.historique.length > 0 && (
+            <div>
+              <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 4 }}>Historique</div>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
+                {d.historique.map((h, i) => <li key={i}>{fmtDateTime(h.date, true)} — {h.action} {h.champ ?? ""} : {h.ancien ?? "—"} → {h.nouveau ?? "—"} ({h.auteur ?? "—"}) — {h.motif}</li>)}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+const pre: CSSProperties = { margin: 0, maxHeight: 320, overflow: "auto", background: FT.slateL, borderRadius: 8, padding: 10, fontSize: 11 };
+

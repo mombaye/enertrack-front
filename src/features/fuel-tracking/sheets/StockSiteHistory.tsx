@@ -9,6 +9,7 @@ import {
   createStockTank,
   decideStockMovement,
   decideStockObservation,
+  getStockBalance,
   getStockSiteHistory,
   patchStockTank,
   type StockObservation,
@@ -40,7 +41,7 @@ import {
   thStyle,
 } from "./stockRegistryUi";
 
-type Tab = "RELEVES" | "MOUVEMENTS" | "COMPARAISONS" | "CUVES" | "CORRECTIONS";
+type Tab = "RELEVES" | "MOUVEMENTS" | "COMPARAISONS" | "CUVES" | "BILAN" | "CORRECTIONS";
 
 type Pending = { kind: "obs" | "mv"; id: number; decision: "valider" | "rejeter"; label: string } | null;
 
@@ -76,9 +77,12 @@ export function StockSiteHistory({ siteId, initialTab = "RELEVES", onClose }: { 
               { key: "MOUVEMENTS", label: `Mouvements (${d.mouvements.length})` },
               { key: "COMPARAISONS", label: `Comparaisons (${d.comparaisons.length})` },
               { key: "CUVES", label: `Cuves & gardiennage (${d.cuves.length})` },
+              { key: "BILAN", label: "Bilan stock" },
               { key: "CORRECTIONS", label: `Corrections (${d.corrections.length})` },
             ]}
           />
+
+          {tab === "BILAN" && <SiteBalance siteId={siteId} />}
 
           {tab === "RELEVES" && (
             <Table
@@ -609,5 +613,92 @@ function ConversionExplanation({ o, tanks, onClose }: { o: StockObservation; tan
         </div>
       )}
     </Modal>
+  );
+}
+
+
+const CERTIF_LABEL: Record<string, { label: string; color: string }> = {
+  NON_CALCULABLE: { label: "Non calculable", color: FT.textSub },
+  INCOHERENT: { label: "Incohérent", color: FT.red },
+  CALCULE_NON_CERTIFIE: { label: "Calculé, non certifié", color: FT.orange },
+  CERTIFIE: { label: "Certifié", color: FT.green },
+};
+
+function isoDay(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+
+/** Bilan stock réel : formule inchangée, composante inconnue → vide (jamais 0) ; CPH et Snowflake affichés à côté. */
+function SiteBalance({ siteId }: { siteId: string }) {
+  const today = new Date();
+  const [fin, setFin] = useState(isoDay(today));
+  const [debut, setDebut] = useState(isoDay(new Date(today.getTime() - 30 * 86_400_000)));
+  const q = useQuery({ queryKey: ["stock-balance", siteId, debut, fin], queryFn: () => getStockBalance(siteId, debut, fin) });
+  const b = q.data;
+  const c = b ? CERTIF_LABEL[b.certification] : null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+        <Field label="Du"><input type="date" value={debut} onChange={(e) => setDebut(e.target.value)} style={inputStyle} /></Field>
+        <Field label="Au"><input type="date" value={fin} onChange={(e) => setFin(e.target.value)} style={inputStyle} /></Field>
+      </div>
+      {q.isLoading && <Skeleton h={160} />}
+      {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 13 }}>Bilan indisponible (serveur API à mettre à jour ou erreur de chargement).</div>}
+      {b && c && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
+            <BalanceTile label="Consommation réelle (bilan stock)" value={b.conso_reelle_l} sub={c.label} color={c.color} />
+            <BalanceTile label="Consommation théorique CPH" value={b.references?.conso_theorique_cph_l ?? null}
+                         sub={b.references?.statut_cph ?? b.references?.motif ?? "—"} color={FT.navy} />
+            <BalanceTile label="Consommation instrumentée Snowflake" value={b.references?.conso_instrumentee_snowflake_l ?? null}
+                         sub="capteur de niveau (VW_FUEL_REPORT)" color={FT.cyan} />
+          </div>
+          {b.motifs.length > 0 && (
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: FT.orange }}>{b.motifs.map((m) => <li key={m}>{m}</li>)}</ul>
+          )}
+          {b.alertes.length > 0 && (
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: FT.red }}>{b.alertes.map((m) => <li key={m}>{m}</li>)}</ul>
+          )}
+          <Table
+            empty=""
+            head={["Composante", "Valeur", "Détail"]}
+            rows={[
+              ["Stock initial", <Num value={b.stock_initial?.litres ?? null} unit="L" digits={1} reason="Aucun stock retenu au début" />,
+                b.stock_initial ? `${fmtDateTime(b.stock_initial.date, true)} · ${b.stock_initial.source} · ${b.stock_initial.methode}` : "—"],
+              ["+ Livraisons éligibles", <Num value={b.composantes_l.livraisons} unit="L" />, "ENOC rapprochés / certifiés, mouvements validés"],
+              ["+ Transferts entrants éligibles", <Num value={b.composantes_l.transferts_entree} unit="L" />, ""],
+              ["− Transferts sortants éligibles", <Num value={b.composantes_l.transferts_sortie} unit="L" />, ""],
+              ["− Vols validés", <Num value={b.composantes_l.vols} unit="L" />, ""],
+              ["− Vidanges validées", <Num value={b.composantes_l.vidanges} unit="L" />, ""],
+              ["− Stock final", <Num value={b.stock_final?.litres ?? null} unit="L" digits={1} reason="Aucun stock retenu à la fin" />,
+                b.stock_final ? `${fmtDateTime(b.stock_final.date, true)} · ${b.stock_final.source} · ${b.stock_final.methode}` : "—"],
+            ]}
+          />
+          {b.mouvements_inconnus.length > 0 && (
+            <div>
+              <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 4 }}>Mouvements dont l'impact n'est pas établi ({b.mouvements_inconnus.length})</div>
+              <Table
+                empty=""
+                head={["Source", "Référence", "Date", "Type", "État", "Motif"]}
+                rows={b.mouvements_inconnus.map((m) => [m.source, m.ref, fmtDateTime(m.date, true) ?? "—", m.type ?? "—", m.etat, <Wrap>{m.motif}</Wrap>])}
+              />
+            </div>
+          )}
+          <div style={{ fontSize: 11.5, color: FT.textSub }}>Formule : {b.formule}. Une composante inconnue rend le résultat vide (jamais 0).</div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function BalanceTile({ label, value, sub, color }: { label: string; value: number | null; sub: string; color: string }) {
+  return (
+    <div style={{ border: `1px solid ${FT.border}`, borderRadius: 10, padding: "10px 12px", background: FT.slateL }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: FT.textMid }}>{label}</div>
+      <div style={{ fontSize: 20, fontWeight: 800, color, fontFamily: "ui-monospace, Menlo, monospace" }}>
+        {value === null ? "—" : `${value.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} L`}
+      </div>
+      <div style={{ fontSize: 11, color: FT.textSub }}>{sub}</div>
+    </div>
   );
 }

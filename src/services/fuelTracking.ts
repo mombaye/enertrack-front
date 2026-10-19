@@ -1301,8 +1301,8 @@ export type WorkQueueItem = {
   attendu: string;
   regle: string;
   action: string;
-  action_type: "OPEN_TANK" | "OPEN_HISTORY" | "VALIDATE_OBS" | "SET_GUARD" | "MAP_ENOC";
-  ref: { observation_id?: number; tank_id?: number; tank?: string; movement_id?: number; raw_value?: string };
+  action_type: "OPEN_TANK" | "OPEN_HISTORY" | "VALIDATE_OBS" | "SET_GUARD" | "MAP_ENOC" | "RECONCILE_ENOC";
+  ref: { observation_id?: number; tank_id?: number; tank?: string; movement_id?: number; raw_value?: string; enoc_id?: number };
   count: number;
   message: string;
 };
@@ -1376,5 +1376,160 @@ export async function getTankModels() {
   const { data } = await api.get<{ data: TankModelRow[]; familles: Record<string, string>; profils: Record<string, string>; version_moteur: string }>(
     `${BASE}/stock/modeles-cuves/`,
   );
+  return data;
+}
+
+
+// ── ENOC : mouvements qualifiés (contrat canonique, qualification, rapprochement) ──────────────────
+
+export type EnocExecutionState =
+  | "DEMANDE" | "APPROUVEE" | "TERMINEE" | "QUANTITE_REELLE_MANQUANTE" | "PREUVE_MANQUANTE"
+  | "A_RAPPROCHER" | "ELIGIBLE_STOCK_REEL" | "REJETEE" | "NATURE_A_QUALIFIER";
+
+export type EnocAlert = { code: string; message: string; blocking?: boolean };
+
+export type EnocMovementRow = {
+  id: number;
+  enoc_reference: string | null;
+  enoc_request_id: string | null;
+  lien_enoc: string | null;
+  site_id: string | null;
+  site_id_brut: string | null;
+  site_connu: boolean;
+  site_name: string | null;
+  country: string | null;
+  zone: string | null;
+  type_brut: string | null;
+  type_famille: "TOTAL_CARD" | "PONCTION" | "TRUCK" | "AUTRE";
+  statut_brut: string | null;
+  qualification: string;
+  etat: EnocExecutionState;
+  rapprochement: "NON_REQUIS" | "A_RAPPROCHER" | "RAPPROCHE" | "CERTIFIE" | "REJETE";
+  impact_stock: boolean;
+  impact_conso: boolean;
+  motif: string;
+  conditions_manquantes: string[];
+  alertes: EnocAlert[];
+  bloquant: boolean;
+  date_reelle: string | null;
+  date_prevue: string | null;
+  date_demande: string | null;
+  date_approbation: string | null;
+  date_cloture: string | null;
+  quantite_demandee_l: number | null;
+  quantite_approuvee_l: number | null;
+  quantite_reelle_l: number | null;
+  unite: string | null;
+  niveau_avant_l: number | null;
+  niveau_apres_l: number | null;
+  niveau_avant_cm: number | null;
+  niveau_apres_cm: number | null;
+  compteur_avant_h: number | null;
+  compteur_apres_h: number | null;
+  technicien: string | null;
+  valideur: string | null;
+  cloture_par: string | null;
+  commentaire: string | null;
+  nb_preuves: number;
+  preuves: string[];
+  fournisseur: string | null;
+  bon_livraison: string | null;
+  camion: string | null;
+  nb_operations: number;
+  rapproche_par: string | null;
+  rapproche_le: string | null;
+  motif_rapprochement: string | null;
+  element_rapprochement: string | null;
+  synchronise_le: string | null;
+};
+
+export type EnocTotal = { label: string; count: number; quantite_reelle_l: number | null; sans_quantite: number };
+
+export type EnocMovementListResponse = {
+  data: EnocMovementRow[];
+  pagination: Pagination;
+  totaux: Record<"demandes" | "declares" | "eligibles" | "certifies" | "a_qualifier" | "rejetes", EnocTotal>;
+  facettes: {
+    types_bruts: string[];
+    statuts_enoc: string[];
+    qualifications: Array<{ key: EnocExecutionState; label: string }>;
+    classifications: string[];
+    anomalies: string[];
+    zones: string[];
+    pays: string[];
+  };
+  can_validate: boolean;
+  regles: string[];
+};
+
+export type EnocMovementParams = {
+  type_brut?: string;
+  statut_enoc?: string;
+  qualification?: string;
+  impact?: "" | "OUI" | "NON";
+  preuve?: "" | "AVEC" | "SANS";
+  a_rapprocher?: boolean;
+  anomalie?: string;
+  date_debut?: string;
+  date_fin?: string;
+  pays?: string;
+  zone?: string;
+  site?: string;
+  page?: number;
+  limit?: number;
+};
+
+export type EnocMovementDetail = EnocMovementRow & {
+  sources_champs: Record<string, string>;
+  contexte_rapprochement: {
+    releves_terrain: Array<{ id: number; source: string; date: string; brut: string | null; litres: number | null; statut: string; position: string }>;
+    niveau_enoc_avant_l: number | null;
+    niveau_enoc_apres_l: number | null;
+    quantite_reelle_l: number | null;
+    preuves: string[];
+    preuve_fournisseur: boolean;
+  };
+  brut: { demande: Record<string, unknown> | null; operation: Record<string, unknown> | null; operations: Array<Record<string, unknown>> | null };
+  historique: Array<{ date: string; action: string; champ: string | null; ancien: string | null; nouveau: string | null; motif: string; auteur: string | null }>;
+  can_validate: boolean;
+};
+
+export async function getEnocMovements(params: EnocMovementParams) {
+  const { a_rapprocher, ...rest } = params;
+  const { data } = await api.get<EnocMovementListResponse>(`${BASE}/stock/enoc/mouvements/`, {
+    params: cleanParams({ ...rest, a_rapprocher: a_rapprocher ? "1" : undefined }),
+  });
+  return data;
+}
+
+export async function getEnocMovement(id: number) {
+  const { data } = await api.get<EnocMovementDetail>(`${BASE}/stock/enoc/mouvements/${id}/`);
+  return data;
+}
+
+export async function reconcileEnocMovement(id: number, decision: "rapprocher" | "rejeter", reason: string, evidence: string) {
+  const { data } = await api.post<EnocMovementRow>(`${BASE}/stock/enoc/mouvements/${id}/rapprocher/`, { decision, reason, evidence });
+  return data;
+}
+
+export type StockBalance = {
+  site_id: string;
+  periode: { debut: string; fin: string };
+  periode_effective: { debut: string | null; fin: string | null };
+  stock_initial: { litres: number | null; date: string; source: string; methode: string; releve_id: number } | null;
+  stock_final: { litres: number | null; date: string; source: string; methode: string; releve_id: number } | null;
+  composantes_l: { livraisons: number; transferts_entree: number; transferts_sortie: number; vols: number; vidanges: number };
+  mouvements_comptes: Array<{ source: string; ref: string; date: string; type: string; quantite_l: number | null; composante: string; certification: string }>;
+  mouvements_inconnus: Array<{ source: string; ref: string; date: string; type: string | null; etat: string; motif: string }>;
+  conso_reelle_l: number | null;
+  certification: "NON_CALCULABLE" | "INCOHERENT" | "CALCULE_NON_CERTIFIE" | "CERTIFIE";
+  motifs: string[];
+  alertes: string[];
+  formule: string;
+  references?: { conso_theorique_cph_l: number | null; conso_instrumentee_snowflake_l: number | null; statut_cph: string | null; motif: string | null };
+};
+
+export async function getStockBalance(siteId: string, debut: string, fin: string) {
+  const { data } = await api.get<StockBalance>(`${BASE}/stock/registre/${encodeURIComponent(siteId)}/bilan/`, { params: { debut, fin } });
   return data;
 }

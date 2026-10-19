@@ -93,6 +93,7 @@ export const CATEGORY_LABEL: Record<string, string> = {
   VOL: "Vol",
   VIDANGE: "Vidange",
   CARTE_TOTAL: "Carte Total (contrôle)",
+  LIVRAISON_DECLAREE: "Livraison déclarée (à rapprocher)",
   INCONNU: "Inconnu",
 };
 

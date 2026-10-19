@@ -7,7 +7,7 @@
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ListChecks, Search, Settings2, SlidersHorizontal, Warehouse } from "lucide-react";
+import { ListChecks, Search, Settings2, SlidersHorizontal, Truck, Warehouse } from "lucide-react";
 import {
   decideStockObservation,
   getStockRegistry,
@@ -41,6 +41,7 @@ import { StockSiteHistory } from "./StockSiteHistory";
 import { StockImportsSection } from "./StockImportsSection";
 import { EnocTypeConfig, TankModelLibrary } from "./StockReferences";
 import { StockWorkQueue, type QueueTarget } from "./StockWorkQueue";
+import { StockEnocMovements } from "./StockEnocMovements";
 
 function useDebounced<T>(value: T, ms = 300) {
   const [v, setV] = useState(value);
@@ -78,7 +79,7 @@ function Profile({ v }: { v: string }) {
 }
 
 type Decision = { row: StockRegistryRow; decision: "valider" | "rejeter" } | null;
-type View = "SITES" | "QUEUE" | "SETTINGS";
+type View = "SITES" | "QUEUE" | "ENOC" | "SETTINGS";
 type Quick = "TOUS" | "ACTION" | "RETENU" | "AUCUNE_DONNEE";
 
 const ACTION_LABEL: Record<NonNullable<StockRegistryRow["prochaine_action_type"]>, string> = {
@@ -95,6 +96,7 @@ export function StockRegistrySection({ technical }: { technical?: ReactNode }) {
   const [view, setView] = useState<View>("SITES");
   const [history, setHistory] = useState<QueueTarget | null>(null);
   const [mapRequest, setMapRequest] = useState<string | null>(null);
+  const [enocOpen, setEnocOpen] = useState<number | null>(null);
   const counters = useQuery({ queryKey: ["stock-queue-counters"], queryFn: getStockWorkQueueCounters });
   const toTreat = (counters.data?.counters ?? []).reduce((a, c) => a + c.count, 0);
   // Backend plus ancien que le frontend (routes absentes → 404) : le dire clairement plutôt qu'afficher des écrans vides.
@@ -110,12 +112,14 @@ export function StockRegistrySection({ technical }: { technical?: ReactNode }) {
           options={[
             { key: "SITES", label: "Stock des sites", icon: <Warehouse size={14} /> },
             { key: "QUEUE", label: `À traiter${counters.data ? ` (${fmt.format(toTreat)})` : ""}`, icon: <ListChecks size={14} /> },
+            { key: "ENOC", label: "Mouvements ENOC", icon: <Truck size={14} /> },
             { key: "SETTINGS", label: "Imports & paramètres", icon: <Settings2 size={14} /> },
           ]}
         />
         <span style={{ fontSize: 12, color: FT.textSub }}>
           {view === "SITES" && "1 ligne = 1 site. Cliquer sur une ligne pour voir tout son historique."}
           {view === "QUEUE" && "Choisir une catégorie : chaque ligne dit quoi corriger et comment."}
+          {view === "ENOC" && "Demandes, ravitaillements déclarés, éligibles et certifiés sont comptés séparément."}
           {view === "SETTINGS" && "Fichiers reçus, modèles de cuves, types ENOC et sources techniques."}
         </span>
       </div>
@@ -129,8 +133,10 @@ export function StockRegistrySection({ technical }: { technical?: ReactNode }) {
 
       {view === "SITES" && <SitesView onOpen={setHistory} onCanValidate={setCanValidate} />}
       {view === "QUEUE" && (
-        <StockWorkQueue onOpen={setHistory} onMapEnoc={(raw) => { setMapRequest(raw); setView("SETTINGS"); }} />
+        <StockWorkQueue onOpen={setHistory} onMapEnoc={(raw) => { setMapRequest(raw); setView("SETTINGS"); }}
+                        onOpenEnoc={(id) => { setEnocOpen(id); setView("ENOC"); }} />
       )}
+      {view === "ENOC" && <StockEnocMovements openId={enocOpen} onOpened={() => setEnocOpen(null)} />}
       {view === "SETTINGS" && (
         <>
           <StockImportsSection canValidate={canValidate} />

@@ -20,9 +20,12 @@ const ACTION_BUTTON: Record<WorkQueueItem["action_type"], string> = {
   VALIDATE_OBS: "Valider / rejeter",
   SET_GUARD: "Gardiennage",
   MAP_ENOC: "Classifier",
+  RECONCILE_ENOC: "Rapprocher",
 };
 
-export function StockWorkQueue({ onOpen, onMapEnoc }: { onOpen: (t: QueueTarget) => void; onMapEnoc: (raw: string) => void }) {
+export function StockWorkQueue({ onOpen, onMapEnoc, onOpenEnoc }: {
+  onOpen: (t: QueueTarget) => void; onMapEnoc: (raw: string) => void; onOpenEnoc?: (id: number) => void;
+}) {
   const [selected, setSelected] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -46,6 +49,7 @@ export function StockWorkQueue({ onOpen, onMapEnoc }: { onOpen: (t: QueueTarget)
 
   const act = (it: WorkQueueItem) => {
     if (it.action_type === "MAP_ENOC" && it.ref.raw_value) return onMapEnoc(it.ref.raw_value);
+    if (it.action_type === "RECONCILE_ENOC" && it.ref.enoc_id && onOpenEnoc) return onOpenEnoc(it.ref.enoc_id);
     const tab = it.action_type === "OPEN_TANK" || it.action_type === "SET_GUARD" ? "CUVES" : it.ref.movement_id ? "MOUVEMENTS" : "RELEVES";
     onOpen({ siteId: it.site_id, tab });
   };
