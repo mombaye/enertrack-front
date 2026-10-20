@@ -90,7 +90,7 @@ export function EnocTypeDialog({ rawValue, categories, onClose, onSaved }: {
       confirmLabel="Enregistrer (nouvelle version)"
       description={
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div>Une demande n'est jamais une livraison réelle ; une carte Total reste une information de contrôle. La classification précédente est conservée en historique.</div>
+          <div>Une demande n'est jamais une livraison réelle ; une Carte Total validée avec quantité et date est intégrée au stock (qualité indiquée). La classification précédente est conservée en historique.</div>
           <Field label="Catégorie">
             <select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle}>
               {categories.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}

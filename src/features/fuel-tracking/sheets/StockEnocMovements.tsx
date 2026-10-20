@@ -1,7 +1,7 @@
 // src/features/fuel-tracking/sheets/StockEnocMovements.tsx
-// Mouvements Fuel & GE ENOC qualifiés : type brut ≠ impact stock. Totaux séparés (demandes, déclarés,
-// éligibles, certifiés…), filtres, détail avec données brutes ENOC et rapprochement tracé (seule voie vers
-// « Éligible stock réel »). Une valeur absente reste « — » (jamais 0).
+// Mouvements Fuel & GE ENOC qualifiés : intégration eGrid sur données minimales (Ponction, Truck, Carte Total),
+// niveau de qualité non bloquant, date comptable et sa provenance. Totaux séparés (intégrés, non intégrables,
+// historiques non vérifiables, demandes…). Une valeur absente reste « — » (jamais 0).
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -10,7 +10,9 @@ import {
   getEnocMovement,
   getEnocMovements,
   reconcileEnocMovement,
+  type EnocDateSource,
   type EnocExecutionState,
+  type EnocIntegrationStatus,
   type EnocMovementParams,
   type EnocMovementRow,
 } from "@/services/fuelTracking";
@@ -31,23 +33,40 @@ export const ETAT_LABEL: Record<EnocExecutionState, { label: string; bg: string;
   TRANSFERT_A_COMPLETER: { label: "Transfert à compléter", bg: FT.orangeL, fg: FT.orange },
 };
 const TRANSFER_LABEL: Record<string, string> = {
-  COMPTABILISE: "Comptabilisé", TRANSFERT_A_COMPLETER: "À compléter", REJETE: "Rejeté", NON_APPLICABLE: "—",
+  COMPTABILISE: "Intégré (double écriture)", TRANSFERT_A_COMPLETER: "Non intégrable", REJETE: "Rejeté", NON_APPLICABLE: "—",
+};
+export const INTEGRATION_LABEL: Record<EnocIntegrationStatus, { label: string; bg: string; fg: string }> = {
+  INTEGRE: { label: "Intégré", bg: FT.greenL, fg: FT.green },
+  NON_INTEGRABLE: { label: "Non intégrable", bg: FT.orangeL, fg: FT.orange },
+  HISTORIQUE_NON_VERIFIABLE: { label: "Historique non vérifiable", bg: FT.slateL, fg: FT.textMid },
+};
+export const QUALITY_LABEL: Record<string, { label: string; color: string }> = {
+  COMPLET: { label: "Complet", color: FT.green },
+  CONTROLE_PARTIEL: { label: "Contrôle partiel", color: FT.orange },
+  NIVEAUX_MANQUANTS: { label: "Niveaux manquants", color: FT.orange },
+  PREUVE_MANQUANTE: { label: "Preuve manquante", color: FT.orange },
+  ECART_NIVEAU: { label: "Écart de niveau", color: FT.red },
+  DONNEES_MINIMALES_MANQUANTES: { label: "Données minimales manquantes", color: FT.red },
+};
+export const DATE_SOURCE_LABEL: Record<EnocDateSource, string> = {
+  DATE_REELLE: "date réelle", DATE_VALIDATION: "date de validation", AUCUNE_DATE: "aucune date",
 };
 const FM_LABEL: Record<string, { label: string; color: string }> = {
   AUCUNE: { label: "Aucune", color: FT.textSub }, EN_ATTENTE: { label: "En attente Fuel Manager", color: FT.red },
   TRAITEE: { label: "Traitée", color: FT.green },
 };
 const PONCTION_FILTERS: Array<[NonNullable<EnocMovementParams["ponction"]>, string]> = [
-  ["comptabilisees", "Ponctions comptabilisées"], ["a_completer", "Ponctions à compléter"],
+  ["comptabilisees", "Ponctions intégrées"], ["a_completer", "Ponctions non intégrables"],
   ["avec_ecart", "Ponctions avec écart"], ["attente_fm", "Ponctions en attente Fuel Manager"],
 ];
 const RAPPROCHEMENT_LABEL: Record<string, string> = {
   NON_REQUIS: "Non requis", A_RAPPROCHER: "À rapprocher", RAPPROCHE: "Rapproché", CERTIFIE: "Certifié", REJETE: "Rejeté",
 };
-const TOTAL_ORDER = ["demandes", "declares", "eligibles", "certifies", "transferts", "transferts_a_completer", "a_qualifier", "rejetes"] as const;
+const TOTAL_ORDER = ["integres", "transferts", "declares", "transferts_a_completer", "historiques", "demandes", "eligibles", "certifies",
+  "a_qualifier", "rejetes"] as const;
 const TOTAL_TONE: Record<string, string> = {
-  demandes: FT.textMid, declares: FT.orange, eligibles: FT.green, certifies: FT.green, transferts: FT.navy,
-  transferts_a_completer: FT.orange, a_qualifier: FT.textSub, rejetes: FT.red,
+  integres: FT.green, demandes: FT.textMid, declares: FT.orange, historiques: FT.textSub, eligibles: FT.green, certifies: FT.green,
+  transferts: FT.navy, transferts_a_completer: FT.orange, a_qualifier: FT.textSub, rejetes: FT.red,
 };
 
 function useList(params: EnocMovementParams) {
@@ -57,6 +76,38 @@ function useList(params: EnocMovementParams) {
 function EtatBadge({ etat }: { etat: EnocExecutionState }) {
   const t = ETAT_LABEL[etat] ?? { label: etat, bg: FT.slateL, fg: FT.textMid };
   return <span style={{ display: "inline-block", padding: "3px 9px", borderRadius: 999, fontSize: 10.5, fontWeight: 800, background: t.bg, color: t.fg, whiteSpace: "nowrap" }}>{t.label}</span>;
+}
+
+function IntegrationBadge({ r }: { r: EnocMovementRow }) {
+  if (!r.statut_integration) return <Dash reason="Qualification à resynchroniser" />;
+  const t = INTEGRATION_LABEL[r.statut_integration];
+  return (
+    <div>
+      <span style={{ display: "inline-block", padding: "3px 9px", borderRadius: 999, fontSize: 10.5, fontWeight: 800, background: t.bg, color: t.fg, whiteSpace: "nowrap" }}>{t.label}</span>
+      {r.cause_non_integration_libelle && <div style={{ fontSize: 10.5, color: FT.textSub, marginTop: 2 }}>{r.cause_non_integration_libelle}</div>}
+    </div>
+  );
+}
+
+function Quality({ r }: { r: EnocMovementRow }) {
+  if (!r.qualite) return <Dash />;
+  const t = QUALITY_LABEL[r.qualite] ?? { label: r.qualite, color: FT.textMid };
+  return (
+    <div>
+      <span style={{ fontWeight: 800, fontSize: 11, color: t.color }}>{t.label}</span>
+      {(r.qualite_manquant ?? []).length > 0 && <div style={{ fontSize: 10.5, color: FT.textSub }}>manque : {(r.qualite_manquant ?? []).join(", ")}</div>}
+    </div>
+  );
+}
+
+function AccountingDate({ r }: { r: EnocMovementRow }) {
+  if (!r.date_comptable) return <Dash reason="Aucune date réelle ni de validation : non intégrable dans un bilan de période" />;
+  return (
+    <div>
+      {fmtDateTime(r.date_comptable, true)}
+      <div style={{ fontSize: 10.5, color: r.date_source === "DATE_REELLE" ? FT.textSub : FT.orange }}>{r.date_source ? DATE_SOURCE_LABEL[r.date_source] : ""}</div>
+    </div>
+  );
 }
 
 function Impact({ yes }: { yes: boolean }) {
@@ -106,13 +157,14 @@ export function StockEnocMovements({ openId, onOpened }: { openId?: number | nul
       <SheetTitle
         icon={<Truck size={17} />}
         title="Mouvements ENOC (Fuel & GE)"
-        subtitle="Type brut ENOC ≠ impact stock : aucun mouvement n'entre automatiquement dans le stock réel. Seul un rapprochement tracé le rend « Éligible stock réel »."
+        subtitle="Un mouvement ENOC validé est intégré au stock dès que ses données comptables minimales sont présentes. Niveaux, photo, bon et compteur absents ne bloquent pas : ils baissent le niveau de qualité."
       />
 
       {d && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8, margin: "12px 0" }}>
           {TOTAL_ORDER.map((k) => {
             const t = d.totaux[k];
+            if (!t) return null;
             return (
               <div key={k} style={{ border: `1px solid ${FT.border}`, borderRadius: 10, padding: "8px 12px", background: FT.slateL }}>
                 <div style={{ fontSize: 20, fontWeight: 800, color: TOTAL_TONE[k], fontFamily: "ui-monospace, Menlo, monospace" }}>{t.count.toLocaleString("fr-FR")}</div>
@@ -140,10 +192,14 @@ export function StockEnocMovements({ openId, onOpened }: { openId?: number | nul
           (v) => set({ statut_enoc: v || undefined }))}
         {sel("Qualification", p.qualification, (d?.facettes.qualifications ?? []).map((x) => [x.key, x.label] as [string, string]),
           (v) => set({ qualification: v || undefined }))}
+        {sel("Intégration", p.integration, (d?.facettes.integrations ?? []).map((x) => [x.key, INTEGRATION_LABEL[x.key]?.label ?? x.label] as [string, string]),
+          (v) => set({ integration: (v || "") as "" | EnocIntegrationStatus }))}
+        {sel("Qualité", p.qualite, (d?.facettes.qualites ?? []).map((x) => [x, QUALITY_LABEL[x]?.label ?? x] as [string, string]),
+          (v) => set({ qualite: v || undefined }))}
         {sel("Impact stock", p.impact, [["OUI", "Oui"], ["NON", "Non"]], (v) => set({ impact: (v || "") as "" | "OUI" | "NON" }))}
         {sel("Preuve", p.preuve, [["AVEC", "Avec preuve"], ["SANS", "Sans preuve"]], (v) => set({ preuve: (v || "") as "" | "AVEC" | "SANS" }))}
         <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: FT.text }}>
-          <input type="checkbox" checked={!!p.a_rapprocher} onChange={(e) => set({ a_rapprocher: e.target.checked })} /> À rapprocher
+          <input type="checkbox" checked={!!p.a_rapprocher} onChange={(e) => set({ a_rapprocher: e.target.checked })} /> Intégrés non rapprochés
         </label>
         <button type="button" aria-expanded={more} onClick={() => setMore(!more)} style={actionBtn("blue")}>
           <SlidersHorizontal size={12} style={{ verticalAlign: -2, marginRight: 4 }} />Plus de filtres
@@ -162,6 +218,8 @@ export function StockEnocMovements({ openId, onOpened }: { openId?: number | nul
       </div>
       {more && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 10 }}>
+          {sel("Cause de non-intégration", p.cause, (d?.facettes.causes ?? []).map((x) => [x.key, x.label] as [string, string]),
+            (v) => set({ cause: v || undefined }))}
           {sel("Anomalie", p.anomalie, [["1", "Avec au moins une anomalie"], ...(d?.facettes.anomalies ?? []).map((a) => [a, a] as [string, string])],
             (v) => set({ anomalie: v || undefined }))}
           <Field label="Du"><input type="date" value={p.date_debut ?? ""} onChange={(e) => set({ date_debut: e.target.value || undefined })} style={inputStyle} /></Field>
@@ -178,11 +236,11 @@ export function StockEnocMovements({ openId, onOpened }: { openId?: number | nul
         <>
           {(p.ponction || p.type_brut === "PONCTION") ? <PonctionTable rows={d.data} fetching={q.isFetching} onOpen={setDetail} /> : (
           <div style={{ overflow: "auto", maxHeight: 560, borderRadius: 12, border: `1px solid ${FT.border}`, opacity: q.isFetching ? 0.7 : 1 }}>
-            <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1700 }}>
+            <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 2000 }}>
               <thead>
                 <tr>
-                  {["Réf. ENOC", "Site", "Type brut", "Statut ENOC", "Qualification eGrid", "Date réelle", "Quantité réelle", "Niveau av. → ap. (L)",
-                    "Niveau av. → ap. (cm)", "Compteur GE av. → ap.", "Preuves", "Rapprochement", "Impact stock", "Motif"].map((h) => (
+                  {["Réf. ENOC", "Site", "Type brut", "Statut ENOC", "Intégration", "Impact stock", "Qualité", "Date comptable", "Quantité réelle",
+                    "Niveau av. → ap. (L)", "Niveau av. → ap. (cm)", "Compteur GE av. → ap.", "Preuves", "Qualification eGrid", "Rapprochement", "Motif"].map((h) => (
                     <th key={h} scope="col" style={{ ...thStyle, textAlign: "left" }}>{h}</th>
                   ))}
                 </tr>
@@ -203,15 +261,18 @@ export function StockEnocMovements({ openId, onOpened }: { openId?: number | nul
                     </td>
                     <td style={cell}>{r.type_brut ?? <Dash />}</td>
                     <td style={cell}>{r.statut_brut ?? <span style={{ color: FT.textSub, fontSize: 11 }}>aucun (opération seule)</span>}</td>
-                    <td style={cell}><EtatBadge etat={r.etat} /><div style={{ fontSize: 10.5, color: FT.textSub, marginTop: 2 }}>{r.qualification}</div></td>
-                    <td style={cell}>{fmtDateTime(r.date_reelle, true) ?? <Dash reason="Date réelle absente (pas d'opération)" />}</td>
+                    <td style={cell}><IntegrationBadge r={r} /></td>
+                    <td style={cell}>{r.impact_stock && r.quantite_integree_l !== null && r.quantite_integree_l !== undefined
+                      ? <span style={{ fontWeight: 800, color: FT.green }}>+{r.quantite_integree_l.toLocaleString("fr-FR")} L</span> : <Impact yes={r.impact_stock} />}</td>
+                    <td style={cell}><Quality r={r} /></td>
+                    <td style={cell}><AccountingDate r={r} /></td>
                     <td style={cell}>{r.quantite_reelle_l !== null ? <><Num value={r.quantite_reelle_l} /> {r.unite ?? "?"}</> : <Dash reason="Quantité réelle absente" />}</td>
                     <td style={cell}>{pair(r.niveau_avant_l, r.niveau_apres_l, "L")}</td>
                     <td style={cell}>{pair(r.niveau_avant_cm, r.niveau_apres_cm, "cm")}</td>
                     <td style={cell}>{pair(r.compteur_avant_h, r.compteur_apres_h, "h")}</td>
                     <td style={cell}>{r.nb_preuves ? <strong>{r.nb_preuves}</strong> : <span style={{ color: FT.orange, fontWeight: 700 }}>0</span>}</td>
+                    <td style={cell}><EtatBadge etat={r.etat} /><div style={{ fontSize: 10.5, color: FT.textSub, marginTop: 2 }}>{r.qualification}</div></td>
                     <td style={cell}>{RAPPROCHEMENT_LABEL[r.rapprochement] ?? r.rapprochement}</td>
-                    <td style={cell}><Impact yes={r.impact_stock} /></td>
                     <td style={{ ...cell, minWidth: 260, fontSize: 11.5 }}>{r.motif}</td>
                   </tr>
                 ))}
@@ -297,6 +358,13 @@ function EnocMovementDetailModal({ id, onClose }: { id: number; onClose: () => v
             {d.lien_enoc && <a href={d.lien_enoc} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: FT.blue }}>Ouvrir dans ENOC <ExternalLink size={11} /></a>}
           </div>
           <div style={{ fontSize: 13, fontWeight: 700, color: d.impact_stock ? FT.green : FT.orange }}>{d.motif}</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 14, border: `1px solid ${FT.border}`, borderRadius: 10, padding: 10 }}>
+            <Info label="Mouvement intégré"><IntegrationBadge r={d} /></Info>
+            <Info label="Impact stock">{d.impact_stock && d.quantite_integree_l != null
+              ? <b style={{ color: FT.green }}>{d.type_famille === "PONCTION" ? "±" : "+"}{d.quantite_integree_l.toLocaleString("fr-FR")} L</b> : "Aucun"}</Info>
+            <Info label="Niveau de qualité"><Quality r={d} /></Info>
+            <Info label="Date utilisée (provenance)"><AccountingDate r={d} /></Info>
+          </div>
           {d.conditions_manquantes.length > 0 && <div style={{ fontSize: 12, color: FT.orange }}>Conditions manquantes : {d.conditions_manquantes.join(", ")}</div>}
           {d.alertes.length > 0 && (
             <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
@@ -364,14 +432,17 @@ function EnocMovementDetailModal({ id, onClose }: { id: number; onClose: () => v
                 {d.alerte_fuel_manager === "EN_ATTENTE" && (
                   <button type="button" onClick={() => setDecision("acquitter")} style={actionBtn("violet")}>Acquitter l'alerte Fuel Manager</button>
                 )}
-                {d.type_famille !== "PONCTION" && (
-                <button type="button" disabled={d.etat !== "A_RAPPROCHER" || d.bloquant} onClick={() => setDecision("rapprocher")}
-                        title={d.etat !== "A_RAPPROCHER" ? "Seul un mouvement « À rapprocher » peut devenir éligible au stock réel." : undefined}
-                        style={actionBtn("green", d.etat !== "A_RAPPROCHER" || d.bloquant)}>Rapprocher (→ éligible stock réel)</button>
-                )}
-                {d.etat !== "ELIGIBLE_STOCK_REEL" && (
-                  <button type="button" onClick={() => setDecision("rejeter")} style={actionBtn("red")}>Rejeter</button>
-                )}
+                {d.type_famille !== "PONCTION" && (() => {
+                  const off = d.statut_integration !== "INTEGRE" || d.rapprochement !== "A_RAPPROCHER" || d.bloquant;
+                  return (
+                    <button type="button" disabled={off} onClick={() => setDecision("rapprocher")}
+                            title={off ? "Seul un mouvement intégré non encore rapproché peut être rapproché (certification)." : undefined}
+                            style={actionBtn("green", off)}>Rapprocher (certifier)</button>
+                  );
+                })()}
+                <button type="button" onClick={() => setDecision("rejeter")} style={actionBtn("red")}>
+                  {d.impact_stock ? "Rejeter (retirer du stock)" : "Rejeter"}
+                </button>
               </div>
               {decision && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
@@ -435,12 +506,12 @@ function signed(v: number | null) {
 function PonctionTable({ rows, fetching, onOpen }: { rows: EnocMovementRow[]; fetching: boolean; onOpen: (id: number) => void }) {
   return (
     <div style={{ overflow: "auto", maxHeight: 560, borderRadius: 12, border: `1px solid ${FT.border}`, opacity: fetching ? 0.7 : 1 }}>
-      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1900 }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 2200 }}>
         <thead>
           <tr>
-            {["Réf. ENOC", "transfer_id", "Site source", "Site destinataire", "Qté approuvée", "Niveau source av. → ap.", "Variation observée",
-              "Écart de contrôle", "Statut transfert", "Impact source", "Impact destinataire", "Alerte Fuel Manager", "Bon de transfert",
-              "Validé par / le", "Motif"].map((h) => <th key={h} scope="col" style={{ ...thStyle, textAlign: "left" }}>{h}</th>)}
+            {["Réf. ENOC", "transfer_id", "Site source", "Site destinataire", "Qté approuvée", "Statut transfert", "Qualité", "Date comptable",
+              "Niveau source av. → ap.", "Variation observée", "Écart de contrôle", "Impact source", "Impact destinataire", "Alerte Fuel Manager",
+              "Bon de transfert", "Validé par / le", "Motif"].map((h) => <th key={h} scope="col" style={{ ...thStyle, textAlign: "left" }}>{h}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -451,11 +522,14 @@ function PonctionTable({ rows, fetching, onOpen }: { rows: EnocMovementRow[]; fe
               <td style={cell}>{r.site_source ?? <Dash reason="Site source absent" />}{r.site_source && !r.site_source_connu && <div style={{ fontSize: 10.5, color: FT.orange }}>inconnu</div>}</td>
               <td style={cell}>{r.site_destinataire ?? <Dash reason="site_id absent" />}</td>
               <td style={cell}><Num value={r.quantite_approuvee_l} unit="L" reason="Quantité approuvée absente" /></td>
+              <td style={cell}>{TRANSFER_LABEL[r.statut_transfert] ?? r.statut_transfert}
+                {r.cause_non_integration_libelle && <div style={{ fontSize: 10.5, color: FT.textSub }}>{r.cause_non_integration_libelle}</div>}</td>
+              <td style={cell}><Quality r={r} /></td>
+              <td style={cell}><AccountingDate r={r} /></td>
               <td style={cell}>{r.niveau_source_avant_l !== null || r.niveau_source_apres_l !== null
                 ? pair(r.niveau_source_avant_l, r.niveau_source_apres_l, "L") : pair(r.niveau_source_avant_cm, r.niveau_source_apres_cm, "cm")}</td>
               <td style={cell}>{signed(r.variation_source_l)}</td>
               <td style={cell}><Num value={r.ecart_controle_l} unit="L" reason="Niveaux source en litres absents" /></td>
-              <td style={cell}>{TRANSFER_LABEL[r.statut_transfert] ?? r.statut_transfert}</td>
               <td style={cell}>{signed(r.impact_source_l)}</td>
               <td style={cell}>{signed(r.impact_destinataire_l)}</td>
               <td style={{ ...cell, color: FM_LABEL[r.alerte_fuel_manager]?.color, fontWeight: 700 }}>{FM_LABEL[r.alerte_fuel_manager]?.label}</td>

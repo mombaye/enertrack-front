@@ -40,16 +40,26 @@ import {
   tdStyle,
   thStyle,
 } from "./stockRegistryUi";
+import { DATE_SOURCE_LABEL, QUALITY_LABEL } from "./StockEnocMovements";
 
 type Tab = "RELEVES" | "MOUVEMENTS" | "COMPARAISONS" | "CUVES" | "BILAN" | "CORRECTIONS";
 
 type Pending = { kind: "obs" | "mv"; id: number; decision: "valider" | "rejeter"; label: string } | null;
+
+// Mouvements : intégrés, non intégrables et historiques non vérifiables ne sont jamais mélangés.
+type MvGroup = "INTEGRE" | "NON_INTEGRABLE" | "HISTORIQUE_NON_VERIFIABLE" | "AUTRES";
+const MV_GROUP_LABEL: Record<MvGroup, string> = {
+  INTEGRE: "Intégrés", NON_INTEGRABLE: "Non intégrables", HISTORIQUE_NON_VERIFIABLE: "Historiques non vérifiables", AUTRES: "Autres sources",
+};
+const mvGroup = (m: StockSiteHistoryData["mouvements"][number]): MvGroup =>
+  m.source_type === "ENOC" && m.integration_status ? m.integration_status : m.source_type === "ENOC" ? "NON_INTEGRABLE" : "AUTRES";
 
 export function StockSiteHistory({ siteId, initialTab = "RELEVES", onClose }: { siteId: string; initialTab?: Tab; onClose: () => void }) {
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>(initialTab);
   const [pending, setPending] = useState<Pending>(null);
   const [explain, setExplain] = useState<StockObservation | null>(null);
+  const [group, setGroup] = useState<MvGroup>("INTEGRE");
   const q = useQuery({ queryKey: ["stock-registry-site", siteId], queryFn: () => getStockSiteHistory(siteId) });
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["stock-registry-site", siteId] });
@@ -140,22 +150,42 @@ export function StockSiteHistory({ siteId, initialTab = "RELEVES", onClose }: { 
           )}
 
           {tab === "MOUVEMENTS" && (
+            <>
+            <div role="group" aria-label="Catégorie de mouvements" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {(Object.keys(MV_GROUP_LABEL) as MvGroup[]).map((g) => {
+                const n = d.mouvements.filter((m) => mvGroup(m) === g).length;
+                return (
+                  <button key={g} type="button" aria-pressed={group === g} onClick={() => setGroup(g)}
+                          style={{ ...actionBtn(group === g ? "violet" : "blue"), background: group === g ? FT.violetL : undefined }}>
+                    {MV_GROUP_LABEL[g]} ({n})
+                  </button>
+                );
+              })}
+            </div>
             <Table
-              empty="Aucun mouvement pour ce site."
-              head={["Date", "Source", "Valeur brute", "Classification", "Type", "Retenu stock", "Sens / impact", "Transfert", "Qté demandée", "Qté réalisée", "Fournisseur", "Ticket / bon", "Preuve", "Niveaux avant → après", "Statut", "Alertes", "Actions"]}
-              rows={d.mouvements.map((m) => [
-                fmtDateTime(m.movement_datetime) ?? <Dash />,
+              empty={`Aucun mouvement « ${MV_GROUP_LABEL[group]} » pour ce site.`}
+              head={["Date utilisée (provenance)", "Source", "Valeur brute", "Classification", "Type", "Intégré", "Sens / impact", "Qualité", "Champs manquants", "Alerte de cohérence", "Transfert", "Qté demandée", "Qté réalisée", "Fournisseur", "Ticket / bon", "Preuve", "Niveaux avant → après", "Statut", "Alertes", "Actions"]}
+              rows={d.mouvements.filter((m) => mvGroup(m) === group).map((m) => [
+                <span>
+                  {fmtDateTime(m.movement_datetime) ?? <Dash />}
+                  {m.date_source_used && <div style={{ fontSize: 10.5, color: m.date_source_used === "DATE_REELLE" ? FT.textSub : FT.orange }}>
+                    {DATE_SOURCE_LABEL[m.date_source_used] ?? m.date_source_used}</div>}
+                </span>,
                 SOURCE_LABEL[m.source_type] ?? m.source_type,
                 m.raw_operation_type ?? <Dash />,
                 <span title={m.mapping_rule ?? undefined}>{m.source_category ? CATEGORY_LABEL[m.source_category] ?? m.source_category : <Dash />}</span>,
                 m.movement_type ? MOVEMENT_LABEL[m.movement_type] ?? m.movement_type : <Dash reason="Type non classifié" />,
-                m.retained_in_stock ? "Oui" : <span style={{ color: FT.textSub }} title="Demande, carte Total, type inconnu, quantité ou preuve manquante">Non</span>,
-                m.movement_direction && m.impact_stock_l !== null ? (
-                  <span style={{ color: m.movement_direction === "OUT" ? FT.red : FT.green, fontWeight: 600 }}>
+                m.retained_in_stock ? <b style={{ color: FT.green }}>Oui</b> : <span style={{ color: FT.textSub }} title="Donnée comptable minimale absente, demande ou historique non vérifiable">Non</span>,
+                m.impact_stock_l != null ? (
+                  <span style={{ color: m.impact_stock_l < 0 ? FT.red : FT.green, fontWeight: 600 }}>
                     {m.movement_direction === "OUT" ? "Sortie " : "Entrée "}
                     <Num value={m.impact_stock_l} unit="L" />
                   </span>
-                ) : <Dash reason="Pas d'impact signé (hors transfert inter-sites)" />,
+                ) : <Dash reason="Aucun impact stock" />,
+                m.quality_status ? <span style={{ fontWeight: 700, color: QUALITY_LABEL[m.quality_status]?.color ?? FT.textMid }}>
+                  {QUALITY_LABEL[m.quality_status]?.label ?? m.quality_status}</span> : <Dash />,
+                (m.quality_missing ?? []).length ? <Wrap>{(m.quality_missing ?? []).join(", ")}</Wrap> : <Dash />,
+                <Wrap>{m.alerts.filter((a) => /ECART|NIVEAU|QUANTITE_SUP/.test(a.code)).map((a) => a.message).join(" · ") || "—"}</Wrap>,
                 m.transfer_id ? <span title="Les deux écritures d'un transfert partagent cet identifiant ; leur somme vaut 0 L.">{m.transfer_id}</span> : <Dash />,
                 <Num value={m.requested_quantity_l} unit="L" />,
                 <Num value={m.quantity_l} unit="L" reason="Quantité réalisée non déclarée" />,
@@ -188,6 +218,7 @@ export function StockSiteHistory({ siteId, initialTab = "RELEVES", onClose }: { 
                 ) : <Dash reason="Réservé aux rôles admin et manager" />,
               ])}
             />
+            </>
           )}
 
           {tab === "COMPARAISONS" && (

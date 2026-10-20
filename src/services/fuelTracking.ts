@@ -1092,6 +1092,10 @@ export type StockMovement = {
   movement_direction?: "IN" | "OUT" | null;
   impact_stock_l?: number | null;
   transfer_id?: string | null;
+  integration_status?: EnocIntegrationStatus | null;
+  quality_status?: string | null;
+  quality_missing?: string[];
+  date_source_used?: EnocDateSource | null;
 };
 
 export type TankShape = "HORIZONTAL_CYLINDER" | "VERTICAL_CYLINDER" | "RECTANGULAR" | "HORIZONTAL_ELLIPTICAL" | "CUSTOM_CURVE";
@@ -1391,6 +1395,9 @@ export type EnocExecutionState =
 
 export type EnocAlert = { code: string; message: string; blocking?: boolean };
 
+export type EnocIntegrationStatus = "INTEGRE" | "NON_INTEGRABLE" | "HISTORIQUE_NON_VERIFIABLE";
+export type EnocDateSource = "DATE_REELLE" | "DATE_VALIDATION" | "AUCUNE_DATE";
+
 export type EnocMovementRow = {
   id: number;
   enoc_reference: string | null;
@@ -1463,6 +1470,15 @@ export type EnocMovementRow = {
   fm_traite_par: string | null;
   fm_traite_le: string | null;
   fm_commentaire: string | null;
+  // Intégration eGrid sur données minimales ; qualité non bloquante
+  statut_integration?: EnocIntegrationStatus;
+  cause_non_integration?: string | null;
+  cause_non_integration_libelle?: string | null;
+  qualite?: string | null;
+  qualite_manquant?: string[];
+  date_comptable?: string | null;
+  date_source?: EnocDateSource;
+  quantite_integree_l?: number | null;
 };
 
 export type EnocTotal = { label: string; count: number; quantite_reelle_l: number | null; sans_quantite: number; base?: string };
@@ -1470,7 +1486,7 @@ export type EnocTotal = { label: string; count: number; quantite_reelle_l: numbe
 export type EnocMovementListResponse = {
   data: EnocMovementRow[];
   pagination: Pagination;
-  totaux: Record<"demandes" | "declares" | "eligibles" | "certifies" | "transferts" | "transferts_a_completer" | "a_qualifier" | "rejetes", EnocTotal>;
+  totaux: Partial<Record<"integres" | "demandes" | "declares" | "historiques" | "eligibles" | "certifies" | "transferts" | "transferts_a_completer" | "a_qualifier" | "rejetes", EnocTotal>>;
   facettes: {
     types_bruts: string[];
     statuts_enoc: string[];
@@ -1479,6 +1495,9 @@ export type EnocMovementListResponse = {
     anomalies: string[];
     zones: string[];
     pays: string[];
+    integrations?: Array<{ key: EnocIntegrationStatus; label: string }>;
+    qualites?: string[];
+    causes?: Array<{ key: string; label: string }>;
   };
   can_validate: boolean;
   regles: string[];
@@ -1492,6 +1511,9 @@ export type EnocMovementParams = {
   preuve?: "" | "AVEC" | "SANS";
   a_rapprocher?: boolean;
   ponction?: "" | "avec_ecart" | "a_completer" | "comptabilisees" | "attente_fm";
+  integration?: "" | EnocIntegrationStatus;
+  qualite?: string;
+  cause?: string;
   anomalie?: string;
   date_debut?: string;
   date_fin?: string;
