@@ -14,6 +14,7 @@ import { FT } from "../theme";
 import { ConsoEstimeeSection } from "./ConsoEstimeeSection";
 import { HorsReferentielBanner } from "./cphDiagnostics";
 import { fmt, monthLabel } from "../helpers";
+import { BalanceReconciliationSection } from "./StockPeriodBalance";
 
 function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse | undefined; stickyTop: number }) {
   const kpis = data?.kpis;
@@ -326,6 +327,7 @@ export function ConsommationSheet({
 
       <HorsReferentielBanner count={data?.sites_hors_referentiel} />
       <ConsoEstimeeSection month={data?.month_year} />
+      <BalanceReconciliationSection />
     </div>
   );
 }

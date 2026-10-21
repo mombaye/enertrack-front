@@ -1578,3 +1578,191 @@ export async function getStockBalance(siteId: string, debut: string, fin: string
   const { data } = await api.get<StockBalance>(`${BASE}/stock/registre/${encodeURIComponent(siteId)}/bilan/`, { params: { debut, fin } });
   return data;
 }
+
+// ── Bilan de stock par site et période exacte (pré-certification Fuel Manager) ─────────────────────
+
+export type StockBalanceStatus =
+  | "PRET_A_CERTIFIER" | "PRET_A_CERTIFIER_AVEC_RESERVE" | "DONNEES_STOCK_INCOMPLETES" | "MOUVEMENTS_A_CONTROLER" | "HISTORIQUE_NON_VERIFIABLE";
+export type StockBalanceCertLevel = "NON_CERTIFIE" | "CERTIFIE" | "CERTIFIE_AVEC_RESERVE" | "A_RECERTIFIER";
+
+export type PeriodBalanceRow = {
+  id: number;
+  country: string | null;
+  site_id: string;
+  site_name: string | null;
+  zone: string | null;
+  typologie: string | null;
+  profil_energetique: string | null;
+  observation_start: string;
+  observation_end: string;
+  stock_initial_l: number | null;
+  source_stock_initial: string | null;
+  date_stock_initial: string | null;
+  stock_final_l: number | null;
+  source_stock_final: string | null;
+  date_stock_final: string | null;
+  truck_l: number | null;
+  carte_total_l: number | null;
+  transferts_entrants_l: number | null;
+  transferts_sortants_l: number | null;
+  vols_l: number | null;
+  vidanges_l: number | null;
+  retraits_l: number | null;
+  rajouts_l: number | null;
+  livraisons_externes_l: number | null;
+  consommation_reelle_l: number | null;
+  conso_journaliere_l: number | null;
+  statut_bilan: StockBalanceStatus;
+  niveau_certification: StockBalanceCertLevel;
+  motifs: string[];
+  alertes: string[];
+  nb_mouvements: number;
+  nb_a_controler: number;
+  fraicheur_stock_final_h: number | null;
+  calculated_at: string;
+  rule_version: string;
+};
+
+export type StockCandidate = {
+  observation_id: number;
+  source: string;
+  source_libelle: string;
+  rang_priorite: number;
+  date: string;
+  valeur_brute: string | null;
+  unite_origine: string | null;
+  niveau_cm: number | null;
+  litres: number | null;
+  methode_conversion: string;
+  modele_cuve: string | null;
+  regle_conversion: string | null;
+  cuve: string | null;
+  confiance: "HAUTE" | "MOYENNE" | "FAIBLE";
+  dans_periode: boolean;
+  ecart_borne_h: number;
+  utilisable: boolean;
+  motif_rejet: string | null;
+  motif_selection?: string;
+};
+
+export type BalanceMovement = {
+  source: string;
+  reference: string | null;
+  date: string | null;
+  type: string | null;
+  composante?: string;
+  quantite_l?: number | null;
+  qualite?: string | null;
+  statut_brut?: string | null;
+  statut_metier?: string | null;
+  date_source?: string | null;
+  contrepartie?: string | null;
+  lien_enoc?: string | null;
+  motif?: string;
+};
+
+export type PeriodBalanceDetail = PeriodBalanceRow & {
+  stock_initial_detail: Partial<StockCandidate>;
+  stock_final_detail: Partial<StockCandidate>;
+  candidats: { initial: StockCandidate[]; final: StockCandidate[] };
+  mouvements: BalanceMovement[];
+  mouvements_exclus: BalanceMovement[];
+  periode_effective: { debut: string | null; fin: string | null };
+  certifications: Array<{ action: string; commentaire: string; utilisateur: string | null; date: string; toujours_valide: boolean }>;
+  priorite_sources: string[];
+  can_validate: boolean;
+};
+
+export type PeriodBalanceListResponse = {
+  data: PeriodBalanceRow[];
+  pagination: Pagination;
+  periode: { debut: string | null; fin: string | null };
+  totaux: {
+    par_statut: Partial<Record<StockBalanceStatus, number>>;
+    calculables: number;
+    incomplets: number;
+    sources_stock: Record<string, { initial: number; final: number }>;
+    par_certification: Partial<Record<StockBalanceCertLevel, number>>;
+  };
+  facettes: {
+    statuts: Array<{ key: StockBalanceStatus; label: string }>;
+    certifications: Array<{ key: StockBalanceCertLevel; label: string }>;
+    zones: string[];
+    pays: string[];
+    typologies: string[];
+    sources: string[];
+  };
+  can_validate: boolean;
+  formule: string;
+};
+
+export type PeriodBalanceParams = {
+  debut?: string;
+  fin?: string;
+  pays?: string;
+  zone?: string;
+  site?: string;
+  typologie?: string;
+  statut?: string;
+  certification?: string;
+  stock_initial?: "" | "present" | "absent";
+  stock_final?: "" | "present" | "absent";
+  source?: string;
+  a_controler?: boolean;
+  page?: number;
+  limit?: number;
+};
+
+export async function getPeriodBalances(params: PeriodBalanceParams) {
+  const { data } = await api.get<PeriodBalanceListResponse>(`${BASE}/stock/bilans/`, {
+    params: { ...params, a_controler: params.a_controler ? "1" : undefined },
+  });
+  return data;
+}
+
+export async function getBalancePeriods() {
+  const { data } = await api.get<{ data: Array<{ observation_start: string; observation_end: string; sites: number; calculables: number }> }>(
+    `${BASE}/stock/bilans/periodes/`);
+  return data.data;
+}
+
+export async function computePeriodBalances(debut: string, fin: string, site?: string) {
+  const { data } = await api.post<{ sites: number; calculables: number; incomplets: number }>(`${BASE}/stock/bilans/calculer/`, { debut, fin, site });
+  return data;
+}
+
+export async function getPeriodBalance(id: number) {
+  const { data } = await api.get<PeriodBalanceDetail>(`${BASE}/stock/bilans/${id}/`);
+  return data;
+}
+
+export async function certifyPeriodBalance(id: number, decision: "certifier" | "certifier_avec_reserve", comment: string) {
+  const { data } = await api.post<PeriodBalanceRow>(`${BASE}/stock/bilans/${id}/certifier/`, { decision, comment });
+  return data;
+}
+
+export type BalanceReconciliationRow = {
+  bilan_id: number;
+  site_id: string;
+  site_name: string | null;
+  zone: string | null;
+  country: string | null;
+  conso_reelle_l: number | null;
+  conso_instrumentee_l: number | null;
+  conso_theorique_l: number | null;
+  ecart_reel_instrumentee_l: number | null;
+  ecart_reel_instrumentee_pct: number | null;
+  ecart_reel_theorique_l: number | null;
+  ecart_reel_theorique_pct: number | null;
+  statut_bilan: StockBalanceStatus;
+  niveau_certification: StockBalanceCertLevel;
+  motif: string | null;
+};
+
+export async function getBalanceReconciliation(params: { debut: string; fin: string; site?: string; calculables?: boolean; page?: number; limit?: number }) {
+  const { data } = await api.get<{ data: BalanceReconciliationRow[]; pagination: Pagination; calcule: boolean; message?: string;
+    totaux?: { sites: number; avec_conso_reelle: number } }>(`${BASE}/stock/bilans/rapprochement/`, {
+    params: { ...params, calculables: params.calculables ? "1" : undefined },
+  });
+  return data;
+}
