@@ -35,6 +35,7 @@ export const CAUSE_LABEL: Record<string, string> = {
   MOUVEMENTS_A_CONTROLER: "Mouvements à contrôler", TRANSFERT_DESEQUILIBRE: "Ponction déséquilibrée", CONSO_NEGATIVE: "Consommation négative",
   SITE_NON_RECONNU: "Site non reconnu", SCORE_INSUFFISANT: "Score insuffisant", RELEVES_INCOHERENTS: "Relevés incohérents",
   ENTREES_NON_RETROUVEES: "Livraison du Closing non retrouvée dans ENOC",
+  MOUVEMENTS_NON_CONFIRMES_CLOSING: "Mouvements eGrid non confirmés par le Closing",
   ESTIMATION: "Valeur estimée (cuve sans plaque / proposée)", RESERVES: "Réserves sur les données",
 };
 const CRITERE_LABEL: Record<string, string> = {
