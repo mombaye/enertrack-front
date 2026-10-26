@@ -7,7 +7,7 @@
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ListChecks, Scale, Search, Settings2, SlidersHorizontal, Truck, Warehouse } from "lucide-react";
+import { FolderInput, ListChecks, ListOrdered, Scale, Search, Settings2, SlidersHorizontal, Table2, Truck, Warehouse } from "lucide-react";
 import {
   decideStockObservation,
   getStockRegistry,
@@ -43,6 +43,7 @@ import { EnocTypeConfig, TankModelLibrary } from "./StockReferences";
 import { StockWorkQueue, type QueueTarget } from "./StockWorkQueue";
 import { StockEnocMovements } from "./StockEnocMovements";
 import { StockPeriodBalance } from "./StockPeriodBalance";
+import { FileAnalysisCard, StockPriorities, StockReadings, TanksToProcess } from "./StockMvpViews";
 
 function useDebounced<T>(value: T, ms = 300) {
   const [v, setV] = useState(value);
@@ -80,7 +81,7 @@ function Profile({ v }: { v: string }) {
 }
 
 type Decision = { row: StockRegistryRow; decision: "valider" | "rejeter" } | null;
-type View = "SITES" | "BILAN" | "QUEUE" | "ENOC" | "SETTINGS";
+type View = "SITES" | "BILAN" | "READINGS" | "TANKS" | "PRIORITIES" | "QUEUE" | "ENOC" | "IMPORTS" | "SETTINGS";
 type Quick = "TOUS" | "ACTION" | "RETENU" | "AUCUNE_DONNEE";
 
 const ACTION_LABEL: Record<NonNullable<StockRegistryRow["prochaine_action_type"]>, string> = {
@@ -113,14 +114,22 @@ export function StockRegistrySection({ technical }: { technical?: ReactNode }) {
           options={[
             { key: "SITES", label: "Stock des sites", icon: <Warehouse size={14} /> },
             { key: "BILAN", label: "Bilan de stock", icon: <Scale size={14} /> },
+            { key: "READINGS", label: "Relevés de stock", icon: <Table2 size={14} /> },
+            { key: "TANKS", label: "Cuves à traiter", icon: <Warehouse size={14} /> },
+            { key: "PRIORITIES", label: "Priorités", icon: <ListOrdered size={14} /> },
             { key: "QUEUE", label: `À traiter${counters.data ? ` (${fmt.format(toTreat)})` : ""}`, icon: <ListChecks size={14} /> },
             { key: "ENOC", label: "Mouvements ENOC", icon: <Truck size={14} /> },
+            { key: "IMPORTS", label: "Imports stock", icon: <FolderInput size={14} /> },
             { key: "SETTINGS", label: "Imports & paramètres", icon: <Settings2 size={14} /> },
           ]}
         />
         <span style={{ fontSize: 12, color: FT.textSub }}>
           {view === "SITES" && "1 ligne = 1 site. Cliquer sur une ligne pour voir tout son historique."}
           {view === "BILAN" && "1 ligne = 1 site sur la période exacte choisie. Cliquer pour voir mouvements, relevés candidats et certification."}
+          {view === "READINGS" && "Mesures brutes : litres directs, calculés et estimés séparés ; cm sans cuve = aucun litre."}
+          {view === "TANKS" && "Cuves validées / proposées / sans plaque / incohérentes, classées par impact sur les bilans."}
+          {view === "PRIORITIES" && "Actions de fiabilisation classées par impact en litres."}
+          {view === "IMPORTS" && "Lots reçus, rapport téléchargeable, analyse d'un fichier avant import."}
           {view === "QUEUE" && "Choisir une catégorie : chaque ligne dit quoi corriger et comment."}
           {view === "ENOC" && "Demandes, ravitaillements déclarés, éligibles et certifiés sont comptés séparément."}
           {view === "SETTINGS" && "Fichiers reçus, modèles de cuves, types ENOC et sources techniques."}
@@ -136,6 +145,15 @@ export function StockRegistrySection({ technical }: { technical?: ReactNode }) {
 
       {view === "SITES" && <SitesView onOpen={setHistory} onCanValidate={setCanValidate} />}
       {view === "BILAN" && <StockPeriodBalance />}
+      {view === "READINGS" && <StockReadings />}
+      {view === "TANKS" && <TanksToProcess />}
+      {view === "PRIORITIES" && <StockPriorities />}
+      {view === "IMPORTS" && (
+        <>
+          <StockImportsSection canValidate={canValidate} />
+          <FileAnalysisCard />
+        </>
+      )}
       {view === "QUEUE" && (
         <StockWorkQueue onOpen={setHistory} onMapEnoc={(raw) => { setMapRequest(raw); setView("SETTINGS"); }}
                         onOpenEnoc={(id) => { setEnocOpen(id); setView("ENOC"); }} />

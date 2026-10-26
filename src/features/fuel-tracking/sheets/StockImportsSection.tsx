@@ -6,6 +6,7 @@ import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileUp, FolderInput } from "lucide-react";
 import {
+  downloadImportReport,
   getStockImportRows,
   getStockImports,
   relaunchStockImport,
@@ -59,10 +60,10 @@ export function StockImportsSection({ canValidate }: { canValidate: boolean }) {
       {q.data && q.data.data.length > 0 && (
         <>
           <div style={{ overflow: "auto", borderRadius: 10, border: `1px solid ${FT.border}` }}>
-            <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1100 }}>
+            <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1350 }}>
               <thead>
                 <tr>
-                  {["Lot", "Reçu le", "Type", "Fichier", "Origine", "Statut", "Lignes", "Acceptées", "Alertes", "À valider", "Rejetées", "Doublons", "Message", "Actions"].map((h) => (
+                  {["Lot", "Reçu le", "Type", "Fichier", "Origine", "Période déclarée", "Mapping", "Statut", "Lignes", "Acceptées", "Alertes", "À valider", "Rejetées", "Doublons", "Message", "Actions"].map((h) => (
                     <th key={h} scope="col" style={thStyle}>{h}</th>
                   ))}
                 </tr>
@@ -75,6 +76,8 @@ export function StockImportsSection({ canValidate }: { canValidate: boolean }) {
                     <td style={tdStyle}>{SOURCE_LABEL[b.source_type] ?? b.source_type}</td>
                     <td style={{ ...tdStyle, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis" }} title={b.file_name}>{b.file_name}</td>
                     <td style={tdStyle}>{b.origin}</td>
+                    <td style={tdStyle}>{b.declared_period_start ? `${fmtDateTime(b.declared_period_start)} → ${fmtDateTime(b.declared_period_end)}` : <Dash reason="Période non déterminée" />}</td>
+                    <td style={tdStyle}>{b.mapping_version ?? <Dash />}</td>
                     <td style={tdStyle}><StatusPill status={b.status} /></td>
                     <td style={tdStyle}>{b.rows_total}</td>
                     <td style={tdStyle}>{b.rows_accepted}</td>
@@ -90,6 +93,9 @@ export function StockImportsSection({ canValidate }: { canValidate: boolean }) {
                       <div style={{ display: "flex", gap: 5, justifyContent: "center" }}>
                         <button type="button" onClick={() => setRowsOf(b)} style={actionBtn("blue")} aria-label={`Lignes du lot ${b.id}`}>
                           Lignes
+                        </button>
+                        <button type="button" onClick={() => downloadImportReport(b.id)} style={actionBtn("blue")} aria-label={`Télécharger le rapport du lot ${b.id}`}>
+                          Rapport
                         </button>
                         {canValidate && b.source_type !== "ENOC" && (
                           <button type="button" onClick={() => setRelaunchOf(b)} style={actionBtn("orange")} aria-label={`Relancer le lot ${b.id}`}>

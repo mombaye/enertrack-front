@@ -1252,6 +1252,9 @@ export type StockImportBatch = {
   received_at: string;
   processed_at: string | null;
   received_by: string | null;
+  declared_period_start?: string | null;
+  declared_period_end?: string | null;
+  mapping_version?: string | null;
 };
 
 export type StockImportListResponse = {
@@ -1581,8 +1584,7 @@ export async function getStockBalance(siteId: string, debut: string, fin: string
 
 // ── Bilan de stock par site et période exacte (pré-certification Fuel Manager) ─────────────────────
 
-export type StockBalanceStatus =
-  | "PRET_A_CERTIFIER" | "PRET_A_CERTIFIER_AVEC_RESERVE" | "DONNEES_STOCK_INCOMPLETES" | "MOUVEMENTS_A_CONTROLER" | "HISTORIQUE_NON_VERIFIABLE";
+export type StockBalanceStatus = "PRET_A_CERTIFIER" | "ESTIMATION_AVEC_RESERVE" | "NON_CALCULABLE";
 export type StockBalanceCertLevel = "NON_CERTIFIE" | "CERTIFIE" | "CERTIFIE_AVEC_RESERVE" | "A_RECERTIFIER";
 
 export type PeriodBalanceRow = {
@@ -1621,6 +1623,43 @@ export type PeriodBalanceRow = {
   fraicheur_stock_final_h: number | null;
   calculated_at: string;
   rule_version: string;
+  cause_principale: string | null;
+  score_confiance: number | null;
+  reserves: string[];
+  estimation: boolean;
+  age_stock_initial_j: number | null;
+  age_stock_final_j: number | null;
+  entrees_externes_nettes_l: number | null;
+  volume_transfere_l: number | null;
+  impact_ponctions_l: number | null;
+  volume_brut_integre_l: number | null;
+  avertissement: string | null;
+};
+
+export type BalanceScoreItem = { critere: string; points_max: number; points: number; motif: string };
+export type BalanceProposal = {
+  indicatif: boolean;
+  commande_automatique: boolean;
+  stock_final_l: number | null;
+  fraicheur_stock_final_j: number | null;
+  conso_reference_jour_l: number | null;
+  score_confiance: number | null;
+  alertes: string[];
+  horizon_jours: number;
+  quantite_indicative_l: number | null;
+  capacite_l?: number;
+  avertissement: string | null;
+};
+export type BalanceVolumes = {
+  livraisons_truck_eydon_l: number;
+  ravitaillements_carte_total_l: number;
+  entrees_externes_nettes_l: number;
+  ponctions_entrantes_l: number;
+  ponctions_sortantes_l: number;
+  volume_transfere_entre_sites_l: number;
+  impact_global_ponctions_l: number;
+  volume_brut_integre_l: number;
+  note: string;
 };
 
 export type StockCandidate = {
@@ -1670,6 +1709,9 @@ export type PeriodBalanceDetail = PeriodBalanceRow & {
   periode_effective: { debut: string | null; fin: string | null };
   certifications: Array<{ action: string; commentaire: string; utilisateur: string | null; date: string; toujours_valide: boolean }>;
   priorite_sources: string[];
+  priorite_valeurs?: string[];
+  score_detail: BalanceScoreItem[];
+  proposition: BalanceProposal | null;
   can_validate: boolean;
 };
 
@@ -1677,6 +1719,8 @@ export type PeriodBalanceListResponse = {
   data: PeriodBalanceRow[];
   pagination: Pagination;
   periode: { debut: string | null; fin: string | null };
+  volumes?: BalanceVolumes;
+  seuils?: { fresh_days: number; reserve_days: number; score_ready: number; score_reserve: number };
   totaux: {
     par_statut: Partial<Record<StockBalanceStatus, number>>;
     calculables: number;
@@ -1691,6 +1735,7 @@ export type PeriodBalanceListResponse = {
     pays: string[];
     typologies: string[];
     sources: string[];
+    causes?: string[];
   };
   can_validate: boolean;
   formule: string;
@@ -1709,13 +1754,15 @@ export type PeriodBalanceParams = {
   stock_final?: "" | "present" | "absent";
   source?: string;
   a_controler?: boolean;
+  cause?: string;
+  estimation?: boolean;
   page?: number;
   limit?: number;
 };
 
 export async function getPeriodBalances(params: PeriodBalanceParams) {
   const { data } = await api.get<PeriodBalanceListResponse>(`${BASE}/stock/bilans/`, {
-    params: { ...params, a_controler: params.a_controler ? "1" : undefined },
+    params: { ...params, a_controler: params.a_controler ? "1" : undefined, estimation: params.estimation ? "1" : undefined },
   });
   return data;
 }
@@ -1757,6 +1804,8 @@ export type BalanceReconciliationRow = {
   statut_bilan: StockBalanceStatus;
   niveau_certification: StockBalanceCertLevel;
   motif: string | null;
+  score_confiance?: number | null;
+  est_estimation?: boolean;
 };
 
 export async function getBalanceReconciliation(params: { debut: string; fin: string; site?: string; calculables?: boolean; page?: number; limit?: number }) {
@@ -1764,5 +1813,152 @@ export async function getBalanceReconciliation(params: { debut: string; fin: str
     totaux?: { sites: number; avec_conso_reelle: number } }>(`${BASE}/stock/bilans/rapprochement/`, {
     params: { ...params, calculables: params.calculables ? "1" : undefined },
   });
+  return data;
+}
+
+// ── MVP Suivi carburant : imports (analyse / rapport), relevés, cuves à traiter, priorités ──────────
+
+export type FileAnalysisSheet = {
+  feuille: string;
+  ignoree?: boolean;
+  motif_ignoree?: string | null;
+  ligne_entete?: number | null;
+  lignes_de_donnees?: number;
+  colonnes_mappees?: Record<string, string>;
+  colonnes_non_reconnues?: string[];
+  plage_dates?: [string, string] | null;
+  [k: string]: unknown;
+};
+export type FileAnalysis = {
+  lecture_seule: boolean;
+  fichier: string;
+  source_detectee: string | null;
+  version_mapping: string | null;
+  feuilles: FileAnalysisSheet[];
+  couverture_sites?: { reconnus: number; inconnus: number; exemples_inconnus?: string[] };
+  [k: string]: unknown;
+};
+
+export async function analyzeStockFile(file: File, sourceType?: string) {
+  const fd = new FormData();
+  fd.append("file", file);
+  if (sourceType) fd.append("source_type", sourceType);
+  const { data } = await api.post<FileAnalysis>(`${BASE}/stock/imports/analyser/`, fd, { headers: { "Content-Type": "multipart/form-data" } });
+  return data;
+}
+
+export async function downloadImportReport(id: number) {
+  const { data } = await api.get<Blob>(`${BASE}/stock/imports/${id}/rapport/`, { responseType: "blob" });
+  const url = URL.createObjectURL(data);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `rapport_lot_${id}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export type StockReadingRow = {
+  id: number;
+  source: string;
+  site_id: string;
+  site_name: string | null;
+  zone: string | null;
+  country: string | null;
+  site_brut: string | null;
+  date: string;
+  niveau_brut: string | null;
+  unite: "L" | "CM" | null;
+  niveau_cm: number | null;
+  litres_directs: number | null;
+  litres_calcules: number | null;
+  litres_estimes: number | null;
+  mode_estimation: string | null;
+  detail_estimation: Record<string, unknown> | null;
+  cuve: string | null;
+  modele_cuve: string | null;
+  methode_conversion: string | null;
+  regle: string | null;
+  confiance: "HAUTE" | "MOYENNE" | "FAIBLE" | null;
+  qualite: string | null;
+  qualite_releve: string | null;
+  doublon_de: number | null;
+  statut_validation: string;
+  anomalies: string[] | null;
+  motif: string | null;
+  lot: number | null;
+};
+export type RejectedReadingRow = { id: number; lot: number; feuille: string | null; ligne: number; site_brut: string | null; qualite: string; codes: string[]; motif: string; date: string | null };
+export type StockReadingsResponse = {
+  data: Array<StockReadingRow & RejectedReadingRow>;
+  pagination: Pagination;
+  totaux_qualite?: Record<string, number>;
+  totaux_source?: Record<string, number>;
+  libelles: Record<string, string>;
+};
+export type StockReadingsParams = {
+  vue?: "rejetes"; source?: string; site?: string; qualite?: string; confiance?: string; unite?: string; estimes?: boolean; debut?: string; fin?: string; lot?: number; page?: number; limit?: number;
+};
+export async function getStockReadings(params: StockReadingsParams) {
+  const { data } = await api.get<StockReadingsResponse>(`${BASE}/stock/releves/`, { params: { ...cleanParams(params as Record<string, unknown>), estimes: params.estimes ? "1" : undefined } });
+  return data;
+}
+
+export type TankToProcessRow = {
+  id: number;
+  site_id: string;
+  cuve: string;
+  statut: string;
+  forme: string | null;
+  cotes_cm: Array<number | null>;
+  plaque_l: number | null;
+  capacite_source_l: number | null;
+  modele: string | null;
+  score_compatibilite: number | null;
+  score_min_estimation: number;
+  categories: string[];
+  usage: "ESTIMATION_GEOMETRIQUE" | "CONVERSION_CERTIFIABLE" | "ESTIMATION_CUVE_PROPOSEE" | "AUCUN_LITRE";
+  geometrie_l: number | null;
+  ecart_plaque_pct: number | null;
+  releves_bloques: number;
+  releves_estimes: number;
+  bilans_impactes: number;
+  action: string;
+};
+export type TanksToProcessResponse = {
+  data: TankToProcessRow[];
+  pagination: Pagination;
+  totaux_categories: Record<string, number>;
+  totaux_usage: Record<string, number>;
+  seuil_score_proposee: number;
+  note: string;
+};
+export async function getTanksToProcess(params: { categorie?: string; usage?: string; site?: string; page?: number; limit?: number }) {
+  const { data } = await api.get<TanksToProcessResponse>(`${BASE}/stock/cuves-a-traiter/`, { params: cleanParams(params) });
+  return data;
+}
+
+export type PriorityRow = {
+  rang: number;
+  categorie: string;
+  libelle_categorie: string;
+  site_id: string;
+  site_name?: string | null;
+  cuve?: string;
+  reference?: string;
+  impact_l: number | null;
+  impact_unite?: string;
+  motif: string;
+  action: string;
+  bilan_id?: number;
+};
+export type PrioritiesResponse = {
+  data: PriorityRow[];
+  pagination: Pagination;
+  periode: { debut: string | null; fin: string | null };
+  totaux: Record<string, number>;
+  libelles: Record<string, string>;
+};
+export async function getPriorities(params: { debut?: string; fin?: string; categorie?: string; page?: number; limit?: number }) {
+  const { data } = await api.get<PrioritiesResponse>(`${BASE}/stock/priorites/`, { params: cleanParams(params) });
   return data;
 }

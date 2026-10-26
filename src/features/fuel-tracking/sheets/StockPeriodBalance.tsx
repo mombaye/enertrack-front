@@ -14,6 +14,7 @@ import {
   getPeriodBalance,
   getPeriodBalances,
   type BalanceMovement,
+  type BalanceVolumes,
   type PeriodBalanceParams,
   type PeriodBalanceRow,
   type StockBalanceCertLevel,
@@ -26,11 +27,26 @@ import { actionBtn, Dash, Field, fmtDateTime, inputStyle, Num, SOURCE_LABEL, tdS
 
 export const BALANCE_STATUS: Record<StockBalanceStatus, { label: string; bg: string; fg: string }> = {
   PRET_A_CERTIFIER: { label: "Prêt à certifier", bg: FT.greenL, fg: FT.green },
-  PRET_A_CERTIFIER_AVEC_RESERVE: { label: "Prêt avec réserve", bg: FT.orangeL, fg: FT.orange },
-  DONNEES_STOCK_INCOMPLETES: { label: "Stock incomplet", bg: FT.slateL, fg: FT.textMid },
-  MOUVEMENTS_A_CONTROLER: { label: "Mouvements à contrôler", bg: FT.redL, fg: FT.red },
-  HISTORIQUE_NON_VERIFIABLE: { label: "Historique non vérifiable", bg: FT.slateL, fg: FT.textSub },
+  ESTIMATION_AVEC_RESERVE: { label: "Estimation avec réserve", bg: FT.orangeL, fg: FT.orange },
+  NON_CALCULABLE: { label: "Non calculable", bg: FT.slateL, fg: FT.textMid },
 };
+export const CAUSE_LABEL: Record<string, string> = {
+  DONNEES_STOCK_INCOMPLETES: "Stock initial ou final absent", CM_SANS_CUVE: "Relevé en cm sans cuve exploitable", STOCK_TROP_ANCIEN: "Stock trop ancien",
+  MOUVEMENTS_A_CONTROLER: "Mouvements à contrôler", TRANSFERT_DESEQUILIBRE: "Ponction déséquilibrée", CONSO_NEGATIVE: "Consommation négative",
+  SITE_NON_RECONNU: "Site non reconnu", SCORE_INSUFFISANT: "Score insuffisant", RELEVES_INCOHERENTS: "Relevés incohérents",
+  ESTIMATION: "Valeur estimée (cuve sans plaque / proposée)", RESERVES: "Réserves sur les données",
+};
+const CRITERE_LABEL: Record<string, string> = {
+  stock_initial: "Stock initial", stock_final: "Stock final", litre_direct_ou_cuve_validee: "Litre direct / cuve validée",
+  mouvements_complets: "Mouvements complets", stock_recent: "Stock récent", sans_alerte_majeure: "Sans alerte majeure",
+};
+const money = (v: number | null | undefined) => (v === null || v === undefined ? "—" : `${v.toLocaleString("fr-FR")} L`);
+
+function ScoreBadge({ score, detail }: { score: number | null; detail?: string }) {
+  if (score === null) return <span style={{ color: FT.textSub }}>—</span>;
+  const tone = score >= 80 ? FT.green : score >= 50 ? FT.orange : FT.red;
+  return <span title={detail} style={{ fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace", color: tone }}>{score}/100</span>;
+}
 export const CERT_LEVEL: Record<StockBalanceCertLevel, { label: string; color: string }> = {
   NON_CERTIFIE: { label: "Non certifié", color: FT.textSub },
   CERTIFIE: { label: "Certifié", color: FT.green },
@@ -63,12 +79,12 @@ function Cert({ c }: { c: StockBalanceCertLevel }) {
   return <span style={{ fontWeight: 800, fontSize: 11, color: t.color }}>{t.label}</span>;
 }
 
-function StockCell({ v, source, date }: { v: number | null; source: string | null; date: string | null }) {
+function StockCell({ v, source, date, age }: { v: number | null; source: string | null; date: string | null; age?: number | null }) {
   if (v === null) return <Dash reason="Aucun relevé validé et converti en litres autour de la borne" />;
   return (
     <div>
       <Num value={v} unit="L" />
-      <div style={{ fontSize: 10.5, color: FT.textSub }}>{SOURCE_LABEL[source ?? ""] ?? source} · {fmtDateTime(date, true)}</div>
+      <div style={{ fontSize: 10.5, color: FT.textSub }}>{SOURCE_LABEL[source ?? ""] ?? source} · {fmtDateTime(date, true)}{age ? ` · ancien de ${age} j` : ""}</div>
     </div>
   );
 }
@@ -178,6 +194,13 @@ export function StockPeriodBalance() {
               Sources de stock utilisées : {Object.entries(totals.sources_stock).map(([s, n]) => `${SOURCE_LABEL[s] ?? s} (initial ${n.initial}, final ${n.final})`).join(" · ")}
             </div>
           )}
+          {d.volumes && <VolumesBlock v={d.volumes} />}
+          {d.seuils && (
+            <div style={{ fontSize: 11.5, color: FT.textSub, marginBottom: 8 }}>
+              Fraîcheur du stock : 0–{d.seuils.fresh_days} j normal · {d.seuils.fresh_days + 1}–{d.seuils.reserve_days} j estimation avec réserve · &gt; {d.seuils.reserve_days} j non calculable.
+              {" "}Score : ≥ {d.seuils.score_ready} prêt à certifier · ≥ {d.seuils.score_reserve} avec réserve.
+            </div>
+          )}
         </>
       )}
 
@@ -194,6 +217,10 @@ export function StockPeriodBalance() {
         <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: FT.text }}>
           <input type="checkbox" checked={!!p.a_controler} onChange={(e) => set({ a_controler: e.target.checked })} /> Mouvements à contrôler
         </label>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: FT.text }}>
+          <input type="checkbox" checked={!!p.estimation} onChange={(e) => set({ estimation: e.target.checked })} /> Valeurs estimées
+        </label>
+        {sel("Cause", p.cause, (d?.facettes.causes ?? []).map((x) => [x, CAUSE_LABEL[x] ?? x] as [string, string]), (v) => set({ cause: v || undefined }))}
         <button type="button" aria-expanded={more} onClick={() => setMore(!more)} style={actionBtn("blue")}>
           <SlidersHorizontal size={12} style={{ verticalAlign: -2, marginRight: 4 }} />Plus de filtres
         </button>
@@ -216,11 +243,11 @@ export function StockPeriodBalance() {
       {d && d.data.length > 0 && (
         <>
           <div style={{ overflow: "auto", maxHeight: 600, borderRadius: 12, border: `1px solid ${FT.border}`, opacity: q.isFetching ? 0.7 : 1 }}>
-            <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1900 }}>
+            <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 2050 }}>
               <thead>
                 <tr>
                   {["Site", "Typologie", "Stock initial", "Truck / Eydon", "Carte Total", "Transferts entrants", "Transferts sortants", "Autres mouvements",
-                    "Stock final", "Consommation réelle", "Statut bilan", "Certification", "Motifs et alertes", "Mis à jour"].map((h) => (
+                    "Stock final", "Consommation réelle", "Statut bilan", "Score", "Certification", "Réserves, motifs et alertes", "Mis à jour"].map((h) => (
                     <th key={h} scope="col" style={{ ...thStyle, textAlign: "left" }}>{h}</th>
                   ))}
                 </tr>
@@ -237,6 +264,28 @@ export function StockPeriodBalance() {
       )}
       {detail !== null && <BalanceDetailModal id={detail} onClose={() => setDetail(null)} />}
     </Card>
+  );
+}
+
+function VolumesBlock({ v }: { v: BalanceVolumes }) {
+  const items: Array<[string, number, string?]> = [
+    ["Truck / Eydon", v.livraisons_truck_eydon_l], ["Carte Total", v.ravitaillements_carte_total_l], ["Entrées externes nettes", v.entrees_externes_nettes_l],
+    ["Ponctions entrantes", v.ponctions_entrantes_l], ["Ponctions sortantes", v.ponctions_sortantes_l], ["Volume transféré entre sites", v.volume_transfere_entre_sites_l],
+    ["Impact global des Ponctions", v.impact_global_ponctions_l, "doit être nul"], ["Volume brut intégré", v.volume_brut_integre_l],
+  ];
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8 }}>
+        {items.map(([l, n, hint]) => (
+          <div key={l} style={{ border: `1px solid ${FT.border}`, borderRadius: 10, padding: "6px 10px", background: "#fff" }}>
+            <div style={{ fontSize: 10.5, fontWeight: 800, color: FT.textSub }}>{l}</div>
+            <div style={{ fontSize: 15, fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace" }}>{n.toLocaleString("fr-FR")} L</div>
+            {hint && <div style={{ fontSize: 10, color: FT.textSub }}>{hint}</div>}
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 11.5, color: FT.textSub, marginTop: 4 }}>{v.note}</div>
+    </div>
   );
 }
 
@@ -260,19 +309,27 @@ function BalanceRow({ r, i, onOpen }: { r: PeriodBalanceRow; i: number; onOpen: 
         <div style={{ fontSize: 11, color: FT.textSub }}>{[r.site_name, r.zone, r.country?.toUpperCase()].filter(Boolean).join(" · ")}</div>
       </th>
       <td style={cell}><Wrap>{r.typologie ?? "—"}{r.profil_energetique ? <div style={{ color: FT.textSub }}>{r.profil_energetique}</div> : null}</Wrap></td>
-      <td style={cell}><StockCell v={r.stock_initial_l} source={r.source_stock_initial} date={r.date_stock_initial} /></td>
+      <td style={cell}><StockCell v={r.stock_initial_l} source={r.source_stock_initial} date={r.date_stock_initial} age={r.age_stock_initial_j} /></td>
       <td style={cell}><Num value={r.livraisons_externes_l} unit="L" /></td>
       <td style={cell}><Num value={r.carte_total_l} unit="L" /></td>
       <td style={cell}><Num value={r.transferts_entrants_l} unit="L" /></td>
       <td style={cell}><Num value={r.transferts_sortants_l} unit="L" /></td>
       <td style={cell}>{others(r)}</td>
-      <td style={cell}><StockCell v={r.stock_final_l} source={r.source_stock_final} date={r.date_stock_final} /></td>
+      <td style={cell}><StockCell v={r.stock_final_l} source={r.source_stock_final} date={r.date_stock_final} age={r.age_stock_final_j} /></td>
       <td style={cell}>{r.consommation_reelle_l !== null
         ? <b style={{ fontFamily: "ui-monospace, Menlo, monospace" }}>{r.consommation_reelle_l.toLocaleString("fr-FR")} L</b>
-        : <Dash reason="Non calculable (stock manquant ou mouvement à contrôler)" />}</td>
-      <td style={cell}><StatusBadge s={r.statut_bilan} /></td>
+        : <Dash reason="Non calculable (stock manquant, trop ancien ou mouvement à contrôler)" />}
+        {r.consommation_reelle_l !== null && r.estimation && <div style={{ fontSize: 10, fontWeight: 800, color: FT.orange }}>ESTIMÉE</div>}</td>
+      <td style={cell}>
+        <StatusBadge s={r.statut_bilan} />
+        {r.cause_principale && r.statut_bilan === "NON_CALCULABLE" && <div style={{ fontSize: 10.5, color: FT.textSub, marginTop: 3 }}>{CAUSE_LABEL[r.cause_principale] ?? r.cause_principale}</div>}
+        {r.avertissement && <div style={{ fontSize: 10, fontWeight: 800, color: FT.orange, marginTop: 3 }}>{r.avertissement}</div>}
+      </td>
+      <td style={cell}><ScoreBadge score={r.score_confiance} /></td>
       <td style={cell}><Cert c={r.niveau_certification} /></td>
-      <td style={{ ...cell, minWidth: 260 }}><Wrap>{[...r.motifs, ...r.alertes].slice(0, 3).join(" · ") || "—"}{r.motifs.length + r.alertes.length > 3 ? " …" : ""}</Wrap></td>
+      <td style={{ ...cell, minWidth: 280 }}>
+        <Wrap>{[...r.reserves, ...r.motifs, ...r.alertes].slice(0, 3).join(" · ") || "—"}{r.reserves.length + r.motifs.length + r.alertes.length > 3 ? " …" : ""}</Wrap>
+      </td>
       <td style={cell}>{fmtDateTime(r.calculated_at, true)}</td>
     </tr>
   );
@@ -297,7 +354,7 @@ function CandidateTable({ title, rows, chosen }: { title: string; rows: StockCan
                     <td style={tdStyle}>{c.valeur_brute ?? "—"}</td>
                     <td style={tdStyle}><Num value={c.litres} unit="L" reason={c.motif_rejet} /></td>
                     <td style={{ ...tdStyle, textAlign: "left", whiteSpace: "normal" }}>{c.methode_conversion}{c.modele_cuve ? ` · ${c.modele_cuve}` : ""}</td>
-                    <td style={tdStyle}>{c.confiance}</td>
+                    <td style={tdStyle}>{c.confiance}{(c as { estimation?: boolean }).estimation ? <div style={{ fontSize: 10, color: FT.orange, fontWeight: 800 }}>ESTIMATION</div> : null}</td>
                     <td style={{ ...tdStyle, textAlign: "left", whiteSpace: "normal", color: c.utilisable ? FT.green : FT.orange }}>{c.utilisable ? "Oui" : c.motif_rejet}</td>
                   </tr>
                 );
@@ -364,7 +421,7 @@ function BalanceDetailModal({ id, onClose }: { id: number; onClose: () => void }
       <span>{sign} {label}</span><span style={{ fontFamily: "ui-monospace, Menlo, monospace" }}>{v === null ? "—" : `${v.toLocaleString("fr-FR")} L`}</span>
     </div>
   );
-  const certifiable = d && ["PRET_A_CERTIFIER", "PRET_A_CERTIFIER_AVEC_RESERVE"].includes(d.statut_bilan);
+  const certifiable = d && ["PRET_A_CERTIFIER", "ESTIMATION_AVEC_RESERVE"].includes(d.statut_bilan);
   return (
     <Modal title={`Bilan ${d?.site_id ?? ""} — ${d ? `${fmtDateTime(d.observation_start, true)} → ${fmtDateTime(d.observation_end, true)}` : ""}`} onClose={onClose} maxWidth={1150}>
       {q.isLoading && <Skeleton h={260} />}
@@ -373,8 +430,15 @@ function BalanceDetailModal({ id, onClose }: { id: number; onClose: () => void }
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <StatusBadge s={d.statut_bilan} /> <Cert c={d.niveau_certification} />
+            {d.score_confiance !== null && <span style={{ fontSize: 12 }}>Score de confiance : <ScoreBadge score={d.score_confiance} /></span>}
+            {d.cause_principale && <span style={{ fontSize: 12, color: FT.textSub }}>Cause principale : {CAUSE_LABEL[d.cause_principale] ?? d.cause_principale}</span>}
             <span style={{ fontSize: 12, color: FT.textSub }}>{[d.site_name, d.zone, d.country?.toUpperCase(), d.typologie, d.profil_energetique].filter(Boolean).join(" · ")}</span>
           </div>
+          {d.avertissement && (
+            <div role="note" style={{ padding: "8px 12px", borderRadius: 10, background: FT.orangeL, border: `1px solid ${FT.orange}`, fontSize: 12.5, fontWeight: 800 }}>
+              {d.avertissement} — la valeur affichée est une estimation, jamais une valeur certifiée.
+            </div>
+          )}
           <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, 360px) 1fr", gap: 16 }}>
             <div style={{ border: `1px solid ${FT.border}`, borderRadius: 10, padding: 12, display: "flex", flexDirection: "column", gap: 4 }}>
               {line("Stock initial", d.stock_initial_l, "")}
@@ -396,8 +460,9 @@ function BalanceDetailModal({ id, onClose }: { id: number; onClose: () => void }
               </div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {[...d.motifs, ...d.alertes].length > 0 ? (
+              {[...d.reserves, ...d.motifs, ...d.alertes].length > 0 ? (
                 <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5 }}>
+                  {d.reserves.map((m) => <li key={m} style={{ color: FT.orange }}>Réserve : {m}</li>)}
                   {d.motifs.map((m) => <li key={m}>{m}</li>)}
                   {d.alertes.map((a) => <li key={a} style={{ color: FT.red }}>{a}</li>)}
                 </ul>
@@ -410,6 +475,24 @@ function BalanceDetailModal({ id, onClose }: { id: number; onClose: () => void }
             </div>
           </div>
 
+          {d.score_detail?.length > 0 && (
+            <div>
+              <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 4 }}>Score de confiance : détail (seuils 80 prêt · 50 réserve)</div>
+              <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
+                <thead><tr>{["Critère", "Points", "Explication"].map((h) => <th key={h} style={{ ...thStyle, fontSize: 10, textAlign: "left" }}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {d.score_detail.map((x) => (
+                    <tr key={x.critere}>
+                      <td style={{ ...tdStyle, textAlign: "left" }}>{CRITERE_LABEL[x.critere] ?? x.critere}</td>
+                      <td style={{ ...tdStyle, color: x.points < x.points_max ? FT.orange : FT.green, fontWeight: 800 }}>{x.points} / {x.points_max}</td>
+                      <td style={{ ...tdStyle, textAlign: "left", whiteSpace: "normal" }}>{x.motif}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           <CandidateTable title="Stock initial" rows={d.candidats.initial ?? []} chosen={d.stock_initial_detail.observation_id ?? null} />
           <CandidateTable title="Stock final" rows={d.candidats.final ?? []} chosen={d.stock_final_detail.observation_id ?? null} />
 
@@ -421,6 +504,19 @@ function BalanceDetailModal({ id, onClose }: { id: number; onClose: () => void }
             <div>
               <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 4 }}>Mouvements exclus ou à contrôler ({d.mouvements_exclus.length})</div>
               <MovementTable rows={d.mouvements_exclus} excluded />
+            </div>
+          )}
+
+          {d.proposition && (
+            <div style={{ border: `1px dashed ${FT.border}`, borderRadius: 10, padding: 12 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 4 }}>Données préparées pour la recommandation de commande (indicatif — aucune commande créée)</div>
+              {d.proposition.avertissement && <div style={{ fontSize: 12, fontWeight: 800, color: FT.orange, marginBottom: 4 }}>{d.proposition.avertissement}</div>}
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
+                <li>Stock final : {money(d.proposition.stock_final_l)}{d.proposition.fraicheur_stock_final_j !== null ? ` (ancien de ${d.proposition.fraicheur_stock_final_j} j)` : ""}</li>
+                <li>Consommation de référence : {d.proposition.conso_reference_jour_l === null ? "—" : `${d.proposition.conso_reference_jour_l.toLocaleString("fr-FR")} L / jour`}</li>
+                <li>Score de confiance : {d.proposition.score_confiance ?? "—"}</li>
+                <li>Quantité indicative sur {d.proposition.horizon_jours} j : {money(d.proposition.quantite_indicative_l)}{d.proposition.capacite_l ? ` (capacité cuves ${money(d.proposition.capacite_l)})` : ""}</li>
+              </ul>
             </div>
           )}
 
@@ -443,7 +539,7 @@ function BalanceDetailModal({ id, onClose }: { id: number; onClose: () => void }
                           title={d.statut_bilan !== "PRET_A_CERTIFIER" ? "Réservé aux bilans « Prêt à certifier »." : undefined}
                           style={actionBtn("green", d.statut_bilan !== "PRET_A_CERTIFIER")}>Certifier</button>
                   <button type="button" disabled={!certifiable} onClick={() => setDecision("certifier_avec_reserve")}
-                          title={!certifiable ? "Bilan non calculable ou mouvements à contrôler : certification impossible." : undefined}
+                          title={!certifiable ? "Bilan non calculable : certification impossible." : undefined}
                           style={actionBtn("violet", !certifiable)}>Certifier avec réserve</button>
                 </div>
                 {decision && (
@@ -516,7 +612,7 @@ export function BalanceReconciliationSection() {
               <div style={{ overflow: "auto", borderRadius: 12, border: `1px solid ${FT.border}` }}>
                 <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1200 }}>
                   <thead><tr>{["Site", "Conso réelle (stock)", "Conso instrumentée (Snowflake)", "Conso théorique (CPH)", "Écart réel − instrumentée",
-                    "Écart réel − théorique", "Statut / certification", "Explication"].map((h) => <th key={h} scope="col" style={{ ...thStyle, textAlign: "left" }}>{h}</th>)}</tr></thead>
+                    "Écart réel − théorique", "Statut / score / certification", "Explication"].map((h) => <th key={h} scope="col" style={{ ...thStyle, textAlign: "left" }}>{h}</th>)}</tr></thead>
                   <tbody>
                     {q.data.data.map((r, i) => (
                       <tr key={r.bilan_id} style={{ background: i % 2 ? FT.cardAlt : "#fff" }}>
@@ -526,7 +622,8 @@ export function BalanceReconciliationSection() {
                         <td style={cell}><Num value={r.conso_theorique_l} unit="L" reason="Non calculable" /></td>
                         <td style={cell}>{gap(r.ecart_reel_instrumentee_l, r.ecart_reel_instrumentee_pct)}</td>
                         <td style={cell}>{gap(r.ecart_reel_theorique_l, r.ecart_reel_theorique_pct)}</td>
-                        <td style={cell}><StatusBadge s={r.statut_bilan} /><div><Cert c={r.niveau_certification} /></div></td>
+                        <td style={cell}><StatusBadge s={r.statut_bilan} /><div>{r.score_confiance !== undefined && r.score_confiance !== null ? <ScoreBadge score={r.score_confiance} /> : null} <Cert c={r.niveau_certification} /></div>
+                          {r.est_estimation && <div style={{ fontSize: 10, fontWeight: 800, color: FT.orange }}>Réel estimé : écart indicatif</div>}</td>
                         <td style={{ ...cell, minWidth: 220 }}><Wrap>{r.motif ?? "—"}</Wrap></td>
                       </tr>
                     ))}
