@@ -10,10 +10,20 @@ export const SOURCE_LABEL: Record<string, string> = {
   LOLIFORCE: "Loliforce",
   SCSS: "SCSS",
   SNOWFLAKE: "Snowflake (technique)",
-  CLOSING: "Closing",
+  CLOSING: "Closing mensuel",
   HISTORICAL_REFUELING: "Historique refueling",
   TANK_MODELS: "Modèles de cuves (calculateur)",
   MANUAL: "Saisie manuelle",
+};
+
+/** Libellés des fichiers d'import (le Closing n'est PAS un référentiel de cuves). */
+export const IMPORT_SOURCE_LABEL: Record<string, string> = {
+  CLOSING: "Closing mensuel — stocks et mouvements de période",
+  LOLIFORCE: "Loliforce — relevés de stock terrain",
+  SCSS: "SCSS — relevés de stock terrain",
+  HISTORICAL_REFUELING: "Historique refueling — source historique",
+  TANK_MODELS: "Modèles de cuves — calculateur et conversion cm vers litres",
+  ENOC: "ENOC (lu par eGrid)",
 };
 
 export const METHOD_LABEL: Record<string, string> = {

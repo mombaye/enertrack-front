@@ -1829,13 +1829,30 @@ export type FileAnalysisSheet = {
   plage_dates?: [string, string] | null;
   [k: string]: unknown;
 };
+export type FileAnalysisControl = {
+  lignes_lues: number;
+  lignes_acceptees: number;
+  lignes_rejetees: number;
+  releves_en_litres: number;
+  releves_en_cm: number;
+  lignes_avec_deux_unites: number;
+  unite_detectee: string | null;
+  motifs_rejet: Record<string, number>;
+  exemples_rejets: Array<{ feuille: string; ligne: number; site: string; motifs: string[] }>;
+  sites_non_reconnus_detail: Record<string, number>;
+};
 export type FileAnalysis = {
   lecture_seule: boolean;
   fichier: string;
+  libelle_source?: string | null;
   source_detectee: string | null;
   version_mapping: string | null;
+  feuilles_retenues?: string[];
+  periode_detectee?: [string, string] | null;
+  lignes_total?: number;
+  controle_lignes?: FileAnalysisControl | null;
   feuilles: FileAnalysisSheet[];
-  couverture_sites?: { reconnus: number; inconnus: number; exemples_inconnus?: string[] };
+  couverture_sites?: { distincts?: number; reconnus: number; inconnus: number; exemples_inconnus?: string[] };
   [k: string]: unknown;
 };
 

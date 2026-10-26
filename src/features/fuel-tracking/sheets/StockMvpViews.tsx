@@ -16,7 +16,7 @@ import {
 } from "@/services/fuelTracking";
 import { Card, EmptyState, Pager, SheetTitle, Skeleton } from "../ui";
 import { FT } from "../theme";
-import { Dash, fmtDateTime, inputStyle, Num, SOURCE_LABEL, tdStyle, thStyle } from "./stockRegistryUi";
+import { Dash, fmtDateTime, IMPORT_SOURCE_LABEL, inputStyle, Num, SOURCE_LABEL, tdStyle, thStyle } from "./stockRegistryUi";
 
 const cell: CSSProperties = { ...tdStyle, textAlign: "left", whiteSpace: "normal", verticalAlign: "top", padding: "8px 10px" };
 
@@ -292,7 +292,7 @@ export function FileAnalysisCard() {
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: "12px 0" }}>
         <select aria-label="Type de fichier" value={source} onChange={(e) => setSource(e.target.value)} style={inputStyle}>
           <option value="">Type : détection automatique</option>
-          {["LOLIFORCE", "SCSS", "CLOSING", "HISTORICAL_REFUELING"].map((s) => <option key={s} value={s}>{SOURCE_LABEL[s] ?? s}</option>)}
+          {["CLOSING", "LOLIFORCE", "SCSS", "HISTORICAL_REFUELING", "TANK_MODELS"].map((s) => <option key={s} value={s}>{IMPORT_SOURCE_LABEL[s] ?? s}</option>)}
         </select>
         <input ref={ref} type="file" accept=".xlsx,.xlsm,.xlsb" aria-label="Fichier à analyser" onChange={(e) => onFile(e.target.files?.[0])} disabled={busy} />
         {busy && <span role="status" style={{ fontSize: 12 }}>Analyse en cours…</span>}
@@ -301,9 +301,32 @@ export function FileAnalysisCard() {
       {res && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 12.5 }}>
           <div>
-            <b>{res.fichier}</b> · source détectée : <b>{res.source_detectee ? SOURCE_LABEL[res.source_detectee] ?? res.source_detectee : "non détectée"}</b> · version du mapping : <b>{res.version_mapping ?? "—"}</b>
-            {res.couverture_sites && <> · sites reconnus {res.couverture_sites.reconnus}, inconnus <span style={{ color: res.couverture_sites.inconnus ? FT.red : FT.green, fontWeight: 800 }}>{res.couverture_sites.inconnus}</span></>}
+            <b>{res.fichier}</b> · source : <b>{res.libelle_source ?? (res.source_detectee ? IMPORT_SOURCE_LABEL[res.source_detectee] ?? res.source_detectee : "non détectée")}</b> · version du mapping : <b>{res.version_mapping ?? "—"}</b>
+            <div>
+              Feuille(s) retenue(s) : <b>{(res.feuilles_retenues ?? []).join(", ") || "—"}</b> · période détectée : <b>{res.periode_detectee ? `${res.periode_detectee[0]} → ${res.periode_detectee[1]}` : "—"}</b> · lignes de données : <b>{res.lignes_total ?? "—"}</b>
+            </div>
+            {res.couverture_sites && <div>Sites : reconnus <b>{res.couverture_sites.reconnus}</b>, non reconnus <b style={{ color: res.couverture_sites.inconnus ? FT.red : FT.green }}>{res.couverture_sites.inconnus}</b></div>}
           </div>
+          {res.controle_lignes && (
+            <div style={{ border: `1px solid ${FT.border}`, borderRadius: 10, padding: 10 }}>
+              <div>
+                Unité détectée : <b>{res.controle_lignes.unite_detectee ?? "—"}</b> · relevés en litres <b>{res.controle_lignes.releves_en_litres}</b> · relevés en cm <b>{res.controle_lignes.releves_en_cm}</b>
+                {res.controle_lignes.lignes_avec_deux_unites ? ` · lignes avec deux unités ${res.controle_lignes.lignes_avec_deux_unites}` : ""}
+              </div>
+              <div>
+                Lignes : lues <b>{res.controle_lignes.lignes_lues}</b>, acceptées <b>{res.controle_lignes.lignes_acceptees}</b>, rejetées <b style={{ color: res.controle_lignes.lignes_rejetees ? FT.red : FT.green }}>{res.controle_lignes.lignes_rejetees}</b>
+              </div>
+              {Object.keys(res.controle_lignes.motifs_rejet).length > 0 && (
+                <div>Motifs de rejet : {Object.entries(res.controle_lignes.motifs_rejet).map(([k, n]) => `${k} (${n})`).join(" · ")}</div>
+              )}
+              {res.controle_lignes.exemples_rejets.length > 0 && (
+                <ul style={{ margin: "4px 0 0", paddingLeft: 18, fontSize: 12 }}>
+                  {res.controle_lignes.exemples_rejets.slice(0, 5).map((x) => <li key={`${x.feuille}-${x.ligne}`}>{x.feuille} · ligne {x.ligne} · {x.site} : {x.motifs.join(" | ")}</li>)}
+                </ul>
+              )}
+              <div style={{ fontSize: 11.5, color: FT.textSub, marginTop: 4 }}>Aperçu de contrôle : rien n'est importé tant que le fichier n'est pas déposé / envoyé dans « Imports stock ».</div>
+            </div>
+          )}
           <div style={{ overflow: "auto", borderRadius: 10, border: `1px solid ${FT.border}` }}>
             <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 800 }}>
               <thead><tr>{["Feuille", "Lignes", "Plage de dates", "Colonnes reconnues", "Colonnes non reconnues"].map((h) => <th key={h} scope="col" style={{ ...thStyle, textAlign: "left" }}>{h}</th>)}</tr></thead>

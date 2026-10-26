@@ -16,14 +16,14 @@ import {
 } from "@/services/fuelTracking";
 import { Card, EmptyState, Modal, Pager, SheetTitle, Skeleton } from "../ui";
 import { FT } from "../theme";
-import { actionBtn, Dash, Field, fmtDateTime, inputStyle, ReasonDialog, SOURCE_LABEL, StatusPill, tdStyle, thStyle } from "./stockRegistryUi";
+import { actionBtn, Dash, Field, fmtDateTime, IMPORT_SOURCE_LABEL, inputStyle, ReasonDialog, StatusPill, tdStyle, thStyle } from "./stockRegistryUi";
 
 const UPLOAD_TYPES: Array<{ key: Exclude<ImportSourceType, "ENOC">; label: string }> = [
-  { key: "LOLIFORCE", label: "Loliforce (relevés)" },
-  { key: "SCSS", label: "SCSS (relevés)" },
-  { key: "CLOSING", label: "Closing (référentiel cuves)" },
-  { key: "HISTORICAL_REFUELING", label: "Historique refueling" },
-  { key: "TANK_MODELS", label: "Modèles de cuves (calculateur)" },
+  { key: "CLOSING", label: IMPORT_SOURCE_LABEL.CLOSING },
+  { key: "LOLIFORCE", label: IMPORT_SOURCE_LABEL.LOLIFORCE },
+  { key: "SCSS", label: IMPORT_SOURCE_LABEL.SCSS },
+  { key: "HISTORICAL_REFUELING", label: IMPORT_SOURCE_LABEL.HISTORICAL_REFUELING },
+  { key: "TANK_MODELS", label: IMPORT_SOURCE_LABEL.TANK_MODELS },
 ];
 
 export function StockImportsSection({ canValidate }: { canValidate: boolean }) {
@@ -73,7 +73,7 @@ export function StockImportsSection({ canValidate }: { canValidate: boolean }) {
                   <tr key={b.id} style={{ background: i % 2 ? FT.cardAlt : "#fff" }}>
                     <td style={tdStyle}>#{b.id}</td>
                     <td style={tdStyle}>{fmtDateTime(b.received_at, true)}</td>
-                    <td style={tdStyle}>{SOURCE_LABEL[b.source_type] ?? b.source_type}</td>
+                    <td style={tdStyle}>{IMPORT_SOURCE_LABEL[b.source_type] ?? b.source_type}</td>
                     <td style={{ ...tdStyle, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis" }} title={b.file_name}>{b.file_name}</td>
                     <td style={tdStyle}>{b.origin}</td>
                     <td style={tdStyle}>{b.declared_period_start ? `${fmtDateTime(b.declared_period_start)} → ${fmtDateTime(b.declared_period_end)}` : <Dash reason="Période non déterminée" />}</td>
