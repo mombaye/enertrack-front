@@ -34,6 +34,7 @@ export const CAUSE_LABEL: Record<string, string> = {
   DONNEES_STOCK_INCOMPLETES: "Stock initial ou final absent", CM_SANS_CUVE: "Relevé en cm sans cuve exploitable", STOCK_TROP_ANCIEN: "Stock trop ancien",
   MOUVEMENTS_A_CONTROLER: "Mouvements à contrôler", TRANSFERT_DESEQUILIBRE: "Ponction déséquilibrée", CONSO_NEGATIVE: "Consommation négative",
   SITE_NON_RECONNU: "Site non reconnu", SCORE_INSUFFISANT: "Score insuffisant", RELEVES_INCOHERENTS: "Relevés incohérents",
+  ENTREES_NON_RETROUVEES: "Livraison du Closing non retrouvée dans ENOC",
   ESTIMATION: "Valeur estimée (cuve sans plaque / proposée)", RESERVES: "Réserves sur les données",
 };
 const CRITERE_LABEL: Record<string, string> = {
