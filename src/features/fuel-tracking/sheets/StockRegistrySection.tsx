@@ -151,7 +151,7 @@ export function StockRegistrySection({ technical }: { technical?: ReactNode }) {
       {view === "PRIORITIES" && (
         <>
           <StockPriorities />
-          <StockReportsCard only={["livraisons_closing_absentes", "ponctions_sans_source", "conflits_enoc_closing", "cuves_prioritaires", "closing_formule_incoherente", "validation_10_sites"]} />
+          <StockReportsCard only={["livraisons_closing_absentes", "ponctions_sans_source", "conflits_enoc_closing", "cuves_prioritaires", "closing_formule_incoherente", "validation_10_sites", "consommations_negatives", "stocks_identiques_suspects"]} />
         </>
       )}
       {view === "IMPORTS" && (
