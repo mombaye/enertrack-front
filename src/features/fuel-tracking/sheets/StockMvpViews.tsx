@@ -35,6 +35,7 @@ const TANK_CAT: Record<string, string> = {
 const USAGE_LABEL: Record<string, { label: string; color: string }> = {
   CONVERSION_CERTIFIABLE: { label: "Conversion certifiable", color: FT.green },
   ESTIMATION_GEOMETRIQUE: { label: "Estimation géométrique (réserve)", color: FT.orange },
+  ESTIMATION_GEOMETRIQUE_DESACTIVEE: { label: "Estimation géométrique désactivée (paramètre)", color: FT.red },
   ESTIMATION_CUVE_PROPOSEE: { label: "Estimation cuve proposée (réserve)", color: FT.orange },
   AUCUN_LITRE: { label: "Aucun litre calculé", color: FT.red },
 };
@@ -196,7 +197,8 @@ export function TanksToProcess() {
               <tbody>
                 {d.data.map((r: TankToProcessRow, i) => (
                   <tr key={r.id} style={{ background: i % 2 ? FT.cardAlt : "#fff" }}>
-                    <td style={cell}><b>{r.site_id}</b><div style={{ fontSize: 11, color: FT.textSub }}>cuve {r.cuve} · {r.statut}</div></td>
+                    <td style={cell}><b>{r.site_id}</b>{r.prioritaire_demande && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 800, color: FT.violet ?? FT.navy }}>PRIORITÉ MÉTIER</span>}
+                      <div style={{ fontSize: 11, color: FT.textSub }}>cuve {r.cuve} · {r.statut}</div></td>
                     <td style={cell}>{r.categories.map((c) => TANK_CAT[c] ?? c).join(" · ")}</td>
                     <td style={cell}>{r.forme ?? "—"}{r.cotes_cm.some((x) => x !== null) ? ` · ${r.cotes_cm.map((x) => x ?? "—").join(" / ")}` : ""}</td>
                     <td style={cell}><Num value={r.plaque_l} unit="L" reason="Plaque absente" /></td>

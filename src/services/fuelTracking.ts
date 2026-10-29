@@ -1698,6 +1698,26 @@ export type BalanceMovement = {
   contrepartie?: string | null;
   lien_enoc?: string | null;
   motif?: string;
+  lot?: number | null;
+  fichier?: string | null;
+};
+
+/** Confrontation Closing / ENOC d'un bilan (les deux valeurs sont conservées). */
+export type ClosingReference = {
+  lot: number | null;
+  fichier: string | null;
+  decision: "CONCORDANT" | "COMPLEMENT_CLOSING" | "CONFLIT" | "CLOSING_FAIT_FOI";
+  livre_closing_l: number | null;
+  rajout_retrait_closing_l: number | null;
+  vole_closing_l: number | null;
+  vidange_closing_l: number | null;
+  conso_closing_l: number | null;
+  entrees_closing_l: number;
+  entrees_egrid_l: number;
+  sorties_closing_l: number;
+  sorties_egrid_l: number;
+  ecart_entrees_l: number;
+  ecart_sorties_l: number;
 };
 
 export type PeriodBalanceDetail = PeriodBalanceRow & {
@@ -1715,12 +1735,24 @@ export type PeriodBalanceDetail = PeriodBalanceRow & {
   can_validate: boolean;
 };
 
+export type BalanceParameters = {
+  ALLOW_GEOMETRIC_TANK_ESTIMATION_WITH_RESERVE: boolean;
+  FUEL_PROPOSED_TANK_MIN_SCORE: number;
+  FUEL_CLOSING_AUTHORITATIVE_PERIODS: string[];
+  FUEL_CLOSING_CONFLICT_REVIEW_L: number;
+  FUEL_BALANCE_FRESH_STOCK_DAYS: number;
+  FUEL_BALANCE_RESERVE_STOCK_DAYS: number;
+  [k: string]: unknown;
+};
+
 export type PeriodBalanceListResponse = {
   data: PeriodBalanceRow[];
   pagination: Pagination;
   periode: { debut: string | null; fin: string | null };
   volumes?: BalanceVolumes;
   seuils?: { fresh_days: number; reserve_days: number; score_ready: number; score_reserve: number };
+  parametres?: BalanceParameters;
+  par_alerte?: Record<string, number>;
   totaux: {
     par_statut: Partial<Record<StockBalanceStatus, number>>;
     calculables: number;
@@ -1755,6 +1787,7 @@ export type PeriodBalanceParams = {
   source?: string;
   a_controler?: boolean;
   cause?: string;
+  alerte?: string;
   estimation?: boolean;
   page?: number;
   limit?: number;
@@ -1933,7 +1966,8 @@ export type TankToProcessRow = {
   score_compatibilite: number | null;
   score_min_estimation: number;
   categories: string[];
-  usage: "ESTIMATION_GEOMETRIQUE" | "CONVERSION_CERTIFIABLE" | "ESTIMATION_CUVE_PROPOSEE" | "AUCUN_LITRE";
+  usage: "ESTIMATION_GEOMETRIQUE" | "ESTIMATION_GEOMETRIQUE_DESACTIVEE" | "CONVERSION_CERTIFIABLE" | "ESTIMATION_CUVE_PROPOSEE" | "AUCUN_LITRE";
+  prioritaire_demande: boolean;
   geometrie_l: number | null;
   ecart_plaque_pct: number | null;
   releves_bloques: number;
@@ -1978,4 +2012,39 @@ export type PrioritiesResponse = {
 export async function getPriorities(params: { debut?: string; fin?: string; categorie?: string; page?: number; limit?: number }) {
   const { data } = await api.get<PrioritiesResponse>(`${BASE}/stock/priorites/`, { params: cleanParams(params) });
   return data;
+}
+
+// ── Rapports téléchargeables (CSV) ────────────────────────────────────────────────────────────────────────────
+export type StockReportInfo = { kind: string; label: string; description: string; periode: boolean; lot: boolean };
+
+export async function getStockReports() {
+  const { data } = await api.get<{ data: StockReportInfo[] }>(`${BASE}/stock/rapports/`);
+  return data.data;
+}
+
+/** Télécharge un rapport CSV depuis eGrid (jamais un fichier du serveur). Lève un message lisible si le rapport est impossible. */
+export async function downloadStockReport(kind: string, params: { debut?: string; fin?: string; lot?: string }) {
+  try {
+    const res = await api.get<Blob>(`${BASE}/stock/rapports/${kind}/`, { params: cleanParams(params), responseType: "blob" });
+    const cd = String(res.headers["content-disposition"] ?? "");
+    const name = /filename="?([^";]+)"?/.exec(cd)?.[1] ?? `${kind}.csv`;
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
+    return { name, rows: Number(res.headers["x-report-rows"] ?? NaN) };
+  } catch (e: unknown) {
+    const blob = (e as { response?: { data?: Blob } })?.response?.data;
+    let detail: string | undefined;
+    if (blob instanceof Blob) {
+      try {
+        detail = (JSON.parse(await blob.text()) as { detail?: string }).detail;
+      } catch {
+        detail = undefined;
+      }
+    }
+    throw new Error(detail ?? "Téléchargement impossible.");
+  }
 }

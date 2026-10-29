@@ -44,6 +44,7 @@ import { StockWorkQueue, type QueueTarget } from "./StockWorkQueue";
 import { StockEnocMovements } from "./StockEnocMovements";
 import { StockPeriodBalance } from "./StockPeriodBalance";
 import { FileAnalysisCard, StockPriorities, StockReadings, TanksToProcess } from "./StockMvpViews";
+import { StockReportsCard } from "./StockReports";
 
 function useDebounced<T>(value: T, ms = 300) {
   const [v, setV] = useState(value);
@@ -147,10 +148,16 @@ export function StockRegistrySection({ technical }: { technical?: ReactNode }) {
       {view === "BILAN" && <StockPeriodBalance />}
       {view === "READINGS" && <StockReadings />}
       {view === "TANKS" && <TanksToProcess />}
-      {view === "PRIORITIES" && <StockPriorities />}
+      {view === "PRIORITIES" && (
+        <>
+          <StockPriorities />
+          <StockReportsCard only={["livraisons_closing_absentes", "ponctions_sans_source", "conflits_enoc_closing", "cuves_prioritaires", "closing_formule_incoherente", "validation_10_sites"]} />
+        </>
+      )}
       {view === "IMPORTS" && (
         <>
           <StockImportsSection canValidate={canValidate} />
+          <StockReportsCard />
           <FileAnalysisCard />
         </>
       )}

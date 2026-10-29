@@ -15,6 +15,7 @@ import {
   getPeriodBalances,
   type BalanceMovement,
   type BalanceVolumes,
+  type ClosingReference,
   type PeriodBalanceParams,
   type PeriodBalanceRow,
   type StockBalanceCertLevel,
@@ -34,9 +35,20 @@ export const CAUSE_LABEL: Record<string, string> = {
   DONNEES_STOCK_INCOMPLETES: "Stock initial ou final absent", CM_SANS_CUVE: "Relevé en cm sans cuve exploitable", STOCK_TROP_ANCIEN: "Stock trop ancien",
   MOUVEMENTS_A_CONTROLER: "Mouvements à contrôler", TRANSFERT_DESEQUILIBRE: "Ponction déséquilibrée", CONSO_NEGATIVE: "Consommation négative",
   SITE_NON_RECONNU: "Site non reconnu", SCORE_INSUFFISANT: "Score insuffisant", RELEVES_INCOHERENTS: "Relevés incohérents",
+  CONFLIT_ENOC_CLOSING: "Conflit ENOC / Closing à contrôler",
   ENTREES_NON_RETROUVEES: "Livraison du Closing non retrouvée dans ENOC",
   MOUVEMENTS_NON_CONFIRMES_CLOSING: "Mouvements eGrid non confirmés par le Closing",
   ESTIMATION: "Valeur estimée (cuve sans plaque / proposée)", RESERVES: "Réserves sur les données",
+};
+export const ALERT_LABEL: Record<string, { label: string; color: string }> = {
+  LIVRAISON_CLOSING_ABSENTE_ENOC: { label: "Livraison Closing absente d'ENOC", color: FT.orange },
+  SORTIE_CLOSING_ABSENTE_ENOC: { label: "Sortie Closing absente d'eGrid", color: FT.orange },
+  CONFLIT_ENOC_CLOSING: { label: "Conflit ENOC / Closing", color: FT.red },
+};
+const alertCode = (a: string) => /^([A-Z][A-Z_]{5,}) :/.exec(a)?.[1] ?? null;
+const DECISION_LABEL: Record<string, string> = {
+  CONCORDANT: "ENOC et Closing concordent", COMPLEMENT_CLOSING: "Le Closing complète ENOC (estimation avec réserve)",
+  CONFLIT: "Conflit : les deux valeurs sont conservées", CLOSING_FAIT_FOI: "Closing retenu (période validée) — ENOC conservé pour audit",
 };
 const CRITERE_LABEL: Record<string, string> = {
   stock_initial: "Stock initial", stock_final: "Stock final", litre_direct_ou_cuve_validee: "Litre direct / cuve validée",
@@ -197,6 +209,26 @@ export function StockPeriodBalance() {
             </div>
           )}
           {d.volumes && <VolumesBlock v={d.volumes} />}
+          {d.par_alerte && Object.keys(d.par_alerte).length > 0 && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }} aria-label="Alertes Closing / ENOC">
+              {Object.entries(d.par_alerte).filter(([k]) => ALERT_LABEL[k]).map(([k, n]) => (
+                <button key={k} type="button" aria-pressed={p.alerte === k} onClick={() => set({ alerte: p.alerte === k ? undefined : k })}
+                        style={{ border: `1px solid ${p.alerte === k ? ALERT_LABEL[k].color : FT.border}`, background: p.alerte === k ? FT.slateL : "#fff", borderRadius: 999,
+                                 padding: "3px 10px", fontSize: 11.5, fontWeight: 800, color: ALERT_LABEL[k].color, cursor: "pointer" }}>
+                  {ALERT_LABEL[k].label} ({n})
+                </button>
+              ))}
+            </div>
+          )}
+          {d.parametres && (
+            <div style={{ fontSize: 11.5, color: FT.textSub, marginBottom: 6 }}>
+              Paramètres en vigueur : estimation géométrique sans plaque <b style={{ color: d.parametres.ALLOW_GEOMETRIC_TANK_ESTIMATION_WITH_RESERVE ? FT.green : FT.red }}>
+                {d.parametres.ALLOW_GEOMETRIC_TANK_ESTIMATION_WITH_RESERVE ? "activée (avec réserve)" : "désactivée"}</b>
+              {" "}· cuve proposée utilisable dès un score de compatibilité de {d.parametres.FUEL_PROPOSED_TANK_MIN_SCORE}
+              {" "}· Closing faisant foi : {d.parametres.FUEL_CLOSING_AUTHORITATIVE_PERIODS.length ? d.parametres.FUEL_CLOSING_AUTHORITATIVE_PERIODS.join(", ") : "aucune période"}
+              {" "}· conflit ENOC/Closing à contrôler au-delà de {d.parametres.FUEL_CLOSING_CONFLICT_REVIEW_L} L.
+            </div>
+          )}
           {d.seuils && (
             <div style={{ fontSize: 11.5, color: FT.textSub, marginBottom: 8 }}>
               Fraîcheur du stock : 0–{d.seuils.fresh_days} j normal · {d.seuils.fresh_days + 1}–{d.seuils.reserve_days} j estimation avec réserve · &gt; {d.seuils.reserve_days} j non calculable.
@@ -378,7 +410,7 @@ function MovementTable({ rows, excluded }: { rows: BalanceMovement[]; excluded?:
         {rows.map((m, i) => (
           <tr key={`${m.reference}-${i}`}>
             <td style={tdStyle}>{fmtDateTime(m.date, true)}{m.date_source && m.date_source !== "DATE_REELLE" ? <div style={{ fontSize: 10, color: FT.orange }}>{m.date_source}</div> : null}</td>
-            <td style={tdStyle}>{m.source}</td>
+            <td style={tdStyle}>{m.source}{m.lot ? <div style={{ fontSize: 10, color: FT.textSub }}>lot #{m.lot}{m.fichier ? ` · ${m.fichier}` : ""}</div> : null}</td>
             <td style={{ ...tdStyle, textAlign: "left" }}>
               {m.reference ?? "—"}
               {m.lien_enoc && <a href={m.lien_enoc} target="_blank" rel="noreferrer" aria-label={`Ouvrir ${m.reference} dans ENOC`} style={{ marginLeft: 4, color: FT.blue }}><ExternalLink size={11} /></a>}
@@ -466,7 +498,14 @@ function BalanceDetailModal({ id, onClose }: { id: number; onClose: () => void }
                 <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5 }}>
                   {d.reserves.map((m) => <li key={m} style={{ color: FT.orange }}>Réserve : {m}</li>)}
                   {d.motifs.map((m) => <li key={m}>{m}</li>)}
-                  {d.alertes.map((a) => <li key={a} style={{ color: FT.red }}>{a}</li>)}
+                  {d.alertes.map((a) => {
+                    const code = alertCode(a);
+                    return (
+                      <li key={a} style={{ color: code && ALERT_LABEL[code] ? ALERT_LABEL[code].color : FT.red }}>
+                        {code && ALERT_LABEL[code] && <b style={{ marginRight: 6 }}>[{ALERT_LABEL[code].label}]</b>}{a}
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : <span style={{ fontSize: 12.5, color: FT.green }}>Aucune anomalie : bilan prêt à certifier.</span>}
               <div style={{ fontSize: 11.5, color: FT.textSub }}>
@@ -476,6 +515,37 @@ function BalanceDetailModal({ id, onClose }: { id: number; onClose: () => void }
               {d.stock_final_detail.motif_selection && <div style={{ fontSize: 12 }}><b>Stock final :</b> {d.stock_final_detail.motif_selection}</div>}
             </div>
           </div>
+
+          {(() => {
+            const ref = (d.stock_initial_detail as { reference_closing?: ClosingReference }).reference_closing;
+            if (!ref) return null;
+            const row = (label: string, egrid: number, closing: number, gap: number) => (
+              <tr key={label}>
+                <td style={{ ...tdStyle, textAlign: "left" }}>{label}</td>
+                <td style={tdStyle}><Num value={egrid} unit="L" /></td>
+                <td style={tdStyle}><Num value={closing} unit="L" /></td>
+                <td style={{ ...tdStyle, color: Math.abs(gap) > 20 ? FT.red : FT.green, fontWeight: 800 }}>{gap > 0 ? "+" : ""}{gap.toLocaleString("fr-FR")} L</td>
+              </tr>
+            );
+            return (
+              <div style={{ border: `1px solid ${FT.border}`, borderRadius: 10, padding: 12 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 4 }}>Closing / ENOC — les deux sources, aucune n'est écrasée</div>
+                <div style={{ fontSize: 12, marginBottom: 6 }}><b>{DECISION_LABEL[ref.decision] ?? ref.decision}</b>
+                  {ref.lot ? ` · lot d'import #${ref.lot}` : ""}{ref.fichier ? ` · fichier « ${ref.fichier} »` : ""}</div>
+                <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
+                  <thead><tr>{["Mouvements de la période", "eGrid (ENOC)", "Closing", "Écart (ENOC − Closing)"].map((h) => <th key={h} style={{ ...thStyle, fontSize: 10, textAlign: "left" }}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    {row("Entrées (livraisons, transferts entrants, rajouts)", ref.entrees_egrid_l, ref.entrees_closing_l, -ref.ecart_entrees_l)}
+                    {row("Sorties (transferts sortants, retraits, vols, vidanges)", ref.sorties_egrid_l, ref.sorties_closing_l, -ref.ecart_sorties_l)}
+                  </tbody>
+                </table>
+                <div style={{ fontSize: 11.5, color: FT.textSub, marginTop: 4 }}>
+                  Closing : livré {money(ref.livre_closing_l)}, rajouts/retraits {money(ref.rajout_retrait_closing_l)}, volé {money(ref.vole_closing_l)}, vidangé {money(ref.vidange_closing_l)}
+                  {ref.conso_closing_l !== null ? ` · consommation du Closing : ${money(ref.conso_closing_l)}` : ""}.
+                </div>
+              </div>
+            );
+          })()}
 
           {d.score_detail?.length > 0 && (
             <div>
