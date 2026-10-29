@@ -494,20 +494,28 @@ function BalanceDetailModal({ id, onClose }: { id: number; onClose: () => void }
               </div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {[...d.reserves, ...d.motifs, ...d.alertes].length > 0 ? (
-                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5 }}>
-                  {d.reserves.map((m) => <li key={m} style={{ color: FT.orange }}>Réserve : {m}</li>)}
-                  {d.motifs.map((m) => <li key={m}>{m}</li>)}
-                  {d.alertes.map((a) => {
-                    const code = alertCode(a);
-                    return (
-                      <li key={a} style={{ color: code && ALERT_LABEL[code] ? ALERT_LABEL[code].color : FT.red }}>
-                        {code && ALERT_LABEL[code] && <b style={{ marginRight: 6 }}>[{ALERT_LABEL[code].label}]</b>}{a}
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : <span style={{ fontSize: 12.5, color: FT.green }}>Aucune anomalie : bilan prêt à certifier.</span>}
+              {(() => {
+                // Les motifs reprennent réserves et alertes : une même phrase ne s'affiche qu'une fois (réserves, puis alertes, puis autres motifs).
+                const seen = new Set<string>();
+                const once = (xs: string[]) => xs.filter((x) => !seen.has(x) && (seen.add(x), true));
+                const reserves = once(d.reserves);
+                const alertes = once(d.alertes);
+                const motifs = once(d.motifs);
+                return reserves.length + alertes.length + motifs.length > 0 ? (
+                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5 }}>
+                    {reserves.map((m) => <li key={m} style={{ color: FT.orange }}>Réserve : {m}</li>)}
+                    {alertes.map((a) => {
+                      const code = alertCode(a);
+                      return (
+                        <li key={a} style={{ color: code && ALERT_LABEL[code] ? ALERT_LABEL[code].color : FT.red }}>
+                          {code && ALERT_LABEL[code] && <b style={{ marginRight: 6 }}>[{ALERT_LABEL[code].label}]</b>}{a}
+                        </li>
+                      );
+                    })}
+                    {motifs.map((m) => <li key={m}>{m}</li>)}
+                  </ul>
+                ) : <span style={{ fontSize: 12.5, color: FT.green }}>Aucune anomalie : bilan prêt à certifier.</span>;
+              })()}
               <div style={{ fontSize: 11.5, color: FT.textSub }}>
                 <b>Priorité des stocks :</b> {d.priorite_sources.join(" · ")}. Les relevés dans la période et les plus proches de la borne sont préférés.
               </div>
@@ -535,8 +543,8 @@ function BalanceDetailModal({ id, onClose }: { id: number; onClose: () => void }
                 <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
                   <thead><tr>{["Mouvements de la période", "eGrid (ENOC)", "Closing", "Écart (ENOC − Closing)"].map((h) => <th key={h} style={{ ...thStyle, fontSize: 10, textAlign: "left" }}>{h}</th>)}</tr></thead>
                   <tbody>
-                    {row("Entrées (livraisons, transferts entrants, rajouts)", ref.entrees_egrid_l, ref.entrees_closing_l, -ref.ecart_entrees_l)}
-                    {row("Sorties (transferts sortants, retraits, vols, vidanges)", ref.sorties_egrid_l, ref.sorties_closing_l, -ref.ecart_sorties_l)}
+                    {row("Entrées (livraisons, transferts entrants, rajouts)", ref.entrees_egrid_l, ref.entrees_closing_l, 0 - ref.ecart_entrees_l)}
+                    {row("Sorties (transferts sortants, retraits, vols, vidanges)", ref.sorties_egrid_l, ref.sorties_closing_l, 0 - ref.ecart_sorties_l)}
                   </tbody>
                 </table>
                 <div style={{ fontSize: 11.5, color: FT.textSub, marginTop: 4 }}>
