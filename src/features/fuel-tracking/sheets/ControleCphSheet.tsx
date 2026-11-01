@@ -285,7 +285,7 @@ function CalculationChain({ d }: { d: CphSiteDetail }) {
   );
 }
 
-function SiteDetailModal({ siteId, start, end, onClose }: { siteId: string; start: string; end: string; onClose: () => void }) {
+export function SiteDetailModal({ siteId, start, end, onClose }: { siteId: string; start: string; end: string; onClose: () => void }) {
   const q = useQuery({ queryKey: ["cph-site", siteId, start, end], queryFn: () => getCphSiteDetail(siteId, { start, end }) });
   const d = q.data;
   return (

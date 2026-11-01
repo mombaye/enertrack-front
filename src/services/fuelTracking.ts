@@ -2048,3 +2048,96 @@ export async function downloadStockReport(kind: string, params: { debut?: string
     throw new Error(detail ?? "Téléchargement impossible.");
   }
 }
+
+// ── Suivis Consommations : tableau unique, période unique (réel stock / instrumentée Snowflake / théorique CPH) ──
+export type ConsoRealStatus = "CERTIFIABLE" | "ESTIMATION_AVEC_RESERVE" | "A_CONTROLER" | "DONNEES_INCOMPLETES" | "NON_CALCULABLE";
+export type ConsoGlobalStatus =
+  | "COHERENT" | "A_JUSTIFIER" | "A_INVESTIGUER" | "ESTIMATION_AVEC_RESERVE" | "DONNEES_INCOMPLETES" | "CPH_NON_CALCULE" | "MESURE_INSTRUMENTEE_ABSENTE";
+
+export type ConsoGap = { l: number | null; pct: number | null; pct_na: string | null; statut: string | null };
+
+export type ConsoRow = {
+  site_id: string;
+  site_name: string | null;
+  country: string | null;
+  zone: string | null;
+  typologie: string | null;
+  configuration: string | null;
+  reel: {
+    conso_l: number | null; statut: ConsoRealStatus; statut_bilan: string | null; cause: string | null; score: number | null;
+    source: string | null; reserves: string[]; bilan_id: number | null; alertes: string[]; certification: string | null;
+  };
+  instrumentee: { conso_l: number | null; jours_mesure: number; jours: number; couverture_pct: number | null; disponible: boolean };
+  theorique: {
+    conso_l: number | null; partielle_l: number | null; statut_cph: string | null; cph_status: string | null; jours_cph: number | null;
+    couverture_pct: number | null; disponible: boolean; motif_code: string | null; runtime_source: string | null; power_source: string | null;
+  };
+  ecart_instrumentee: ConsoGap;
+  ecart_theorique: ConsoGap;
+  statut_global: ConsoGlobalStatus;
+  motif: string | null;
+  action: string;
+  hors_referentiel: boolean;
+};
+
+export type ConsoKpis = {
+  sites: number;
+  reel: { total_l: number | null; sites_calculables: number; sites_certifiables: number; sites_avec_reserve: number };
+  instrumentee: { total_l: number | null; sites_couverts: number; note: string };
+  theorique: { total_l: number | null; sites_complets: number; sites_partiels: number; note: string };
+  ecart_instrumentee: { sites_comparables: number; ecart_l: number | null; ecart_pct: number | null; reel_compare_l: number | null };
+  ecart_theorique: { sites_comparables: number; ecart_l: number | null; ecart_pct: number | null; reel_compare_l: number | null };
+  a_traiter: {
+    sites_non_calculables: number; sites_a_controler: number; sites_donnees_incompletes: number; conflits_enoc_closing: number; sites_avec_reserve: number;
+  };
+};
+
+export type ConsoResponse = {
+  detail?: string;
+  periode: {
+    debut: string; fin: string; libelle: string; jours: number; bilan_disponible: boolean; sites_avec_bilan: number; sites_calculables: number; par_defaut?: boolean;
+  } | null;
+  kpis: ConsoKpis;
+  rows: ConsoRow[];
+  total: number;
+  page: number;
+  page_size: number;
+  labels: Record<string, string>;
+  aide: Record<string, string>;
+  qualite_cph: CphCouverture[];
+  facettes: {
+    pays: string[]; zones: string[]; typologies: string[]; configurations: string[]; statuts_globaux: string[]; qualites_reel: string[];
+    sources_runtime: string[]; sources_puissance: string[]; statuts_cph: string[];
+  };
+  seuils: { couverture_instrumentee_min_pct: number; reference_minimale_l: number };
+};
+
+export type ConsoFilters = {
+  date_debut?: string; date_fin?: string; pays?: string; zone?: string; site?: string; typologie?: string; configuration?: string;
+  statut_global?: string; qualite_reel?: string; source_runtime?: string; source_puissance?: string; statut_cph?: string; tri?: string; page?: number; page_size?: number;
+};
+
+export async function getConsommations(params: ConsoFilters) {
+  const { data } = await api.get<ConsoResponse>(`${BASE}/consommations/`, { params: cleanParams(params) });
+  return data;
+}
+
+export type ConsoPeriods = { periodes: Array<{ debut: string; fin: string; libelle: string; sites: number; calculables: number; certifiables: number }>; defaut: { debut: string; fin: string } | null };
+
+export async function getConsommationsPeriodes() {
+  const { data } = await api.get<ConsoPeriods>(`${BASE}/consommations/periodes/`);
+  return data;
+}
+
+export async function downloadConsoExport(kind: "controle_complet" | "anomalies_fuel" | "bilan_certification", params: ConsoFilters) {
+  const res = await api.get<Blob>(`${BASE}/consommations/export/${kind}/`, { params: cleanParams(params), responseType: "blob" });
+  const cd = String(res.headers["content-disposition"] ?? "");
+  const name = /filename="?([^";]+)"?/.exec(cd)?.[1] ?? `${kind}.csv`;
+  const url = URL.createObjectURL(res.data);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+  return { name, rows: Number(res.headers["x-row-count"] ?? NaN) };
+}

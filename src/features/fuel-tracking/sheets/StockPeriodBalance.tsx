@@ -426,7 +426,7 @@ function MovementTable({ rows, excluded }: { rows: BalanceMovement[]; excluded?:
   );
 }
 
-function BalanceDetailModal({ id, onClose }: { id: number; onClose: () => void }) {
+export function BalanceDetailModal({ id, onClose }: { id: number; onClose: () => void }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["stock-balance", id], queryFn: () => getPeriodBalance(id) });
   const [decision, setDecision] = useState<"certifier" | "certifier_avec_reserve" | null>(null);
