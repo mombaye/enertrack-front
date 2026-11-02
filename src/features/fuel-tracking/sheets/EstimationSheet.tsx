@@ -12,7 +12,7 @@
 import { useState, type CSSProperties } from "react";
 import { AlertTriangle, Calculator, Fuel, Search, TrendingUp, Warehouse } from "lucide-react";
 import type { FuelCommandeConfiance, FuelCommandeEstimationResponse } from "@/services/fuelTracking";
-import { Card, EmptyState, EstimationBanner, KpiCard, Pill, Skeleton } from "../ui";
+import { Card, EmptyState, KpiCard, Pill, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { fmt, monthLabel } from "../helpers";
 
@@ -96,7 +96,6 @@ export function EstimationSheet({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <EstimationBanner />
       <div
         style={{
           position: "sticky", top: stickyTop, zIndex: 9, background: FT.card, borderRadius: FT.radius,

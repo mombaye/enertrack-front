@@ -445,13 +445,3 @@ export const GLOBAL_STYLES = `
   .ft-scroll::-webkit-scrollbar-thumb:hover { background: #A8B7CC; }
   .ft-row:hover td { background: #F5F8FF !important; }
 `;
-
-/** Rappel d'information (pas une erreur) sur tout résultat d'estimation de commande : à valider par le Fuel Manager. */
-export function EstimationBanner() {
-  return (
-    <div role="note" style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", borderRadius: FT.radius, background: FT.slateL, border: `1px solid ${FT.border}`, color: FT.textMid, fontWeight: 700, fontSize: 12 }}>
-      <span aria-hidden style={{ width: 16, height: 16, borderRadius: 999, background: FT.blue, color: "#fff", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>i</span>
-      <span>Estimation — validation Fuel Manager requise</span>
-    </div>
-  );
-}
