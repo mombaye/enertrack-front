@@ -446,11 +446,12 @@ export const GLOBAL_STYLES = `
   .ft-row:hover td { background: #F5F8FF !important; }
 `;
 
-/** Bandeau obligatoire sur tout résultat de commande / d'estimation (aucune valeur n'est une commande validée). */
+/** Rappel d'information (pas une erreur) sur tout résultat d'estimation de commande : à valider par le Fuel Manager. */
 export function EstimationBanner() {
   return (
-    <div role="note" style={{ padding: "9px 14px", borderRadius: FT.radius, background: FT.orangeL, border: "1px solid rgba(217,119,6,.35)", color: FT.orange, fontWeight: 800, fontSize: 12.5, letterSpacing: ".03em" }}>
-      ESTIMATION — VALIDATION FUEL MANAGER REQUISE
+    <div role="note" style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", borderRadius: FT.radius, background: FT.slateL, border: `1px solid ${FT.border}`, color: FT.textMid, fontWeight: 700, fontSize: 12 }}>
+      <span aria-hidden style={{ width: 16, height: 16, borderRadius: 999, background: FT.blue, color: "#fff", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>i</span>
+      <span>Estimation — validation Fuel Manager requise</span>
     </div>
   );
 }
