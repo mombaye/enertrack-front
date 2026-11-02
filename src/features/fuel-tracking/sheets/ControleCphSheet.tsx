@@ -969,7 +969,7 @@ function SimpleTable({ rows, onDetail }: { rows: CphSiteRow[]; onDetail: (siteId
       <caption className="sr-only">Contrôle CPH par site : résultat, consommation théorique et comparaison au stock</caption>
       <thead>
         <tr>
-          <th scope="col" style={{ ...th, textAlign: "left" }}>Site</th>
+          <th scope="col" style={{ ...th, textAlign: "left", position: "sticky", left: 0, zIndex: 3 }}>Site</th>
           <th scope="col" style={{ ...th, textAlign: "left" }}>Résultat</th>
           <th scope="col" style={{ ...th, textAlign: "left" }}>Correspondance / courbe<HelpTip label="correspondance" text={HELP.courbe} /></th>
           <th scope="col" style={th}>Heures GE<HelpTip label="heures de marche" text={HELP.runtime} /></th>
@@ -985,7 +985,7 @@ function SimpleTable({ rows, onDetail }: { rows: CphSiteRow[]; onDetail: (siteId
           const rec = r.rapprochement;
           return (
             <tr key={r.site_id} style={{ background: i % 2 === 0 ? "#fff" : FT.cardAlt }}>
-              <td style={{ ...td, textAlign: "left" }}>
+              <td style={{ ...td, textAlign: "left", position: "sticky", left: 0, zIndex: 1, background: i % 2 === 0 ? "#fff" : FT.cardAlt }}>
                 <div style={{ fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace" }}>{r.site_id}</div>
                 {r.hors_referentiel && <HorsReferentielTag />}
                 <div style={{ fontSize: 11, color: FT.textSub }}>{r.site_name ?? "—"} · {r.kind === "INDOOR" ? "Indoor" : r.kind === "OUTDOOR" ? "Outdoor" : "type ?"} · {r.ge_label ?? "GE inconnu"}</div>
@@ -1206,22 +1206,35 @@ function CphKpis({ s, meta, onPreparation, handlers }: { s: CphSynthesis | undef
         <div role="note" style={warnStyle}>⚠ Aucune correspondance plaque → courbe active — aucun CPH ne peut être calculé. <button type="button" onClick={handlers.onReferentiel} style={warnLink}>Ouvrir le référentiel</button></div>
       ) : null}
       <FreshnessWarning meta={meta} />
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
-        <KpiCard label="Sites avec GE" value={s.sites.toLocaleString("fr-FR")} sub="inventaire Snowflake (DG_COUNT > 0)" tone="blue" icon={<Fuel size={14} />} />
-        <KpiCard label="CPH calculé" value={s.cph_calcules.toLocaleString("fr-FR")} sub={`${pct(s.cph_calcules)} des sites · ${s.conso_theorique_complete.toLocaleString("fr-FR")} complets sur la période`} tone="violet" icon={<Gauge size={14} />} />
-        <KpiCard label="Comparés au stock" value={s.rapprochements_calcules.toLocaleString("fr-FR")} sub={`${s.ok} OK · ${s.a_justifier} à justifier · ${s.a_investiguer} à investiguer`} tone="green" icon={<Scale size={14} />} />
-        <KpiCard label="Sans verdict" value={sansVerdict.toLocaleString("fr-FR")} sub={`${s.donnees_incompletes} données incomplètes · ${s.rapprochement_cph_non_calcule} CPH non calculé`} tone="slate" icon={<HelpCircle size={14} />} />
-      </div>
-      {s.couvertures && <div style={{ marginTop: 12 }}><CoverageKpis items={s.couvertures} /></div>}
-      <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", fontSize: 11.5, color: FT.textSub }}>
-        <span>Préparation :</span>
-        {items.map((i) => (
-          <button key={i.key} type="button" onClick={onPreparation} title={`${i.title} — ouvrir la préparation des données`}
-            style={{ display: "inline-flex", alignItems: "center", gap: 5, border: `1px solid ${FT.border}`, background: FT.cardAlt, borderRadius: 999, padding: "3px 9px", fontSize: 11.5, fontWeight: 700, color: FT.textMid, cursor: "pointer" }}>
-            <PrepIcon item={i} size={12} /> {i.short}
-          </button>
+      <div role="group" aria-label="Indicateurs du contrôle CPH" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", border: `1px solid ${FT.border}`, borderRadius: FT.radius, overflow: "hidden" }}>
+        {([
+          { c: FT.blue, label: "Sites avec GE", value: s.sites.toLocaleString("fr-FR"), sub: "inventaire Snowflake (DG_COUNT > 0)" },
+          { c: FT.violet, label: "CPH calculé", value: s.cph_calcules.toLocaleString("fr-FR"), sub: `${pct(s.cph_calcules)} des sites · ${s.conso_theorique_complete.toLocaleString("fr-FR")} complets sur la période` },
+          { c: FT.green, label: "Comparés au stock", value: s.rapprochements_calcules.toLocaleString("fr-FR"), sub: `${s.ok} OK · ${s.a_justifier} à justifier · ${s.a_investiguer} à investiguer` },
+          { c: FT.slate, label: "Sans verdict", value: sansVerdict.toLocaleString("fr-FR"), sub: `${s.donnees_incompletes} données incomplètes · ${s.rapprochement_cph_non_calcule} CPH non calculé` },
+        ]).map((k, i) => (
+          <div key={k.label} style={{ padding: "12px 14px", borderTop: `3px solid ${k.c}`, borderLeft: i === 0 ? "none" : `1px solid ${FT.border}`, display: "grid", gap: 4, alignContent: "start", minWidth: 0 }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: FT.textSub, textTransform: "uppercase", letterSpacing: ".04em" }}>{k.label}</div>
+            <div style={{ fontSize: 21, fontWeight: 800, color: FT.text, fontVariantNumeric: "tabular-nums" }}>{k.value}</div>
+            <div style={{ fontSize: 11, color: FT.textMid, lineHeight: 1.35 }}>{k.sub}</div>
+          </div>
         ))}
       </div>
+      <details style={{ marginTop: 10 }}>
+        <summary style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 800, color: FT.text }}>
+          Qualité du calcul CPH et préparation des données ({items.filter((i) => i.ready).length}/{items.length} prêts)
+        </summary>
+        {s.couvertures && <div style={{ marginTop: 10 }}><CoverageKpis items={s.couvertures} /></div>}
+        <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", fontSize: 11.5, color: FT.textSub }}>
+          <span>Préparation :</span>
+          {items.map((i) => (
+            <button key={i.key} type="button" onClick={onPreparation} title={`${i.title} — ouvrir la préparation des données`}
+              style={{ display: "inline-flex", alignItems: "center", gap: 5, border: `1px solid ${FT.border}`, background: FT.cardAlt, borderRadius: 999, padding: "3px 9px", fontSize: 11.5, fontWeight: 700, color: FT.textMid, cursor: "pointer" }}>
+              <PrepIcon item={i} size={12} /> {i.short}
+            </button>
+          ))}
+        </div>
+      </details>
     </div>
   );
 }

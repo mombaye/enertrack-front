@@ -8,7 +8,7 @@ import {
   downloadConsoExport, getConsommations, getConsommationsPeriodes,
   type ConsoFilters, type ConsoFraicheur, type ConsoGap, type ConsoGlobalStatus, type ConsoRealStatus, type ConsoRow,
 } from "@/services/fuelTracking";
-import { KpiCard, Modal, Skeleton } from "../ui";
+import { Modal, Skeleton } from "../ui";
 import { FT, type Tone } from "../theme";
 import { HelpTip } from "./cphBadges";
 import { CoverageKpis } from "./cphDiagnostics";
@@ -74,7 +74,10 @@ function GapPct({ g }: { g: ConsoGap }) {
   return <span style={mono}>{signed(g.pct, 1)} %</span>;
 }
 
-const th: CSSProperties = { padding: "8px 10px", fontSize: 10.5, fontWeight: 800, color: FT.text, textTransform: "uppercase", letterSpacing: ".03em", background: FT.slateL, borderBottom: `1px solid ${FT.border}`, textAlign: "right", whiteSpace: "nowrap", position: "sticky", top: 0, zIndex: 2 };
+const GROUP_H = 26;
+const thGroup: CSSProperties = { padding: "5px 10px", fontSize: 10.5, fontWeight: 800, color: "#fff", background: FT.navy, textAlign: "center", position: "sticky", top: 0, zIndex: 2, borderLeft: "1px solid rgba(255,255,255,.25)", height: GROUP_H, boxSizing: "border-box" };
+const clamp2: CSSProperties = { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", whiteSpace: "normal", lineHeight: 1.35 };
+const th: CSSProperties = { padding: "8px 10px", fontSize: 10.5, fontWeight: 800, color: FT.text, textTransform: "uppercase", letterSpacing: ".03em", background: FT.slateL, borderBottom: `1px solid ${FT.border}`, textAlign: "right", whiteSpace: "nowrap", position: "sticky", top: GROUP_H, zIndex: 2 };
 const td: CSSProperties = { padding: "7px 10px", fontSize: 12, borderBottom: `1px solid ${FT.border}`, textAlign: "right", whiteSpace: "nowrap", background: FT.card };
 const left: CSSProperties = { textAlign: "left" };
 // Colonnes figées : Site ID · Nom du site · Statut global (restent visibles au défilement horizontal).
@@ -105,6 +108,20 @@ function DataQualityNotice({ f }: { f: ConsoFraicheur | undefined }) {
     <div role="status" style={{ padding: "9px 14px", borderRadius: FT.radius, background: FT.orangeL, border: "1px solid rgba(217,119,6,.3)", color: FT.text, fontSize: 12.5, display: "grid", gap: 2 }}>
       <strong style={{ color: FT.orange }}>Qualité des données Snowflake</strong>
       {lines.map((l) => <span key={l}>{l}</span>)}
+    </div>
+  );
+}
+
+function KpiStrip({ cells }: { cells: Array<{ tone: Tone; label: string; value: string; sub: string }> }) {
+  return (
+    <div role="group" aria-label="Indicateurs de la période" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", border: FT.borderCrisp, borderRadius: FT.radius, background: FT.card, boxShadow: FT.shadow, overflow: "hidden" }}>
+      {cells.map((c, i) => (
+        <div key={c.label} style={{ padding: "12px 14px", borderLeft: i === 0 ? "none" : `1px solid ${FT.border}`, borderTop: `3px solid ${TONE_COLORS[c.tone].fg}`, display: "grid", alignContent: "start", gap: 4, minWidth: 0 }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: FT.textSub, textTransform: "uppercase", letterSpacing: ".04em", lineHeight: 1.25 }}>{c.label}</div>
+          <div style={{ fontSize: 21, fontWeight: 800, color: FT.text, ...mono }}>{c.value}</div>
+          <div style={{ fontSize: 11, color: FT.textMid, lineHeight: 1.35 }}>{c.sub}</div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -186,6 +203,22 @@ export function ConsoComparaisonSection() {
         {per && <div style={{ fontSize: 11.5, color: FT.textMid }}>{per.sites_calculables.toLocaleString("fr-FR")} site(s) à consommation réelle calculable sur {per.sites_avec_bilan.toLocaleString("fr-FR")} bilans — {per.jours} jour(s).</div>}
       </div>
 
+      {k && (
+        <KpiStrip cells={[
+          { tone: "green", label: "Consommation réelle stock (L)", value: k.reel.total_l === null ? "—" : `${nf(k.reel.total_l)} L`,
+            sub: `${nf(k.reel.sites_calculables)} sites calculables · ${nf(k.reel.sites_certifiables)} certifiables · ${nf(k.reel.sites_avec_reserve)} avec réserve` },
+          { tone: "blue", label: "Consommation instrumentée Snowflake (L)", value: k.instrumentee.total_l === null ? "—" : `${nf(k.instrumentee.total_l)} L`,
+            sub: `${nf(k.instrumentee.sites_couverts)} sites couverts · mesure capteur, non certifiée réelle` },
+          { tone: "violet", label: "Consommation théorique CPH (L)", value: k.theorique.total_l === null ? "—" : `${nf(k.theorique.total_l)} L`,
+            sub: `${nf(k.theorique.sites_complets)} complets · ${nf(k.theorique.sites_partiels)} partiels · estimation` },
+          { tone: "orange", label: "Écart réel vs instrumentée", value: k.ecart_instrumentee.ecart_l === null ? "—" : `${signed(k.ecart_instrumentee.ecart_l)} L`,
+            sub: `${k.ecart_instrumentee.ecart_pct === null ? "% n/a" : `${signed(k.ecart_instrumentee.ecart_pct, 1)} %`} · ${nf(k.ecart_instrumentee.sites_comparables)} sites comparables` },
+          { tone: "orange", label: "Écart réel vs théorique", value: k.ecart_theorique.ecart_l === null ? "—" : `${signed(k.ecart_theorique.ecart_l)} L`,
+            sub: `${k.ecart_theorique.ecart_pct === null ? "% n/a" : `${signed(k.ecart_theorique.ecart_pct, 1)} %`} · ${nf(k.ecart_theorique.sites_comparables)} sites comparables` },
+          { tone: "red", label: "Sites à traiter", value: nf(k.a_traiter.sites_non_calculables),
+            sub: `${nf(k.a_traiter.sites_donnees_incompletes)} incomplets/non calculables · ${nf(k.a_traiter.conflits_enoc_closing)} conflits · ${nf(k.a_traiter.sites_avec_reserve)} réserves` },
+        ]} />
+      )}
       {d?.detail && !per && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.orangeL, color: FT.orange, fontWeight: 700, fontSize: 13 }}>{d.detail}</div>}
       {per && noBilan && (
         <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.orangeL, color: FT.text, fontSize: 13 }}>
@@ -195,22 +228,6 @@ export function ConsoComparaisonSection() {
       <DataQualityNotice f={d?.fraicheur} />
       {q.isError && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.redL, color: FT.red, fontWeight: 700, fontSize: 13 }}>Impossible de charger les consommations (erreur serveur).</div>}
 
-      {k && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 10 }}>
-          <KpiCard tone="green" label="Consommation réelle stock (L)" value={k.reel.total_l === null ? "—" : `${nf(k.reel.total_l)} L`}
-            sub={`${nf(k.reel.sites_calculables)} sites calculables · ${nf(k.reel.sites_certifiables)} certifiables · ${nf(k.reel.sites_avec_reserve)} avec réserve`} />
-          <KpiCard tone="blue" label="Consommation instrumentée Snowflake (L)" value={k.instrumentee.total_l === null ? "—" : `${nf(k.instrumentee.total_l)} L`}
-            sub={`${nf(k.instrumentee.sites_couverts)} sites couverts · mesure capteur, non certifiée réelle`} />
-          <KpiCard tone="violet" label="Consommation théorique CPH (L)" value={k.theorique.total_l === null ? "—" : `${nf(k.theorique.total_l)} L`}
-            sub={`${nf(k.theorique.sites_complets)} complets · ${nf(k.theorique.sites_partiels)} partiels · estimation`} />
-          <KpiCard tone="orange" label="Écart réel vs instrumentée" value={k.ecart_instrumentee.ecart_l === null ? "—" : `${signed(k.ecart_instrumentee.ecart_l)} L`}
-            sub={`${k.ecart_instrumentee.ecart_pct === null ? "% n/a" : `${signed(k.ecart_instrumentee.ecart_pct, 1)} %`} · ${nf(k.ecart_instrumentee.sites_comparables)} sites comparables`} />
-          <KpiCard tone="orange" label="Écart réel vs théorique" value={k.ecart_theorique.ecart_l === null ? "—" : `${signed(k.ecart_theorique.ecart_l)} L`}
-            sub={`${k.ecart_theorique.ecart_pct === null ? "% n/a" : `${signed(k.ecart_theorique.ecart_pct, 1)} %`} · ${nf(k.ecart_theorique.sites_comparables)} sites comparables`} />
-          <KpiCard tone="red" label="Sites à traiter" value={nf(k.a_traiter.sites_non_calculables)}
-            sub={`${nf(k.a_traiter.sites_donnees_incompletes)} incomplets/non calculables · ${nf(k.a_traiter.conflits_enoc_closing)} conflits · ${nf(k.a_traiter.sites_avec_reserve)} réserves`} />
-        </div>
-      )}
 
       <div style={{ border: FT.borderCrisp, background: FT.card, borderRadius: FT.radius, boxShadow: FT.shadow, padding: "12px 14px", display: "grid", gap: 10 }}>
         <div role="group" aria-label="Vues rapides" style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
@@ -257,8 +274,18 @@ export function ConsoComparaisonSection() {
 
       <div style={{ border: FT.borderCrisp, background: FT.card, borderRadius: FT.radius, boxShadow: FT.shadow, overflow: "hidden" }}>
         <div style={{ overflow: "auto", maxHeight: "70vh" }} tabIndex={0} aria-label="Tableau des consommations par site">
-          <table style={{ borderCollapse: "separate", borderSpacing: 0, minWidth: 2400, width: "100%" }}>
+          <table style={{ borderCollapse: "separate", borderSpacing: 0, minWidth: 2300, width: "100%" }}>
             <thead>
+              <tr>
+                <th colSpan={3} scope="colgroup" style={{ ...thGroup, ...stick(0, { zIndex: 5 }) }}>Site</th>
+                <th colSpan={4} scope="colgroup" style={thGroup}>Localisation et configuration</th>
+                <th colSpan={3} scope="colgroup" style={{ ...thGroup, background: "#0F7A52" }}>Réel stock</th>
+                <th colSpan={2} scope="colgroup" style={{ ...thGroup, background: "#1A56C4" }}>Instrumentée Snowflake</th>
+                <th colSpan={2} scope="colgroup" style={{ ...thGroup, background: "#6D28D9" }}>Théorique CPH</th>
+                <th colSpan={2} scope="colgroup" style={{ ...thGroup, background: "#B45309" }}>Écart vs instrumentée</th>
+                <th colSpan={2} scope="colgroup" style={{ ...thGroup, background: "#B45309" }}>Écart vs théorique</th>
+                <th colSpan={3} scope="colgroup" style={thGroup}>Synthèse et action</th>
+              </tr>
               <tr>
                 {COLS.map((c, i) => (
                   <th key={c.k} scope="col" style={{ ...th, ...(i < 2 ? left : {}), ...(i === 0 ? stick(0, { zIndex: 4 }) : i === 1 ? stick(W1, { zIndex: 4 }) : i === 2 ? stick(W1 + W2, { zIndex: 4, ...left }) : {}) }}>
@@ -268,31 +295,32 @@ export function ConsoComparaisonSection() {
               </tr>
             </thead>
             <tbody>
-              {(d?.rows ?? []).map((r) => {
+              {(d?.rows ?? []).map((r, idx) => {
+                const tdr: CSSProperties = { ...td, background: idx % 2 ? "#F8FAFD" : FT.card };
                 const rm = REAL_META[r.reel.statut]; const gm = GLOBAL_META[r.statut_global];
                 return (
-                  <tr key={r.site_id}>
-                    <td style={{ ...td, ...left, ...stick(0), fontWeight: 800, minWidth: W1 }}>{r.site_id}</td>
-                    <td style={{ ...td, ...left, ...stick(W1), minWidth: W2, maxWidth: W2, overflow: "hidden", textOverflow: "ellipsis" }} title={r.site_name ?? ""}>{r.site_name ?? "—"}</td>
-                    <td style={{ ...td, ...left, ...stick(W1 + W2), boxShadow: "2px 0 0 rgba(15,23,42,.06)" }}><Pill label={gm.label} tone={gm.tone} /></td>
-                    <td style={{ ...td, ...left }}>{r.country ?? "—"}</td>
-                    <td style={{ ...td, ...left }}>{r.zone ?? "—"}</td>
-                    <td style={{ ...td, ...left }}>{r.typologie ?? "—"}</td>
-                    <td style={{ ...td, ...left }}>{r.configuration ?? "—"}</td>
-                    <td style={{ ...td, fontWeight: 800, ...mono }}>{r.reel.conso_l === null ? <span style={{ color: FT.textSub }} title={HELP.nc}>—</span> : nf(r.reel.conso_l)}</td>
-                    <td style={{ ...td, ...left }} title={r.reel.reserves[0] ?? ""}><Pill label={rm.label} tone={rm.tone} /></td>
-                    <td style={{ ...td, ...left, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis" }} title={r.reel.source ?? ""}>{r.reel.source ?? "—"}</td>
-                    <td style={{ ...td, ...mono }}>{r.instrumentee.conso_l === null ? <span style={{ color: FT.textSub }}>—</span> : nf(r.instrumentee.conso_l)}</td>
-                    <td style={td}><Disp pct={r.instrumentee.couverture_pct} ok={r.instrumentee.disponible} jours={r.instrumentee.jours_mesure} total={r.instrumentee.jours} /></td>
-                    <td style={{ ...td, ...mono }}>{r.theorique.conso_l === null ? <span style={{ color: FT.textSub }} title={r.theorique.partielle_l !== null ? "CPH partiel : aucun total affiché" : ""}>—</span> : nf(r.theorique.conso_l)}</td>
-                    <td style={td}><Disp pct={r.theorique.couverture_pct} ok={r.theorique.disponible} jours={r.theorique.jours_cph} total={r.instrumentee.jours} /></td>
-                    <td style={td}><GapCell g={r.ecart_instrumentee} /></td>
-                    <td style={td}><GapPct g={r.ecart_instrumentee} /></td>
-                    <td style={td}><GapCell g={r.ecart_theorique} /></td>
-                    <td style={td}><GapPct g={r.ecart_theorique} /></td>
-                    <td style={{ ...td, ...left, whiteSpace: "normal", minWidth: 280, fontSize: 11.5 }}>{r.motif ?? "—"}</td>
-                    <td style={{ ...td, ...left, whiteSpace: "normal", minWidth: 280, fontSize: 11.5 }}>{r.action}</td>
-                    <td style={td}>
+                  <tr key={r.site_id} style={{ background: idx % 2 ? "#F8FAFD" : FT.card }}>
+                    <td style={{ ...tdr, ...left, ...stick(0), fontWeight: 800, minWidth: W1 }}>{r.site_id}</td>
+                    <td style={{ ...tdr, ...left, ...stick(W1), minWidth: W2, maxWidth: W2, overflow: "hidden", textOverflow: "ellipsis" }} title={r.site_name ?? ""}>{r.site_name ?? "—"}</td>
+                    <td style={{ ...tdr, ...left, ...stick(W1 + W2), boxShadow: "2px 0 0 rgba(15,23,42,.06)" }}><Pill label={gm.label} tone={gm.tone} /></td>
+                    <td style={{ ...tdr, ...left }}>{r.country ?? "—"}</td>
+                    <td style={{ ...tdr, ...left }}>{r.zone ?? "—"}</td>
+                    <td style={{ ...tdr, ...left }}>{r.typologie ?? "—"}</td>
+                    <td style={{ ...tdr, ...left }}>{r.configuration ?? "—"}</td>
+                    <td style={{ ...tdr, fontWeight: 800, ...mono }}>{r.reel.conso_l === null ? <span style={{ color: FT.textSub }} title={HELP.nc}>—</span> : nf(r.reel.conso_l)}</td>
+                    <td style={{ ...tdr, ...left }} title={r.reel.reserves[0] ?? ""}><Pill label={rm.label} tone={rm.tone} /></td>
+                    <td style={{ ...tdr, ...left, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis" }} title={r.reel.source ?? ""}>{r.reel.source ?? "—"}</td>
+                    <td style={{ ...tdr, ...mono }}>{r.instrumentee.conso_l === null ? <span style={{ color: FT.textSub }}>—</span> : nf(r.instrumentee.conso_l)}</td>
+                    <td style={tdr}><Disp pct={r.instrumentee.couverture_pct} ok={r.instrumentee.disponible} jours={r.instrumentee.jours_mesure} total={r.instrumentee.jours} /></td>
+                    <td style={{ ...tdr, ...mono }}>{r.theorique.conso_l === null ? <span style={{ color: FT.textSub }} title={r.theorique.partielle_l !== null ? "CPH partiel : aucun total affiché" : ""}>—</span> : nf(r.theorique.conso_l)}</td>
+                    <td style={tdr}><Disp pct={r.theorique.couverture_pct} ok={r.theorique.disponible} jours={r.theorique.jours_cph} total={r.instrumentee.jours} /></td>
+                    <td style={tdr}><GapCell g={r.ecart_instrumentee} /></td>
+                    <td style={tdr}><GapPct g={r.ecart_instrumentee} /></td>
+                    <td style={tdr}><GapCell g={r.ecart_theorique} /></td>
+                    <td style={tdr}><GapPct g={r.ecart_theorique} /></td>
+                    <td style={{ ...tdr, ...left, minWidth: 300, maxWidth: 300 }} title={r.motif ?? ""}><div style={{ ...clamp2, fontSize: 11.5 }}>{r.motif ?? "—"}</div></td>
+                    <td style={{ ...tdr, ...left, minWidth: 300, maxWidth: 300 }} title={r.action}><div style={{ ...clamp2, fontSize: 11.5 }}>{r.action}</div></td>
+                    <td style={tdr}>
                       <button type="button" onClick={() => setDetail({ row: r, tab: "hub" })} aria-label={`Voir le détail du site ${r.site_id}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 800, padding: "5px 9px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}>
                         <Eye size={12} aria-hidden /> Voir le détail
                       </button>
