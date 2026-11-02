@@ -357,7 +357,6 @@ function BalanceRow({ r, i, onOpen }: { r: PeriodBalanceRow; i: number; onOpen: 
       <td style={cell}>
         <StatusBadge s={r.statut_bilan} />
         {r.cause_principale && r.statut_bilan === "NON_CALCULABLE" && <div style={{ fontSize: 10.5, color: FT.textSub, marginTop: 3 }}>{CAUSE_LABEL[r.cause_principale] ?? r.cause_principale}</div>}
-        {r.avertissement && <div style={{ fontSize: 10, fontWeight: 800, color: FT.orange, marginTop: 3 }}>{r.avertissement}</div>}
       </td>
       <td style={cell}><ScoreBadge score={r.score_confiance} /></td>
       <td style={cell}><Cert c={r.niveau_certification} /></td>
@@ -468,11 +467,6 @@ export function BalanceDetailModal({ id, onClose }: { id: number; onClose: () =>
             {d.cause_principale && <span style={{ fontSize: 12, color: FT.textSub }}>Cause principale : {CAUSE_LABEL[d.cause_principale] ?? d.cause_principale}</span>}
             <span style={{ fontSize: 12, color: FT.textSub }}>{[d.site_name, d.zone, d.country?.toUpperCase(), d.typologie, d.profil_energetique].filter(Boolean).join(" · ")}</span>
           </div>
-          {d.avertissement && (
-            <div role="note" style={{ padding: "8px 12px", borderRadius: 10, background: FT.orangeL, border: `1px solid ${FT.orange}`, fontSize: 12.5, fontWeight: 800 }}>
-              {d.avertissement} — la valeur affichée est une estimation, jamais une valeur certifiée.
-            </div>
-          )}
           <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, 360px) 1fr", gap: 16 }}>
             <div style={{ border: `1px solid ${FT.border}`, borderRadius: 10, padding: 12, display: "flex", flexDirection: "column", gap: 4 }}>
               {line("Stock initial", d.stock_initial_l, "")}
@@ -590,7 +584,6 @@ export function BalanceDetailModal({ id, onClose }: { id: number; onClose: () =>
           {d.proposition && (
             <div style={{ border: `1px dashed ${FT.border}`, borderRadius: 10, padding: 12 }}>
               <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 4 }}>Données préparées pour la recommandation de commande (indicatif — aucune commande créée)</div>
-              {d.proposition.avertissement && <div style={{ fontSize: 12, fontWeight: 800, color: FT.orange, marginBottom: 4 }}>{d.proposition.avertissement}</div>}
               <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
                 <li>Stock final : {money(d.proposition.stock_final_l)}{d.proposition.fraicheur_stock_final_j !== null ? ` (ancien de ${d.proposition.fraicheur_stock_final_j} j)` : ""}</li>
                 <li>Consommation de référence : {d.proposition.conso_reference_jour_l === null ? "—" : `${d.proposition.conso_reference_jour_l.toLocaleString("fr-FR")} L / jour`}</li>
