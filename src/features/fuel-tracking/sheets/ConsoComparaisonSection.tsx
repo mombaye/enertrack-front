@@ -1,7 +1,7 @@
 // « Suivis Consommations » — UN seul tableau métier, UNE période exacte (jours entiers 00:00:00 → 23:59:59).
 // Une ligne = un site : consommation réelle stock · instrumentée Snowflake · théorique CPH, écarts, statut global, motif, action.
 // Les détails techniques CPH (runtime, puissance, courbe, jour par jour) restent dans « Contrôle CPH » et le bouton « Voir le détail ».
-import { useState, type CSSProperties } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Download, Eye } from "lucide-react";
 import {
@@ -131,7 +131,7 @@ function Disp({ pct, ok, jours, total }: { pct: number | null; ok: boolean; jour
   return <span title={`${jours ?? 0} / ${total} jours`} style={{ color: ok ? FT.text : FT.orange, ...mono }}>{nf(pct, 0)} %</span>;
 }
 
-export function ConsoComparaisonSection() {
+export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
   const [debut, setDebut] = useState<string>("");
   const [fin, setFin] = useState<string>("");
   const [f, setF] = useState<ConsoFilters>({});
@@ -219,6 +219,16 @@ export function ConsoComparaisonSection() {
             sub: `${nf(k.a_traiter.sites_donnees_incompletes)} incomplets/non calculables · ${nf(k.a_traiter.conflits_enoc_closing)} conflits · ${nf(k.a_traiter.sites_avec_reserve)} réserves` },
         ]} />
       )}
+      <details style={{ border: FT.borderCrisp, borderRadius: FT.radius, background: FT.card, padding: "9px 14px" }}>
+        <summary style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 800, color: FT.text }}>Indicateurs secondaires : qualité du calcul CPH{extra ? " et couverture GE officielle" : ""}</summary>
+        <div style={{ marginTop: 10, display: "grid", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: FT.textSub, textTransform: "uppercase", marginBottom: 6 }}>Qualité du calcul CPH</div>
+            <CoverageKpis items={d?.qualite_cph} />
+          </div>
+          {extra}
+        </div>
+      </details>
       {d?.detail && !per && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.orangeL, color: FT.orange, fontWeight: 700, fontSize: 13 }}>{d.detail}</div>}
       {per && noBilan && (
         <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.orangeL, color: FT.text, fontSize: 13 }}>
@@ -344,10 +354,6 @@ export function ConsoComparaisonSection() {
         </div>
       </div>
 
-      <div>
-        <div style={{ fontSize: 12, fontWeight: 800, color: FT.text, textTransform: "uppercase", letterSpacing: ".04em", margin: "4px 0 8px" }}>Qualité du calcul CPH</div>
-        <CoverageKpis items={d?.qualite_cph} />
-      </div>
 
       {detail && per && detail.tab === "hub" && <DetailHub row={detail.row} periode={per.libelle} onClose={() => setDetail(null)} onPick={(tab) => setDetail({ row: detail.row, tab })} />}
       {detail && per && detail.tab === "stock" && detail.row.reel.bilan_id !== null && (

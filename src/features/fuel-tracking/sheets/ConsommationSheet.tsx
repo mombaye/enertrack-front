@@ -324,13 +324,14 @@ export function ConsommationSheet({
       )}
 
       <HorsReferentielBanner count={data?.sites_hors_referentiel} />
-      <ConsoComparaisonSection />
-      {data?.kpis && (
-        <details style={{ border: `1px solid ${FT.border}`, borderRadius: FT.radius, background: FT.card, padding: "10px 14px" }}>
-          <summary style={{ cursor: "pointer", fontWeight: 800, fontSize: 13, color: FT.text }}>Couverture GE officielle du mois (fichier Stan) — indicateurs secondaires</summary>
-          <div style={{ marginTop: 10 }}><ConsommationKpis data={data} stickyTop={0} /></div>
-        </details>
-      )}
+      <ConsoComparaisonSection
+        extra={data?.kpis ? (
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: FT.textSub, textTransform: "uppercase", marginBottom: 6 }}>Couverture GE officielle du mois (fichier Stan)</div>
+            <ConsommationKpis data={data} stickyTop={0} />
+          </div>
+        ) : undefined}
+      />
     </div>
   );
 }
