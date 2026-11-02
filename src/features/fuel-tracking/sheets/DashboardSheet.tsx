@@ -17,6 +17,7 @@
 // des données vides (pas de graphique masqué conditionnellement).
 
 import type { ReactNode } from "react";
+import { ConsoDashboardCard } from "./ConsoDashboardCard";
 import {
   Bar,
   BarChart,
@@ -527,6 +528,7 @@ export function DashboardSheet({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <ConsoDashboardCard onOpen={onNavigateTab ? () => onNavigateTab("CONSOMMATION") : undefined} />
       <OverviewCircles data={data} stockData={stockData} commandeData={commandeData} estimationData={estimationData} onNavigateTab={onNavigateTab} />
       <ConsommationSection data={data} />
       <CommandeSection data={commandeData} loading={commandeLoading} />

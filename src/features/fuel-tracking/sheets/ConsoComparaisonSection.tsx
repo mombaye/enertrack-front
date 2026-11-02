@@ -8,7 +8,7 @@ import {
   downloadConsoExport, getConsommations, getConsommationsPeriodes,
   type ConsoFilters, type ConsoGap, type ConsoGlobalStatus, type ConsoRealStatus, type ConsoRow,
 } from "@/services/fuelTracking";
-import { KpiCard, Skeleton } from "../ui";
+import { KpiCard, Modal, Skeleton } from "../ui";
 import { FT, type Tone } from "../theme";
 import { HelpTip } from "./cphBadges";
 import { CoverageKpis } from "./cphDiagnostics";
@@ -104,7 +104,8 @@ export function ConsoComparaisonSection() {
   const [f, setF] = useState<ConsoFilters>({});
   const [site, setSite] = useState("");
   const [page, setPage] = useState(1);
-  const [detail, setDetail] = useState<{ row: ConsoRow; tab: "stock" | "cph" } | null>(null);
+  const [detail, setDetail] = useState<{ row: ConsoRow; tab: "hub" | "stock" | "cph" } | null>(null);
+  const [more, setMore] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -178,7 +179,7 @@ export function ConsoComparaisonSection() {
       {q.isError && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.redL, color: FT.red, fontWeight: 700, fontSize: 13 }}>Impossible de charger les consommations (erreur serveur).</div>}
 
       {k && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 10 }}>
           <KpiCard tone="green" label="Consommation réelle stock (L)" value={k.reel.total_l === null ? "—" : `${nf(k.reel.total_l)} L`}
             sub={`${nf(k.reel.sites_calculables)} sites calculables · ${nf(k.reel.sites_certifiables)} certifiables · ${nf(k.reel.sites_avec_reserve)} avec réserve`} />
           <KpiCard tone="blue" label="Consommation instrumentée Snowflake (L)" value={k.instrumentee.total_l === null ? "—" : `${nf(k.instrumentee.total_l)} L`}
@@ -195,6 +196,15 @@ export function ConsoComparaisonSection() {
       )}
 
       <div style={{ border: FT.borderCrisp, background: FT.card, borderRadius: FT.radius, boxShadow: FT.shadow, padding: "12px 14px", display: "grid", gap: 10 }}>
+        <div role="group" aria-label="Vues rapides" style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+          {([["Tous", {}], ["Certifiables", { qualite_reel: "CERTIFIABLE" }], ["Avec réserve", { qualite_reel: "ESTIMATION_AVEC_RESERVE" }], ["À contrôler", { qualite_reel: "A_CONTROLER" }], ["Non calculables", { qualite_reel: "NON_CALCULABLE" }], ["À investiguer", { statut_global: "A_INVESTIGUER" }]] as Array<[string, Partial<ConsoFilters>]>).map(([label, patch]) => {
+            const active = Object.keys(patch).length === 0 ? !f.qualite_reel && !f.statut_global : Object.entries(patch).every(([key, v]) => (f as Record<string, unknown>)[key] === v);
+            return (
+              <button key={label} type="button" aria-pressed={active} onClick={() => { setF((o) => ({ ...o, qualite_reel: undefined, statut_global: undefined, ...patch })); setPage(1); }}
+                style={{ fontSize: 12, fontWeight: 800, padding: "6px 12px", borderRadius: 999, border: `1px solid ${active ? FT.navy : FT.border}`, background: active ? FT.navy : FT.card, color: active ? "#fff" : FT.text, cursor: "pointer" }}>{label}</button>
+            );
+          })}
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
           {sel("pays", "Pays", d?.facettes.pays)}
           {sel("zone", "Zone", d?.facettes.zones)}
@@ -202,15 +212,22 @@ export function ConsoComparaisonSection() {
             Site / nom
             <input value={site} onChange={(e) => { setSite(e.target.value); setPage(1); }} placeholder="ID ou nom" style={{ fontSize: 12, padding: "6px 8px", borderRadius: 8, border: `1px solid ${FT.border}` }} />
           </label>
-          {sel("typologie", "Typologie", d?.facettes.typologies)}
-          {sel("configuration", "Configuration énergétique", d?.facettes.configurations)}
           {sel("statut_global", "Statut global", d?.facettes.statuts_globaux, (o) => GLOBAL_META[o as ConsoGlobalStatus]?.label ?? o)}
-          {sel("qualite_reel", "Qualité conso réelle", d?.facettes.qualites_reel, (o) => REAL_META[o as ConsoRealStatus]?.label ?? o)}
-          {sel("source_runtime", "Source runtime", d?.facettes.sources_runtime)}
-          {sel("source_puissance", "Source puissance", d?.facettes.sources_puissance)}
-          {sel("statut_cph", "Statut CPH", d?.facettes.statuts_cph)}
-          {sel("tri", "Tri", ["gravite", "reel", "ecart"], (o) => (o === "gravite" ? "Gravité" : o === "reel" ? "Consommation réelle" : "Plus gros écart"))}
         </div>
+        <button type="button" aria-expanded={more} onClick={() => setMore((m) => !m)} style={{ justifySelf: "start", fontSize: 12, fontWeight: 800, background: "none", border: "none", color: FT.blue, cursor: "pointer", padding: 0 }}>
+          {more ? "Moins de filtres ▲" : "Plus de filtres (typologie, configuration, sources, statut CPH, tri) ▼"}
+        </button>
+        {more && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+            {sel("typologie", "Typologie", d?.facettes.typologies)}
+            {sel("configuration", "Configuration énergétique", d?.facettes.configurations)}
+            {sel("qualite_reel", "Qualité conso réelle", d?.facettes.qualites_reel, (o) => REAL_META[o as ConsoRealStatus]?.label ?? o)}
+            {sel("source_runtime", "Source runtime", d?.facettes.sources_runtime)}
+            {sel("source_puissance", "Source puissance", d?.facettes.sources_puissance)}
+            {sel("statut_cph", "Statut CPH", d?.facettes.statuts_cph)}
+            {sel("tri", "Tri", ["gravite", "reel", "ecart"], (o) => (o === "gravite" ? "Gravité" : o === "reel" ? "Consommation réelle" : "Plus gros écart"))}
+          </div>
+        )}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
           {([["controle_complet", "Contrôle complet"], ["anomalies_fuel", "Anomalies Fuel"], ["bilan_certification", "Bilan certification"]] as const).map(([kind, label]) => (
             <button key={kind} type="button" disabled={busy !== null || noBilan} onClick={() => exportCsv(kind)} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, padding: "7px 12px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: busy || noBilan ? "not-allowed" : "pointer", opacity: busy || noBilan ? 0.6 : 1 }}>
@@ -259,10 +276,10 @@ export function ConsoComparaisonSection() {
                     <td style={{ ...td, ...left, whiteSpace: "normal", minWidth: 280, fontSize: 11.5 }}>{r.motif ?? "—"}</td>
                     <td style={{ ...td, ...left, whiteSpace: "normal", minWidth: 280, fontSize: 11.5 }}>{r.action}</td>
                     <td style={td}>
-                      <button type="button" onClick={() => setDetail({ row: r, tab: "stock" })} aria-label={`Voir le détail du site ${r.site_id}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 800, padding: "5px 9px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}>
+                      <button type="button" onClick={() => setDetail({ row: r, tab: "hub" })} aria-label={`Voir le détail du site ${r.site_id}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 800, padding: "5px 9px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}>
                         <Eye size={12} aria-hidden /> Voir le détail
                       </button>
-                      <button type="button" onClick={() => setDetail({ row: r, tab: "cph" })} aria-label={`Détail CPH du site ${r.site_id}`} title="Détail technique CPH (runtime, puissance, courbe, jour par jour)" style={{ marginLeft: 6, fontSize: 11.5, fontWeight: 700, padding: "5px 8px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}>CPH</button>
+
                     </td>
                   </tr>
                 );
@@ -287,12 +304,42 @@ export function ConsoComparaisonSection() {
         <CoverageKpis items={d?.qualite_cph} />
       </div>
 
+      {detail && per && detail.tab === "hub" && <DetailHub row={detail.row} periode={per.libelle} onClose={() => setDetail(null)} onPick={(tab) => setDetail({ row: detail.row, tab })} />}
       {detail && per && detail.tab === "stock" && detail.row.reel.bilan_id !== null && (
-        <BalanceDetailModal id={detail.row.reel.bilan_id} onClose={() => setDetail(null)} />
+        <BalanceDetailModal id={detail.row.reel.bilan_id} onClose={() => setDetail({ row: detail.row, tab: "hub" })} />
       )}
-      {detail && per && (detail.tab === "cph" || detail.row.reel.bilan_id === null) && (
-        <SiteDetailModal siteId={detail.row.site_id} start={per.debut} end={per.fin} onClose={() => setDetail(null)} />
+      {detail && per && detail.tab === "cph" && (
+        <SiteDetailModal siteId={detail.row.site_id} start={per.debut} end={per.fin} onClose={() => setDetail({ row: detail.row, tab: "hub" })} />
       )}
     </section>
+  );
+}
+
+function DetailHub({ row: r, periode, onClose, onPick }: { row: ConsoRow; periode: string; onClose: () => void; onPick: (t: "stock" | "cph") => void }) {
+  const line = (label: string, v: string, help?: string) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "6px 0", borderBottom: `1px solid ${FT.border}`, fontSize: 13 }}>
+      <span style={{ color: FT.textMid }}>{label}{help && <HelpTip text={help} label={label} />}</span><strong style={mono}>{v}</strong>
+    </div>
+  );
+  const gap = (g: ConsoGap) => (g.l === null ? "—" : `${signed(g.l)} L (${g.pct === null ? g.pct_na ?? "n/a" : `${signed(g.pct, 1)} %`})`);
+  return (
+    <Modal title={`${r.site_id} — ${r.site_name ?? ""}`} onClose={onClose} maxWidth={640}>
+      <div style={{ fontSize: 12, color: FT.textMid, marginBottom: 8 }}>Période : {periode} (identique pour les trois consommations)</div>
+      {line("Consommation réelle stock (L)", r.reel.conso_l === null ? "— (non calculable)" : `${nf(r.reel.conso_l)} L`, HELP.reel)}
+      {line("Qualité de la consommation réelle", REAL_META[r.reel.statut].label)}
+      {line("Source", r.reel.source ?? "—")}
+      {line("Consommation instrumentée Snowflake (L)", r.instrumentee.conso_l === null ? "—" : `${nf(r.instrumentee.conso_l)} L`, HELP.instr)}
+      {line("Consommation théorique CPH (L)", r.theorique.conso_l === null ? "—" : `${nf(r.theorique.conso_l)} L`, HELP.theo)}
+      {line("Écart réel vs instrumentée", gap(r.ecart_instrumentee), HELP.ecartI)}
+      {line("Écart réel vs théorique", gap(r.ecart_theorique), HELP.ecartT)}
+      {line("Statut global", GLOBAL_META[r.statut_global].label)}
+      {r.reel.reserves.length > 0 && <div style={{ marginTop: 8, fontSize: 12.5 }}><strong>Réserves :</strong><ul style={{ margin: "4px 0 0 18px" }}>{r.reel.reserves.map((x) => <li key={x}>{x}</li>)}</ul></div>}
+      <div style={{ marginTop: 8, fontSize: 12.5 }}><strong>Motif :</strong> {r.motif ?? "—"}</div>
+      <div style={{ marginTop: 4, fontSize: 12.5 }}><strong>Action attendue :</strong> {r.action}</div>
+      <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+        <button type="button" disabled={r.reel.bilan_id === null} onClick={() => onPick("stock")} style={{ padding: "8px 12px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.navy, color: "#fff", fontWeight: 800, fontSize: 12.5, cursor: r.reel.bilan_id === null ? "not-allowed" : "pointer", opacity: r.reel.bilan_id === null ? 0.5 : 1 }}>Détail du bilan de stock (composantes, sources)</button>
+        <button type="button" onClick={() => onPick("cph")} style={{ padding: "8px 12px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>Détail technique CPH (jour par jour)</button>
+      </div>
+    </Modal>
   );
 }

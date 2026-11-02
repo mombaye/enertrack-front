@@ -445,3 +445,12 @@ export const GLOBAL_STYLES = `
   .ft-scroll::-webkit-scrollbar-thumb:hover { background: #A8B7CC; }
   .ft-row:hover td { background: #F5F8FF !important; }
 `;
+
+/** Bandeau obligatoire sur tout résultat de commande / d'estimation (aucune valeur n'est une commande validée). */
+export function EstimationBanner() {
+  return (
+    <div role="note" style={{ padding: "9px 14px", borderRadius: FT.radius, background: FT.orangeL, border: "1px solid rgba(217,119,6,.35)", color: FT.orange, fontWeight: 800, fontSize: 12.5, letterSpacing: ".03em" }}>
+      ESTIMATION — VALIDATION FUEL MANAGER REQUISE
+    </div>
+  );
+}
