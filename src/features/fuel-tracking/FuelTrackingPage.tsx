@@ -12,7 +12,7 @@
 //   - Commande    : à venir.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, Calculator, Calendar, Droplets, Fuel, Gauge, LayoutGrid, RefreshCw, Warehouse } from "lucide-react";
 
 import {
@@ -91,7 +91,20 @@ function SourceBadge({ label, status }: { label: string; status: FuelSourceStatu
 }
 
 export default function FuelTrackingPage() {
-  const [activeTab, setActiveTab] = useState<MainTab>("DASHBOARD");
+  const qc = useQueryClient();
+  const [activeTab, setActiveTabState] = useState<MainTab>(() => {
+    try {
+      const saved = sessionStorage.getItem("fuel-tracking-tab") as MainTab | null;
+      return saved && MAIN_TABS.some((t) => t.key === saved) ? saved : "DASHBOARD";
+    } catch {
+      return "DASHBOARD";
+    }
+  });
+  const setActiveTab = (t: MainTab) => {
+    setActiveTabState(t);
+    try { sessionStorage.setItem("fuel-tracking-tab", t); } catch { /* stockage indisponible : on ignore */ }
+    window.scrollTo({ top: 0 });
+  };
   // Le header pilote une PLAGE de 2 mois (pas un mois unique) — sert
   // directement le Dashboard (tendance) ; l'onglet Suivis Consommations
   // (tableau site×mois) utilise le mois le plus récent de cette plage
@@ -231,37 +244,31 @@ export default function FuelTrackingPage() {
         <div
           ref={headerRef}
           className="ft-fade"
-          style={{ position: "sticky", top: 0, zIndex: 10, background: "#fff", border: `1px solid ${FT.border}`, borderRadius: FT.radius, boxShadow: FT.shadow, padding: "20px 24px" }}
+          style={{ position: "sticky", top: 0, zIndex: 10, background: "#fff", border: `1px solid ${FT.border}`, borderRadius: FT.radius, boxShadow: FT.shadow, padding: "10px 16px" }}
         >
-          <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 18, alignItems: "center" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 10, background: FT.blueL, display: "grid", placeItems: "center", color: FT.gold }}>
-                <BarChart3 size={16} />
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+              <div style={{ width: 30, height: 30, borderRadius: 9, background: FT.blueL, display: "grid", placeItems: "center", color: FT.gold, flexShrink: 0 }}>
+                <BarChart3 size={15} aria-hidden />
               </div>
-              <div>
-                <h1 style={{ margin: 0, color: "#0f172a", fontSize: 22, lineHeight: 1.25, fontWeight: 900, letterSpacing: "-.03em" }}>Suivi Carburant</h1>
-                <p style={{ margin: "5px 0 0", color: "#64748b", fontSize: 13 }}>Suivi automatisé de la consommation, du stock et des commandes carburant.</p>
-                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                  <SourceBadge label="Snowflake" status={consommationQ.data?.sources?.snowflake} />
-                  <SourceBadge label="ENOC" status={consommationQ.data?.sources?.enoc} />
-                </div>
-              </div>
+              <h1 style={{ margin: 0, color: "#0f172a", fontSize: 18, lineHeight: 1.2, fontWeight: 900, letterSpacing: "-.02em", whiteSpace: "nowrap" }}>Suivi Carburant</h1>
+              <SourceBadge label="Snowflake" status={consommationQ.data?.sources?.snowflake} />
+              <SourceBadge label="ENOC" status={consommationQ.data?.sources?.enoc} />
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: FT.textSub, textAlign: "center" }}>
-              <div>
-                <strong style={{ color: FT.text }}>Snowflake</strong> — Dernières données : {snowflakeLastDataLabel}
-              </div>
-              <div>
-                <strong style={{ color: FT.text }}>ENOC</strong> — Dernières données : {enocLastDataLabel}
-              </div>
+            <div style={{ display: "flex", gap: 14, fontSize: 11.5, color: FT.textSub, flexWrap: "wrap" }}>
+              <span><strong style={{ color: FT.text }}>Snowflake</strong> : {snowflakeLastDataLabel}</span>
+              <span><strong style={{ color: FT.text }}>ENOC</strong> : {enocLastDataLabel}</span>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifySelf: "end" }}>
-                {activeTab !== "CPH" && (
-                <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "7px 11px" }}>
-                  <Calendar size={14} color={FT.textSub} />
+            <div style={{ flex: 1 }} />
+
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              {(activeTab === "DASHBOARD" || activeTab === "CONSOMMATION") && (
+                <div title="Mois des indicateurs mensuels (tendance du Dashboard, couverture GE)" style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "5px 10px" }}>
+                  <Calendar size={14} color={FT.textSub} aria-hidden />
                   <input
+                    aria-label="Mois de début"
                     type="month"
                     value={fromMonth ?? ""}
                     max={toMonth ?? undefined}
@@ -270,6 +277,7 @@ export default function FuelTrackingPage() {
                   />
                   <span style={{ color: FT.textSub, fontSize: 12 }}>à</span>
                   <input
+                    aria-label="Mois de fin"
                     type="month"
                     value={toMonth ?? ""}
                     min={fromMonth ?? undefined}
@@ -278,19 +286,20 @@ export default function FuelTrackingPage() {
                     style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, color: FT.text, fontWeight: 700 }}
                   />
                 </div>
-                )}
-
-                <button
-                  onClick={() => consommationQ.refetch()}
-                  title="Rafraîchir"
-                  style={{ width: 33, height: 33, borderRadius: 9, border: `1px solid ${FT.border}`, background: FT.slateL, display: "grid", placeItems: "center", cursor: "pointer", color: FT.textMid, flexShrink: 0 }}
-                >
-                  <RefreshCw size={14} className={consommationQ.isFetching ? "ft-spin" : ""} />
-                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => { consommationQ.refetch(); qc.invalidateQueries(); }}
+                title="Rafraîchir toutes les données"
+                aria-label="Rafraîchir"
+                style={{ width: 31, height: 31, borderRadius: 9, border: `1px solid ${FT.border}`, background: FT.slateL, display: "grid", placeItems: "center", cursor: "pointer", color: FT.textMid, flexShrink: 0 }}
+              >
+                <RefreshCw size={14} className={consommationQ.isFetching ? "ft-spin" : ""} aria-hidden />
+              </button>
             </div>
           </div>
 
-          <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${FT.border}`, display: "flex", justifyContent: "center" }}>
+          <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-start", overflowX: "auto" }}>
             <SegmentedTabs options={MAIN_TABS} value={activeTab} onChange={setActiveTab} />
           </div>
         </div>
