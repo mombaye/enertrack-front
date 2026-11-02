@@ -2092,8 +2092,14 @@ export type ConsoKpis = {
   };
 };
 
+export type ConsoFraicheur = {
+  snowflake_derniere_date: string | null; age_jours: number | null; seuil_jours: number; perime: boolean;
+  synchro_en_echec: boolean; erreur_synchro: string | null; jours_non_couverts: number; periode_incomplete: boolean;
+};
+
 export type ConsoResponse = {
   detail?: string;
+  fraicheur?: ConsoFraicheur;
   periode: {
     debut: string; fin: string; libelle: string; jours: number; bilan_disponible: boolean; sites_avec_bilan: number; sites_calculables: number; par_defaut?: boolean;
   } | null;

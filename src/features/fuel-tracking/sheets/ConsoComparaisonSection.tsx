@@ -6,7 +6,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Download, Eye } from "lucide-react";
 import {
   downloadConsoExport, getConsommations, getConsommationsPeriodes,
-  type ConsoFilters, type ConsoGap, type ConsoGlobalStatus, type ConsoRealStatus, type ConsoRow,
+  type ConsoFilters, type ConsoFraicheur, type ConsoGap, type ConsoGlobalStatus, type ConsoRealStatus, type ConsoRow,
 } from "@/services/fuelTracking";
 import { KpiCard, Modal, Skeleton } from "../ui";
 import { FT, type Tone } from "../theme";
@@ -93,6 +93,22 @@ const COLS: Array<{ k: string; label: string; help?: string }> = [
   { k: "motif", label: "Motif" }, { k: "action", label: "Action attendue" }, { k: "detail", label: "" },
 ];
 
+function DataQualityNotice({ f }: { f: ConsoFraicheur | undefined }) {
+  if (!f || (!f.perime && !f.periode_incomplete && !f.synchro_en_echec)) return null;
+  const fr = (d: string) => d.split("-").reverse().join("/");
+  const lines: string[] = [];
+  if (f.snowflake_derniere_date === null) lines.push("Aucune donnée Snowflake synchronisée : consommation instrumentée et théorique indisponibles.");
+  else if (f.perime) lines.push(`Données Snowflake à jour jusqu'au ${fr(f.snowflake_derniere_date)} (${f.age_jours} j de retard, seuil ${f.seuil_jours} j).`);
+  if (f.periode_incomplete && f.snowflake_derniere_date) lines.push(`${f.jours_non_couverts} jour(s) de la période ne sont pas couverts : l'instrumentée et la théorique ne portent que sur les jours disponibles (la consommation réelle stock n'est pas concernée).`);
+  if (f.synchro_en_echec) lines.push(`Dernière synchronisation Snowflake en échec${f.erreur_synchro ? ` : ${f.erreur_synchro}` : ""}.`);
+  return (
+    <div role="status" style={{ padding: "9px 14px", borderRadius: FT.radius, background: FT.orangeL, border: "1px solid rgba(217,119,6,.3)", color: FT.text, fontSize: 12.5, display: "grid", gap: 2 }}>
+      <strong style={{ color: FT.orange }}>Qualité des données Snowflake</strong>
+      {lines.map((l) => <span key={l}>{l}</span>)}
+    </div>
+  );
+}
+
 function Disp({ pct, ok, jours, total }: { pct: number | null; ok: boolean; jours: number | null; total: number }) {
   if (pct === null) return <span style={{ color: FT.textSub }}>—</span>;
   return <span title={`${jours ?? 0} / ${total} jours`} style={{ color: ok ? FT.text : FT.orange, ...mono }}>{nf(pct, 0)} %</span>;
@@ -176,6 +192,7 @@ export function ConsoComparaisonSection() {
           Aucun bilan de stock enregistré pour cette période exacte ({per.libelle}). Les consommations instrumentée et théorique sont affichées sans comparaison ; choisissez une période de la liste « Périodes avec bilan ».
         </div>
       )}
+      <DataQualityNotice f={d?.fraicheur} />
       {q.isError && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.redL, color: FT.red, fontWeight: 700, fontSize: 13 }}>Impossible de charger les consommations (erreur serveur).</div>}
 
       {k && (

@@ -302,7 +302,6 @@ export function ConsommationSheet({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <ConsommationKpis data={data} stickyTop={stickyTop + 14} />
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <button
@@ -326,6 +325,12 @@ export function ConsommationSheet({
 
       <HorsReferentielBanner count={data?.sites_hors_referentiel} />
       <ConsoComparaisonSection />
+      {data?.kpis && (
+        <details style={{ border: `1px solid ${FT.border}`, borderRadius: FT.radius, background: FT.card, padding: "10px 14px" }}>
+          <summary style={{ cursor: "pointer", fontWeight: 800, fontSize: 13, color: FT.text }}>Couverture GE officielle du mois (fichier Stan) — indicateurs secondaires</summary>
+          <div style={{ marginTop: 10 }}><ConsommationKpis data={data} stickyTop={0} /></div>
+        </details>
+      )}
     </div>
   );
 }
