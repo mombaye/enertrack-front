@@ -13,6 +13,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useParams } from "react-router-dom";
 import { BarChart3, Calculator, Calendar, Droplets, Fuel, Gauge, LayoutGrid, RefreshCw, Warehouse } from "lucide-react";
 
 import {
@@ -25,7 +26,7 @@ import {
 } from "@/services/fuelTracking";
 
 import { FT } from "./theme";
-import { GLOBAL_STYLES, SegmentedTabs } from "./ui";
+import { GLOBAL_STYLES } from "./ui";
 import { ConsommationSheet } from "./sheets/ConsommationSheet";
 import { DashboardSheet } from "./sheets/DashboardSheet";
 import { StockSheet } from "./sheets/StockSheet";
@@ -35,14 +36,16 @@ import { ControleCphSheet } from "./sheets/ControleCphSheet";
 
 export type MainTab = "DASHBOARD" | "CONSOMMATION" | "CPH" | "STOCK" | "COMMANDE" | "ESTIMATION";
 
-const MAIN_TABS: Array<{ key: MainTab; label: string; icon: ReactNode }> = [
-  { key: "DASHBOARD", label: "Dashboard", icon: <LayoutGrid size={14} /> },
-  { key: "CONSOMMATION", label: "Suivis Consommations", icon: <Droplets size={14} /> },
-  { key: "CPH", label: "Contrôle CPH", icon: <Gauge size={14} /> },
-  { key: "STOCK", label: "Suivis Stock", icon: <Warehouse size={14} /> },
-  { key: "COMMANDE", label: "Commandes", icon: <Fuel size={14} /> },
-  { key: "ESTIMATION", label: "Estimation commande", icon: <Calculator size={14} /> },
+export const FUEL_TAB_SLUGS: Array<{ tab: MainTab; slug: string }> = [
+  { tab: "DASHBOARD", slug: "dashboard" },
+  { tab: "CONSOMMATION", slug: "consommations" },
+  { tab: "CPH", slug: "controle-cph" },
+  { tab: "STOCK", slug: "stock" },
+  { tab: "COMMANDE", slug: "commandes" },
+  { tab: "ESTIMATION", slug: "estimation-commande" },
 ];
+const TAB_BY_SLUG: Record<string, MainTab> = Object.fromEntries(FUEL_TAB_SLUGS.map((x) => [x.slug, x.tab]));
+const SLUG_BY_TAB = Object.fromEntries(FUEL_TAB_SLUGS.map((x) => [x.tab, x.slug])) as Record<MainTab, string>;
 
 /** Mois calendaire précédent le mois courant réel (pas lié aux données),
  * ex: le 2026-09-02 → "2026-08" — la plage de dates du header ne doit
@@ -92,17 +95,12 @@ function SourceBadge({ label, status }: { label: string; status: FuelSourceStatu
 
 export default function FuelTrackingPage() {
   const qc = useQueryClient();
-  const [activeTab, setActiveTabState] = useState<MainTab>(() => {
-    try {
-      const saved = sessionStorage.getItem("fuel-tracking-tab") as MainTab | null;
-      return saved && MAIN_TABS.some((t) => t.key === saved) ? saved : "DASHBOARD";
-    } catch {
-      return "DASHBOARD";
-    }
-  });
+  // L'onglet actif vient de l'adresse (sous-rubriques de la barre latérale : /modules/suivi-carburant/<onglet>).
+  const { tab: tabSlug } = useParams();
+  const navigate = useNavigate();
+  const activeTab: MainTab = TAB_BY_SLUG[tabSlug ?? ""] ?? "DASHBOARD";
   const setActiveTab = (t: MainTab) => {
-    setActiveTabState(t);
-    try { sessionStorage.setItem("fuel-tracking-tab", t); } catch { /* stockage indisponible : on ignore */ }
+    navigate(`/modules/suivi-carburant/${SLUG_BY_TAB[t]}`);
     window.scrollTo({ top: 0 });
   };
   // Le header pilote une PLAGE de 2 mois (pas un mois unique) — sert
@@ -299,9 +297,6 @@ export default function FuelTrackingPage() {
             </div>
           </div>
 
-          <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-start", overflowX: "auto" }}>
-            <SegmentedTabs options={MAIN_TABS} value={activeTab} onChange={setActiveTab} />
-          </div>
         </div>
 
         {activeTab === "DASHBOARD" && (

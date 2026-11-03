@@ -17,7 +17,7 @@ import camusatLogo from "@/assets/images/camusat-logo.png";
 import { useAuth } from "@/auth/AuthContext";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
-type Section = "ANALYSE" | "FACTURATION" | "CONSO & ESTIMATION" | "PILOTAGE GRID" | "MODULES" | "ADMINISTRATION" | "RÉSEAU";
+type Section = "ANALYSE" | "FACTURATION" | "CONSO & ESTIMATION" | "SUIVI CARBURANT" | "PILOTAGE GRID" | "MODULES" | "ADMINISTRATION" | "RÉSEAU";
 type LinkItem = {
   to: string; label: string; icon: React.ReactNode;
   adminOnly?: boolean; section?: Section; end?: boolean;
@@ -43,6 +43,14 @@ const LINKS: LinkItem[] = [
   { to: "/modules/estimation", icon: <Calculator />,   label: "Estimation", section: "CONSO & ESTIMATION", end: true },
 
   { to: "/modules/prediction", icon: <BrainCircuit />, label: "Prédiction IA", section: "CONSO & ESTIMATION", end: true },
+  // ── SUIVI CARBURANT — sous-rubriques (le contenu s'affiche à droite) ─────────────────────────────────
+  { to: "/modules/suivi-carburant/dashboard",           icon: <LayoutDashboard />, label: "Dashboard",             section: "SUIVI CARBURANT" },
+  { to: "/modules/suivi-carburant/consommations",       icon: <Fuel />,            label: "Suivis Consommations",  section: "SUIVI CARBURANT" },
+  { to: "/modules/suivi-carburant/controle-cph",        icon: <Cpu />,             label: "Contrôle CPH",          section: "SUIVI CARBURANT" },
+  { to: "/modules/suivi-carburant/stock",               icon: <ClipboardList />,   label: "Suivis Stock",          section: "SUIVI CARBURANT" },
+  { to: "/modules/suivi-carburant/commandes",           icon: <Receipt />,         label: "Commandes",             section: "SUIVI CARBURANT" },
+  { to: "/modules/suivi-carburant/estimation-commande", icon: <Calculator />,      label: "Estimation commande",   section: "SUIVI CARBURANT" },
+
   // ── PILOTAGE GRID — les 11 parties du fichier, le contenu s'affiche à droite ────────────────────────
   { to: "/pilotage-grid/synthese",               icon: <LayoutDashboard />, label: "Synthèse",                section: "PILOTAGE GRID" },
   { to: "/pilotage-grid/paiements",              icon: <CreditCard />,      label: "Paiements",               section: "PILOTAGE GRID" },
@@ -74,14 +82,6 @@ const LINKS: LinkItem[] = [
     comingSoon: false,
   },
 
-  {
-  to: "/modules/suivi-carburant",
-    icon: <Fuel />,
-    label: "Suivi Carburant",
-    section: "MODULES",
-    end: true,
-    comingSoon: false,
-  },
 
   // ── ADMINISTRATION ───────────────────────────────────────────────────────────
   { to: "/users",                  icon: <User />,         label: "Utilisateurs",               section: "ADMINISTRATION", adminOnly: true },
@@ -267,6 +267,7 @@ function Inner({
       ANALYSE: [],
       FACTURATION: [],
       "CONSO & ESTIMATION": [],
+      "SUIVI CARBURANT": [],
       "PILOTAGE GRID": [],
       MODULES: [],
       ADMINISTRATION: [],
@@ -284,6 +285,7 @@ function Inner({
     "ANALYSE",
     "FACTURATION",
     "CONSO & ESTIMATION",
+    "SUIVI CARBURANT",
     "PILOTAGE GRID",
     "MODULES",
     "ADMINISTRATION",
