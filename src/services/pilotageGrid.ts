@@ -76,3 +76,60 @@ export function pgApiError(e: unknown): string {
   const d = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
   return d ?? (e instanceof Error ? e.message : "Erreur inattendue");
 }
+
+// ── Sections calculées côté serveur ────────────────────────────────────────────────────────────────────────────────────────────────
+export type PgFilterState = { region?: string; porteur?: string; tarif?: string; tension?: string; from?: string; to?: string };
+
+export type PgFacets = { months: string[]; regions: string[]; porteurs: string[]; tarifs: string[]; default_from: string | null; default_to: string | null };
+
+export type PgStatut = { idx: number; label: string; ttc: number; nb: number };
+
+export type PgSynthese = {
+  statuts: PgStatut[];
+  pct_paye: number;
+  kpis: { ttc: number; nb_factures: number; reste: number; reste_nb: number; kwh: number; k2_pct: number; ht: number; cout_kwh: number; sites_factures: number; avec_changement_contrat: number };
+  mensuel: Array<{ month: string; k1: number; k2: number; ht: number }>;
+  variations: Array<{ site: string; label: string; name: string; avg: number; last: number; d: number }>;
+  variations_note: string;
+  couts: Array<{ site: string; label: string; name: string; tarif: string; ps: number | null; moy: number; pu: number }>;
+  periode: { from: string; to: string };
+};
+
+export type PgSeries = { statut?: number; porteur?: string; label?: string; data: number[] };
+
+export type PgPaiements = {
+  metric: "ttc" | "nb";
+  kpis: { nb: number; ttc: number; statuts: PgStatut[] };
+  echeance: { labels: string[]; series: Array<{ porteur: string; data: number[] }> };
+  comptable: { labels: string[]; series: PgSeries[] };
+  regions: { labels: string[]; series: PgSeries[] };
+  anciennete: { labels: string[]; series: PgSeries[] };
+  periode: { from: string; to: string };
+};
+
+export type PgFactures = {
+  total: number; ttc: number; page: number; page_size: number;
+  rows: Array<{ numero: number; contrat: number; site_id: string; site_name: string; date: string; ttc: number; statut: number; porteur: string; localisation: string }>;
+};
+
+const clean = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== ""));
+
+export async function getPgFacets() {
+  const { data } = await api.get<PgFacets>(`${BASE}/facets/`);
+  return data;
+}
+
+export async function getPgSynthese(f: PgFilterState) {
+  const { data } = await api.get<PgSynthese>(`${BASE}/synthese/`, { params: clean(f) });
+  return data;
+}
+
+export async function getPgPaiements(f: PgFilterState, metric: "ttc" | "nb") {
+  const { data } = await api.get<PgPaiements>(`${BASE}/paiements/`, { params: clean({ ...f, metric }) });
+  return data;
+}
+
+export async function getPgFactures(f: PgFilterState, extra: { statuts: string; q?: string; page: number; page_size: number }) {
+  const { data } = await api.get<PgFactures>(`${BASE}/paiements/factures/`, { params: clean({ ...f, ...extra }) });
+  return data;
+}
