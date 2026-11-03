@@ -11,13 +11,13 @@ import {
   ClipboardList,
   TrendingDown,
   LogOut,
-
+  LayoutDashboard, CreditCard, MapPin, FileText, FileX, Leaf, Cpu, Coins, Repeat, FileCheck, FileSearch,
 } from "lucide-react";
 import camusatLogo from "@/assets/images/camusat-logo.png";
 import { useAuth } from "@/auth/AuthContext";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
-type Section = "ANALYSE" | "FACTURATION" | "CONSO & ESTIMATION" | "MODULES" | "ADMINISTRATION" | "RÉSEAU";
+type Section = "ANALYSE" | "FACTURATION" | "CONSO & ESTIMATION" | "PILOTAGE GRID" | "MODULES" | "ADMINISTRATION" | "RÉSEAU";
 type LinkItem = {
   to: string; label: string; icon: React.ReactNode;
   adminOnly?: boolean; section?: Section; end?: boolean;
@@ -43,6 +43,19 @@ const LINKS: LinkItem[] = [
   { to: "/modules/estimation", icon: <Calculator />,   label: "Estimation", section: "CONSO & ESTIMATION", end: true },
 
   { to: "/modules/prediction", icon: <BrainCircuit />, label: "Prédiction IA", section: "CONSO & ESTIMATION", end: true },
+  // ── PILOTAGE GRID — les 11 parties du fichier, le contenu s'affiche à droite ────────────────────────
+  { to: "/pilotage-grid/synthese",               icon: <LayoutDashboard />, label: "Synthèse",                section: "PILOTAGE GRID" },
+  { to: "/pilotage-grid/paiements",              icon: <CreditCard />,      label: "Paiements",               section: "PILOTAGE GRID" },
+  { to: "/pilotage-grid/sites",                  icon: <MapPin />,          label: "Sites",                   section: "PILOTAGE GRID" },
+  { to: "/pilotage-grid/fiche-site",             icon: <FileText />,        label: "Fiche site",              section: "PILOTAGE GRID" },
+  { to: "/pilotage-grid/non-parvenues",          icon: <FileX />,           label: "Non parvenues",           section: "PILOTAGE GRID" },
+  { to: "/pilotage-grid/sites-demandes",         icon: <FileSearch />,      label: "Sites demandés",          section: "PILOTAGE GRID" },
+  { to: "/pilotage-grid/efficacite-energetique", icon: <Leaf />,            label: "Efficacité énergétique",  section: "PILOTAGE GRID" },
+  { to: "/pilotage-grid/config-nouvelle-baie",   icon: <Cpu />,             label: "Config Nouvelle Baie",    section: "PILOTAGE GRID" },
+  { to: "/pilotage-grid/redevance",              icon: <Coins />,           label: "Redevance",               section: "PILOTAGE GRID" },
+  { to: "/pilotage-grid/changements-de-tarif",   icon: <Repeat />,          label: "Changements de tarif",    section: "PILOTAGE GRID" },
+  { to: "/pilotage-grid/contrats-et-controles",  icon: <FileCheck />,       label: "Contrats et contrôles",   section: "PILOTAGE GRID" },
+
   // ── MODULES ──────────────────────────────────────────────────────────────────
   {
     to: "/modules/optimisation",
@@ -254,6 +267,7 @@ function Inner({
       ANALYSE: [],
       FACTURATION: [],
       "CONSO & ESTIMATION": [],
+      "PILOTAGE GRID": [],
       MODULES: [],
       ADMINISTRATION: [],
       "RÉSEAU": [],
@@ -270,6 +284,7 @@ function Inner({
     "ANALYSE",
     "FACTURATION",
     "CONSO & ESTIMATION",
+    "PILOTAGE GRID",
     "MODULES",
     "ADMINISTRATION",
     "RÉSEAU",

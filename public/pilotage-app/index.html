@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pilotage Grid – facturation, paiements et sites</title>
+<script src="chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#EEF2F1; --surface:#FFFFFF; --ink:#16262E; --muted:#5A6B73; --rule:#D3DCD9; --soft:#E4EBE9; --sel:#DCEAF5;
+  --paid:#2E7D5B; --cancel:#9AA4A9; --unpaid:#D08A1E; --hors:#B0425A; --none:#5B5FC7;
+  --akt:#1E5B8E; --son:#E0741A; --mix:#7A9A3A; --mix2:#8E8E8E; --nop:#C3CACD;
+  --part:#D08A1E;--anom:#B0425A;--eff:#2E7D5B;--stop:#B0425A;--meter:#5B5FC7;--mm:#8E6C3A;--ps:#D08A1E;--est:#9AA4A9;--kwh:#1E5B8E;--before:#9AA4A9;--k1:#1E5B8E; --k2:#E0741A; --money:#16262E; --ign:#B0425A; --up:#B0425A; --down:#2E7D5B; --focus:#1E5B8E;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px); color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0F1B20; --surface:#172830; --ink:#E6EEEC; --muted:#9AAFB5; --rule:#2B414A; --soft:#1F343D; --sel:#1E3A4D;
+  --paid:#4DB387; --cancel:#7F8C92; --unpaid:#E9A43C; --hors:#DC6A82; --none:#8C8FF0;
+  --akt:#5A9BD5; --son:#F39A4A; --mix:#A3C46A; --mix2:#A5A5A5; --nop:#56666D;
+  --part:#E9A43C;--anom:#DC6A82;--eff:#4DB387;--stop:#DC6A82;--meter:#8C8FF0;--mm:#C9A26B;--ps:#E9A43C;--est:#7F8C92;--kwh:#5A9BD5;--before:#7F8C92;--k1:#5A9BD5; --k2:#F39A4A; --money:#E6EEEC; --ign:#DC6A82; --up:#DC6A82; --down:#4DB387; --focus:#8CC4F2; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#0F1B20; --surface:#172830; --ink:#E6EEEC; --muted:#9AAFB5; --rule:#2B414A; --soft:#1F343D; --sel:#1E3A4D;
+  --paid:#4DB387; --cancel:#7F8C92; --unpaid:#E9A43C; --hors:#DC6A82; --none:#8C8FF0;
+  --akt:#5A9BD5; --son:#F39A4A; --mix:#A3C46A; --mix2:#A5A5A5; --nop:#56666D;
+  --part:#E9A43C;--anom:#DC6A82;--eff:#4DB387;--stop:#DC6A82;--meter:#8C8FF0;--mm:#C9A26B;--ps:#E9A43C;--est:#7F8C92;--kwh:#5A9BD5;--before:#7F8C92;--k1:#5A9BD5; --k2:#F39A4A; --money:#E6EEEC; --ign:#DC6A82; --up:#DC6A82; --down:#4DB387; --focus:#8CC4F2; color-scheme:dark;}
+*{box-sizing:border-box}
+html{scroll-padding-top:calc(env(safe-area-inset-top,0px) + 130px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Archivo",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.45;font-variant-numeric:tabular-nums}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.wrap{max-width:1320px;margin:0 auto;padding:0 20px 48px}
+header.top{padding:26px 0 12px;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px}
+h1{font-stretch:75%;font-weight:760;font-size:clamp(28px,4vw,40px);line-height:1.05;margin:0;letter-spacing:-.01em}
+.sub{color:var(--muted);margin:6px 0 0;max-width:80ch}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:6;background:var(--bg);border-bottom:1px solid var(--rule)}
+.tabs{display:flex;gap:2px;overflow-x:auto;border-bottom:1px solid var(--rule)}
+.tab{font:inherit;font-size:15px;font-weight:600;background:none;border:0;border-bottom:3px solid transparent;color:var(--muted);padding:10px 14px 9px;cursor:pointer;white-space:nowrap}
+.tab[aria-selected=true]{color:var(--ink);border-bottom-color:var(--ink)}
+.filters{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;padding:10px 0}
+.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+select,input[type=search],input[list]{font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:6px 8px;min-width:108px}
+.chk{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink);padding-bottom:7px}
+.btn{font:inherit;font-size:13px;border:1px solid var(--rule);background:transparent;color:var(--ink);border-radius:6px;padding:7px 11px;cursor:pointer}
+.btn:hover{background:var(--soft)}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:6px;overflow:hidden;background:var(--surface)}
+.seg button{font:inherit;font-size:13px;border:0;background:transparent;color:var(--muted);padding:7px 11px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--bg)}
+.spacer{flex:1}
+[role=tabpanel][hidden]{display:none}
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);margin:20px 0 22px}
+.kpi{padding:14px 14px;border-left:1px solid var(--rule);min-width:0}
+.kpi:first-child{border-left:0;padding-left:0}
+.kpi .v{font-stretch:75%;font-weight:720;font-size:25px;line-height:1.1}
+.kpi .l{font-size:13px;color:var(--muted)}
+.kpi .d{font-size:12px;color:var(--muted);margin-top:2px}
+section{margin-top:30px}
+h2{font-stretch:80%;font-weight:700;font-size:22px;margin:0 0 4px}
+h3{font-size:15px;font-weight:650;margin:0 0 2px}
+.note{color:var(--muted);font-size:13px;margin:0 0 12px;max-width:90ch}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.panel{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:16px;min-width:0}
+.cv{position:relative;height:300px}.cv.tall{height:380px}
+/* meter */
+.meter{margin:22px 0 4px;display:grid;grid-template-columns:minmax(200px,300px) 1fr;gap:24px;align-items:center}
+.big{font-stretch:62%;font-weight:800;font-size:clamp(60px,9vw,104px);line-height:.85;letter-spacing:-.02em}
+.big small{font-size:.38em;font-weight:600;margin-left:2px}
+.bigl{color:var(--muted);font-size:13px;margin-top:6px}
+.track{display:flex;height:48px;border-radius:4px;overflow:hidden;background:var(--soft)}
+.seg-s{height:100%;transition:width .5s ease}
+.ticks{position:relative;height:18px;margin-top:4px;font-size:11px;color:var(--muted)}
+.ticks span{position:absolute;transform:translateX(-50%);white-space:nowrap}
+.ticks span:first-child{transform:none}.ticks span:last-child{transform:translateX(-100%)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:8px;font-size:13px}
+.legend b{font-weight:650}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:0}
+.hatch{background:repeating-linear-gradient(45deg,var(--ign) 0 2px,transparent 2px 5px);border:1px solid var(--ign)}
+/* tables */
+.scroll{overflow:auto;border:1px solid var(--rule);border-radius:8px;background:var(--surface)}
+.scroll.h{max-height:460px}.scroll.s{max-height:380px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--soft);white-space:nowrap}
+th{font-weight:650;color:var(--muted);background:var(--surface);position:sticky;top:0;z-index:1}
+th.sort{cursor:pointer}th.sort:hover{color:var(--ink)}
+td.n,th.n{text-align:right}
+tbody tr.row{cursor:pointer}
+tbody tr.row:hover td{background:var(--soft)}
+tbody tr.on td{background:var(--sel)}
+.tblhead{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:inherit;font-size:13px;border:1px solid var(--rule);background:var(--surface);color:var(--ink);border-radius:999px;padding:4px 10px;cursor:pointer}
+.chip[aria-pressed=true]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.more{margin-top:10px;display:flex;gap:12px;align-items:center;color:var(--muted);font-size:13px}
+.flag{display:inline-block;font-size:11px;padding:1px 6px;border-radius:999px;border:1px solid var(--ign);color:var(--ign);margin-left:6px}
+.up{color:var(--up);font-weight:650}.down{color:var(--down);font-weight:650}
+/* fiche */
+.fiche{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:22px}
+.fhead{display:flex;flex-wrap:wrap;gap:14px 28px;align-items:flex-end;justify-content:space-between;border-bottom:1px solid var(--rule);padding-bottom:16px}
+.sid{font-stretch:62%;font-weight:800;font-size:clamp(44px,7vw,74px);line-height:.9}
+.sname{font-size:19px;font-weight:600;margin-top:6px}
+.snav{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+.attrs{display:grid;grid-template-columns:repeat(6,1fr);margin:16px 0 4px}
+.attr{padding:8px 12px 8px 0;border-bottom:1px solid var(--soft);min-width:0}
+.attr .l{font-size:12px;color:var(--muted)}
+.attr .v{font-size:15px;font-weight:620;overflow-wrap:anywhere}
+.tl{width:100%;display:block}
+.tl text{font-family:inherit;font-size:12px;fill:var(--ink)}
+.tl .m{fill:var(--muted)}
+.checks ul{margin:6px 0 0;padding-left:18px}.checks li{margin:6px 0}
+.ok{color:var(--paid);font-weight:650}
+
+.strip{display:flex;gap:1px;align-items:center}
+.cell{width:9px;height:16px;border-radius:1px;flex:none}
+.c-ok{background:var(--rule)}.c-part{background:var(--unpaid)}.c-miss{background:var(--hors)}.c-na{background:transparent;box-shadow:inset 0 0 0 1px var(--soft)}
+.strip.big .cell{width:auto;flex:1;height:26px}
+.yr{font-size:10px;color:var(--muted);width:9px;flex:none;overflow:visible;white-space:nowrap}
+td.hl{background:color-mix(in srgb,var(--hors) 14%,transparent);color:var(--hors);font-weight:650}
+td.hw{background:color-mix(in srgb,var(--unpaid) 16%,transparent);font-weight:650}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600}
+.grp{background:color-mix(in srgb,var(--k1) 9%,var(--surface))}
+td.gcell{background:color-mix(in srgb,var(--k1) 5%,transparent)}
+tr.grow th{top:0;border-bottom:0;font-size:12px;text-align:left;color:var(--ink)}
+tr.hrow th{top:30px}
+.sitetbl .stk{position:sticky;left:0;z-index:2;background:var(--surface);box-shadow:1px 0 0 var(--rule)}
+.sitetbl thead .stk{z-index:3}
+.sitetbl tbody tr.row:hover td.stk{background:var(--soft)}
+.sitetbl tbody tr.on td.stk{background:var(--sel)}
+.sitetbl tr.grow th.stk0{position:sticky;left:0;z-index:3}
+.kpis.g8{grid-template-columns:repeat(4,1fr)}
+.kpis.g8 .kpi:nth-child(4n+1){border-left:0;padding-left:0}
+.kpis.g8 .kpi:nth-child(n+5){border-top:1px solid var(--rule)}
+
+/* sous-pages intégrées */
+.subhead{padding:18px 0 4px} .tabtitle{font-stretch:75%;font-weight:760;font-size:clamp(24px,3.2vw,32px);line-height:1.05;margin:0}
+#p-dem .bar.inner,#p-eff .bar.inner{position:static;background:transparent;border-bottom:1px solid var(--rule)}
+button.of{font:inherit;font-weight:700;background:none;border:0;padding:0;color:var(--ink);cursor:pointer;text-decoration:underline;text-decoration-color:var(--rule);text-underline-offset:3px}
+button.of:hover{text-decoration-color:var(--ink)}
+#p-dem header{padding:26px 0 8px}
+#p-dem .sub{color:var(--muted);margin:6px 0 0;max-width:90ch}
+#p-dem h2{font-stretch:80%;font-weight:700;font-size:21px;margin:0 0 4px}
+#p-dem h3{font-size:15px;font-weight:650;margin:0 0 2px}
+#p-dem .note{color:var(--muted);font-size:13px;margin:0 0 10px;max-width:95ch}
+#p-dem .kpis{display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);margin:18px 0 20px}
+#p-dem .kpi{padding:12px 14px;border-left:1px solid var(--rule)}
+#p-dem .kpi:first-child{border-left:0;padding-left:0}
+#p-dem .kpi .v{font-stretch:75%;font-weight:720;font-size:25px;line-height:1.1}
+#p-dem .kpi .l{font-size:13px;color:var(--muted)}
+#p-dem .kpi .d{font-size:12px;color:var(--muted)}
+#p-dem .bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:6;background:var(--bg);border-bottom:1px solid var(--rule);padding:10px 0}
+#p-dem .filters{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end}
+#p-dem .f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+#p-dem select,#p-dem input[type=search]{font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:6px 8px;min-width:120px}
+#p-dem .seg{display:inline-flex;border:1px solid var(--rule);border-radius:6px;overflow:hidden;background:var(--surface)}
+#p-dem .seg button{font:inherit;font-size:13px;border:0;background:transparent;color:var(--muted);padding:7px 11px;cursor:pointer}
+#p-dem .seg button[aria-pressed=true]{background:var(--ink);color:var(--bg)}
+#p-dem .btn{font:inherit;font-size:13px;border:1px solid var(--rule);background:transparent;color:var(--ink);border-radius:6px;padding:7px 11px;cursor:pointer}
+#p-dem .btn:hover{background:var(--soft)}
+#p-dem .chk{display:flex;align-items:center;gap:6px;font-size:13px;padding-bottom:7px}
+#p-dem .spacer{flex:1}
+#p-dem .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:6px}
+#p-dem .panel{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:16px;min-width:0}
+#p-dem .cv{position:relative;height:320px}
+#p-dem .chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px;min-height:28px}
+#p-dem .chip{font:inherit;font-size:12px;border:1px solid var(--rule);background:var(--surface);color:var(--ink);border-radius:999px;padding:3px 9px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+#p-dem .chip:hover{background:var(--soft)}
+#p-dem .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+#p-dem section{margin-top:28px}
+#p-dem .scroll{overflow:auto;border:1px solid var(--rule);border-radius:8px;background:var(--surface);max-height:620px}
+#p-dem table{border-collapse:separate;border-spacing:0;font-size:12.5px;width:max-content;min-width:100%}
+#p-dem th,#p-dem td{padding:6px 8px;border-bottom:1px solid var(--soft);white-space:nowrap;text-align:right;background:var(--surface)}
+#p-dem th{font-weight:650;color:var(--muted);position:sticky;top:0;z-index:2}
+#p-dem th.l,#p-dem td.l{text-align:left}
+#p-dem .s0{position:sticky;left:0;z-index:3;min-width:34px}
+#p-dem .s1{position:sticky;left:34px;z-index:3;min-width:92px}
+#p-dem .s2{position:sticky;left:126px;z-index:3;min-width:170px;max-width:170px;overflow:hidden;text-overflow:ellipsis;box-shadow:1px 0 0 var(--rule)}
+#p-dem th.s0,#p-dem th.s1,#p-dem th.s2{z-index:4}
+#p-dem tr.on td{background:var(--sel)}
+#p-dem td.p{background:color-mix(in srgb,var(--part) 18%,var(--surface))}
+#p-dem td.z{color:var(--muted)}
+#p-dem td.a{box-shadow:inset 0 0 0 2px var(--anom);color:var(--anom);font-weight:650}
+#p-dem td.yr,#p-dem th.yr{border-left:2px solid var(--rule)}
+#p-dem .up{color:var(--up);font-weight:650}
+#p-dem .down{color:var(--down);font-weight:650}
+#p-dem .legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12px;color:var(--muted);margin:0 0 8px}
+#p-dem .sw{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+#p-dem .more{margin-top:10px;display:flex;gap:12px;align-items:center;color:var(--muted);font-size:13px}
+#p-dem svg.sp{display:block}
+#p-dem .miss{columns:3 260px;font-size:13px;margin:0;padding:0;list-style:none}
+#p-dem .miss li{padding:2px 0;break-inside:avoid}
+#p-dem footer{margin-top:36px;color:var(--muted);font-size:12px;max-width:110ch}
+@media (max-width:900px){#p-dem .grid2{grid-template-columns:1fr}#p-dem .kpis{grid-template-columns:repeat(2,1fr)}#p-dem .kpi:nth-child(odd){border-left:0;padding-left:0}}
+#p-eff header{padding:26px 0 6px}
+#p-eff h2{font-stretch:80%;font-weight:700;font-size:21px;margin:0 0 4px}
+#p-eff h3{font-size:15px;font-weight:650;margin:0 0 2px}
+#p-eff .sub,#p-eff .note{color:var(--muted)}
+#p-eff .sub{margin:6px 0 0;max-width:90ch}
+#p-eff .note{font-size:13px;margin:0 0 10px;max-width:95ch}
+#p-eff .lead{font-size:16px;max-width:92ch;margin:16px 0 0}
+#p-eff .lead b{font-weight:650}
+#p-eff .kpis{display:grid;grid-template-columns:repeat(6,1fr);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);margin:18px 0 20px}
+#p-eff .kpi{padding:12px 14px;border-left:1px solid var(--rule);min-width:0}
+#p-eff .kpi:first-child{border-left:0;padding-left:0}
+#p-eff .kpi .v{font-stretch:75%;font-weight:720;font-size:25px;line-height:1.1}
+#p-eff .kpi .l{font-size:13px;color:var(--muted)}
+#p-eff .kpi .d{font-size:12px;color:var(--muted)}
+#p-eff .kpi.hero .v{color:var(--eff)}
+#p-eff .bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:6;background:var(--bg);border-bottom:1px solid var(--rule);padding:10px 0}
+#p-eff .filters{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end}
+#p-eff .f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+#p-eff select,#p-eff input[type=search]{font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:6px 8px;min-width:120px}
+#p-eff .chips{display:flex;flex-wrap:wrap;gap:6px}
+#p-eff .chip{font:inherit;font-size:13px;border:1px solid var(--rule);background:var(--surface);color:var(--ink);border-radius:999px;padding:4px 10px;cursor:pointer}
+#p-eff .chip[aria-pressed=true]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+#p-eff .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:0}
+#p-eff .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+#p-eff .panel{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:16px;min-width:0}
+#p-eff .cv{position:relative;height:300px}
+#p-eff section{margin-top:28px}
+#p-eff .scroll{overflow:auto;border:1px solid var(--rule);border-radius:8px;background:var(--surface);max-height:560px}
+#p-eff table{border-collapse:separate;border-spacing:0;font-size:13px;width:100%}
+#p-eff th,#p-eff td{padding:7px 9px;border-bottom:1px solid var(--soft);white-space:nowrap;text-align:right;background:var(--surface)}
+#p-eff th{font-weight:650;color:var(--muted);position:sticky;top:0;z-index:2;cursor:pointer}
+#p-eff th.l,#p-eff td.l{text-align:left}
+#p-eff tbody tr{cursor:pointer}
+#p-eff tbody tr:hover td{background:var(--soft)}
+#p-eff tr.on td{background:var(--sel)}
+#p-eff .pill{display:inline-flex;align-items:center;font-size:12px;font-weight:600}
+#p-eff .down{color:var(--eff);font-weight:650}
+#p-eff .tag{font-size:11px;border:1px solid var(--rule);border-radius:999px;padding:1px 6px;color:var(--muted);margin-left:4px}
+#p-eff .more{margin-top:10px;display:flex;gap:12px;align-items:center;color:var(--muted);font-size:13px}
+#p-eff .btn{font:inherit;font-size:13px;border:1px solid var(--rule);background:transparent;color:var(--ink);border-radius:6px;padding:7px 11px;cursor:pointer}
+#p-eff .btn:hover{background:var(--soft)}
+#p-eff .fiche{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:20px}
+#p-eff .fhead{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px;border-bottom:1px solid var(--rule);padding-bottom:12px}
+#p-eff .sid{font-stretch:62%;font-weight:800;font-size:clamp(40px,6vw,64px);line-height:.9}
+#p-eff .attrs{display:grid;grid-template-columns:repeat(6,1fr);margin:12px 0}
+#p-eff .attr{padding:7px 12px 7px 0;border-bottom:1px solid var(--soft)}
+#p-eff .attr .l{font-size:12px;color:var(--muted)}
+#p-eff .attr .v{font-size:15px;font-weight:620}
+#p-eff .method{font-size:13px;color:var(--muted);max-width:110ch}
+#p-eff .method li{margin:4px 0}
+@media (max-width:1000px){#p-eff .grid2{grid-template-columns:1fr}#p-eff .kpis{grid-template-columns:repeat(3,1fr)}#p-eff .kpi:nth-child(3n+1){border-left:0;padding-left:0}#p-eff .attrs{grid-template-columns:repeat(3,1fr)}}
+
+.selbar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;background:var(--sel);border:1px solid var(--rule);border-radius:8px;padding:8px 12px;margin:0 0 8px;font-size:13px}
+.selbar[hidden]{display:none}
+.selsums{display:flex;flex-wrap:wrap;gap:4px 14px;color:var(--muted)}.selsum b{color:var(--ink)}
+.selta{width:100%;height:110px;font:12px/1.4 ui-monospace,monospace;margin:0 0 8px;border:1px solid var(--rule);border-radius:6px;background:var(--surface);color:var(--ink)}
+th.selc,td.selc{width:34px;min-width:34px;max-width:34px;text-align:center!important;padding-left:6px!important;padding-right:6px!important}
+td.selc input,th.selc input{width:15px;height:15px;cursor:pointer;margin:0}
+tr.sel-on td{background:color-mix(in srgb,var(--k1) 13%,var(--surface))!important}
+.sitetbl th.selc,.sitetbl td.selc{position:sticky;left:0;z-index:3;background:var(--surface)}
+.sitetbl .stk{left:34px!important}
+.sitetbl tr.grow th.stk0{left:34px!important}
+#p-dem th.selc,#p-dem td.selc{position:sticky;left:0;z-index:3;background:var(--surface)}
+#p-dem .s0{left:34px!important}#p-dem .s1{left:68px!important}#p-dem .s2{left:160px!important}
+tr.tot td{background:var(--soft)!important;border-top:1px solid var(--rule)}
+footer{margin-top:40px;color:var(--muted);font-size:12px;max-width:110ch}
+@media (max-width:1000px){.grid2{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(3,1fr)}.kpi:nth-child(3n+1){border-left:0;padding-left:0}.attrs{grid-template-columns:repeat(3,1fr)}.meter{grid-template-columns:1fr}}
+@media (max-width:560px){.kpis{grid-template-columns:repeat(2,1fr)}.kpi{border-left:0;padding-left:0}.attrs{grid-template-columns:repeat(2,1fr)}}
+@media (prefers-reduced-motion:reduce){.seg-s{transition:none}}
+
+/* Onglet Redevance */
+#p-red{--navy:#1F3A5F;--bar1:#1F3A5F;--bg:#FFFFFF;--card:#F7F9FB;--rule:#E1E6EB;--ink:#1A2733;--mut:#5F6B76;--red:#D3343A;--redbg:#FDF1F1;--redb:#F2B8BA;--grn:#1E9E4A;--grnbg:#EFF9F2;--grnb:#B7E2C4;--blue:#1F5FBF;--bluebg:#EEF4FC;--amb:#C9811A;--sel:#E3EEFB;--ambbg:#FFF1CC;--ambb:#E9C46A;
+color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) #p-red{--navy:#1B3350;--bar1:#5A8FD6;--bg:#0F1720;--card:#16212C;--rule:#2A3947;--ink:#E6EDF3;--mut:#9AA9B6;--red:#F0676B;--redbg:#2A1719;--redb:#5A2A2D;--grn:#4CC47A;--grnbg:#132719;--grnb:#2C5A3A;--blue:#6FA4F0;--bluebg:#142338;--amb:#E9A43C;--sel:#1E3A4D;--ambbg:#3A2E12;--ambb:#7A5A1A;color-scheme:dark}}
+:root[data-theme="dark"] #p-red{--navy:#1B3350;--bar1:#5A8FD6;--bg:#0F1720;--card:#16212C;--rule:#2A3947;--ink:#E6EDF3;--mut:#9AA9B6;--red:#F0676B;--redbg:#2A1719;--redb:#5A2A2D;--grn:#4CC47A;--grnbg:#132719;--grnb:#2C5A3A;--blue:#6FA4F0;--bluebg:#142338;--amb:#E9A43C;--sel:#1E3A4D;--ambbg:#3A2E12;--ambb:#7A5A1A;color-scheme:dark}
+#p-red .ban{background:var(--navy);color:#fff;border-radius:10px;padding:22px 28px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+#p-red .ban h1{margin:0;font-size:22px;font-weight:700}
+#p-red .ban p{margin:8px 0 0;font-size:13px;color:#D6E0EC}
+#p-red .ban .r{text-align:right;font-size:13px}
+#p-red .cards{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin:20px 0 26px}
+#p-red .card{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:14px 8px;text-align:center}
+#p-red .card .v{font-size:21px;font-weight:700}
+#p-red .card .l{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.02em;margin-top:6px}
+#p-red .card .s{font-size:11px;color:var(--mut)}
+#p-red .red{color:var(--red)}
+#p-red .grn{color:var(--grn)}
+#p-red .blue{color:var(--blue)}
+#p-red h2{font-size:18px;margin:30px 0 14px;padding-bottom:8px;border-bottom:2px solid var(--red)}
+#p-red h2.b{border-color:var(--blue)}
+#p-red h3{font-size:14px;color:var(--blue);margin:20px 0 8px}
+#p-red .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+#p-red .box{border-radius:8px;padding:16px 18px}
+#p-red .box.r{background:var(--redbg);border:1px solid var(--redb)}
+#p-red .box.g{background:var(--grnbg);border:1px solid var(--grnb)}
+#p-red .box h4{margin:0 0 10px;font-size:14px}
+#p-red .box ol{margin:0;padding-left:20px}
+#p-red .box li{margin:5px 0}
+#p-red .box li button{font:inherit;font-weight:700;background:none;border:0;padding:0;color:inherit;cursor:pointer;text-decoration:underline;text-decoration-color:var(--rule)}
+#p-red .pill{display:inline-block;color:#fff;border-radius:999px;font-size:11px;font-weight:600;padding:1px 8px;margin-left:6px;background:var(--red)}
+#p-red .pill.a{background:var(--amb)}
+#p-red .pill.b{background:var(--blue)}
+#p-red .bilan{background:var(--bluebg);border-left:4px solid var(--blue);border-radius:6px;padding:14px 18px;margin-top:16px}
+#p-red .tw{overflow:auto;border:1px solid var(--rule);border-radius:8px}
+#p-red .tw.h{max-height:520px}
+#p-red table{border-collapse:collapse;width:100%;font-size:13px}
+#p-red th,#p-red td{padding:7px 10px;border-bottom:1px solid var(--rule);text-align:left;white-space:nowrap}
+#p-red th{background:var(--card);color:var(--mut);font-weight:600;position:sticky;top:0}
+#p-red th.s{cursor:pointer}
+#p-red th.s:hover{color:var(--ink)}
+#p-red td.n,#p-red th.n{text-align:right}
+#p-red tr.tot td{font-weight:700;background:var(--card)}
+#p-red .mut{color:var(--mut);font-size:12px}
+#p-red .neg{color:var(--red);font-weight:600}
+#p-red .pos{color:var(--grn);font-weight:600}
+#p-red tbody tr.row{cursor:pointer}
+#p-red tbody tr.row:hover td{background:var(--card)}
+#p-red tbody tr.on td{background:var(--sel)}
+#p-red tr.hlr td{background:var(--ambbg)}
+#p-red tr.hlr.on td{background:var(--sel)}
+#p-red .pill.y{background:var(--amb)}
+#p-red .nrbox{background:var(--ambbg);border:1px solid var(--ambb);border-radius:8px;padding:12px 16px;margin:0 0 12px}
+#p-red .st{font-weight:700;font-size:12px;border-radius:999px;padding:2px 9px}
+#p-red .chart{display:flex;gap:12px;align-items:flex-end;background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:16px 18px 10px;margin:8px 0 14px}
+#p-red .bm{flex:1;text-align:center}
+#p-red .bb{height:170px;display:flex;gap:4px;align-items:flex-end;justify-content:center}
+#p-red .bb span{width:34%;border-radius:3px 3px 0 0;display:block}
+#p-red .b1{background:var(--bar1)}
+#p-red .b2{background:var(--grn)}
+#p-red .bl{font-size:12px;color:var(--mut);margin-top:4px}
+#p-red .bd{font-size:12px}
+#p-red .lg{font-size:12px;color:var(--mut);margin:0 0 6px}
+#p-red .lg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 5px 0 12px;vertical-align:-1px}
+#p-red .stack{display:flex;height:34px;border-radius:6px;overflow:hidden;margin:6px 0 8px}
+#p-red .stack span{display:block;height:100%}
+#p-red .leg{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px}
+#p-red .leg b{font-weight:650}
+#p-red .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+#p-red .filters{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin:6px 0 10px}
+#p-red .f{display:flex;flex-direction:column;font-size:12px;color:var(--mut);gap:3px}
+#p-red select,#p-red input[type=search]{font:inherit;font-size:13px;color:var(--ink);background:var(--bg);border:1px solid var(--rule);border-radius:6px;padding:6px 8px}
+#p-red .btn{font:inherit;font-size:13px;border:1px solid var(--rule);background:transparent;color:var(--ink);border-radius:6px;padding:6px 11px;cursor:pointer}
+#p-red .det{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:16px;margin-top:14px}
+#p-red .det h3{margin-top:0}
+#p-red .f2{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:14px;text-align:center;font-family:Georgia,"Times New Roman",serif;font-size:15px}
+#p-red .f2 small{display:block;font-size:12px;color:var(--mut);margin-top:6px}
+#p-red footer{margin-top:30px;color:var(--mut);font-size:12px}
+@media (max-width:980px){#p-red .cards{grid-template-columns:repeat(4,1fr)}#p-red .two{grid-template-columns:1fr}}
+@media (max-width:520px){#p-red .cards{grid-template-columns:repeat(2,1fr)}}
+#p-red .ban h1{color:#fff}
+#p-red{font-family:inherit}
+</style>
+<style id="pg-embed">header.top{display:none!important}.tabs{display:none!important}.bar{position:static!important;border-bottom:none!important;padding-top:6px!important}</style></head>
+<body>
+<div class="wrap">
+<header class="top">
+  <div>
+    <h1>Pilotage Grid</h1>
+    <p class="sub">Factures Senelec du portefeuille ESCO : statuts de paiement, porteurs, consommation et coûts par site et par mois calendaire.</p>
+  </div>
+</header>
+
+<div class="bar">
+  <div class="tabs" role="tablist" aria-label="Sections">
+    <button class="tab" role="tab" id="t-syn" aria-controls="p-syn" aria-selected="true">Synthèse</button>
+    <button class="tab" role="tab" id="t-pay" aria-controls="p-pay" aria-selected="false" tabindex="-1">Paiements</button>
+    <button class="tab" role="tab" id="t-sit" aria-controls="p-sit" aria-selected="false" tabindex="-1">Sites</button>
+    <button class="tab" role="tab" id="t-fic" aria-controls="p-fic" aria-selected="false" tabindex="-1">Fiche site</button>
+    <button class="tab" role="tab" id="t-gap" aria-controls="p-gap" aria-selected="false" tabindex="-1">Non parvenues</button>
+    <button class="tab" role="tab" id="t-dem" aria-controls="p-dem" aria-selected="false" tabindex="-1">Sites demandés</button>
+    <button class="tab" role="tab" id="t-eff" aria-controls="p-eff" aria-selected="false" tabindex="-1">Efficacité énergétique</button>
+    <button class="tab" role="tab" id="t-nb" aria-controls="p-nb" aria-selected="false" tabindex="-1">Config Nouvelle Baie</button>
+    <button class="tab" role="tab" id="t-red" aria-controls="p-red" aria-selected="false" tabindex="-1">Redevance</button>
+    <button class="tab" role="tab" id="t-tar" aria-controls="p-tar" aria-selected="false" tabindex="-1">Changements de tarif</button>
+    <button class="tab" role="tab" id="t-ctr" aria-controls="p-ctr" aria-selected="false" tabindex="-1">Contrats et contrôles</button>
+  </div>
+  <div class="filters" id="gFilters">
+    <label class="f">Région<select id="fReg"></select></label>
+    <label class="f">Porteur<select id="fPor"></select></label>
+    <label class="f">Catégorie tarifaire<select id="fTar"></select></label>
+    <label class="f">Tension<select id="fTen"><option value="">Toutes</option><option>BT</option><option>MT</option></select></label>
+    <label class="f">Période, de<select id="fFrom"></select></label>
+    <label class="f">à<select id="fTo"></select></label>
+    <span class="spacer"></span>
+    <button class="btn" id="reset">Réinitialiser les filtres</button>
+  </div>
+</div>
+
+<!-- SYNTHESE -->
+<div role="tabpanel" id="p-syn" aria-labelledby="t-syn">
+  <div class="meter">
+    <div><div class="big" id="sPct">–</div><div class="bigl">du montant TTC facturé est payé</div></div>
+    <div>
+      <div class="track" id="sTrack" role="img" aria-label="Répartition du montant TTC par statut"></div>
+      <div class="ticks"><span style="left:0">0 %</span><span style="left:25%">25 %</span><span style="left:50%">50 %</span><span style="left:75%">75 %</span><span style="left:100%">100 %</span></div>
+      <div class="legend" id="sLegend"></div>
+    </div>
+  </div>
+  <div class="kpis" id="sKpis"></div>
+  <div class="panel">
+    <h3>Consommation K1 / K2 et montant HTVA par mois calendaire</h3>
+    <p class="note">Factures réparties au prorata des jours, anciens contrats ignorés après bascule.</p>
+    <div class="cv"><canvas id="cSyn"></canvas></div>
+  </div>
+  <section class="grid2">
+    <div>
+      <h2>Variations de consommation</h2>
+      <p class="note" id="varNote"></p>
+      <div class="scroll s"><table><thead><tr><th>Site</th><th>Site_Name</th><th class="n">Moyenne 6 mois</th><th class="n">Dernier mois</th><th class="n">Écart</th></tr></thead><tbody id="tbVar"></tbody></table></div>
+    </div>
+    <div>
+      <h2>Coûts au kWh les plus élevés</h2>
+      <p class="note">HTVA rapporté à la consommation sur la période, sites de plus de 1 000 kWh par mois en moyenne.</p>
+      <div class="scroll s"><table><thead><tr><th>Site</th><th>Site_Name</th><th>Tarif</th><th class="n">P. souscrite</th><th class="n">kWh / mois</th><th class="n">FCFA / kWh</th></tr></thead><tbody id="tbPu"></tbody></table></div>
+    </div>
+  </section>
+</div>
+
+<!-- PAIEMENTS -->
+<div role="tabpanel" id="p-pay" aria-labelledby="t-pay" hidden>
+  <div class="tblhead" style="margin-top:18px">
+    <p class="note" style="margin:0">Période appliquée à la date comptable des factures, décalée d'un mois (une facture de consommation d'août est comptabilisée en septembre). Statut final : colonne BA, sinon AZ, sinon « Impayées/Rempl/Hors Scope ».</p>
+    <span class="spacer"></span>
+    <div class="seg" role="group" aria-label="Mesure"><button id="mTtc" aria-pressed="true">Montant TTC</button><button id="mNb" aria-pressed="false">Nombre de factures</button></div>
+  </div>
+  <div class="kpis" id="pKpis"></div>
+  <div class="grid2">
+    <div class="panel"><h3>Paiements par mois d'échéance</h3><p class="note">Factures payées, réparties par porteur.</p><div class="cv"><canvas id="cEch"></canvas></div></div>
+    <div class="panel"><h3>Facturation par mois comptable</h3><p class="note">Toutes les factures, par statut final.</p><div class="cv"><canvas id="cCpt"></canvas></div></div>
+    <div class="panel"><h3>Part non payée par région</h3><p class="note">Poids de chaque statut non payé dans le total de la région.</p><div class="cv tall"><canvas id="cReg"></canvas></div></div>
+    <div class="panel"><h3>Reste à traiter par année comptable</h3><p class="note">Impayées, hors scope/remplacées et factures sans statut.</p><div class="cv tall"><canvas id="cAge"></canvas></div></div>
+  </div>
+  <section>
+    <h2>Factures non payées</h2>
+    <p class="note">Statut final différent de « Payée ». Cliquez sur une ligne pour ouvrir la fiche du site.</p>
+    <div class="tblhead"><div class="chips" id="chips"></div><span class="spacer"></span><input type="search" id="qU" placeholder="N° facture, compte, site, agence…" aria-label="Rechercher une facture"></div>
+    <div class="scroll h"><table><thead><tr><th>N° facture</th><th>Compte contrat</th><th>Site</th><th>Nom du site</th><th>Agence</th><th>Date comptable</th><th class="n">Montant TTC</th><th>Statut final</th><th>Porteur</th></tr></thead><tbody id="tbU"></tbody></table></div>
+    <div class="more"><span id="cntU"></span><button class="btn" id="moreU">Afficher 50 de plus</button></div>
+  </section>
+</div>
+
+<!-- SITES -->
+<div role="tabpanel" id="p-sit" aria-labelledby="t-sit" hidden>
+  <div class="kpis" id="tKpis"></div>
+  <div class="tblhead">
+    <input type="search" id="qS" placeholder="Site_ID, nom, contrat, agence…" aria-label="Rechercher un site" style="min-width:280px">
+    <label class="chk"><input type="checkbox" id="fRep"> Sites avec changement de contrat</label>
+    <label class="chk"><input type="checkbox" id="fImp"> Sites avec montant non payé</label>
+    <span class="spacer"></span><span class="note" style="margin:0" id="cntS"></span>
+  </div>
+  <div class="scroll h"><table class="sitetbl"><thead><tr class="grow"><th colspan="4" class="stk0">Site</th><th colspan="6" class="grp">Moyenne mensuelle des 3 derniers mois facturés et même période un an avant</th><th colspan="4">Période choisie dans les filtres</th><th colspan="3">Suivi des factures</th></tr><tr class="hrow">
+    <th class="sort stk" data-k="lab">Site_ID</th><th class="sort" data-k="name">Site_Name</th><th class="sort" data-k="tar">Tarif</th><th class="n sort" data-k="ps">P. souscrite</th>
+    <th class="sort grp" data-k="p3">Mois retenus</th><th class="n sort grp" data-k="k3">kWh / mois</th><th class="n sort grp" data-k="k3p">kWh / mois N-1</th><th class="n sort grp" data-k="k3d">Écart N-1</th><th class="n sort grp" data-k="h3">HTVA / mois</th><th class="n sort grp" data-k="h3p">HTVA / mois N-1</th>
+    <th class="n sort" data-k="kwh">Conso kWh</th><th class="n sort" data-k="k2p">Part K2</th><th class="n sort" data-k="ht">HTVA FCFA</th><th class="n sort" data-k="pu">FCFA / kWh</th>
+    <th class="sort" data-k="last">Fin dernière facture</th><th class="n sort" data-k="est">Non parvenu estimé</th><th class="n sort" data-k="imp">TTC non payé</th></tr></thead><tbody id="tbS"></tbody></table></div>
+  <div class="more"><button class="btn" id="moreS">Afficher 100 de plus</button></div>
+</div>
+
+<!-- FICHE -->
+<div role="tabpanel" id="p-fic" aria-labelledby="t-fic" hidden>
+  <div class="fiche" style="margin-top:18px">
+    <div class="fhead">
+      <div><div class="sid" id="fId"></div><div class="sname" id="fName"></div></div>
+      <div class="snav">
+        <label class="f">Aller au site<input list="dl" id="goto" placeholder="Site_ID ou nom" style="min-width:220px"></label>
+        <datalist id="dl"></datalist>
+        <button class="btn" id="prev">Site précédent</button><button class="btn" id="next">Site suivant</button>
+      </div>
+    </div>
+    <div class="attrs" id="attrs"></div>
+    <section style="margin-top:14px">
+      <h3>Contrats du site</h3><p class="note" id="tlNote"></p>
+      <svg class="tl" id="tl" role="img" aria-label="Chronologie des contrats"></svg>
+      <div class="legend" style="font-size:12px;color:var(--muted)"><span><span class="sw" style="background:var(--k1)"></span>Période retenue</span><span><span class="sw hatch"></span>Période ignorée (contrat remplacé)</span><span><span class="sw" style="background:var(--ink);width:2px"></span>Date de bascule</span></div>
+    </section>
+    <section style="margin-top:18px">
+      <h3>Factures reçues et non parvenues depuis le 15 juillet 2023</h3>
+      <p class="note" id="covNote"></p>
+      <div class="strip big" id="fStrip" role="img" aria-label="Couverture mensuelle des factures"></div>
+      <div class="strip" id="fStripLab" style="margin-top:3px"></div>
+      <div id="fGaps" style="margin-top:10px"></div>
+    </section>
+    <section style="margin-top:18px">
+      <h3>Mois calendaires</h3><p class="note">Consommation K1 et K2 (barres, kWh), montant HTVA facturé après prorata (ligne pleine) et provision de la compil (pointillés).</p>
+      <div class="cv"><canvas id="cSite"></canvas></div>
+    </section>
+    <section style="margin-top:18px">
+      <h3>Cos φ des factures</h3><p class="note" id="cosNote"></p>
+      <div class="cv"><canvas id="cCos"></canvas></div>
+      <div class="scroll s" style="margin-top:10px;max-height:300px"><table><thead><tr><th>Début période</th><th>Fin période</th><th class="n">Conso active (kWh)</th><th class="n">Conso réactive (kVArh)</th><th class="n">Cos φ</th><th class="n">Montant cos φ (FCFA)</th><th>Effet</th></tr></thead><tbody id="tbCos"></tbody></table></div>
+    </section>
+    <div class="grid2" style="margin-top:18px">
+      <div><h3>Détail mensuel</h3><div class="scroll s" style="margin-top:8px"><table><thead><tr><th>Mois</th><th class="n">Jours</th><th class="n">K1 kWh</th><th class="n">K2 kWh</th><th class="n">HTVA</th><th class="n">FCFA/kWh</th><th class="n">Cos φ</th><th class="n">Cos φ (FCFA)</th><th class="n">Non payé</th></tr></thead><tbody id="tbM"></tbody></table></div></div>
+      <div><h3>Factures non payées ou annulées du site</h3><div class="scroll s" style="margin-top:8px"><table><thead><tr><th>N° facture</th><th>Contrat</th><th>Date comptable</th><th class="n">TTC</th><th>Statut</th></tr></thead><tbody id="tbFU"></tbody></table></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- NON PARVENUES -->
+<div role="tabpanel" id="p-gap" aria-labelledby="t-gap" hidden>
+  <section>
+    <h2>Factures non parvenues et montant estimé</h2>
+    <p class="note" id="gapNote"></p>
+    <div class="kpis g8" id="gKpis"></div>
+    <div class="panel"><h3>Montant non parvenu estimé par mois</h3><p class="note">HTVA estimé à partir des provisions de la compil, au prorata des jours non couverts, selon la source de la provision.</p><div class="cv"><canvas id="cGap"></canvas></div></div>
+    <div class="tblhead" style="margin-top:22px">
+      <div class="chips" id="gChips"></div>
+      <span class="spacer"></span>
+      <input type="search" id="qG" placeholder="Site_ID, nom, contrat…" aria-label="Rechercher un site">
+    </div>
+    <div class="legend" style="font-size:12px;color:var(--muted);margin:0 0 10px"><span><span class="sw c-ok"></span>Mois couvert par les factures reçues</span><span><span class="sw c-part"></span>Partiellement couvert</span><span><span class="sw c-miss"></span>Attendu, aucune facture reçue</span><span><span class="sw c-na"></span>Non attendu (hors scope ou sans provision)</span></div>
+    <div class="scroll h"><table><thead><tr><th>Site</th><th>Site_Name</th><th id="stripHead"></th><th>Fin dernière facture</th><th class="n">Jours depuis</th><th class="n">Mois manquants</th><th class="n">Estimation HTVA</th><th class="n">Estimation kWh</th><th>Statut</th></tr></thead><tbody id="tbG"></tbody></table></div>
+    <div class="more"><span id="cntG"></span><button class="btn" id="moreG">Afficher 100 de plus</button></div>
+  </section>
+</div>
+
+<!-- DEMANDE -->
+<div role="tabpanel" id="p-dem" aria-labelledby="t-dem" hidden>
+<header class="subhead">
+  <h2 class="tabtitle">Consommation mensuelle des sites demandés</h2>
+  <p class="sub" id="d_sub"></p>
+</header>
+<div class="kpis" id="d_kpis"></div>
+<div class="bar inner"><div class="filters">
+  <label class="f">Région<select id="d_fReg"></select></label>
+  <label class="f">Catégorie tarifaire<select id="d_fTar"></select></label>
+  <label class="f">Rechercher<input type="search" id="d_q" placeholder="Site_ID ou nom" style="min-width:200px"></label>
+  <div class="f">Mesure<div class="seg" role="group" aria-label="Mesure"><button data-m="t" aria-pressed="true">Conso totale</button><button data-m="k1" aria-pressed="false">K1</button><button data-m="k2" aria-pressed="false">K2</button><button data-m="ht" aria-pressed="false">HTVA</button></div></div>
+  <label class="chk"><input type="checkbox" id="d_xAn" checked> Exclure les valeurs anormales des totaux</label>
+</div></div>
+
+<div class="grid2" style="margin-top:18px">
+  <div class="panel"><h3 id="d_tTot">Total des sites filtrés</h3><p class="note" id="d_nTot"></p><div class="cv"><canvas id="d_cTot"></canvas></div></div>
+  <div class="panel"><h3>Évolution par site</h3><p class="note">Cochez des sites dans le tableau (10 au maximum) pour les comparer ; cliquez sur une étiquette pour retirer un site.</p><div class="chips" id="d_chips"></div><div class="cv" style="height:282px"><canvas id="d_cSite"></canvas></div></div>
+</div>
+
+<section>
+  <h2>Tableau mensuel par site</h2>
+  <p class="note">Valeurs mensuelles après prorata des factures sur les mois calendaires, de janvier 2024 à août 2026, dernier mois complet (septembre 2026 n'est que partiellement facturé à ce jour).</p>
+  <div class="legend"><span><span class="sw" style="background:color-mix(in srgb,var(--part) 18%,var(--surface));border:1px solid var(--rule)"></span>Mois couvert partiellement par les factures reçues</span><span><span class="sw" style="box-shadow:inset 0 0 0 2px var(--anom)"></span>Valeur anormale (plus de 5 fois la médiane du site)</span><span>– aucune facture reçue pour le mois</span></div>
+  <div class="scroll"><table><thead id="d_th"></thead><tbody id="d_tb"></tbody></table></div>
+  <div class="more"><span id="d_cnt"></span><button class="btn" id="d_more">Afficher 100 de plus</button><button class="btn" id="d_top5">Comparer les 5 plus gros consommateurs</button><button class="btn" id="d_clr">Vider la comparaison</button></div>
+</section>
+
+<section>
+  <h2>Sites demandés absents de la BDD</h2>
+  <p class="note" id="d_nMiss"></p>
+  <div class="panel"><ul class="miss" id="d_miss"></ul></div>
+</section>
+<footer>Onglets « Sites demandés » et « Efficacité énergétique » : filtres propres à chaque onglet. Source : BDD_Factures_ESCO.xlsx rapprochée avec demande_grid.xlsx. Règles : factures « Annulée » et « Hors Scope / Remplace / Annul » exclues, doublons d'une même période sur un même contrat supprimés (la facture payée est gardée), prorata au jour, anciens contrats ignorés après bascule. Conso K2 = écart d'index K2 lorsqu'il existe, sinon toute la consommation est en K1. Montants HTVA en FCFA.</footer>
+</div>
+<!-- EFFICACITE -->
+<div role="tabpanel" id="p-eff" aria-labelledby="t-eff" hidden>
+<header class="subhead">
+  <h2 class="tabtitle">Baisses durables de consommation et efficacité énergétique</h2>
+  <p class="sub">Sites de la BDD Grid, consommation mensuelle après prorata des factures, juillet 2023 à août 2026.</p>
+  <p class="lead" id="e_lead"></p>
+</header>
+<div class="kpis" id="e_kpis"></div>
+
+<div class="bar inner"><div class="filters">
+  <div class="f">Nature de la baisse<div class="chips" id="e_cChips"></div></div>
+  <label class="f">Région<select id="e_fReg"></select></label>
+  <label class="f">Tarif<select id="e_fTar"></select></label>
+  <label class="f">Confiance<select id="e_fConf"><option value="">Toutes</option><option>Forte</option><option>Moyenne</option></select></label>
+  <label class="f">Année de la baisse<select id="e_fYr"><option value="">Toutes</option><option>2024</option><option>2025</option><option>2026</option></select></label>
+</div></div>
+
+<section class="grid2">
+  <div class="panel"><h3>Date de la baisse</h3><p class="note">Nombre de sites par mois de rupture détecté, selon la nature de la baisse.</p><div class="cv"><canvas id="e_cDates"></canvas></div></div>
+  <div class="panel"><h3>Profil moyen autour de la baisse</h3><p class="note">Consommation de chaque site rapportée à son niveau avant la baisse, alignée sur le mois de rupture (0). Médiane et quartiles des sites filtrés.</p><div class="cv"><canvas id="e_cEvt"></canvas></div></div>
+</section>
+<section class="panel" style="margin-top:18px">
+  <h3>Évolution des consommations et des montants des sites filtrés</h3>
+  <p class="note">Somme mensuelle des consommations (barres, kWh) et des montants HTVA (ligne, FCFA). Les barres claires sont les mois avant la baisse de chaque site, les barres foncées les mois après.</p>
+  <div class="cv"><canvas id="e_cEvo"></canvas></div>
+</section>
+
+<section>
+  <h2>Sites concernés</h2>
+  <p class="note">Triés par économie annuelle estimée. Cliquez sur une ligne pour voir l'évolution du site.</p>
+  <div class="filters" style="margin-bottom:10px"><input type="search" id="e_q" placeholder="Site_ID, nom, agence…" aria-label="Rechercher" style="min-width:260px"><span id="e_cnt" class="note" style="margin:0 0 0 auto"></span></div>
+  <div class="scroll"><table><thead><tr>
+    <th class="l" data-k="id">Site_ID</th><th class="l" data-k="name">Site_Name</th><th class="l" data-k="tar">Tarif</th><th data-k="ps">P. souscrite</th><th class="l" data-k="rup">Baisse depuis</th>
+    <th data-k="av">Avant (kWh/mois)</th><th data-k="ap">Après (kWh/mois)</th><th data-k="bs">Baisse</th><th data-k="pm">P. max avant → après</th>
+    <th data-k="ek">Économie kWh/an</th><th data-k="ef">Économie FCFA/an</th><th data-k="er">Économies réalisées FCFA</th><th class="l" data-k="cat">Nature</th><th class="l">Évolution</th>
+  </tr></thead><tbody id="e_tb"></tbody></table></div>
+  <div class="more"><button class="btn" id="e_more">Afficher 100 de plus</button></div>
+</section>
+
+<section id="e_ficheSec">
+  <h2>Évolution du site</h2>
+  <div class="fiche">
+    <div class="fhead"><div><div class="sid" id="e_fId"></div><div style="font-size:18px;font-weight:600;margin-top:4px" id="e_fName"></div></div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px"><div class="note" style="margin:0;max-width:60ch" id="e_fTxt"></div><button class="btn" id="e_open">Ouvrir la fiche complète du site</button></div></div>
+    <div class="attrs" id="e_attrs"></div>
+    <div class="grid2">
+      <div><h3>Consommation mensuelle</h3><p class="note">kWh par mois ; lignes pointillées : niveau moyen avant et après la baisse (corrigé de la durée du mois).</p><div class="cv"><canvas id="e_cS1"></canvas></div></div>
+      <div><h3>Montant HTVA mensuel</h3><p class="note">FCFA par mois ; trait vertical : mois de la baisse.</p><div class="cv"><canvas id="e_cS2"></canvas></div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Méthode</h2>
+  <ul class="method">
+    <li>Séries mensuelles en kWh par jour, sur les seuls mois entièrement couverts par des factures retenues (annulées, hors scope, doublons de période et ancien contrat après bascule exclus). Valeurs supérieures à 5 fois la médiane du site écartées.</li>
+    <li>Sites analysés : au moins 18 mois complets et plus de 1 kWh par jour. Pour chaque site, recherche du mois qui sépare le mieux la série en deux niveaux (rupture de moyenne), avec au moins 6 mois avant et 6 mois après. La saisonnalité du portefeuille est très faible (moins de 1 % d'écart entre mois) et a été corrigée.</li>
+    <li>Baisse retenue si : niveau après au moins 10 % sous le niveau avant, écart statistiquement net (t ≥ 4), au moins 80 % des mois après sous le niveau d'avant et les 3 derniers mois toujours 10 % en dessous (baisse durable).</li>
+    <li>Nature : arrêt ou quasi-arrêt si le niveau après est inférieur à 15 % du niveau avant ; changement de compteur ou de contrat si un nouveau n° de compteur ou une bascule de contrat apparaît dans les 2 mois autour de la baisse ; changement de puissance souscrite ou fin de relevés estimés lorsqu'ils coïncident ; conso en baisse sans baisse du montant si le montant HTVA par jour baisse moins de la moitié de la consommation ; sinon efficacité énergétique probable. Confiance forte si la puissance max relevée baisse d'au moins 10 % ou si la rupture explique au moins 60 % de la variance.</li>
+    <li>Économie annuelle = (niveau avant − niveau après) × 365 jours × prix moyen HTVA du site. Économies réalisées = écart au niveau d'avant cumulé sur les mois complets depuis la baisse.</li>
+  </ul>
+</section>
+</div>
+<!-- NOUVELLE BAIE -->
+<div role="tabpanel" id="p-nb" aria-labelledby="t-nb" hidden>
+  <header class="subhead">
+    <h2 class="tabtitle">Config Nouvelle Baie</h2>
+    <p class="sub" id="nbSub"></p>
+  </header>
+  <div class="kpis" id="nbKpis"></div>
+  <div class="grid2">
+    <div class="panel"><h3>Consommation mensuelle par site</h3><p class="note">kWh par mois calendaire, après prorata des factures. Le mois de mise en service est partiel.</p><div class="cv"><canvas id="nbC1"></canvas></div></div>
+    <div class="panel"><h3>Montant HTVA facturé et provision</h3><p class="note">Total des 5 sites : montant HTVA facturé (barres) comparé à la provision de la compil (ligne).</p><div class="cv"><canvas id="nbC2"></canvas></div></div>
+  </div>
+  <section>
+    <h2>Synthèse par site</h2>
+    <p class="note">Cliquez sur un Site_ID pour ouvrir sa fiche complète. Moyenne mensuelle calculée sur les mois entièrement couverts par des factures.</p>
+    <div class="scroll"><table><thead><tr><th>Site_ID</th><th>Site_Name</th><th>Contrat</th><th>N° compteur</th><th>Tarif</th><th class="n">P. souscrite</th><th>Début facturation</th><th>Fin dernière facture</th><th class="n">Factures</th><th class="n">Conso kWh</th><th class="n">kWh / mois</th><th class="n">Part K2</th><th class="n">HTVA FCFA</th><th class="n">FCFA / kWh</th><th class="n">P. max relevée</th><th class="n">TTC non payé</th><th class="n">Non parvenu estimé</th></tr></thead><tbody id="nbS"></tbody></table></div>
+  </section>
+  <section>
+    <h2>Évolution mensuelle</h2>
+    <div class="tblhead"><div class="seg" role="group" aria-label="Mesure du tableau mensuel"><button data-m="kwh" aria-pressed="true">Conso kWh</button><button data-m="k2" aria-pressed="false">dont K2</button><button data-m="ht" aria-pressed="false">HTVA</button><button data-m="prov" aria-pressed="false">Provision</button><button data-m="ecart" aria-pressed="false">Écart facturé / provision</button></div></div>
+    <div class="scroll"><table><thead id="nbMh"></thead><tbody id="nbM"></tbody></table></div>
+  </section>
+  <section>
+    <h2>Factures reçues</h2>
+    <p class="note">Toutes les factures de la BDD pour ces sites, avec leur statut de paiement.</p>
+    <div class="scroll h"><table><thead><tr><th>Site_ID</th><th>N° facture</th><th>Date comptable</th><th>Période</th><th class="n">Jours</th><th class="n">Conso K1</th><th class="n">Conso K2</th><th class="n">P. max</th><th class="n">HTVA FCFA</th><th class="n">TTC FCFA</th><th>Statut</th><th>Porteur</th></tr></thead><tbody id="nbF"></tbody></table></div>
+  </section>
+</div>
+
+<!-- REDEVANCE -->
+<div role="tabpanel" id="p-red" aria-labelledby="t-red" hidden><div style="padding-top:18px">
+<div class="ban"><div><h1>Sénégal — Parc Grid : redevance face aux factures Senelec AKTIVCO</h1><p id="r_sub"></p></div><div class="r"><b>Date :</b> 2 novembre 2026<br><b>Période :</b> janvier–août 2026</div></div>
+<div class="cards" id="r_cards"></div>
+<h2>Montants mensuels : redevance face aux factures Senelec AKTIVCO payées</h2>
+<p class="lg"><i style="background:var(--bar1)"></i>HTVA Senelec AKTIVCO payé<i style="background:var(--grn)"></i>Redevance — périmètre des sites-mois entièrement payés sur plus de 20 jours ; sous chaque mois : delta en M FCFA</p>
+<div class="chart" id="r_bars"></div>
+<div class="tw" id="r_mtab"></div>
+<h2>Répartition des sites par statut</h2>
+<div class="stack" id="r_stack" role="img" aria-label="Répartition des sites par statut"></div><div class="leg" id="r_leg"></div>
+<h2>Sites aux écarts les plus marqués</h2>
+<div class="two"><div class="box r"><h4 class="red">10 sites au delta le plus négatif</h4><ol id="r_topneg"></ol></div><div class="box g"><h4 class="grn">10 sites au delta le plus positif</h4><ol id="r_toppos"></ol></div></div>
+<div class="bilan" id="r_bilan"></div>
+<h2>Sites sans redevance dont AKTIVCO a payé les factures</h2>
+<div class="nrbox" id="r_nr"></div>
+<div class="tw h"><table><thead><tr><th>Site_ID</th><th>Site_Name</th><th>Région</th><th>Tarif</th><th>Typologie</th><th class="n">Load (W)</th><th class="n">Mois concernés</th><th class="n">Conso (kWh)</th><th class="n">HTVA payé sans redevance (FCFA)</th><th>Motif principal</th></tr></thead><tbody id="r_tnr"></tbody></table></div>
+<h2>Juin 2026 : load aligné révisé</h2>
+<p class="nt" id="r_j6"></p>
+<div class="tw h"><table><thead><tr><th>Site_ID</th><th>Site_Name</th><th>Typologie</th><th class="n">Load initial (W)</th><th class="n">Load révisé (W)</th><th class="n">Écart load</th><th class="n">Redevance initiale</th><th class="n">Redevance révisée</th><th class="n">Écart redevance</th><th class="n">HTVA AKTIVCO juin</th></tr></thead><tbody id="r_tj6"></tbody></table></div>
+<h2>Pistes d'analyse</h2>
+<div class="tw"><table><thead><tr><th>Piste (hypothèse automatique à vérifier)</th><th class="n">Sites</th><th class="n">HTVA payé (FCFA)</th><th class="n">Delta (FCFA)</th></tr></thead><tbody id="r_pistes"></tbody></table></div>
+<h2>Par région</h2>
+<div class="tw"><table><thead><tr><th>Région</th><th class="n">Sites</th><th class="n">Conso (kWh)</th><th class="n">Cible (kWh)</th><th class="n">Écart</th><th class="n">HTVA payé</th><th class="n">Redevance</th><th class="n">Delta</th><th class="n">Delta / HTVA</th><th class="n">À payer (hors calcul)</th></tr></thead><tbody id="r_regs"></tbody></table></div>
+<h2>Tous les sites</h2>
+<div class="filters">
+<label class="f">Rechercher<input type="search" id="r_q" placeholder="Site_ID ou nom" style="min-width:200px"></label>
+<label class="f">Statut<select id="r_fSt"><option value="">Tous</option></select></label>
+<label class="f">Région<select id="r_fReg"><option value="">Toutes</option></select></label>
+<label class="f">Piste<select id="r_fPi"><option value="">Toutes</option></select></label>
+<span id="r_cnt" class="mut" style="margin-left:auto"></span></div>
+<div class="tw h"><table><thead><tr><th class="s" data-k="0">Site_ID</th><th class="s" data-k="1">Site_Name</th><th class="s" data-k="6">Typologie</th><th class="n s" data-k="5">Load (W)</th><th class="n s" data-k="8">Conso (kWh)</th><th class="n s" data-k="9">Cible (kWh)</th><th class="n s" data-k="10">Écart</th><th class="n s" data-k="11">HTVA payé</th><th class="n s" data-k="12">À payer (hors calcul)</th><th class="n s" data-k="13">Redevance</th><th class="n s" data-k="14">Delta</th><th class="n s" data-k="15">Delta / HTVA</th><th class="n s" data-k="16">FCFA/kWh</th><th class="s" data-k="19">Statut</th></tr></thead><tbody id="r_tb"></tbody></table></div>
+<div class="filters"><button class="btn" id="r_more">Afficher 100 de plus</button></div>
+<div class="det" id="r_det"></div>
+<h2>Contrôles de données</h2>
+<div class="tw"><table><thead><tr><th>Contrôle</th><th class="n">Lignes site × mois</th><th class="n">HTVA AKTIVCO concerné</th></tr></thead><tbody id="r_ctl"></tbody></table></div>
+<h2 class="b">KPIs et métriques dérivées</h2>
+<h3>1. Delta des montants</h3><div class="f2">Delta = Redevance − HTVA Senelec AKTIVCO payé<small>calculé uniquement sur les sites-mois dont toutes les factures AKTIVCO figurent dans Details_Paiement ou dans le bon à payer de l'échéance d'octobre 2026 et couvrent plus de 20 jours du mois (sinon le montant est séparé du HTVA payé, la redevance mensuelle n'étant pas proratée) ; les factures à payer sont affichées sans calcul d'écart. Redevance : grille Aktivco déc. 2025, typologie facturée × configuration × palier de load (palier supérieur si le load n'est pas un palier) ; non proratée, comptée à 0 sans load ou typologie</small></div>
+<h3>2. Écart à la cible</h3><div class="f2">Écart = Conso réseau Senelec / (Cible grid par jour × jours du mois) − 1<small>calculé sur les mois payés où une cible existe</small></div>
+<h3>3. Coût Senelec et prix implicite de la redevance</h3><div class="f2">Coût Senelec = HTVA / kWh réseau &nbsp;·&nbsp; Prix implicite = Redevance / kWh cible<small>un coût Senelec supérieur au prix implicite explique un delta négatif à consommation conforme</small></div>
+<h3>4. Part AKTIVCO</h3><div class="f2">HTVA AKTIVCO = HTVA × part (100 % porteur AKTIVCO ; part CAMUSAT pour « SONATEL & AKTIVCO »)<small>factures à payer : porteur et part de la dernière facture du site, montant affiché hors calcul du delta</small></div>
+<footer>Sources : BDD Grid (BDD_Factures_ESCO + facturation SONATEL éch. octobre 2026), Details_Paiement, Load_alignes_JAN-MAI_2026, LOAD_JUIN_2 (juin), Proposition_de_load 07–08/2026, Redevance_et_Cible_Akt_Dec_25, fichiers de monitoring solaire. Détail complet dans Analyse_Redevance_Parc_Aktivco.xlsx.</footer>
+</div></div>
+<!-- CHANGEMENTS DE TARIF -->
+<div role="tabpanel" id="p-tar" aria-labelledby="t-tar" hidden>
+  <section>
+    <h2>Changements de contrat et de tarif</h2>
+    <p class="note" id="tr_tNote"></p>
+    <div class="kpis" id="tr_tKpis"></div>
+  </section>
+  <section>
+    <h2>PMP et PGP : deux structures de prix</h2>
+    <p class="note">Toutes les factures PMP et PGP du parc depuis janvier 2025 (hors valeurs aberrantes), HTVA par kWh facturé. La PMP facture l'énergie à un prix unique tous les deux mois, sans prime fixe ni cos φ. La PGP facture tous les mois une prime fixe, l'énergie en heures pleines (K1) et en pointe (K2), et applique une bonification ou une pénalité selon le cos φ.</p>
+    <div class="grid2">
+      <div class="panel"><h3>Composantes du prix moyen</h3><p class="note">FCFA HTVA par kWh facturé.</p><div class="scroll"><table style="min-width:0"><thead><tr><th>Élément</th><th class="n">PMP</th><th class="n">PGP</th></tr></thead><tbody id="tr_tCmp"></tbody></table></div></div>
+      <div class="panel"><h3>Prix moyen selon la consommation mensuelle</h3><p class="note" id="tr_tBandNote"></p><div class="cv"><canvas id="tr_cBand"></canvas></div></div>
+    </div>
+  </section>
+  <section>
+    <h2>Sites passés de PMP à PGP</h2>
+    <p class="note">Avant : factures de l'ancien contrat PMP sur les 12 mois précédant la bascule. Après : toutes les factures du nouveau contrat PGP. L'économie annuelle est estimée à consommation constante : consommation journalière après bascule × 365 × (prix avant − prix après). « Ancien contrat après bascule » : part, au prorata des jours, des factures de l'ancien contrat qui couvrent des jours postérieurs à la bascule. Cliquez sur une ligne pour le détail.</p>
+    <div class="scroll h"><table><thead><tr><th class="sort" data-k="0">Site</th><th>Site_Name</th><th class="sort" data-k="6">Bascule</th><th class="n sort" data-k="11">kWh/jour avant</th><th class="n sort" data-k="12">kWh/jour après</th><th class="n sort" data-k="13">FCFA/kWh avant</th><th class="n sort" data-k="14">FCFA/kWh après</th><th class="n sort" data-k="15">Écart</th><th class="n sort" data-k="16">Économie annuelle estimée</th><th class="n sort" data-k="10">Factures PGP</th><th class="n sort" data-k="18">Ancien contrat après bascule (HTVA)</th><th class="n sort" data-k="19">dont payé</th></tr></thead><tbody id="tr_tbT"></tbody></table></div>
+    <div class="fiche" id="tr_tDet" style="margin-top:14px"></div>
+  </section>
+  <section>
+    <h2>Autres changements de contrat (même tarif)</h2>
+    <p class="note">Remplacement de contrat sans changement de catégorie tarifaire, le plus souvent PGP vers PGP (changement de compteur ou de titulaire).</p>
+    <div class="scroll h"><table><thead><tr><th>Site</th><th>Site_Name</th><th>Tarif</th><th>Ancien contrat</th><th>Nouveau contrat</th><th>Bascule</th><th class="n">FCFA/kWh avant</th><th class="n">FCFA/kWh après</th><th class="n">Factures de l'ancien après bascule</th><th class="n">HTVA correspondant</th><th class="n">dont payé</th></tr></thead><tbody id="tr_tbT2"></tbody></table></div>
+  </section>
+</div>
+
+<!-- CONTRATS -->
+<div role="tabpanel" id="p-ctr" aria-labelledby="t-ctr" hidden>
+  <section>
+    <h2>Changements de contrat détectés</h2>
+    <p class="note">Contrats d'un même site classés par premier jour facturé. La bascule est fixée au premier jour facturé du nouveau contrat ; ce que l'ancien facture à partir de cette date est ignoré. Cliquez sur une ligne pour voir la fiche.</p>
+    <div class="scroll h"><table><thead><tr><th>Site</th><th>Ancien contrat</th><th>Nouveau contrat</th><th>Date de bascule</th><th>Dernière fin (ancien)</th><th class="n">Chevauchement (jours)</th><th class="n">Factures touchées</th><th class="n">HTVA ignoré</th><th class="n">kWh ignorés</th></tr></thead><tbody id="tbR"></tbody></table></div>
+  </section>
+  <section class="grid2 checks">
+    <div class="panel">
+      <h3>Cohérence BDD et fichier paiement</h3>
+      <ul>
+        <li><span class="ok">Concordant.</span> Les 60 953 factures « Payée » de la BDD sont toutes payées dans le fichier paiement.</li>
+        <li><span class="ok">Concordant.</span> Les 196 « Annulée » correspondent aux 196 paires de lignes + et −.</li>
+        <li>Les 1 222 autres factures de la BDD d'origine sont absentes du fichier paiement, donc sans porteur.</li>
+        <li>1 883 factures du fichier « facturation SONATEL éch. octobre 2026 » (périodes d'août et début septembre 2026), certifiées dans FACTURATION_SONATEL_ECHEANCE_OCT-_2026 : 1 823 en bon à payer (payées, échéance oct. 2026), 60 retenues (impayées). Le BAP comprend aussi 2 factures plus anciennes de la BDD, désormais payées, et 22 avoirs (montants négatifs) : les 22 factures d'origine sont annulées et remplacées par de nouvelles factures du BAP. 6 factures non payées corrigées par une nouvelle facture sont classées remplacées.</li>
+        <li>1 808 factures du fichier « facturation octobre, échéance novembre 2026 » (surtout la période du 2 septembre au 1er octobre 2026, plus quelques factures bimestrielles ou de rattrapage) : pas encore certifiées ni dans le fichier paiement, elles sont classées « Impayées/Rempl/Hors Scope ». 1 797 sont rattachées à un site existant par leur n° de contrat ; 11 contrats nouveaux (une facture chacun, sites SONATEL) apparaissent « Sans Site_ID ».</li>
+      </ul>
+      <h3 style="margin-top:14px">Correspondance avec la compil provisions</h3>
+      <ul id="corrList"></ul>
+      <h3 style="margin-top:14px">Points à vérifier</h3>
+      <ul>
+        <li>3 factures en double dans la BDD (7000622725, 7000621471, 7000621474).</li>
+        <li>7551415594 : payée à 80 900 dans la BDD, seulement −80 900 dans le fichier paiement.</li>
+        <li>7000468191 : 8 943 300 TTC dans la BDD contre 8 943 338 dans le fichier paiement.</li>
+        <li>56 factures n'ont qu'une ligne négative dans le fichier paiement.</li>
+        <li>7000453463 (annulée) porte deux porteurs différents.</li>
+        <li>Quelques lignes de la BDD inversent deux sites voisins ; chaque contrat est rattaché à son Site_ID majoritaire.</li>
+        <li>72 contrats sans Site_ID, surtout de gros sites MT, affichés « Sans Site_ID ».</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Paiements absents de la BDD Grid</h3>
+      <p class="note" id="horsNote"></p>
+      <div class="cv"><canvas id="cHors"></canvas></div>
+    </div>
+  </section>
+</div>
+
+<footer>Onglets « Sites demandés » et « Efficacité énergétique » : filtres propres à chaque onglet. 
+Sources : BDD_Factures_ESCO.xlsx, facturation SONATEL éch. octobre 2026, facturation octobre éch. novembre 2026, Details_Paiement.xlsx, certification FACTURATION_SONATEL_ECHEANCE_OCT-_2026 (BAP payées, retenues impayées, avoirs = factures annulées et remplacées), Provisions_GRID_Conso.xlsx ; onglet Redevance : Load_alignes_JAN-MAI_2026, LOAD_JUIN_2, Proposition_de_load 07–08/2026, Redevance_et_Cible_Akt_Dec_25. Vues consommation et sites : factures « Annulée » et « Hors Scope / Remplace / Annul » exclues ; prorata au jour sur les mois calendaires (période inclusive) ; conso K2 = écart d'index K2 lorsqu'il existe, K1 = consommation facturée − K2, sinon tout en K1 ; puissances souscrites supérieures à 1 000 converties en kW (÷ 1 000) ; caractéristiques du site issues de la dernière facture retenue. Moyenne des 3 derniers mois facturés : les 3 derniers mois calendaires entièrement couverts par des factures, comparés aux mêmes mois un an avant lorsqu'ils sont eux aussi complets. Estimations des non parvenues : provisions de la compil (supposées HTVA, cohérent avec un coût moyen d'environ 178 FCFA/kWh contre 171 FCFA/kWh HTVA facturé). Vue paiements : toutes les factures de la BDD. Montants en FCFA.
+</footer>
+</div>
+
+<script>window.__pgStart=function(__PG){
+
+const P=__PG.paiements;const Q=__PG.sites;
+const L=P.lists,M=Q.months;
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmtN=new Intl.NumberFormat('fr-FR',{maximumFractionDigits:0});
+const f1=v=>v.toLocaleString('fr-FR',{maximumFractionDigits:1});
+function money(v){const a=Math.abs(v);if(a>=1e9)return(v/1e9).toLocaleString('fr-FR',{maximumFractionDigits:2})+' Md';if(a>=1e6)return f1(v/1e6)+' M';if(a>=1e3)return fmtN.format(v/1e3)+' k';return fmtN.format(v)}
+const energy=v=>v>=1e6?f1(v/1e6)+' GWh':v>=1e3?f1(v/1e3)+' MWh':fmtN.format(v)+' kWh';
+const MOIS=['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+const ml=s=>{const[y,m]=s.split('-');return MOIS[+m-1]+' '+y.slice(2)};
+const dfr=s=>s?s.split('-').reverse().join('/'):'';
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const ST_LBL=['Payée','Annulée','Impayée','Hors scope / remplacée / annulée (AZ)','Sans statut (Impayées/Rempl/Hors Scope)'];
+const ST_VAR=['--paid','--cancel','--unpaid','--hors','--none'];
+const POR_VAR={'AKTIVCO':'--akt','SONATEL':'--son','SONATEL & AKTIVCO':'--mix','SONATEL / SONATEL & AKTIVCO':'--mix2','Sans porteur':'--nop','Non renseigné':'--nop'};
+
+// ---- sites model
+const S=Q.sites.map((s,i)=>({i,id:s[0],name:s[1],reg:s[2],tar:s[3],ten:s[4],ps:s[5],ptr:s[6],tc:s[7],ag:s[8],cpt:s[9],por:s[10],ca:s[11],nc:s[12],st:s[13],pmax:s[14],k2:s[15],fin:s[16],nf:s[17],ser:Q.ser[i],con:Q.con[i]}));
+S.forEach(s=>{s.lab=s.id.startsWith('SANS_ID')?'Sans Site_ID':s.id.startsWith('SONATEL · ')?'site_sonatel':s.id;s.dname=s.name||(s.id.startsWith('SANS_ID')?'Contrat '+s.ca:'')});
+S.forEach((s,i)=>{s.gp=Q.gp[i];s.av=Q.avg[i];s.last=s.gp&&s.gp[0]?s.gp[0]:s.fin});
+const GM=Q.pm,SRC=Q.srcs,TODAY=Q.corr.today;
+const dayDiff=(a,b)=>Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/864e5);
+// gp: [last, states(str), pct[], est[], src[], prov[], estKwh, inList]
+function gInfo(s){const g=s.gp;if(!g)return null;if(s._gi)return s._gi;
+  const lastM=g[0]?g[0].slice(0,7):null;let tot=0,after=0,before=0,aug=0,nMiss=0,nExp=0;
+  g[3].forEach((e,i)=>{tot+=e;if(e>0)nMiss++;if(g[1][i]!=='2')nExp++;if(i===GM.length-1)aug+=e;if(lastM&&GM[i]>=lastM)after+=e;else before+=e});
+  const tail=g[0]?dayDiff(g[0],TODAY):null;let st;
+  if(!g[0])st=tot>0?0:5;else if(after>0&&tail>120)st=1;else if(after>0&&tail>60)st=2;else if(before>0)st=3;else st=4;
+  return s._gi={tot,after,before,aug,nMiss,tail,st,kwh:g[6]}}
+const GST=[['aucune','Aucune facture reçue','--ink'],['sev','Plus de facture depuis plus de 4 mois','--hors'],['ret','Retard de 2 à 4 mois','--unpaid'],['trou',"Trous dans l'historique",'--none'],['ok','À jour','--paid'],['na','Non attendu (hors scope ou sans provision)','--cancel']];
+const CC=['c-miss','c-part','c-na','c-ok'];
+function strip(s){const g=s.gp;return[...g[1]].map((c,i)=>`<span class="cell ${CC[+c]}" title="${ml(GM[i])} : ${g[2][i]} % couvert${g[4][i]>=0?', provision '+SRC[g[4][i]]+' '+fmtN.format(g[5][i])+' FCFA':', pas de provision'}${g[3][i]?', estimé non parvenu '+fmtN.format(g[3][i])+' FCFA':''}"></span>`).join('')}
+const byId=new Map(S.map(s=>[s.id,s]));
+const repSites=new Set(Q.reps.map(r=>r[0]));
+// invoices (non payées) grouped by BDD Site_ID for fiche
+const detBySite=new Map();P.det.forEach(r=>{const k=String(r[2]).toUpperCase();if(!detBySite.has(k))detBySite.set(k,[]);detBySite.get(k).push(r)});
+
+// ---- filters
+const setOpts=(el,opts,all)=>{el.innerHTML=`<option value="">${all}</option>`+opts.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join('')};
+const fReg=document.getElementById('fReg'),fPor=document.getElementById('fPor'),fTar=document.getElementById('fTar'),fTen=document.getElementById('fTen'),fFrom=document.getElementById('fFrom'),fTo=document.getElementById('fTo');
+setOpts(fReg,[...new Set([...L.reg,...S.map(s=>s.reg)])].sort(),'Toutes');
+setOpts(fPor,[...new Set([...L.por,...S.map(s=>s.por)])].sort(),'Tous');
+setOpts(fTar,[...new Set([...L.tar,...S.map(s=>s.tar)])].sort(),'Toutes');
+fFrom.innerHTML=M.map((m,i)=>`<option value="${i}">${ml(m)}</option>`).join('');fTo.innerHTML=fFrom.innerHTML;
+const defFrom=Math.max(0,M.indexOf('2023-07')),defTo=M.length-2;
+fFrom.value=defFrom;fTo.value=defTo;
+function F(){return{reg:fReg.value,por:fPor.value,tar:fTar.value,ten:fTen.value,a:+fFrom.value,b:+fTo.value,ma:M[Math.min(M.length-1,+fFrom.value+1)],mb:M[Math.min(M.length-1,+fTo.value+1)]}}
+const sitePass=(s,f)=>(!f.reg||s.reg===f.reg)&&(!f.por||s.por===f.por)&&(!f.tar||s.tar===f.tar)&&(!f.ten||s.ten===f.ten);
+const tenOf=t=>String(t).startsWith('MT')?'MT':'BT';
+const cubePass=(r,f)=>(!f.reg||L.reg[r[4]]===f.reg)&&(!f.por||L.por[r[1]]===f.por)&&(!f.tar||L.tar[r[5]]===f.tar)&&(!f.ten||tenOf(L.tar[r[5]])===f.ten)&&L.cpt[r[3]]>=f.ma&&L.cpt[r[3]]<=f.mb;
+const detPass=(r,f)=>(!f.reg||r[9]===f.reg)&&(!f.por||r[7]===f.por)&&(!f.tar||r[10]===f.tar)&&(!f.ten||tenOf(r[10])===f.ten)&&r[4].slice(0,7)>=f.ma&&r[4].slice(0,7)<=f.mb;
+function tot(s,f){const r={ht:0,ttc:0,k1:0,k2:0,j:0,imp:0};const x=s.ser;if(x){for(let j=0;j<x[1].length;j++){const m=x[0]+j;if(m<f.a||m>f.b)continue;r.ht+=x[1][j];r.ttc+=x[2][j];r.k1+=x[3][j];r.k2+=x[4][j];r.j+=x[5][j];r.imp+=x[6][j]}}
+  r.kwh=r.k1+r.k2;r.k2p=r.kwh?r.k2/r.kwh*100:0;r.pu=r.kwh?r.ht/r.kwh:0;r.moy=r.j?r.kwh/r.j*30.4375:0;return r}
+
+// ---- charts
+Chart.defaults.font.family='"Archivo",system-ui,sans-serif';Chart.defaults.font.size=12;
+const charts={};
+function draw(id,cfg){if(charts[id]){charts[id].data=cfg.data;charts[id].options=cfg.options;charts[id].update();return}charts[id]=new Chart(document.getElementById(id),cfg)}
+function stackOpts(fmt,horizontal,pct){const tc=css('--muted'),gc=css('--rule');
+  const v={stacked:true,beginAtZero:true,grid:{color:gc},border:{display:false},ticks:{color:tc,callback:x=>pct?x+' %':fmt(x)}};
+  const c={stacked:true,grid:{display:false},border:{color:gc},ticks:{color:tc,maxRotation:0,autoSkip:true}};
+  return{responsive:true,maintainAspectRatio:false,animation:{duration:RM?0:350},indexAxis:horizontal?'y':'x',
+    plugins:{legend:{position:'bottom',labels:{color:css('--ink'),boxWidth:10,boxHeight:10}},tooltip:{callbacks:{label:k=>{const y=horizontal?k.parsed.x:k.parsed.y;return' '+k.dataset.label+' : '+(pct?f1(y)+' %':fmt(y))}}}},
+    scales:horizontal?{x:v,y:c}:{x:c,y:v}}}
+function combo(id,labels,k1,k2,ht){const tc=css('--muted'),gc=css('--rule');
+  draw(id,{data:{labels,datasets:[
+    {type:'bar',label:'Conso K1',data:k1,backgroundColor:css('--k1'),borderWidth:0,yAxisID:'y',order:2},
+    {type:'bar',label:'Conso K2',data:k2,backgroundColor:css('--k2'),borderWidth:0,yAxisID:'y',order:2},
+    {type:'line',label:'Montant HTVA',data:ht,borderColor:css('--money'),backgroundColor:css('--money'),borderWidth:2,pointRadius:0,pointHoverRadius:4,tension:.2,yAxisID:'y2',order:1}]},
+   options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},animation:{duration:RM?0:350},
+    plugins:{legend:{position:'bottom',labels:{color:css('--ink'),boxWidth:10,boxHeight:10}},tooltip:{callbacks:{label:c=>' '+c.dataset.label+' : '+fmtN.format(c.parsed.y)+(c.dataset.yAxisID==='y2'?' FCFA':' kWh')}}},
+    scales:{x:{stacked:true,grid:{display:false},ticks:{color:tc,maxRotation:0,autoSkip:true},border:{color:gc}},
+      y:{stacked:true,beginAtZero:true,grid:{color:gc},border:{display:false},ticks:{color:tc,callback:v=>money(v)},title:{display:true,text:'kWh',color:tc}},
+      y2:{position:'right',beginAtZero:true,grid:{display:false},border:{display:false},ticks:{color:tc,callback:v=>money(v)},title:{display:true,text:'FCFA HTVA',color:tc}}}}});
+}
+
+// ---- tabs
+const tabs=[...document.querySelectorAll('.tab')];let active='syn';const dirty=new Set(['syn','pay','sit','fic','gap','dem','eff','nb','red','tar','ctr']);
+function show(id,focus){active=id;document.getElementById('gFilters').style.display=(id==='dem'||id==='eff'||id==='nb'||id==='red'||id==='tar')?'none':'';tabs.forEach(t=>{const on=t.id==='t-'+id;t.setAttribute('aria-selected',on);t.tabIndex=on?0:-1;document.getElementById(t.getAttribute('aria-controls')).hidden=!on;if(on&&focus)t.focus()});
+  if(dirty.has(id)){dirty.delete(id);R[id]()}else if(id==='fic'&&cur)timeline(cur);window.scrollTo({top:0,behavior:'auto'})}
+tabs.forEach((t,i)=>{t.addEventListener('click',()=>show(t.id.slice(2)));t.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key==='ArrowLeft'){const n=tabs[(i+(e.key==='ArrowRight'?1:tabs.length-1))%tabs.length];show(n.id.slice(2),true)}})});
+function refresh(){['syn','pay','sit','fic','gap','nb','ctr'].forEach(k=>dirty.add(k));dirty.delete(active);R[active]()}
+let cur=null;
+function openSite(id){const s=byId.get(id)||S.find(x=>x.lab===id);if(!s)return;cur=s;dirty.add('fic');dirty.add('sit');show('fic')}
+
+// ---- SYNTHESE
+function renderSyn(){
+  const f=F();
+  // statuts
+  const tT=[0,0,0,0,0],tN=[0,0,0,0,0];P.cube.forEach(r=>{if(!cubePass(r,f))return;tT[r[0]]+=r[7];tN[r[0]]+=r[6]});
+  const all=tT.reduce((a,b)=>a+b,0);
+  document.getElementById('sPct').innerHTML=f1(all?tT[0]/all*100:0)+'<small>%</small>';
+  document.getElementById('sTrack').innerHTML=tT.map((v,i)=>`<div class="seg-s" title="${ST_LBL[i]} : ${money(v)}" style="width:${all?v/all*100:0}%;background:var(${ST_VAR[i]})"></div>`).join('');
+  document.getElementById('sLegend').innerHTML=tT.map((v,i)=>`<span><span class="sw" style="background:var(${ST_VAR[i]})"></span>${ST_LBL[i]} <b>${money(v)}</b></span>`).join('');
+  // conso
+  const fs=S.filter(s=>sitePass(s,f));const n=f.b-f.a+1,k1=Array(n).fill(0),k2=Array(n).fill(0),ht=Array(n).fill(0);
+  fs.forEach(s=>{const x=s.ser;if(!x)return;for(let j=0;j<x[1].length;j++){const m=x[0]+j-f.a;if(m<0||m>=n)continue;k1[m]+=x[3][j];k2[m]+=x[4][j];ht[m]+=x[1][j]}});
+  combo('cSyn',M.slice(f.a,f.b+1).map(ml),k1,k2,ht);
+  const K=k1.reduce((a,b)=>a+b,0)+k2.reduce((a,b)=>a+b,0),K2=k2.reduce((a,b)=>a+b,0),HT=ht.reduce((a,b)=>a+b,0);
+  const rest=tT[2]+tT[3]+tT[4],restN=tN[2]+tN[3]+tN[4];
+  const act=fs.filter(s=>tot(s,f).j>0).length;
+  kp('sKpis',[['Montant TTC facturé',money(all)+' FCFA',fmtN.format(tN.reduce((a,b)=>a+b,0))+' factures (date comptable)'],['Reste à traiter',money(rest)+' FCFA',fmtN.format(restN)+' factures non payées'],
+    ['Consommation',energy(K),'dont K2 '+f1(K?K2/K*100:0)+' %'],['Montant HTVA',money(HT)+' FCFA','mois calendaires, après prorata'],['Coût moyen',fmtN.format(K?HT/K:0)+' FCFA/kWh','HTVA / consommation'],['Sites facturés',fmtN.format(act),fmtN.format(fs.filter(s=>repSites.has(s.id)).length)+' avec changement de contrat']]);
+  // variations
+  const b=f.b,prev=[];for(let m=b-6;m<b;m++)if(m>=0)prev.push(m);
+  const V=[];fs.forEach(s=>{const x=s.ser;if(!x)return;const g=m=>{const j=m-x[0];return j>=0&&j<x[1].length?[x[3][j]+x[4][j],x[5][j]]:[0,0]};
+    const [lk,lj]=g(b);if(lj<25)return;let sk=0,sj=0,c=0;prev.forEach(m=>{const[k,j]=g(m);if(j>=25){sk+=k/j*30.4375;c++}});if(c<4)return;const avg=sk/c;const last=lk/lj*30.4375;if(avg<500)return;V.push({s,avg,last,d:(last-avg)/avg*100})});
+  V.sort((a,b)=>Math.abs(b.d)-Math.abs(a.d));
+  document.getElementById('varNote').textContent=`${ml(M[b])} comparé à la moyenne des 6 mois précédents, en kWh par mois normalisés à 30,4 jours. Sites de plus de 500 kWh/mois, mois complets uniquement.`;
+  document.getElementById('tbVar').innerHTML=V.slice(0,40).map(v=>`<tr class="row" data-id="${esc(v.s.id)}" tabindex="0"><td><b>${esc(v.s.lab)}</b></td><td>${esc(v.s.dname)}</td><td class="n">${fmtN.format(v.avg)}</td><td class="n">${fmtN.format(v.last)}</td><td class="n ${v.d>0?'up':'down'}">${v.d>0?'+':''}${f1(v.d)} %</td></tr>`).join('')||`<tr><td colspan="5" style="color:var(--muted)">Pas assez de mois complets sur la période choisie.</td></tr>`;
+  const U=fs.map(s=>({s,t:tot(s,f)})).filter(x=>x.t.moy>1000).sort((a,b)=>b.t.pu-a.t.pu).slice(0,40);
+  document.getElementById('tbPu').innerHTML=U.map(x=>`<tr class="row" data-id="${esc(x.s.id)}" tabindex="0"><td><b>${esc(x.s.lab)}</b></td><td>${esc(x.s.dname)}</td><td>${esc(x.s.tar)}</td><td class="n">${f1(x.s.ps)} kW</td><td class="n">${fmtN.format(x.t.moy)}</td><td class="n">${fmtN.format(x.t.pu)}</td></tr>`).join('');
+}
+function kp(id,k){document.getElementById(id).innerHTML=k.map(x=>`<div class="kpi"><div class="l">${x[0]}</div><div class="v">${x[1]}</div><div class="d">${x[2]}</div></div>`).join('')}
+['tbVar','tbPu','tbR'].forEach(id=>{const el=document.getElementById(id);el.addEventListener('click',e=>{const tr=e.target.closest('tr.row');if(tr)openSite(tr.dataset.id)});el.addEventListener('keydown',e=>{if(e.key==='Enter')e.target.closest('tr.row')?.click()})});
+
+// ---- PAIEMENTS
+let metric='ttc';const val=r=>metric==='ttc'?r[7]:r[6];const fmtV=v=>metric==='ttc'?money(v):fmtN.format(v);
+document.getElementById('mTtc').onclick=()=>{metric='ttc';setM()};document.getElementById('mNb').onclick=()=>{metric='nb';setM()};
+function setM(){document.getElementById('mTtc').setAttribute('aria-pressed',metric==='ttc');document.getElementById('mNb').setAttribute('aria-pressed',metric==='nb');renderPay()}
+function renderPay(){
+  const f=F();const rows=P.cube.filter(r=>cubePass(r,f));
+  const tT=[0,0,0,0,0],tN=[0,0,0,0,0];rows.forEach(r=>{tT[r[0]]+=r[7];tN[r[0]]+=r[6]});
+  kp('pKpis',[['Factures',fmtN.format(tN.reduce((a,b)=>a+b,0)),money(tT.reduce((a,b)=>a+b,0))+' FCFA TTC'],['Payé',money(tT[0])+' FCFA',fmtN.format(tN[0])+' factures'],['Annulé',money(tT[1])+' FCFA',fmtN.format(tN[1])+' factures (paires + / −)'],['Impayées (AZ)',money(tT[2])+' FCFA',fmtN.format(tN[2])+' factures'],['Hors scope / remplacées',money(tT[3])+' FCFA',fmtN.format(tN[3])+' factures'],['Sans statut',money(tT[4])+' FCFA',fmtN.format(tN[4])+' factures']]);
+  const porIdx=L.por.map((_,i)=>i).filter(i=>!['Sans porteur','SONATEL / SONATEL & AKTIVCO'].includes(L.por[i]));
+  const mE={};rows.forEach(r=>{if(r[0]!==0||L.ech[r[2]]==='')return;const k=r[2]+'|'+r[1];mE[k]=(mE[k]||0)+val(r)});
+  const eU=L.ech.map((_,i)=>i).filter(i=>L.ech[i]!==''&&porIdx.some(p=>mE[i+'|'+p]));
+  draw('cEch',{type:'bar',data:{labels:eU.map(i=>ml(L.ech[i])),datasets:porIdx.map(p=>({label:L.por[p],data:eU.map(i=>mE[i+'|'+p]||0),backgroundColor:css(POR_VAR[L.por[p]]),borderWidth:0}))},options:stackOpts(fmtV)});
+  const mC={};rows.forEach(r=>{const k=r[3]+'|'+r[0];mC[k]=(mC[k]||0)+val(r)});
+  const cU=L.cpt.map((_,i)=>i).filter(i=>[0,1,2,3,4].some(s=>mC[i+'|'+s]));
+  draw('cCpt',{type:'bar',data:{labels:cU.map(i=>ml(L.cpt[i])),datasets:[0,1,2,3,4].map(s=>({label:ST_LBL[s],data:cU.map(i=>mC[i+'|'+s]||0),backgroundColor:css(ST_VAR[s]),borderWidth:0}))},options:stackOpts(fmtV)});
+  const mR={},rT={};rows.forEach(r=>{const k=r[4]+'|'+r[0];mR[k]=(mR[k]||0)+val(r);rT[r[4]]=(rT[r[4]]||0)+val(r)});
+  const regs=Object.keys(rT).map(Number).filter(i=>rT[i]).sort((a,b)=>(mR[a+'|0']||0)/rT[a]-(mR[b+'|0']||0)/rT[b]);
+  draw('cReg',{type:'bar',data:{labels:regs.map(i=>L.reg[i]),datasets:[1,2,3,4].map(s=>({label:ST_LBL[s],data:regs.map(i=>(mR[i+'|'+s]||0)/rT[i]*100),backgroundColor:css(ST_VAR[s]),borderWidth:0}))},options:stackOpts(fmtV,true,true)});
+  const mA={};rows.forEach(r=>{if(r[0]<2)return;const k=L.cpt[r[3]].slice(0,4)+'|'+r[0];mA[k]=(mA[k]||0)+val(r)});
+  const yrs=[...new Set(Object.keys(mA).map(k=>k.split('|')[0]))].sort();
+  draw('cAge',{type:'bar',data:{labels:yrs,datasets:[2,3,4].map(s=>({label:ST_LBL[s],data:yrs.map(y=>mA[y+'|'+s]||0),backgroundColor:css(ST_VAR[s]),borderWidth:0}))},options:stackOpts(fmtV)});
+  shownU=50;renderU();
+}
+let stSel=new Set([1,2,3,4]),shownU=50;
+const chips=document.getElementById('chips');
+chips.innerHTML=[1,2,3,4].map(s=>`<button class="chip" data-s="${s}" aria-pressed="true"><span class="sw" style="background:var(${ST_VAR[s]})"></span>${ST_LBL[s]}</button>`).join('');
+chips.addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b)return;const s=+b.dataset.s;stSel.has(s)?stSel.delete(s):stSel.add(s);b.setAttribute('aria-pressed',stSel.has(s));shownU=50;renderU()});
+document.getElementById('qU').addEventListener('input',()=>{shownU=50;renderU()});
+document.getElementById('moreU').onclick=()=>{shownU+=50;renderU()};
+function renderU(){const f=F();const q=document.getElementById('qU').value.trim().toLowerCase();
+  let d=P.det.filter(r=>stSel.has(r[6])&&detPass(r,f));if(q)d=d.filter(r=>[r[0],r[1],r[2],r[3],r[8]].join(' ').toLowerCase().includes(q));
+  const sum=d.reduce((a,r)=>a+r[5],0);
+  document.getElementById('tbU').innerHTML=d.slice(0,shownU).map(r=>`<tr class="row" data-sid="${esc(r[2])}" data-c="${r[1]}" tabindex="0"><td>${r[0]}</td><td>${r[1]}</td><td>${esc(r[2])}</td><td>${esc(r[3])}</td><td>${esc(r[8])}</td><td>${dfr(r[4])}</td><td class="n">${fmtN.format(r[5])}</td><td><span class="sw" style="background:var(${ST_VAR[r[6]]})"></span>${ST_LBL[r[6]]}</td><td>${esc(r[7])}</td></tr>`).join('')||`<tr><td colspan="9" style="color:var(--muted);padding:16px 10px">Aucune facture ne correspond. Élargissez la période ou réactivez un statut.</td></tr>`;
+  document.getElementById('cntU').textContent=`${fmtN.format(Math.min(shownU,d.length))} sur ${fmtN.format(d.length)} factures, ${fmtN.format(sum)} FCFA TTC`;
+  document.getElementById('moreU').style.display=shownU<d.length?'':'none'}
+document.getElementById('tbU').addEventListener('click',e=>{const tr=e.target.closest('tr.row');if(!tr)return;const sid=tr.dataset.sid.toUpperCase();const s=byId.get(sid)||S.find(x=>x.ca==+tr.dataset.c||x.con.some(c=>c[0]==+tr.dataset.c));if(s)openSite(s.id)});
+document.getElementById('tbU').addEventListener('keydown',e=>{if(e.key==='Enter')e.target.closest('tr.row')?.click()});
+
+// ---- SITES
+let list=[],shownS=100,sortK='ht',sortDir=-1;
+const fRep=document.getElementById('fRep'),fImp=document.getElementById('fImp');
+function renderSit(){const f=F();
+  list=S.filter(s=>sitePass(s,f)&&(!fRep.checked||repSites.has(s.id))).map(s=>{const a=s.av,gi=gInfo(s);return Object.assign({s,lab:s.lab,name:s.dname,reg:s.reg,tar:s.tar,ps:s.ps,ca:s.ca,nc:s.nc,last:s.last,est:gi?gi.tot:0,gst:gi?gi.st:4,p3:a?a[0]:'',k3:a?a[2]:-1,h3:a?a[3]:-1,k3p:a&&a[4]!=null?a[4]:-1,h3p:a&&a[5]!=null?a[5]:-1,k3d:a&&a[4]?(a[2]-a[4])/a[4]*100:-1e9},tot(s,f))}).filter(r=>r.j>0&&(!fImp.checked||r.imp>0));
+  const K=list.reduce((a,r)=>a+r.kwh,0),H=list.reduce((a,r)=>a+r.ht,0),I=list.reduce((a,r)=>a+r.imp,0),K2=list.reduce((a,r)=>a+r.k2,0);
+  kp('tKpis',[['Sites',fmtN.format(list.length),`${fmtN.format(list.filter(r=>r.s.ten==='MT').length)} MT, ${fmtN.format(list.filter(r=>r.s.ten==='BT').length)} BT`],['Consommation',energy(K),'dont K2 '+f1(K?K2/K*100:0)+' %'],['Montant HTVA',money(H)+' FCFA','après prorata'],['Coût moyen',fmtN.format(K?H/K:0)+' FCFA/kWh',''],['Conso moyenne par site',fmtN.format(list.length?list.reduce((a,r)=>a+r.moy,0)/list.length:0)+' kWh','par mois'],['TTC non payé',money(I)+' FCFA',fmtN.format(list.filter(r=>r.imp>0).length)+' sites concernés']]);
+  shownS=100;renderS()}
+function per3(a){const[y1,m1]=a[0].split('-'),[y2,m2]=a[1].split('-');return y1===y2?MOIS[+m1-1]+' à '+MOIS[+m2-1]+' '+y2.slice(2):ml(a[0])+' à '+ml(a[1])}
+function renderS(){const q=document.getElementById('qS').value.trim().toLowerCase();
+  let d=q?list.filter(r=>[r.s.id,r.name,r.ca,r.s.ag,r.s.con.map(c=>c[0]).join(' ')].join(' ').toLowerCase().includes(q)):list;
+  d=[...d].sort((a,b)=>{const x=a[sortK],y=b[sortK];return(typeof x==='string'?x.localeCompare(y,'fr'):x-y)*sortDir});window._view=d;
+  document.getElementById('tbS').innerHTML=d.slice(0,shownS).map(r=>`<tr class="row${r.s===cur?' on':''}" data-id="${esc(r.s.id)}" tabindex="0"><td class="stk"><b>${esc(r.lab)}</b>${repSites.has(r.s.id)?'<span class="flag">contrat remplacé</span>':''}</td><td>${esc(r.name)}</td><td>${esc(r.tar)}</td><td class="n">${f1(r.ps)} kW</td><td class="gcell">${r.p3?per3(r.s.av):'–'}</td><td class="n gcell">${r.k3>=0?fmtN.format(r.k3):'–'}</td><td class="n gcell">${r.k3p>=0?fmtN.format(r.k3p):'–'}</td><td class="n gcell ${r.k3d>-1e9?(r.k3d>20?'up':r.k3d<-20?'down':''):''}">${r.k3d>-1e9?(r.k3d>0?'+':'')+f1(r.k3d)+' %':'–'}</td><td class="n gcell">${r.h3>=0?fmtN.format(r.h3):'–'}</td><td class="n gcell">${r.h3p>=0?fmtN.format(r.h3p):'–'}</td><td class="n">${fmtN.format(r.kwh)}</td><td class="n">${f1(r.k2p)} %</td><td class="n">${fmtN.format(r.ht)}</td><td class="n">${fmtN.format(r.pu)}</td><td class="${r.gst===1?'hl':r.gst===2?'hw':''}">${dfr(r.last)}</td><td class="n ${r.est>0&&r.gst<4?'hl':''}">${r.est?fmtN.format(r.est):'–'}</td><td class="n">${r.imp?fmtN.format(r.imp):'–'}</td></tr>`).join('')||`<tr><td colspan="17" style="color:var(--muted);padding:16px 10px">Aucun site ne correspond. Élargissez les filtres ou la recherche.</td></tr>`;
+  document.getElementById('cntS').textContent=`${fmtN.format(Math.min(shownS,d.length))} sur ${fmtN.format(d.length)} sites affichés`;
+  document.getElementById('moreS').style.display=shownS<d.length?'':'none'}
+document.getElementById('tbS').addEventListener('click',e=>{const tr=e.target.closest('tr.row');if(tr)openSite(tr.dataset.id)});
+document.getElementById('tbS').addEventListener('keydown',e=>{if(e.key==='Enter')e.target.closest('tr.row')?.click()});
+document.querySelectorAll('th.sort').forEach(th=>th.addEventListener('click',()=>{const k=th.dataset.k;if(sortK===k)sortDir*=-1;else{sortK=k;sortDir=['lab','name','reg','tar','ca','last','p3'].includes(k)?1:-1}renderS()}));
+document.getElementById('qS').addEventListener('input',()=>{shownS=100;renderS()});
+document.getElementById('moreS').onclick=()=>{shownS+=100;renderS()};
+[fRep,fImp].forEach(x=>x.addEventListener('change',renderSit));
+
+// ---- FICHE
+document.getElementById('dl').innerHTML=S.map(s=>`<option value="${esc(s.lab==='Sans Site_ID'?s.ca:s.lab==='site_sonatel'?s.name:s.id)}">${esc(s.dname)}</option>`).join('');
+document.getElementById('goto').addEventListener('change',e=>{const v=e.target.value.trim().toUpperCase();const s=S.find(x=>x.id.toUpperCase()===v)||S.find(x=>String(x.name).toUpperCase()===v)||S.find(x=>String(x.ca)===v);if(s){cur=s;dirty.add('sit');renderFic();e.target.value=''}});
+function step(d){const v=window._view||[];if(!v.length)return;const i=v.findIndex(r=>r.s===cur);const n=v[i<0?0:(i+d+v.length)%v.length];cur=n.s;dirty.add('sit');renderFic()}
+document.getElementById('prev').onclick=()=>step(-1);document.getElementById('next').onclick=()=>step(1);
+function renderFic(){
+  if(!cur){const f=F();cur=S.filter(s=>sitePass(s,f)).map(s=>({s,t:tot(s,f)})).sort((a,b)=>b.t.ht-a.t.ht)[0]?.s||S[0]}
+  const s=cur,f=F(),t=tot(s,f);
+  document.getElementById('fId').textContent=s.lab==='Sans Site_ID'?'Contrat '+s.ca:s.lab==='site_sonatel'?s.name:s.id;
+  document.getElementById('fName').textContent=s.lab===s.id?(s.name||'Nom non renseigné'):s.lab==='site_sonatel'?'Site_ID « site_sonatel »':'Sans Site_ID';
+  const A=[['Catégorie tarifaire',s.tar],['Tension',s.ten],['Puissance souscrite',f1(s.ps)+' kW'],['P. max relevée (12 mois)',s.pmax==null?'–':f1(s.pmax)],['Puissance transfo',s.ptr==null||s.ptr===0?'–':s.ptr],['Comptage K1 / K2',s.k2?'Oui':'Non, tout en K1'],
+    ['Contrat actif',s.ca],['Contrats sur le site',s.nc],['N° compteur',s.cpt||'–'],['Agence',s.ag||'–'],['Porteur',s.por],['Type de client',s.tc||'–'],
+    ['Moy. 3 derniers mois facturés',s.av?fmtN.format(s.av[2])+' kWh / mois':'–'],['HTVA moyen sur ces 3 mois',s.av?fmtN.format(s.av[3])+' FCFA / mois':'–'],['Mois retenus',s.av?ml(s.av[0])+' à '+ml(s.av[1]):'Pas 3 mois complets'],
+    ['Même période N-1',s.av&&s.av[4]!=null?fmtN.format(s.av[4])+' kWh / mois':'–'],['HTVA moyen N-1',s.av&&s.av[5]!=null?fmtN.format(s.av[5])+' FCFA / mois':'–'],['Écart de conso vs N-1',s.av&&s.av[4]?((s.av[2]-s.av[4])/s.av[4]*100>0?'+':'')+f1((s.av[2]-s.av[4])/s.av[4]*100)+' %':'–'],
+    ['Baisse durable détectée',(()=>{const e=EFF.look(s.id);return e?ml(e.rup)+', −'+f1(e.bs)+' %':'Non'})()],['Nature de la baisse',(()=>{const e=EFF.look(s.id);return e?e.cat+(e.conf?' ('+e.conf.toLowerCase()+')':''):'–'})()],['Économie estimée',(()=>{const e=EFF.look(s.id);return e?fmtN.format(e.ef)+' FCFA/an':'–'})()],
+    ['HTVA AKTIVCO janv.–août',(()=>{const e=RED.look(s.id);return e?fmtN.format(e.htT)+' FCFA'+(e.ap>0?' (dont '+fmtN.format(e.ap)+' à payer)':''):'–'})()],['HTVA payé – périmètre delta',(()=>{const e=RED.look(s.id);return e?fmtN.format(e.ht)+' FCFA ('+e.nmp+'/'+e.nm+' mois payés sur plus de 20 jours)':'–'})()],['Redevance (mois payés)',(()=>{const e=RED.look(s.id);return e?fmtN.format(e.red)+' FCFA':'–'})()],['Delta redevance − HTVA payé',(()=>{const e=RED.look(s.id);return !e?'–':e.delta==null?'Non calculé (à payer ou ≤ 20 jours payés)':(e.delta>0?'+':'')+fmtN.format(e.delta)+' FCFA'+(e.dp==null?'':' ('+(e.dp>0?'+':'')+f1(e.dp*100)+' %)')})()],['Statut redevance',(()=>{const e=RED.look(s.id);return e?e.st:'Non facturé AKTIVCO'})()],
+    ['Cos φ moyen sur la période',(()=>{const c=cosPer(s,f);return c.cos==null?'Non mesuré':cosF(c.cos)+' ('+cosEff(c.cos).split(' (')[0].toLowerCase()+')'})()],['Cos φ (bonus − / pénalité +)',(()=>{const c=cosPer(s,f);return c.n?(c.mc>0?'+':'')+fmtN.format(c.mc)+' FCFA':'–'})()],['Conso sur la période',energy(t.kwh)],['Conso moyenne',fmtN.format(t.moy)+' kWh / mois'],['Part K2',f1(t.k2p)+' %'],['HTVA sur la période',money(t.ht)+' FCFA'],['Coût moyen',fmtN.format(t.pu)+' FCFA/kWh'],['Fin dernière facture reçue',dfr(s.last)]];
+  document.getElementById('attrs').innerHTML=A.map(a=>`<div class="attr"><div class="l">${a[0]}</div><div class="v">${esc(a[1])}</div></div>`).join('');
+  timeline(s);
+  const gi=gInfo(s);
+  if(gi){document.getElementById('fStrip').innerHTML=strip(s);
+    document.getElementById('fStripLab').innerHTML=GM.map((m,i)=>`<span style="flex:1;font-size:10px;color:var(--muted);white-space:nowrap;overflow:visible;width:0">${m.endsWith('-01')||i===0?ml(m):''}</span>`).join('');
+    document.getElementById('covNote').innerHTML=(s.last?`Dernière facture reçue jusqu'au <b>${dfr(s.last)}</b> (${fmtN.format(gi.tail)} jours au ${dfr(TODAY)}). `:'Aucune facture de ce site dans la BDD. ')+`Statut : <span class="pill"><span class="sw" style="background:var(${GST[gi.st][2]})"></span>${GST[gi.st][1]}</span>. Montant non parvenu estimé : <b>${fmtN.format(gi.tot)} FCFA HTVA</b>, ${fmtN.format(gi.kwh)} kWh.`;
+    const g=s.gp,ms=GM.map((m,i)=>i).filter(i=>g[3][i]>0).reverse();
+    document.getElementById('fGaps').innerHTML=ms.length?`<div class="scroll s" style="max-width:820px"><table><thead><tr><th>Mois non parvenu</th><th class="n">Couvert</th><th>Source de la provision</th><th class="n">Provision du mois</th><th class="n">Estimation non parvenue HTVA</th></tr></thead><tbody>${ms.map(i=>`<tr><td>${ml(GM[i])}</td><td class="n">${g[2][i]} %</td><td>${esc(SRC[g[4][i]]||'–')}</td><td class="n">${fmtN.format(g[5][i])}</td><td class="n hl">${fmtN.format(g[3][i])}</td></tr>`).join('')}</tbody></table></div>`:'<p class="note">Aucun mois attendu sans facture.</p>';
+  }else{document.getElementById('fStrip').innerHTML='';document.getElementById('fStripLab').innerHTML='';document.getElementById('covNote').textContent="Ce site n'est pas dans la compil provisions : pas d'estimation possible.";document.getElementById('fGaps').innerHTML=''}
+  const x=s.ser,rows=[],lab=[],k1=[],k2=[],ht=[];
+  if(x)for(let j=0;j<x[1].length;j++){const m=x[0]+j;if(m<f.a||m>f.b)continue;lab.push(ml(M[m]));k1.push(x[3][j]);k2.push(x[4][j]);ht.push(x[1][j]);rows.push([M[m],x[5][j],x[3][j],x[4][j],x[1][j],x[6][j],(COS.mon[s.id]||{})[m]])}
+  combo('cSite',lab,k1,k2,ht);
+  if(s.gp){const pv=lab.map((_,j)=>null);const labM=[];if(x)for(let j=0;j<x[1].length;j++){const m=x[0]+j;if(m<f.a||m>f.b)continue;labM.push(M[m])}
+    const idx=labM.map(m=>GM.indexOf(m));const prov=idx.map(i=>i>=0?s.gp[5][i]:null);
+    charts.cSite.data.datasets.push({type:'line',label:'Provision (compil)',data:prov,borderColor:css('--hors'),borderDash:[5,4],borderWidth:2,pointRadius:0,tension:.2,yAxisID:'y2',order:0});charts.cSite.update()}
+  document.getElementById('tbM').innerHTML=rows.reverse().map(r=>{const kw=r[2]+r[3];return`<tr><td>${ml(r[0])}</td><td class="n">${r[1]}</td><td class="n">${fmtN.format(r[2])}</td><td class="n">${fmtN.format(r[3])}</td><td class="n">${fmtN.format(r[4])}</td><td class="n">${kw?fmtN.format(r[4]/kw):'–'}</td><td class="n" style="${r[6]&&r[6][0]!=null&&r[6][0]<0.8?'color:var(--up);font-weight:600':''}">${r[6]?cosF(r[6][0]):'–'}</td><td class="n" style="color:var(${r[6]&&r[6][1]<0?'--down':'--up'})">${r[6]&&Math.abs(r[6][1])>=1?(r[6][1]>0?'+':'')+fmtN.format(r[6][1]):'–'}</td><td class="n">${r[5]?fmtN.format(r[5]):'–'}</td></tr>`}).join('')||`<tr><td colspan="9" style="color:var(--muted)">Pas de facture retenue sur la période choisie.</td></tr>`;
+  cosChart(s,f);
+  const cons=new Set(s.con.map(c=>c[0]));
+  const inv=(detBySite.get(s.id.toUpperCase())||[]).concat(P.det.filter(r=>cons.has(r[1])&&String(r[2]).toUpperCase()!==s.id.toUpperCase())).filter((r,i,a)=>a.findIndex(z=>z[0]===r[0])===i).sort((a,b)=>b[4].localeCompare(a[4]));
+  document.getElementById('tbFU').innerHTML=inv.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${dfr(r[4])}</td><td class="n">${fmtN.format(r[5])}</td><td><span class="sw" style="background:var(${ST_VAR[r[6]]})"></span>${ST_LBL[r[6]]}</td></tr>`).join('')||`<tr><td colspan="5" style="color:var(--muted)">Toutes les factures du site sont payées.</td></tr>`;
+}
+function cosInv(s,f){return(COS.inv[s.id]||[]).filter(r=>{const m=M.indexOf(r[1].slice(0,7));return m>=f.a&&m<=f.b})}
+function cosPer(s,f){const v=cosInv(s,f);let w=0,c=0,mc=0;v.forEach(r=>{mc+=r[3];if(r[2]!=null){const k=Math.max(r[4],1e-9);w+=k;c+=r[2]*k}});return{n:v.length,cos:w?c/w:null,mc}}
+function cosChart(s,f){const v=cosInv(s,f),tc=css('--muted'),gc=css('--rule');
+  const nm=v.filter(r=>r[2]!=null).length,pen=v.filter(r=>r[2]!=null&&r[2]<0.8).length,bon=v.filter(r=>r[2]!=null&&r[2]>=0.95).length,mc=v.reduce((a,r)=>a+r[3],0);
+  document.getElementById('cosNote').innerHTML=!v.length?'Aucune facture sur la période choisie.':!nm?`Cos φ non mesuré sur les ${v.length} factures de la période (tarif sans comptage réactif).`:`Cos φ facture par facture (ligne, axe de gauche) et montant cos φ facturé (barres, FCFA HTVA : négatif = bonification, positif = pénalité). Seuils Senelec observés : pénalité sous 0,80, bonification à partir de 0,95. Sur la période : ${nm} factures mesurées, <b>${pen}</b> en pénalité, ${bon} en bonification, montant net <b>${mc>0?'+':''}${fmtN.format(mc)} FCFA</b>.`;
+  const lab=v.map(r=>dfr(r[1]));
+  draw('cCos',{data:{labels:lab,datasets:[
+    {type:'line',label:'Cos φ',data:v.map(r=>r[2]),borderColor:css('--akt'),backgroundColor:css('--akt'),borderWidth:2,pointRadius:3,pointHoverRadius:5,spanGaps:false,tension:0,yAxisID:'y',order:0},
+    {type:'line',label:'Seuil pénalité 0,80',data:v.map(()=>0.8),borderColor:css('--up'),borderDash:[5,4],borderWidth:1.5,pointRadius:0,yAxisID:'y',order:1},
+    {type:'line',label:'Seuil bonification 0,95',data:v.map(()=>0.95),borderColor:css('--down'),borderDash:[5,4],borderWidth:1.5,pointRadius:0,yAxisID:'y',order:1},
+    {type:'bar',label:'Montant cos φ (FCFA)',data:v.map(r=>r[3]),backgroundColor:v.map(r=>r[3]<0?css('--down'):css('--up')),borderWidth:0,yAxisID:'y2',order:2}]},
+   options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},animation:{duration:RM?0:350},
+    plugins:{legend:{position:'bottom',labels:{color:css('--ink'),boxWidth:10,boxHeight:10}},tooltip:{callbacks:{label:c=>' '+c.dataset.label+' : '+(c.dataset.yAxisID==='y2'?fmtN.format(c.parsed.y)+' FCFA':cosF(c.parsed.y))}}},
+    scales:{x:{grid:{display:false},ticks:{color:tc,maxRotation:0,autoSkip:true},border:{color:gc}},
+      y:{min:Math.min(0.5,...v.filter(r=>r[2]!=null).map(r=>Math.floor(r[2]*10)/10)),max:1,grid:{color:gc},border:{display:false},ticks:{color:tc,callback:x=>cosF(x)},title:{display:true,text:'Cos φ',color:tc}},
+      y2:{position:'right',grid:{display:false},border:{display:false},ticks:{color:tc,callback:x=>money(x)},title:{display:true,text:'FCFA HTVA',color:tc}}}}});
+  document.getElementById('tbCos').innerHTML=[...v].reverse().map(r=>`<tr><td>${dfr(r[0])}</td><td>${dfr(r[1])}</td><td class="n">${fmtN.format(r[4])}</td><td class="n">${r[5]==null?'–':fmtN.format(r[5])}</td><td class="n" style="${r[2]!=null&&r[2]<0.8?'color:var(--up);font-weight:600':''}">${cosF(r[2])}</td><td class="n" style="color:var(${r[3]<0?'--down':'--up'})">${Math.abs(r[3])>=1?(r[3]>0?'+':'')+fmtN.format(r[3]):'–'}</td><td>${cosEff(r[2])}</td></tr>`).join('')||'<tr><td colspan="7" style="color:var(--muted)">Aucune facture sur la période choisie.</td></tr>';
+}
+function timeline(s){const svg=document.getElementById('tl'),C=s.con,note=document.getElementById('tlNote');
+  if(!C.length){svg.innerHTML='';note.textContent='Aucune facture retenue.';return}
+  note.textContent=C.length<2?'Un seul contrat facturé pour ce site.':`${C.length} contrats. `+C.filter(c=>c[3]).map(c=>`Le contrat ${c[0]} est remplacé le ${dfr(c[3])}`).join(' ; ')+'.';
+  const W=svg.clientWidth||900,lw=120,rw=W-lw-16,rh=30,H=C.length*rh+28;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.setAttribute('height',H);
+  const t=d=>new Date(d+'T00:00:00').getTime(),t0=Math.min(...C.map(c=>t(c[1]))),t1=Math.max(...C.map(c=>t(c[2])))+864e5,X=v=>lw+(v-t0)/(t1-t0)*rw;
+  let g=`<defs><pattern id="hp" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="6" fill="${css('--ign')}"/></pattern></defs>`;
+  for(let y=new Date(t0).getFullYear();y<=new Date(t1).getFullYear();y++){const v=new Date(y,0,1).getTime();if(v<t0||v>t1)continue;g+=`<line x1="${X(v)}" x2="${X(v)}" y1="0" y2="${H-18}" stroke="${css('--rule')}"/><text class="m" x="${X(v)+3}" y="${H-4}">${y}</text>`}
+  C.forEach((c,i)=>{const y=i*rh+6,a=t(c[1]),b=t(c[2])+864e5,s2=c[3]?t(c[3]):null,cut=s2&&s2<b;const ek=cut?Math.max(a,s2):b;
+    g+=`<text x="0" y="${y+15}">${c[0]}</text>`;
+    if(ek>a)g+=`<rect x="${X(a)}" y="${y}" width="${Math.max(1,X(ek)-X(a))}" height="20" rx="2" fill="${css('--k1')}"><title>Retenu à partir du ${dfr(c[1])}, ${c[4]} factures</title></rect>`;
+    if(cut)g+=`<rect x="${X(Math.max(a,s2))}" y="${y}" width="${Math.max(1,X(b)-X(Math.max(a,s2)))}" height="20" rx="2" fill="url(#hp)" stroke="${css('--ign')}"><title>Ignoré à partir du ${dfr(c[3])} (jusqu'au ${dfr(c[2])})</title></rect>`;
+    if(s2)g+=`<line x1="${X(s2)}" x2="${X(s2)}" y1="${y-3}" y2="${y+rh}" stroke="${css('--ink')}" stroke-width="2"/>`});
+  svg.innerHTML=g}
+
+// ---- CONTRATS
+function renderCtr(){const C=Q.corr;
+  document.getElementById('corrList').innerHTML=`<li>La compil liste <b>${fmtN.format(C.compil)}</b> Site_ID (${fmtN.format(C.list)} dans la liste de l'onglet 2, ${fmtN.format(C.compil_only_feuil1)} présents seulement dans les provisions mensuelles).</li>
+   <li><span class="ok">${fmtN.format(C.both)}</span> sites ont des factures dans la BDD Grid. Tous les Site_ID valides de la BDD sont dans la compil.</li>
+   <li>${fmtN.format(C.compil_sans_bdd)} sites de la compil n'ont aucune facture dans la BDD ; ${fmtN.format(C.compil_sans_bdd_attendus)} d'entre eux ont pourtant une provision attendue (statut « Aucune facture reçue »), les autres sont hors scope, off-grid ou sans provision.</li>
+   <li>${fmtN.format(C.bdd_hors_compil.length)} ensembles de factures de la BDD restent hors compil : contrats sans Site_ID et sites « site_sonatel » dont le nom ne correspond à aucun site de la compil. Deux sites « site_sonatel » ont été rattachés par leur nom (KOLDA26 à KLD_2740, MBACKE_KADIOR à DBL_1303).</li>
+   <li>Site_Name de référence : celui de la compil. Il corrige les noms inversés de la BDD pour les contrats croisés (DKR_0280/0281, DBL_0372/0405, etc.).</li>`;
+const f=F();const ids=new Set(S.filter(s=>sitePass(s,f)).map(s=>s.id));
+  const d=Q.reps.filter(r=>ids.has(r[0])).sort((a,b)=>b[6]-a[6]);
+  document.getElementById('tbR').innerHTML=d.map(r=>`<tr class="row" data-id="${esc(r[0])}" tabindex="0"><td><b>${esc(byId.get(r[0])?.lab==='site_sonatel'?byId.get(r[0]).name:r[0])}</b></td><td>${r[1]}</td><td>${r[2]}</td><td>${dfr(r[3])}</td><td>${dfr(r[4])}</td><td class="n">${r[5]>0?fmtN.format(r[5]):'–'}</td><td class="n">${r[9]||'–'}</td><td class="n">${r[6]?fmtN.format(r[6]):'–'}</td><td class="n">${r[8]?fmtN.format(r[8]):'–'}</td></tr>`).join('')||`<tr><td colspan="9" style="color:var(--muted)">Aucun changement de contrat pour les sites filtrés.</td></tr>`;
+  const e=[...new Set(P.hors.map(r=>r[0]))].sort(),ps=[...new Set(P.hors.map(r=>r[1]))];
+  const n=P.hors.reduce((a,r)=>a+r[2],0),tt=P.hors.reduce((a,r)=>a+r[3],0);
+  document.getElementById('horsNote').textContent=`${fmtN.format(n)} lignes du fichier paiement (${money(tt)} FCFA TTC) sans facture correspondante dans la BDD, par mois d'échéance. Non filtré.`;
+  draw('cHors',{type:'bar',data:{labels:e.map(ml),datasets:ps.map(p=>({label:p,data:e.map(x=>{const r=P.hors.find(h=>h[0]===x&&h[1]===p);return r?r[3]:0}),backgroundColor:css(POR_VAR[p]||'--mix2'),borderWidth:0}))},options:stackOpts(money)})}
+
+let gSel=new Set([0,1,2,3,4]),shownG=100;
+const gChips=document.getElementById('gChips');
+gChips.innerHTML=GST.map((x,i)=>`<button class="chip" data-s="${i}" aria-pressed="${i<5}"><span class="sw" style="background:var(${x[2]})"></span>${x[1]} <span id="gc${i}" style="color:var(--muted)"></span></button>`).join('');
+gChips.addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b)return;const s=+b.dataset.s;gSel.has(s)?gSel.delete(s):gSel.add(s);b.setAttribute('aria-pressed',gSel.has(s));shownG=100;renderG()});
+document.getElementById('qG').addEventListener('input',()=>{shownG=100;renderG()});
+document.getElementById('moreG').onclick=()=>{shownG+=100;renderG()};
+document.getElementById('tbG').addEventListener('click',e=>{const tr=e.target.closest('tr.row');if(tr)openSite(tr.dataset.id)});
+document.getElementById('tbG').addEventListener('keydown',e=>{if(e.key==='Enter')e.target.closest('tr.row')?.click()});
+let gBase=[];
+const SRC_VAR=['--akt','--son','--mix','--none','--unpaid','--hors','--mix2','--cancel','--paid','--k2','--ink','--nop','--akt','--son','--mix','--none','--unpaid','--hors','--mix2','--cancel'];
+function renderGap(){const f=F();gBase=S.filter(s=>s.gp&&sitePass(s,f));
+  const c=[0,0,0,0,0,0],e=[0,0,0,0,0,0];let T=0,A=0,K=0;gBase.forEach(s=>{const g=gInfo(s);c[g.st]++;e[g.st]+=g.tot;T+=g.tot;A+=g.aug;K+=g.kwh});
+  c.forEach((n,i)=>document.getElementById('gc'+i).textContent='('+fmtN.format(n)+')');
+  document.getElementById('gapNote').innerHTML=`Référentiel : ${fmtN.format(Q.corr.compil)} Site_ID de la compil provisions. Pour chaque site et chaque mois du 15/07/2023 au 31/08/2026 (dernier mois provisionné), les jours couverts par les factures reçues sont comparés aux jours attendus. Un mois est attendu lorsque la compil porte une provision positive et que la source n'est pas hors scope, off-grid, fournisseur tiers, groupe électrogène, en raccordement, démonté ou closing board. L'estimation vaut la provision du mois × la part des jours non couverts. Les écarts de 3 jours ou moins sont ignorés. Retard et ancienneté sont mesurés au ${dfr(TODAY)}.`;
+  kp('gKpis',[['Non parvenu estimé',money(T)+' FCFA','HTVA'],[`Dont ${ml(GM[GM.length-1])}`,money(A)+' FCFA','dernier mois provisionné, en attente'],['Dont mois antérieurs',money(T-A)+' FCFA','retards, trous, sites sans facture'],['Consommation estimée',energy(K),'non parvenue'],[GST[0][1],fmtN.format(c[0])+' sites',money(e[0])+' FCFA estimés'],[GST[1][1],fmtN.format(c[1])+' sites',money(e[1])+' FCFA estimés'],[GST[2][1],fmtN.format(c[2])+' sites',money(e[2])+' FCFA estimés'],[GST[3][1],fmtN.format(c[3])+' sites',money(e[3])+' FCFA estimés']]);
+  // chart by source
+  const n=GM.length,bySrc={};gBase.forEach(s=>{const g=s.gp;for(let i=0;i<n;i++){if(!g[3][i])continue;const k=g[4][i];(bySrc[k]=bySrc[k]||Array(n).fill(0))[i]+=g[3][i]}});
+  const keys=Object.keys(bySrc).map(Number).sort((a,b)=>bySrc[b].reduce((x,y)=>x+y,0)-bySrc[a].reduce((x,y)=>x+y,0));
+  draw('cGap',{type:'bar',data:{labels:GM.map(ml),datasets:keys.map((k,j)=>({label:SRC[k]||'Sans source',data:bySrc[k],backgroundColor:css(SRC_VAR[j%SRC_VAR.length]),borderWidth:0}))},options:stackOpts(money)});
+  document.getElementById('stripHead').innerHTML=`<div class="strip">${GM.map((m,i)=>`<span class="yr">${m.endsWith('-01')||i===0?m.slice(0,4):''}</span>`).join('')}</div>`;
+  shownG=100;renderG()}
+function renderG(){const q=document.getElementById('qG').value.trim().toLowerCase();
+  let d=gBase.filter(s=>gSel.has(gInfo(s).st));if(q)d=d.filter(s=>[s.id,s.dname,s.ca,s.con.map(c=>c[0]).join(' ')].join(' ').toLowerCase().includes(q));
+  d=[...d].sort((a,b)=>gInfo(a).st-gInfo(b).st||gInfo(b).tot-gInfo(a).tot);
+  const sum=d.reduce((a,s)=>a+gInfo(s).tot,0);
+  document.getElementById('tbG').innerHTML=d.slice(0,shownG).map(s=>{const g=gInfo(s);return`<tr class="row" data-id="${esc(s.id)}" tabindex="0"><td><b>${esc(s.lab)}</b></td><td>${esc(s.dname)}</td><td><div class="strip">${strip(s)}</div></td><td class="${g.st<=1?'hl':g.st===2?'hw':''}">${s.last?dfr(s.last):'Aucune'}</td><td class="n">${g.tail!=null?fmtN.format(g.tail):'–'}</td><td class="n">${g.nMiss||'–'}</td><td class="n ${g.tot>0&&g.st<4?'hl':''}">${g.tot?fmtN.format(g.tot):'–'}</td><td class="n">${g.kwh?fmtN.format(g.kwh):'–'}</td><td><span class="pill"><span class="sw" style="background:var(${GST[g.st][2]})"></span>${GST[g.st][1]}</span></td></tr>`}).join('')||`<tr><td colspan="9" style="color:var(--muted);padding:16px 10px">Aucun site ne correspond. Réactivez un statut ou élargissez les filtres.</td></tr>`;
+  document.getElementById('cntG').textContent=`${fmtN.format(Math.min(shownG,d.length))} sur ${fmtN.format(d.length)} sites, ${fmtN.format(sum)} FCFA HTVA estimés`;
+  document.getElementById('moreG').style.display=shownG<d.length?'':'none'}
+window.openSite=openSite;
+const DEM=(()=>{const D=__PG.demandes;
+const M=D.months;
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmtN=new Intl.NumberFormat('fr-FR',{maximumFractionDigits:0});const f1=v=>v.toLocaleString('fr-FR',{maximumFractionDigits:1});
+const MOIS=['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];const ml=s=>{const[y,m]=s.split('-');return MOIS[+m-1]+' '+y.slice(2)};
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const big=v=>{const a=Math.abs(v);return a>=1e9?f1(v/1e9)+' Md':a>=1e6?f1(v/1e6)+' M':a>=1e3?f1(v/1e3)+' k':fmtN.format(v)};
+const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
+// site: [id,name,tarif,ps,reg,k1[],k2[],ht[],cov[],anom[]]
+const S=D.sites.map((s,i)=>({i,id:s[0],name:s[1],tar:s[2],ps:s[3],reg:s[4],k1:s[5],k2:s[6],ht:s[7],cov:s[8],an:s[9],t:s[5].map((v,j)=>v+s[6][j])}));
+const n=M.length;
+const iJ26=M.indexOf('2026-01'),iJul26=M.length-1,iJ25=M.indexOf('2025-01'),iJul25=M.indexOf('2025-'+M[M.length-1].slice(5));const LM=MOIS[+M[M.length-1].slice(5)-1].replace('.','');const LMf=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'][+M[M.length-1].slice(5)-1];
+S.forEach(s=>{const tc=s.t.map((v,j)=>s.an[j]?0:v);const sum=(a,b)=>tc.slice(a,b+1).reduce((x,y)=>x+y,0);s.tot=tc.reduce((a,b)=>a+b,0);s.y26=sum(iJ26,iJul26);s.y25=sum(iJ25,iJul25);s.dv=s.y25?(s.y26-s.y25)/s.y25*100:null;s.moy=s.tot/n});
+let metric='t';const MLAB={t:'Conso totale (kWh)',k1:'Conso K1 (kWh)',k2:'Conso K2 (kWh)',ht:'Montant HTVA (FCFA)'};
+const unit=()=>metric==='ht'?'FCFA':'kWh';
+document.getElementById('d_sub').textContent=`Fichier de demande : ${fmtN.format(D.nrows)} lignes, soit ${fmtN.format(D.nuniq)} Site_ID uniques (${fmtN.format(D.ndup)} lignes en double, ${D.nokey.length} lignes sans Site_ID exploitable). ${fmtN.format(S.length)} sites sont présents dans la BDD Grid ; leur consommation est donnée mois par mois de janvier 2024 à ${LMf} ${M[M.length-1].slice(0,4)}.`;
+const sel=(id,opts,all)=>{const el=document.getElementById('d_'+id);el.innerHTML=`<option value="">${all}</option>`+opts.map(o=>`<option>${esc(o)}</option>`).join('');return el};
+const fReg=sel('fReg',[...new Set(S.map(s=>s.reg))].sort(),'Toutes'),fTar=sel('fTar',[...new Set(S.map(s=>s.tar))].sort(),'Toutes');
+const q=document.getElementById('d_q'),xAn=document.getElementById('d_xAn');
+let view=[],shown=100,sortK='tot',sortDir=-1;const picked=[];
+const PAL=['--k1','--k2','#2E7D5B','#B0425A','#5B5FC7','#7A9A3A','#8E6C3A','#2A8C9C','#9A4FB0','#5A6B73'];
+const pcol=i=>{const c=PAL[i%PAL.length];return c.startsWith('--')?css(c):c};
+const arr=s=>s[metric];const arrX=s=>xAn.checked?s[metric].map((v,j)=>s.an[j]?0:v):s[metric];
+Chart.defaults.font.family='"Archivo",system-ui,sans-serif';Chart.defaults.font.size=12;
+const charts={};
+function opts(stacked){const tc=css('--muted'),gc=css('--rule');return{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},animation:{duration:RM?0:300},
+  plugins:{legend:{position:'bottom',labels:{color:css('--ink'),boxWidth:10,boxHeight:10}},tooltip:{callbacks:{label:c=>' '+c.dataset.label+' : '+fmtN.format(c.parsed.y)+' '+unit()}}},
+  scales:{x:{stacked,grid:{display:false},ticks:{color:tc,maxRotation:0,autoSkip:true},border:{color:gc}},y:{stacked,beginAtZero:true,grid:{color:gc},border:{display:false},ticks:{color:tc,callback:v=>big(v)},title:{display:true,text:unit(),color:tc}}}}}
+function draw(id,cfg){if(charts[id]){charts[id].data=cfg.data;charts[id].options=cfg.options;charts[id].update();return}charts[id]=new Chart(document.getElementById('d_'+id),cfg)}
+function filtered(){const r=fReg.value,t=fTar.value,s=q.value.trim().toLowerCase();return S.filter(x=>(!r||x.reg===r)&&(!t||x.tar===t)&&(!s||(x.id+' '+x.name).toLowerCase().includes(s)))}
+function render(){
+  const F=filtered();
+  // totals
+  const ex=xAn.checked;const tot=k=>{const a=Array(n).fill(0);F.forEach(s=>s[k].forEach((v,j)=>{if(!(ex&&s.an[j]))a[j]+=v}));return a};
+  let ds;if(metric==='t')ds=[{label:'Conso K1',data:tot('k1'),backgroundColor:css('--k1'),borderWidth:0},{label:'Conso K2',data:tot('k2'),backgroundColor:css('--k2'),borderWidth:0}];
+  else ds=[{label:MLAB[metric],data:tot(metric),backgroundColor:css(metric==='k2'?'--k2':'--k1'),borderWidth:0}];
+  draw('cTot',{type:'bar',data:{labels:M.map(ml),datasets:ds},options:opts(true)});
+  document.getElementById('d_tTot').textContent=`Total des ${fmtN.format(F.length)} sites filtrés, ${MLAB[metric]}`;
+  const nAn=F.reduce((a,s)=>a+s.an.reduce((x,y)=>x+y,0),0);
+  document.getElementById('d_nTot').textContent=nAn?(ex?`${nAn} valeur(s) anormale(s) exclue(s) du total, par exemple un saut d'index de compteur.`:`${nAn} valeur(s) anormale(s) incluse(s) dans le total.`):'Aucune valeur anormale dans la sélection.';
+  // kpis
+  const T=F.reduce((a,s)=>a+s.t.reduce((x,y,j)=>x+(ex&&s.an[j]?0:y),0),0),H=F.reduce((a,s)=>a+s.ht.reduce((x,y)=>x+y,0),0);
+  const y26=F.reduce((a,s)=>a+s.y26,0),y25=F.reduce((a,s)=>a+s.y25,0);
+  const last=F.reduce((a,s)=>a+(ex&&s.an[n-1]?0:s.t[n-1]),0);
+  document.getElementById('d_kpis').innerHTML=[['Sites présents dans la BDD',fmtN.format(F.length),`sur ${fmtN.format(D.nuniq)} demandés`],['Consommation cumulée',big(T)+' kWh','janv. 2024 à '+ml(M[M.length-1])],['Moyenne mensuelle',big(T/n)+' kWh','tous sites filtrés'],[`Janv.–${LM} 2026 vs 2025`,(y25?((y26-y25)/y25*100>0?'+':'')+f1((y26-y25)/y25*100)+' %':'–'),`${big(y26)} contre ${big(y25)} kWh`],[LMf.charAt(0).toUpperCase()+LMf.slice(1)+' '+M[M.length-1].slice(0,4),big(last)+' kWh','dernier mois complet']].map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v">${k[1]}</div><div class="d">${k[2]}</div></div>`).join('');
+  view=F;shown=100;renderTable();renderSite();
+}
+function spark(s){const a=s.t.map((v,j)=>s.an[j]?null:v);const mx=Math.max(1,...a.filter(v=>v!=null));const w=120,h=26;
+  const pts=a.map((v,j)=>v==null?null:[j/(n-1)*w,h-2-(v/mx)*(h-4)]);let d='';pts.forEach((p,j)=>{if(!p)return;d+=(d&&pts[j-1]?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1)});
+  return`<svg class="sp" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><path d="${d}" fill="none" stroke="${css('--k1')}" stroke-width="1.5"/></svg>`}
+function renderHead(){document.getElementById('d_th').innerHTML=`<tr><th class="s0 l" aria-label="Comparer"></th><th class="s1 l sort" data-k="id">Site_ID</th><th class="s2 l sort" data-k="name">Site_Name</th><th class="l sort" data-k="tar">Tarif</th><th class="l">Tendance</th><th class="sort" data-k="tot">Total</th><th class="sort" data-k="moy">Moy. / mois</th><th class="sort" data-k="dv">2026 vs 2025</th>${M.map((m,j)=>`<th class="${m.endsWith('-01')?'yr':''}">${ml(m)}</th>`).join('')}</tr>`;
+  document.querySelectorAll('#d_th th.sort').forEach(th=>th.style.cursor='pointer')}
+function renderTable(){
+  const d=[...view].sort((a,b)=>{const x=a[sortK],y=b[sortK];if(x==null)return 1;if(y==null)return -1;return(typeof x==='string'?x.localeCompare(y,'fr'):x-y)*sortDir});window._d=d;
+  document.getElementById('d_tb').innerHTML=d.slice(0,shown).map(s=>{const on=picked.includes(s.i);const a=arr(s);const sum=arrX(s).reduce((x,y)=>x+y,0);
+    return`<tr class="${on?'on':''}"><td class="s0 l"><input type="checkbox" data-i="${s.i}" ${on?'checked':''} aria-label="Comparer ${esc(s.id)}"></td><td class="s1 l"><button class="of" data-id="${esc(s.id)}" title="Ouvrir la fiche du site">${esc(s.id)}</button></td><td class="s2 l" title="${esc(s.name)}">${esc(s.name)}</td><td class="l">${esc(s.tar)}</td><td>${spark(s)}</td><td><b>${fmtN.format(sum)}</b></td><td>${fmtN.format(sum/n)}</td><td class="${s.dv==null?'':s.dv>20?'up':s.dv<-20?'down':''}">${s.dv==null?'–':(s.dv>0?'+':'')+f1(s.dv)+' %'}</td>${a.map((v,j)=>{const c=s.cov[j];const cls=[M[j].endsWith('-01')?'yr':'',s.an[j]?'a':'',c===0?'z':c<95?'p':''].join(' ');return`<td class="${cls}" title="${ml(M[j])} : couvert à ${c} %">${c===0&&!v?'–':fmtN.format(v)}</td>`}).join('')}</tr>`}).join('')||`<tr><td class="l" colspan="${8+n}" style="color:var(--muted);padding:16px">Aucun site ne correspond à ces filtres.</td></tr>`;
+  document.getElementById('d_cnt').textContent=`${fmtN.format(Math.min(shown,d.length))} sur ${fmtN.format(d.length)} sites · ${MLAB[metric]}`;
+  document.getElementById('d_more').style.display=shown<d.length?'':'none'}
+function renderSite(){
+  const P=picked.map(i=>S[i]);
+  document.getElementById('d_chips').innerHTML=P.length?P.map((s,k)=>`<button class="chip" data-i="${s.i}" aria-label="Retirer ${esc(s.id)}"><span class="dot" style="background:${pcol(k)}"></span>${esc(s.id)} ${esc(s.name)} ✕</button>`).join(''):'<span class="note" style="margin:0">Aucun site sélectionné.</span>';
+  draw('cSite',{type:'line',data:{labels:M.map(ml),datasets:P.map((s,k)=>({label:s.id+' '+s.name,data:arr(s).map((v,j)=>(s.cov[j]===0&&!v)||(xAn.checked&&s.an[j])?null:v),borderColor:pcol(k),backgroundColor:pcol(k),borderWidth:2,pointRadius:2,pointHoverRadius:4,tension:.2,spanGaps:false,
+    segment:{borderDash:c=>s.an[c.p1DataIndex]||s.an[c.p0DataIndex]?[4,4]:undefined}}))},options:opts(false)});
+}
+function toggle(i){const k=picked.indexOf(i);if(k>=0)picked.splice(k,1);else{if(picked.length>=10)picked.shift();picked.push(i)}renderTable();renderSite()}
+document.getElementById('d_tb').addEventListener('click',e=>{const b=e.target.closest('button.of');if(b)openSite(b.dataset.id)});
+document.getElementById('d_tb').addEventListener('change',e=>{if(e.target.dataset.i)toggle(+e.target.dataset.i)});
+document.getElementById('d_chips').addEventListener('click',e=>{const b=e.target.closest('.chip');if(b)toggle(+b.dataset.i)});
+document.getElementById('d_th').addEventListener('click',e=>{const th=e.target.closest('th.sort');if(!th)return;const k=th.dataset.k;if(sortK===k)sortDir*=-1;else{sortK=k;sortDir=['id','name','tar'].includes(k)?1:-1}renderTable()});
+document.getElementById('d_more').onclick=()=>{shown+=100;renderTable()};
+document.getElementById('d_top5').onclick=()=>{picked.length=0;[...view].sort((a,b)=>b.tot-a.tot).slice(0,5).forEach(s=>picked.push(s.i));renderTable();renderSite()};
+document.getElementById('d_clr').onclick=()=>{picked.length=0;renderTable();renderSite()};
+document.querySelectorAll('#p-dem .seg button').forEach(b=>b.onclick=()=>{metric=b.dataset.m;document.querySelectorAll('#p-dem .seg button').forEach(x=>x.setAttribute('aria-pressed',x===b));render()});
+[fReg,fTar,xAn].forEach(x=>x.addEventListener('change',render));q.addEventListener('input',render);
+// missing
+const inC=D.miss.filter(m=>m[2]==='Oui').length;
+document.getElementById('d_nMiss').textContent=`${fmtN.format(D.miss.length)} Site_ID demandés n'ont aucune facture dans la BDD (${fmtN.format(inC)} figurent dans la compil provisions, souvent hors scope ou off-grid). ${D.nokey.length} lignes n'ont pas de Site_ID exploitable et leur nom ne correspond à aucun site de la BDD.`;
+document.getElementById('d_miss').innerHTML=D.miss.map(m=>`<li><b>${esc(m[0])}</b> ${esc(m[1])}</li>`).join('')+D.nokey.map(m=>`<li><b>${esc(m[0])}</b> ${esc(m[1])} (sans Site_ID)</li>`).join('');
+
+let inited=false;return{render(){if(!inited){inited=true;renderHead();[...S].sort((a,b)=>b.tot-a.tot).slice(0,5).forEach(s=>picked.push(s.i))}render()},destroy(){Object.values(charts).forEach(c=>c.destroy());for(const k in charts)delete charts[k]}};
+})();
+const EFF=(()=>{const D=__PG.efficacite;
+const M=D.months,C=D.cats,n=M.length;
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const fmtN=new Intl.NumberFormat('fr-FR',{maximumFractionDigits:0});const f1=v=>v.toLocaleString('fr-FR',{maximumFractionDigits:1});
+const MOIS=['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];const ml=s=>{const[y,m]=s.split('-');return MOIS[+m-1]+' '+y.slice(2)};
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const big=v=>{const a=Math.abs(v);return a>=1e9?f1(v/1e9)+' Md':a>=1e6?f1(v/1e6)+' M':a>=1e3?fmtN.format(v/1e3)+' k':fmtN.format(v)};
+const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const CV=['--eff','--stop','--meter','--mm','--ps','--est'];
+// [id,name,tar,ps,reg,agence,rup,av,ap,bs,cat,conf,vague,pmb,pma,ek,ef,erk,erf,pu,cpt,ctr,psch,r2,kwh[],ht[],full[]]
+const S=D.sites.map((r,i)=>({i,id:r[0],name:r[1],tar:r[2],ps:r[3],reg:r[4]==='SAN'?'Sans Site_ID':r[4],ag:r[5],rup:r[6],av:r[7],ap:r[8],bs:r[9],cat:r[10],conf:r[11],vague:r[12],pmb:r[13],pma:r[14],ek:r[15],ef:r[16],erk:r[17],er:r[18],pu:r[19],cpt:r[20],ctr:r[21],psch:r[22],r2:r[23],hd:r[24],kwh:r[25],ht:r[26],full:r[27],ri:M.indexOf(r[6])}));
+S.forEach(s=>{s.lab=s.id.startsWith('SANS_ID')?'Sans Site_ID':s.id;s.dname=s.name&&s.name!=='None'&&s.name!=='nan'?s.name:(s.id.startsWith('SANS_ID')?'Contrat '+s.id.split(' · ')[1]:'');s.pm=s.pmb!=null&&s.pma!=null?(s.pma-s.pmb)/s.pmb:0});
+let cSel=new Set([0]);
+document.getElementById('e_cChips').innerHTML=C.map((c,i)=>`<button class="chip" data-c="${i}" aria-pressed="${i===0}"><span class="sw" style="background:var(${CV[i]})"></span>${c} <span style="color:var(--muted)">(${S.filter(s=>s.cat===i).length})</span></button>`).join('');
+const selO=(id,o,all)=>{const e=document.getElementById('e_'+id);e.innerHTML=`<option value="">${all}</option>`+o.map(x=>`<option>${esc(x)}</option>`).join('');return e};
+const fReg=selO('fReg',[...new Set(S.map(s=>s.reg))].sort(),'Toutes'),fTar=selO('fTar',[...new Set(S.map(s=>s.tar))].sort(),'Tous');
+const fConf=document.getElementById('e_fConf'),fYr=document.getElementById('e_fYr'),q=document.getElementById('e_q');
+function F(){const r=fReg.value,t=fTar.value,c=fConf.value,y=fYr.value,s=q.value.trim().toLowerCase();return S.filter(x=>cSel.has(x.cat)&&(!r||x.reg===r)&&(!t||x.tar===t)&&(!c||x.conf===c)&&(!y||x.rup.startsWith(y))&&(!s||(x.id+' '+x.dname+' '+x.ag).toLowerCase().includes(s)))}
+Chart.defaults.font.family='"Archivo",system-ui,sans-serif';Chart.defaults.font.size=12;
+const charts={};function draw(id,cfg){if(charts[id]){charts[id].data=cfg.data;charts[id].options=cfg.options;charts[id].update();return}charts[id]=new Chart(document.getElementById('e_'+id),cfg)}
+const vline={id:'vline',afterDatasetsDraw(ch,a,o){if(o.at==null)return;const x=ch.scales.x.getPixelForValue(o.at);const{top,bottom}=ch.chartArea;const c=ch.ctx;c.save();c.strokeStyle=css('--ink');c.lineWidth=2;c.beginPath();c.moveTo(x,top);c.lineTo(x,bottom);c.stroke();c.fillStyle=css('--ink');c.font='12px Archivo, sans-serif';c.fillText(o.label||'',Math.min(x+4,ch.chartArea.right-80),top+12);c.restore()}};
+if(!window._vl){Chart.register(vline);window._vl=1}
+function base(yl,y2){const tc=css('--muted'),gc=css('--rule');const o={responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},animation:{duration:RM?0:300},
+  plugins:{legend:{position:'bottom',labels:{color:css('--ink'),boxWidth:10,boxHeight:10}},vline:{}},
+  scales:{x:{stacked:true,grid:{display:false},ticks:{color:tc,maxRotation:0,autoSkip:true},border:{color:gc}},y:{stacked:true,beginAtZero:true,grid:{color:gc},border:{display:false},ticks:{color:tc,callback:v=>big(v)},title:{display:!!yl,text:yl,color:tc}}}};
+  if(y2)o.scales.y2={position:'right',beginAtZero:true,grid:{display:false},border:{display:false},ticks:{color:tc,callback:v=>big(v)},title:{display:true,text:y2,color:tc}};return o}
+let view=[],shown=100,sortK='ek',dir=-1,cur=null;
+function render(){
+  const f=F();view=f;
+  const all=S.filter(s=>(!fReg.value||s.reg===fReg.value)&&(!fTar.value||s.tar===fTar.value));
+  const E=S.filter(s=>s.cat===0);
+  document.getElementById('e_lead').innerHTML=`Sur <b>${fmtN.format(D.nanalyse)}</b> sites dont l'historique est suffisant, <b>${fmtN.format(S.length)}</b> présentent une baisse durable de consommation. <b>${fmtN.format(E.length)}</b> relèvent probablement de l'efficacité énergétique (${fmtN.format(E.filter(s=>s.conf==='Forte').length)} avec une confiance forte) : baisse médiane de ${f1(med(E.map(s=>s.bs)))} %, site toujours en service, sans changement de compteur, de contrat ni de puissance souscrite, et avec un montant HTVA qui baisse lui aussi. Elles représentent environ <b>${big(sum(E,'ek'))} kWh</b> et <b>${big(sum(E,'ef'))} FCFA HTVA</b> économisés par an, soit ${big(sum(E,'er'))} FCFA déjà économisés depuis les baisses. Les baisses se concentrent sur 2024, avec des vagues régionales (mars 2024 à Diourbel et Thiès, janvier 2026 à Dakar), qui ressemblent à des programmes d'actions déployés par zone.`;
+  const eff=f.filter(s=>s.cat===0);
+  document.getElementById('e_kpis').innerHTML=[['Sites filtrés',fmtN.format(f.length),'baisse durable détectée'],['Économie annuelle',big(sum(f,'ek'))+' kWh','par an, au rythme actuel',1],['Soit en montant',big(sum(f,'ef'))+' FCFA','HTVA par an',1],['Économies réalisées',big(sum(f,'er'))+' FCFA',big(sum(f,'erk'))+' kWh depuis les baisses'],['Baisse médiane',f.length?f1(med(f.map(s=>s.bs)))+' %':'–','du niveau de consommation'],['Confiance forte',fmtN.format(eff.filter(s=>s.conf==='Forte').length),'sites en efficacité probable']].map(k=>`<div class="kpi${k[3]?' hero':''}"><div class="l">${k[0]}</div><div class="v">${k[1]}</div><div class="d">${k[2]}</div></div>`).join('');
+  // dates chart
+  const cnt=C.map(()=>Array(n).fill(0));f.forEach(s=>cnt[s.cat][s.ri]++);
+  const used=[...Array(n).keys()].filter(j=>cnt.some(c=>c[j]));const lo=Math.min(...used,n),hi=Math.max(...used,0);const rng=[...Array(Math.max(0,hi-lo+1)).keys()].map(j=>j+lo);
+  const o1=base('Sites');o1.plugins.tooltip={callbacks:{label:c=>' '+c.dataset.label+' : '+c.parsed.y+' sites'}};o1.scales.y.ticks.callback=v=>v;
+  draw('cDates',{type:'bar',data:{labels:rng.map(j=>ml(M[j])),datasets:C.map((c,i)=>({label:c,data:rng.map(j=>cnt[i][j]),backgroundColor:css(CV[i]),borderWidth:0})).filter(d=>d.data.some(v=>v))},options:o1});
+  // event study
+  const K=[...Array(31).keys()].map(x=>x-12);const vals=K.map(()=>[]);
+  f.forEach(s=>{const lvl=s.av/30.4375;if(!lvl)return;K.forEach((k,j)=>{const m=s.ri+k;if(m<0||m>=n||!s.full[m])return;const d=new Date(M[m]+'-01');const nd=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();vals[j].push(s.kwh[m]/nd/lvl*100)})});
+  const qt=(a,p)=>{if(!a.length)return null;const b=[...a].sort((x,y)=>x-y);const i=(b.length-1)*p,l=Math.floor(i);return b[l]+(b[Math.ceil(i)]-b[l])*(i-l)};
+  const o2=base('% du niveau avant');o2.scales.x.stacked=false;o2.scales.y.stacked=false;o2.scales.y.beginAtZero=false;o2.scales.y.ticks.callback=v=>v+' %';o2.plugins.vline={at:12,label:'baisse'};
+  o2.plugins.tooltip={callbacks:{label:c=>' '+c.dataset.label+' : '+(c.parsed.y==null?'–':f1(c.parsed.y)+' %')}};o2.plugins.legend.labels.filter=i=>i.text!=='q1';
+  draw('cEvt',{type:'line',data:{labels:K.map(k=>(k>0?'+':'')+k),datasets:[{label:'q3',data:vals.map(a=>qt(a,.75)),borderColor:'transparent',pointRadius:0,fill:false,order:2},{label:'Quartiles 25–75 %',data:vals.map(a=>qt(a,.25)),borderColor:'transparent',backgroundColor:css('--soft'),pointRadius:0,fill:'-1',order:2},{label:'Médiane',data:vals.map(a=>qt(a,.5)),borderColor:css('--eff'),backgroundColor:css('--eff'),borderWidth:2.5,pointRadius:0,tension:.2,order:0}]},options:Object.assign(o2,{plugins:Object.assign(o2.plugins,{legend:{position:'bottom',labels:{color:css('--ink'),boxWidth:10,boxHeight:10,filter:i=>i.text!=='q3'}}})})});
+  // evolution
+  const kb=Array(n).fill(0),ka=Array(n).fill(0),h=Array(n).fill(0);f.forEach(s=>{for(let j=0;j<n;j++){(j<s.ri?kb:ka)[j]+=s.kwh[j];h[j]+=s.ht[j]}});
+  const o3=base('kWh','FCFA HTVA');o3.plugins.tooltip={callbacks:{label:c=>' '+c.dataset.label+' : '+fmtN.format(c.parsed.y)+(c.dataset.yAxisID==='y2'?' FCFA':' kWh')}};
+  draw('cEvo',{data:{labels:M.map(ml),datasets:[{type:'bar',label:'kWh avant la baisse du site',data:kb,backgroundColor:css('--before'),borderWidth:0,yAxisID:'y',order:2},{type:'bar',label:'kWh après la baisse du site',data:ka,backgroundColor:css('--eff'),borderWidth:0,yAxisID:'y',order:2},{type:'line',label:'Montant HTVA',data:h,borderColor:css('--money'),backgroundColor:css('--money'),borderWidth:2,pointRadius:0,tension:.2,yAxisID:'y2',order:1}]},options:o3});
+  shown=100;renderTable();if(!cur||!f.includes(cur))cur=f.slice().sort((a,b)=>b.ek-a.ek)[0]||null;renderFiche();
+}
+const sum=(a,k)=>a.reduce((x,s)=>x+s[k],0);const med=a=>{if(!a.length)return 0;const b=[...a].sort((x,y)=>x-y);return b[Math.floor(b.length/2)]};
+function spark(s){const w=110,h=24;const v=s.kwh.map((x,j)=>s.full[j]?x:null);const mx=Math.max(1,...v.filter(x=>x!=null));let d='';v.forEach((x,j)=>{if(x==null)return;const X=(j/(n-1)*w).toFixed(1),Y=(h-2-x/mx*(h-4)).toFixed(1);d+=(d&&v[j-1]!=null?'L':'M')+X+','+Y});const xr=(s.ri/(n-1)*w).toFixed(1);
+  return`<svg width="${w}" height="${h}" aria-hidden="true"><line x1="${xr}" x2="${xr}" y1="0" y2="${h}" stroke="${css('--rule')}" stroke-width="2"/><path d="${d}" fill="none" stroke="${css(CV[s.cat])}" stroke-width="1.5"/></svg>`}
+const KEY={id:'lab',name:'dname',tar:'tar',ps:'ps',rup:'rup',av:'av',ap:'ap',bs:'bs',pm:'pm',ek:'ek',ef:'ef',er:'er',cat:'cat'};
+function renderTable(){const k=KEY[sortK]||sortK;const d=[...view].sort((a,b)=>{const x=a[k],y=b[k];return(typeof x==='string'?x.localeCompare(y,'fr'):x-y)*dir});window._d=d;
+  document.getElementById('e_tb').innerHTML=d.slice(0,shown).map(s=>`<tr class="${s===cur?'on':''}" data-i="${s.i}" tabindex="0"><td class="l"><b>${esc(s.lab)}</b>${s.vague?'<span class="tag">vague</span>':''}</td><td class="l">${esc(s.dname)}</td><td class="l">${esc(s.tar)}</td><td>${f1(s.ps)} kW</td><td class="l">${ml(s.rup)}</td><td>${fmtN.format(s.av)}</td><td>${fmtN.format(s.ap)}</td><td class="down">−${f1(s.bs)} %</td><td>${s.pmb!=null&&s.pma!=null?f1(s.pmb)+' → '+f1(s.pma):'–'}</td><td>${fmtN.format(s.ek)}</td><td><b>${fmtN.format(s.ef)}</b></td><td>${fmtN.format(s.er)}</td><td class="l"><span class="pill"><span class="sw" style="background:var(${CV[s.cat]})"></span>${s.cat===0?'Efficacité ('+s.conf.toLowerCase()+')':C[s.cat]}</span></td><td class="l">${spark(s)}</td></tr>`).join('')||`<tr><td class="l" colspan="14" style="color:var(--muted);padding:16px">Aucun site ne correspond. Réactivez une nature de baisse ou élargissez les filtres.</td></tr>`;
+  document.getElementById('e_cnt').textContent=`${fmtN.format(Math.min(shown,d.length))} sur ${fmtN.format(d.length)} sites`;document.getElementById('e_more').style.display=shown<d.length?'':'none'}
+document.getElementById('e_open').onclick=()=>cur&&window.openSite&&openSite(cur.id);
+function renderFiche(){const s=cur;if(!s){document.getElementById('e_fId').textContent='Aucun site';return}
+  document.getElementById('e_fId').textContent=s.lab==='Sans Site_ID'?'Contrat '+s.id.split(' · ')[1]:s.id;document.getElementById('e_fName').textContent=s.lab==='Sans Site_ID'?'Sans Site_ID':s.dname;
+  document.getElementById('e_fTxt').innerHTML=`Baisse détectée à partir de <b>${ml(s.rup)}</b> : de ${fmtN.format(s.av)} à ${fmtN.format(s.ap)} kWh par mois (−${f1(s.bs)} %). ${C[s.cat]}${s.cat===0?', confiance '+s.conf.toLowerCase():''}.${s.vague?' La baisse fait partie d\u2019une vague de baisses simultanées dans la même région.':''}`;
+  const A=[['Tarif',s.tar],['Puissance souscrite',f1(s.ps)+' kW'],['Agence',s.ag||'–'],['P. max relevée',s.pmb!=null?f1(s.pmb)+' → '+(s.pma!=null?f1(s.pma):'–'):'–'],['Prix moyen HTVA',fmtN.format(s.pu)+' FCFA/kWh'],['Baisse du montant HTVA',s.hd==null?'–':'−'+f1(s.hd)+' %'],
+    ['Économie annuelle',fmtN.format(s.ek)+' kWh'],['Économie annuelle',fmtN.format(s.ef)+' FCFA'],['Économies réalisées',fmtN.format(s.er)+' FCFA'],['Changement de compteur',s.cpt?'Oui':'Non'],['Changement de contrat',s.ctr?'Oui':'Non'],['Changement de PS',s.psch?'Oui':'Non']];
+  document.getElementById('e_attrs').innerHTML=A.map(a=>`<div class="attr"><div class="l">${a[0]}</div><div class="v">${esc(a[1])}</div></div>`).join('');
+  const nd=M.map(m=>{const d=new Date(m+'-01');return new Date(d.getFullYear(),d.getMonth()+1,0).getDate()});
+  const lvB=M.map((m,j)=>j<s.ri?s.av/30.4375*nd[j]:null),lvA=M.map((m,j)=>j>=s.ri?s.ap/30.4375*nd[j]:null);
+  const o=base('kWh');o.scales.x.stacked=false;o.scales.y.stacked=false;o.plugins.vline={at:s.ri,label:ml(s.rup)};o.plugins.tooltip={callbacks:{label:c=>' '+c.dataset.label+' : '+(c.parsed.y==null?'–':fmtN.format(c.parsed.y))}};
+  draw('cS1',{data:{labels:M.map(ml),datasets:[{type:'bar',label:'Consommation',data:s.kwh.map((v,j)=>s.full[j]?v:null),backgroundColor:M.map((m,j)=>css(j<s.ri?'--before':CV[s.cat])),borderWidth:0,order:2},{type:'line',label:'Niveau avant',data:lvB,borderColor:css('--ink'),borderDash:[5,4],borderWidth:1.5,pointRadius:0,order:1},{type:'line',label:'Niveau après',data:lvA,borderColor:css(CV[s.cat]),borderDash:[5,4],borderWidth:2,pointRadius:0,order:1}]},options:o});
+  const o2=base('FCFA HTVA');o2.scales.x.stacked=false;o2.plugins.vline={at:s.ri,label:ml(s.rup)};o2.plugins.tooltip={callbacks:{label:c=>' '+c.dataset.label+' : '+(c.parsed.y==null?'–':fmtN.format(c.parsed.y)+' FCFA')}};
+  draw('cS2',{type:'bar',data:{labels:M.map(ml),datasets:[{label:'Montant HTVA',data:s.ht.map((v,j)=>s.full[j]?v:null),backgroundColor:M.map((m,j)=>css(j<s.ri?'--before':'--money')),borderWidth:0}]},options:o2});
+}
+document.getElementById('e_cChips').addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b)return;const c=+b.dataset.c;cSel.has(c)?cSel.delete(c):cSel.add(c);b.setAttribute('aria-pressed',cSel.has(c));render()});
+[fReg,fTar,fConf,fYr].forEach(x=>x.addEventListener('change',render));q.addEventListener('input',()=>{view=F();shown=100;renderTable()});
+document.getElementById('e_more').onclick=()=>{shown+=100;renderTable()};
+document.querySelector('#p-eff thead').addEventListener('click',e=>{const th=e.target.closest('th[data-k]');if(!th)return;const k=th.dataset.k;if(sortK===k)dir*=-1;else{sortK=k;dir=['id','name','tar','rup','cat'].includes(k)?1:-1}renderTable()});
+document.getElementById('e_tb').addEventListener('click',e=>{const tr=e.target.closest('tr[data-i]');if(!tr)return;cur=S[+tr.dataset.i];renderTable();renderFiche();document.getElementById('e_ficheSec').scrollIntoView({behavior:RM?'auto':'smooth'})});
+document.getElementById('e_tb').addEventListener('keydown',e=>{if(e.key==='Enter')e.target.closest('tr')?.click()});
+
+return{look:id=>{const x=S.find(s=>s.id===id);return x?{rup:x.rup,bs:x.bs,cat:C[x.cat],conf:x.conf,ef:x.ef}:null},render,destroy(){Object.values(charts).forEach(c=>c.destroy());for(const k in charts)delete charts[k]}};})();
+// ===== Config Nouvelle Baie =====
+const NB={"ids": ["DKR_2779", "DKR_2809", "DKR_2834", "DKR_2849", "DKR_2810"], "inv": [["DKR_2779", 7501681922, "2026-03-16", "2026-03-31", 16, 1906, 453, 402794, 475300, "Payée", "AKTIVCO", "2026-04-07", "36202511", 5.0, true], ["DKR_2779", 7691758754, "2026-04-01", "2026-04-30", 30, 2107, 499, 471359, 556200, "Payée", "AKTIVCO", "2026-05-07", "36202511", 9.0, true], ["DKR_2779", 7691774545, "2026-05-01", "2026-05-31", 31, 1981, 351, 422124, 498100, "Payée", "AKTIVCO", "2026-06-07", "36202511", 9.0, true], ["DKR_2779", 7671859328, "2026-06-01", "2026-06-30", 30, 2438, 434, 502367, 592800, "Payée", "AKTIVCO", "2026-07-07", "36202511", 9.0, true], ["DKR_2779", 7531770399, "2026-07-01", "2026-07-31", 31, 1990, 497, 456778, 539000, "Payée", "AKTIVCO", "2026-08-07", "36202511", 9.0, true], ["DKR_2779", 7691819875, "2026-08-01", "2026-08-31", 31, 2401, 587, 534495, 630700, "Impayées/Rempl/Hors Scope", "", "2026-09-07", "36202511", 8.0, true], ["DKR_2809", 7691758913, "2026-03-23", "2026-04-30", 39, 2198, 233, 442373, 522000, "Payée", "AKTIVCO", "2026-05-07", "36202514", 8.0, true], ["DKR_2809", 7691774928, "2026-05-01", "2026-05-31", 31, 1365, 95, 277877, 327900, "Payée", "AKTIVCO", "2026-06-07", "36202514", 9.0, true], ["DKR_2809", 7661816924, "2026-06-01", "2026-06-30", 30, 2006, 118, 370095, 436700, "Payée", "AKTIVCO", "2026-07-07", "36202514", 9.0, true], ["DKR_2809", 7681804958, "2026-07-01", "2026-07-31", 31, 1981, 151, 376172, 443900, "Payée", "AKTIVCO", "2026-08-07", "36202514", 9.0, true], ["DKR_2809", 7691819906, "2026-08-01", "2026-08-31", 31, 1916, 285, 397971, 469600, "Impayées/Rempl/Hors Scope", "", "2026-09-07", "36202514", 9.0, true], ["DKR_2810", 7691739847, "2026-03-16", "2026-03-31", 16, 1266, 299, 278640, 328800, "Payée", "AKTIVCO", "2026-04-07", "36202493", 8.0, true], ["DKR_2810", 7691758753, "2026-04-01", "2026-04-30", 30, 1855, 319, 644837, 760900, "Payée", "AKTIVCO", "2026-05-07", "36202493", 76.0, true], ["DKR_2810", 7691774544, "2026-05-01", "2026-05-31", 31, 1137, 186, 267123, 315200, "Payée", "AKTIVCO", "2026-06-07", "36202493", 8.0, true], ["DKR_2810", 7671859327, "2026-06-01", "2026-06-30", 30, 389, 32, 125755, 148400, "Payée", "AKTIVCO", "2026-07-07", "36202493", 2.0, true], ["DKR_2810", 7531770398, "2026-07-01", "2026-07-31", 31, 1732, 444, 408812, 482400, "Payée", "AKTIVCO", "2026-08-07", "36202493", 9.0, true], ["DKR_2810", 7691819874, "2026-08-01", "2026-08-31", 31, 1965, 469, 446958, 527400, "Impayées/Rempl/Hors Scope", "", "2026-09-07", "36202493", 9.0, true], ["DKR_2834", 7691739864, "2026-03-16", "2026-04-01", 17, 936, 228, 218729, 258100, "Payée", "AKTIVCO", "2026-04-07", "36202513", 6.0, true], ["DKR_2834", 7691758854, "2026-04-02", "2026-05-01", 30, 1899, 505, 443810, 523700, "Payée", "AKTIVCO", "2026-05-07", "36202513", 7.0, true], ["DKR_2834", 7691774803, "2026-05-02", "2026-06-01", 31, 1921, 578, 465762, 549600, "Payée", "AKTIVCO", "2026-06-07", "36202513", 9.0, true], ["DKR_2834", 7671859335, "2026-06-02", "2026-07-01", 30, 2028, 508, 462462, 545700, "Payée", "AKTIVCO", "2026-07-07", "36202513", 9.0, true], ["DKR_2834", 7531770653, "2026-07-02", "2026-08-01", 31, 2136, 335, 439910, 519100, "Payée", "AKTIVCO", "2026-08-07", "36202513", 9.0, true], ["DKR_2834", 7691819891, "2026-08-02", "2026-09-01", 31, 2076, 368, 439249, 518300, "Impayées/Rempl/Hors Scope", "", "2026-09-07", "36202513", 9.0, true], ["DKR_2849", 7691774930, "2026-04-24", "2026-04-30", 7, 0, 0, 15513, 18300, "Payée", "AKTIVCO", "2026-06-07", "36200590", 0.0, true], ["DKR_2849", 7691774931, "2026-05-01", "2026-05-31", 31, 1869, 204, 372786, 439900, "Payée", "AKTIVCO", "2026-06-07", "36200590", 7.0, true], ["DKR_2849", 7661816926, "2026-06-01", "2026-06-30", 30, 1004, 201, 249915, 294900, "Payée", "AKTIVCO", "2026-07-07", "36200590", 7.0, true], ["DKR_2849", 7531770847, "2026-07-01", "2026-07-31", 31, 1895, 0, 329749, 389100, "Payée", "AKTIVCO", "2026-08-07", "36200590", 8.0, true], ["DKR_2849", 7691819908, "2026-08-01", "2026-08-31", 31, 1581, 50, 297635, 351200, "Impayées/Rempl/Hors Scope", "", "2026-09-07", "36200590", 8.0, true]]};let nbM='kwh';
+function renderNB(){
+  const sites=NB.ids.map(id=>byId.get(id)).filter(Boolean);
+  const inv=NB.inv;const COL=['--k1','--k2','--paid','--hors','--none'];
+  const first=sites.map(s=>s.ser?s.ser[0]:M.length).reduce((a,b)=>Math.min(a,b),M.length);const last=M.indexOf('2026-08');
+  const idx=[];for(let m=first;m<=last;m++)idx.push(m);
+  const val=(s,m,k)=>{const x=s.ser;if(!x)return 0;const j=m-x[0];if(j<0||j>=x[1].length)return 0;return k==='ht'?x[1][j]:k==='ttc'?x[2][j]:k==='k1'?x[3][j]:k==='k2'?x[4][j]:k==='j'?x[5][j]:k==='imp'?x[6][j]:x[3][j]+x[4][j]};
+  const prov=(s,m)=>{const i=GM.indexOf(M[m]);return s.gp&&i>=0?s.gp[5][i]:0};
+  const nd=m=>{const[y,mo]=M[m].split('-');return new Date(+y,+mo,0).getDate()};
+  // summary per site
+  const rows=sites.map(s=>{const iv=inv.filter(r=>r[0]===s.id);let kwh=0,k2=0,ht=0,imp=0,fullK=0,fullN=0;idx.forEach(m=>{kwh+=val(s,m,'kwh');k2+=val(s,m,'k2');ht+=val(s,m,'ht');imp+=val(s,m,'imp');if(val(s,m,'j')>=nd(m)-3){fullK+=val(s,m,'kwh');fullN++}});
+    const pm=iv.map(r=>r[13]).filter(v=>v!=null&&v>0);const gi=gInfo(s);
+    return{s,iv,kwh,k2,ht,imp,moy:fullN?fullK/fullN:0,first:iv.length?iv[0][2]:'',pm:pm.length?Math.max(...pm):null,est:gi?gi.tot:0}});
+  const T=k=>rows.reduce((a,r)=>a+r[k],0);
+  const firstD=rows.map(r=>r.first).filter(Boolean).sort();
+  document.getElementById('nbSub').textContent=`${sites.length} sites de Dakar (${sites.map(s=>s.id).join(', ')}), tous en tarif ${[...new Set(sites.map(s=>s.tar))].join('/')} à ${[...new Set(sites.map(s=>f1(s.ps)))].join('/')} kW, facturés depuis le ${dfr(firstD[0])} au plus tôt. Données des factures reçues jusqu'au ${dfr(sites.map(s=>s.last).sort().pop())}.`;
+  const imp=inv.filter(r=>r[9]!=='Payée').length;
+  kp('nbKpis',[['Consommation cumulée',energy(T('kwh')),'dont K2 '+f1(T('kwh')?T('k2')/T('kwh')*100:0)+' %'],['Montant HTVA cumulé',money(T('ht'))+' FCFA',fmtN.format(inv.length)+' factures reçues'],['Conso moyenne par site',fmtN.format(T('moy')/Math.max(1,rows.length))+' kWh','par mois complet'],['Coût moyen',fmtN.format(T('kwh')?T('ht')/T('kwh'):0)+' FCFA/kWh','HTVA / consommation'],['Factures non payées',fmtN.format(imp),imp?money(T('imp'))+' FCFA TTC':'toutes payées'],['Non parvenu estimé',money(T('est'))+' FCFA','HTVA, d\u2019après la compil']]);
+  document.getElementById('nbS').innerHTML=rows.map(r=>{const s=r.s;return`<tr data-id="${esc(s.id)}"><td><button class="of" data-id="${esc(s.id)}">${esc(s.id)}</button></td><td>${esc(s.name)}</td><td>${s.ca}</td><td>${esc(s.cpt||'–')}</td><td>${esc(s.tar)}</td><td class="n">${f1(s.ps)} kW</td><td>${dfr(r.first)}</td><td>${dfr(s.last)}</td><td class="n">${r.iv.length}</td><td class="n">${fmtN.format(r.kwh)}</td><td class="n">${fmtN.format(r.moy)}</td><td class="n">${f1(r.kwh?r.k2/r.kwh*100:0)} %</td><td class="n">${fmtN.format(r.ht)}</td><td class="n">${fmtN.format(r.kwh?r.ht/r.kwh:0)}</td><td class="n">${r.pm==null?'–':f1(r.pm)}</td><td class="n">${r.imp?fmtN.format(r.imp):'–'}</td><td class="n ${r.est?'hl':''}">${r.est?fmtN.format(r.est):'–'}</td></tr>`}).join('')+
+   `<tr class="tot"><td colspan="8"><b>Total des ${rows.length} sites</b></td><td class="n"><b>${fmtN.format(inv.length)}</b></td><td class="n"><b>${fmtN.format(T('kwh'))}</b></td><td class="n"><b>${fmtN.format(T('moy'))}</b></td><td class="n"><b>${f1(T('kwh')?T('k2')/T('kwh')*100:0)} %</b></td><td class="n"><b>${fmtN.format(T('ht'))}</b></td><td class="n"><b>${fmtN.format(T('kwh')?T('ht')/T('kwh'):0)}</b></td><td class="n">–</td><td class="n"><b>${T('imp')?fmtN.format(T('imp')):'–'}</b></td><td class="n"><b>${fmtN.format(T('est'))}</b></td></tr>`;
+  // charts
+  const tc=css('--muted'),gc=css('--rule');
+  const base={responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},animation:{duration:RM?0:300},plugins:{legend:{position:'bottom',labels:{color:css('--ink'),boxWidth:10,boxHeight:10}}},scales:{x:{grid:{display:false},ticks:{color:tc,maxRotation:0},border:{color:gc}},y:{beginAtZero:true,grid:{color:gc},border:{display:false},ticks:{color:tc,callback:v=>money(v)}}}};
+  draw('nbC1',{type:'bar',data:{labels:idx.map(m=>ml(M[m])),datasets:sites.map((s,i)=>({label:s.id+' '+s.name,data:idx.map(m=>val(s,m,'kwh')||null),backgroundColor:css(COL[i]),borderWidth:0}))},options:Object.assign(JSON.parse(JSON.stringify(base)),{plugins:{legend:base.plugins.legend,tooltip:{callbacks:{label:c=>' '+c.dataset.label+' : '+fmtN.format(c.parsed.y)+' kWh'}}}},{scales:{x:base.scales.x,y:Object.assign({},base.scales.y,{title:{display:true,text:'kWh',color:tc},ticks:{color:tc,callback:v=>fmtN.format(v)}})}})});
+  draw('nbC2',{data:{labels:idx.map(m=>ml(M[m])),datasets:[{type:'bar',label:'HTVA facturé',data:idx.map(m=>sites.reduce((a,s)=>a+val(s,m,'ht'),0)),backgroundColor:css('--k1'),borderWidth:0,order:2},{type:'line',label:'Provision compil',data:idx.map(m=>sites.reduce((a,s)=>a+prov(s,m),0)),borderColor:css('--hors'),backgroundColor:css('--hors'),borderDash:[5,4],borderWidth:2,pointRadius:3,order:1}]},options:Object.assign({},base,{plugins:{legend:base.plugins.legend,tooltip:{callbacks:{label:c=>' '+c.dataset.label+' : '+fmtN.format(c.parsed.y)+' FCFA'}}},scales:{x:base.scales.x,y:Object.assign({},base.scales.y,{title:{display:true,text:'FCFA HTVA',color:tc},ticks:{color:tc,callback:v=>money(v)}})}})});
+  // monthly pivot
+  const cell=(s,m)=>{const h=val(s,m,'ht'),p=prov(s,m);switch(nbM){case'kwh':return val(s,m,'kwh');case'k2':return val(s,m,'k2');case'ht':return h;case'prov':return p;case'ecart':return p?Math.round((h-p)/p*100):null}};
+  const fmtc=v=>v==null?'–':nbM==='ecart'?(v>0?'+':'')+v+' %':v?fmtN.format(v):'–';
+  document.getElementById('nbMh').innerHTML=`<tr><th>Site_ID</th><th>Site_Name</th>${idx.map(m=>`<th class="n">${ml(M[m])}</th>`).join('')}<th class="n">Total</th></tr>`;
+  const tot=idx.map(m=>sites.reduce((a,s)=>a+(nbM==='ecart'?0:(cell(s,m)||0)),0));
+  document.getElementById('nbM').innerHTML=sites.map(s=>{const v=idx.map(m=>cell(s,m));const sum=nbM==='ecart'?(()=>{const h=idx.reduce((a,m)=>a+val(s,m,'ht'),0),p=idx.reduce((a,m)=>a+prov(s,m),0);return p?Math.round((h-p)/p*100):null})():v.reduce((a,b)=>a+(b||0),0);
+    return`<tr data-id="${esc(s.id)}"><td><b>${esc(s.id)}</b></td><td>${esc(s.name)}</td>${v.map((x,j)=>{const c=val(s,idx[j],'j'),full=c>=nd(idx[j])-3;return`<td class="n ${nbM==='ecart'&&x!=null&&Math.abs(x)>25?'hl':''} ${!full&&c>0?'hw':''}" title="${c} jours couverts">${fmtc(x)}</td>`}).join('')}<td class="n"><b>${fmtc(sum)}</b></td></tr>`}).join('')+
+    (nbM==='ecart'?'':`<tr class="tot"><td colspan="2"><b>Total</b></td>${tot.map(v=>`<td class="n"><b>${fmtc(v)}</b></td>`).join('')}<td class="n"><b>${fmtc(tot.reduce((a,b)=>a+b,0))}</b></td></tr>`);
+  // invoices
+  document.getElementById('nbF').innerHTML=inv.slice().sort((a,b)=>a[0].localeCompare(b[0])||a[2].localeCompare(b[2])).map(r=>`<tr data-k="${r[1]}"><td><b>${esc(r[0])}</b></td><td>${r[1]}</td><td>${dfr(r[11])}</td><td>du ${dfr(r[2])} au ${dfr(r[3])}</td><td class="n">${r[4]}</td><td class="n">${fmtN.format(r[5])}</td><td class="n">${fmtN.format(r[6])}</td><td class="n">${r[13]==null?'–':f1(r[13])}</td><td class="n">${fmtN.format(r[7])}</td><td class="n">${fmtN.format(r[8])}</td><td>${esc(r[9])}${r[14]?'':' <span class="flag">non retenue</span>'}</td><td>${esc(r[10]||'–')}</td></tr>`).join('');
+}
+document.getElementById('nbS').addEventListener('click',e=>{const b=e.target.closest('button.of');if(b)openSite(b.dataset.id)});
+document.querySelectorAll('#p-nb .seg button').forEach(b=>b.onclick=()=>{nbM=b.dataset.m;document.querySelectorAll('#p-nb .seg button').forEach(x=>x.setAttribute('aria-pressed',x===b));renderNB()});
+
+const TAR=(()=>{const D=__PG.tarifs;const C=D.comp,rows=D.rows;
+const CL=['Énergie','Prime fixe','Redevance','TCO','Cos φ','Rappels et autres'];
+const pu1=v=>v==null?'–':f1(v);const sg=v=>v==null?'–':(v>0?'+':'')+fmtN.format(v);
+let sk=16,sd=-1,curT=null;
+const P=rows.filter(r=>r[26]&&r[4]==='PMP'&&r[5]==='PGP'),O=rows.filter(r=>!r[26]),X=rows.filter(r=>r[26]&&!(r[4]==='PMP'&&r[5]==='PGP'));
+function render(){
+  const ok=P.filter(r=>r[13]!=null&&r[14]!=null),bh=ok.reduce((a,r)=>a+r[27],0),bk=ok.reduce((a,r)=>a+r[28],0),ah=ok.reduce((a,r)=>a+r[29],0),ak=ok.reduce((a,r)=>a+r[30],0);
+  const pb=bh/bk,pa=ah/ak,g=ok.reduce((a,r)=>a+(r[16]||0),0),ov=P.reduce((a,r)=>a+(r[18]||0),0),ovp=P.reduce((a,r)=>a+(r[19]||0),0),ov2=[...O,...X].reduce((a,r)=>a+(r[18]||0),0);
+  const ns=new Set(rows.map(r=>r[0])).size,np=new Set(P.map(r=>r[0])).size;
+  document.getElementById('tr_tNote').innerHTML=`Un changement de contrat est détecté quand un site est facturé sur un nouveau n° de contrat ; la bascule est le premier jour facturé du nouveau contrat. Sur ${fmtN.format(rows.length)} changements (${fmtN.format(ns)} sites), <b>${fmtN.format(P.length)} sont un passage du tarif PMP au tarif PGP</b> (${fmtN.format(np)} sites), ${fmtN.format(O.length)} gardent le même tarif${X.length?` et ${X.length} passent par un contrat sans tarif renseigné (${[...new Set(X.map(r=>r[0]))].join(', ')})`:''}. Les bascules PMP → PGP datent surtout de juillet 2025 et d'avril à juillet 2026 : pour les plus récentes, l'« après » ne repose que sur 2 ou 3 factures.`;
+  kp('tr_tKpis',[['Sites ayant changé de contrat',fmtN.format(ns),fmtN.format(rows.length)+' changements'],['Dont passage PMP → PGP',fmtN.format(np)+' sites',fmtN.format(ok.length)+' avec un avant et un après mesurables'],['Prix HTVA moyen, avant (PMP)',f1(pb)+' FCFA/kWh','12 mois avant la bascule'],['Prix HTVA moyen, après (PGP)',f1(pa)+' FCFA/kWh',(pa/pb*100-100).toLocaleString('fr-FR',{maximumFractionDigits:1})+' % vs PMP'],['Économie annuelle estimée',money(g)+' FCFA','à consommation constante'],['Ancien contrat facturé après bascule',money(ov+ov2)+' FCFA',`dont ${money(ov)} sur les sites PMP → PGP (${money(ovp)} payés)`]]);
+  const cm=[['Facturation',`tous les ${Math.round(C.PMP.nd)} jours`,`tous les ${Math.round(C.PGP.nd)} jours`],['Puissance souscrite (médiane)',f1(C.PMP.ps/1000)+' kVA',f1(C.PGP.ps)+' kVA'],['Consommation médiane',fmtN.format(C.PMP.kwhm)+' kWh/mois',fmtN.format(C.PGP.kwhm)+' kWh/mois'],
+    ['Prix de l\'énergie','prix unique',`K1 ${f1(C.PGP.p1)} · K2 ${f1(C.PGP.p2)} FCFA/kWh`],['Part de la pointe (K2)','–',f1(C.PGP.k2p*100)+' %'],['Prime fixe mensuelle (médiane)','aucune',fmtN.format(C.PGP.pfm)+' FCFA'],
+    ...['en','pf','rd','tco','cos'].map((k,i)=>[CL[i],pu1(C.PMP[k]),pu1(C.PGP[k])]),['Total HTVA',`<b>${pu1(C.PMP.pu)}</b>`,`<b>${pu1(C.PGP.pu)}</b>`],['Factures analysées',fmtN.format(C.PMP.n)+' ('+C.PMP.sites+' sites)',fmtN.format(C.PGP.n)+' ('+C.PGP.sites+' sites)']];
+  document.getElementById('tr_tCmp').innerHTML=cm.map((r,i)=>`<tr${i===11?' class="tot"':''}><td>${r[0]}</td><td class="n">${r[1]}</td><td class="n">${r[2]}</td></tr>`).join('');
+  const B=D.bands,be=B.find(b=>b[2]!=null&&b[4]!=null&&b[4]<b[2]);
+  document.getElementById('tr_tBandNote').textContent=`Le prix PMP reste presque constant (${f1(B.find(b=>b[2]!=null)[2])} à ${f1([...B].reverse().find(b=>b[2]!=null)[2])} FCFA/kWh) ; en PGP la prime fixe est diluée quand la consommation augmente. La PGP devient moins chère à partir de la tranche ${be?be[0]:'–'} kWh/mois.`;
+  const tc=css('--muted'),gc=css('--rule');
+  draw('tr_cBand',{data:{labels:B.map(b=>b[0]),datasets:[{type:'line',label:'PMP',data:B.map(b=>b[2]),borderColor:css('--son'),backgroundColor:css('--son'),borderWidth:2,pointRadius:3,spanGaps:true,tension:.2},{type:'line',label:'PGP',data:B.map(b=>b[4]),borderColor:css('--akt'),backgroundColor:css('--akt'),borderWidth:2,pointRadius:3,spanGaps:true,tension:.2}]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},animation:{duration:RM?0:350},plugins:{legend:{position:'bottom',labels:{color:css('--ink'),boxWidth:10,boxHeight:10}},tooltip:{callbacks:{title:c=>c[0].label+' kWh/mois',label:c=>' '+c.dataset.label+' : '+(c.parsed.y==null?'–':f1(c.parsed.y)+' FCFA/kWh')+' ('+fmtN.format(B[c.dataIndex][c.datasetIndex?3:1])+' factures)'}}},
+      scales:{x:{grid:{display:false},ticks:{color:tc,maxRotation:45,autoSkip:false},border:{color:gc},title:{display:true,text:'kWh par mois',color:tc}},y:{grid:{color:gc},border:{display:false},ticks:{color:tc},title:{display:true,text:'FCFA HTVA / kWh',color:tc}}}}});
+  table();
+  document.getElementById('tr_tbT2').innerHTML=[...O,...X].sort((a,b)=>(b[18]||0)-(a[18]||0)).map(r=>`<tr class="row" data-id="${esc(r[0])}" tabindex="0"><td><b>${esc(r[0])}</b></td><td>${esc(r[1])}</td><td>${esc(r[4])}${r[4]!==r[5]?' → '+esc(r[5]):''}</td><td>${r[2]}</td><td>${r[3]}</td><td>${dfr(r[6])}</td><td class="n">${pu1(r[13])}</td><td class="n">${pu1(r[14])}</td><td class="n">${r[17]}</td><td class="n${r[18]>0?' hl':''}">${r[18]?fmtN.format(r[18]):'–'}</td><td class="n">${r[19]?fmtN.format(r[19]):'–'}</td></tr>`).join('');
+  if(!curT)detail(P.filter(r=>r[16]!=null).sort((a,b)=>b[16]-a[16])[0]);
+}
+function table(){const v=[...P].sort((a,b)=>{const x=a[sk],y=b[sk];if(x==null)return 1;if(y==null)return -1;return(typeof x==='string'?x.localeCompare(y,'fr'):x-y)*sd});
+  document.getElementById('tr_tbT').innerHTML=v.map(r=>`<tr class="row${r===curT?' on':''}" data-k="${esc(r[0]+'|'+r[3])}" tabindex="0"><td><b>${esc(r[0])}</b></td><td>${esc(r[1])}</td><td>${dfr(r[6])}</td><td class="n">${pu1(r[11])}</td><td class="n">${pu1(r[12])}</td><td class="n">${pu1(r[13])}</td><td class="n">${pu1(r[14])}</td><td class="n" style="color:var(${r[15]==null?'--muted':r[15]<0?'--down':'--up'});font-weight:600">${r[15]==null?'–':(r[15]>0?'+':'')+f1(r[15])}</td><td class="n">${r[16]==null?'<span style="color:var(--muted)">pas de référence</span>':fmtN.format(r[16])}</td><td class="n">${r[10]??'–'}</td><td class="n${r[18]>0?' hl':''}">${r[18]?fmtN.format(r[18]):'–'}</td><td class="n">${r[19]?fmtN.format(r[19]):'–'}</td></tr>`).join('')}
+function detail(r){if(!r)return;curT=r;table();if(charts.tr_cTarSite){charts.tr_cTarSite.destroy();delete charts.tr_cTarSite}const L=D.inv[r[0]+'|'+r[3]]||[];
+  const box=document.getElementById('tr_tDet');
+  box.innerHTML=`<div class="fhead"><div><div class="sid" style="font-size:clamp(34px,5vw,52px)">${esc(r[0])}</div><div class="sname">${esc(r[1])}</div></div><div class="snav"><button class="btn" data-open="${esc(r[0])}">Ouvrir la fiche complète du site</button></div></div>
+  <div class="attrs">${[['Ancien contrat',r[2]+' ('+r[4]+')'],['Nouveau contrat',r[3]+' ('+r[5]+')'],['Date de bascule',dfr(r[6])],['Puissance souscrite',(r[7]==null?'–':f1(r[7]))+' → '+(r[8]==null?'–':f1(r[8]))+' kVA'],['Période avant',r[31]?dfr(r[31])+' → '+dfr(r[6]):'–'],['Factures avant / après',(r[9]??0)+' / '+(r[10]??0)],
+    ['Conso avant',r[11]==null?'–':f1(r[11])+' kWh/jour'],['Conso après',r[12]==null?'–':f1(r[12])+' kWh/jour'],['Prix avant (PMP)',pu1(r[13])+' FCFA/kWh'],['Prix après (PGP)',pu1(r[14])+' FCFA/kWh'],['Prix K1 / K2 après',r[23]==null?'–':f1(r[23])+' / '+(r[24]==null?'–':f1(r[24]))+' FCFA/kWh'],['Part K2 après',r[25]==null?'–':f1(r[25]*100)+' %'],
+    ['Économie annuelle estimée',r[16]==null?'–':fmtN.format(r[16])+' FCFA'],['Ancien contrat après bascule',r[18]?fmtN.format(r[18])+' FCFA, '+fmtN.format(r[20])+' kWh':'Aucune facture']].map(a=>`<div class="attr"><div class="l">${a[0]}</div><div class="v">${esc(a[1])}</div></div>`).join('')}</div>
+  <div class="grid2" style="margin-top:14px"><div style="min-width:0"><h3>Décomposition du prix avant et après</h3><p class="note">FCFA HTVA par kWh.</p><div class="cv" style="height:220px"><canvas id="tr_cTarSite"></canvas></div></div>
+  <div style="min-width:0"><h3>Factures autour de la bascule</h3><p class="note">Ancien contrat sur les 13 mois précédents, puis nouveau contrat. En rouge : factures de l'ancien contrat couvrant des jours après la bascule.</p><div class="scroll" style="max-height:300px"><table style="min-width:0"><thead><tr><th>Contrat</th><th>Période</th><th class="n">Jours</th><th class="n">kWh</th><th class="n">HTVA</th><th class="n">FCFA/kWh</th><th class="n">Prime fixe</th><th class="n">Cos φ</th><th>Statut</th></tr></thead><tbody>
+  ${L.map(q=>`<tr${q[14]?' class="hl"':''}><td>${q[0]==='a'?'Ancien':'Nouveau'} (${esc(q[12]||'–')})</td><td>${dfr(q[1])} → ${dfr(q[2])}</td><td class="n">${q[3]}</td><td class="n">${fmtN.format(q[4])}</td><td class="n">${fmtN.format(q[5])}</td><td class="n">${q[4]?fmtN.format(q[5]/q[4]):'–'}</td><td class="n">${q[7]?fmtN.format(q[7]):'–'}</td><td class="n">${q[10]?sg(q[10]):'–'}</td><td>${esc(q[13])}</td></tr>`).join('')}</tbody></table></div></div></div>`;
+  const cols=['--son','--akt','--mix','--mix2','--down','--unpaid'],tc=css('--muted'),gc=css('--rule');
+  draw('tr_cTarSite',{data:{labels:['Avant ('+r[4]+')','Après ('+r[5]+')'],datasets:CL.map((l,i)=>({type:'bar',label:l,data:[r[21][i]+(i===5?(r[21][6]||0):0),r[22][i]+(i===5?(r[22][6]||0):0)].map(v=>v==null||isNaN(v)?0:v),backgroundColor:css(cols[i]),borderWidth:0}))},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,animation:{duration:RM?0:350},plugins:{legend:{position:'bottom',labels:{color:css('--ink'),boxWidth:10,boxHeight:10}},tooltip:{callbacks:{label:c=>' '+c.dataset.label+' : '+f1(c.parsed.x)+' FCFA/kWh'}}},scales:{x:{stacked:true,grid:{color:gc},border:{display:false},ticks:{color:tc}},y:{stacked:true,grid:{display:false},ticks:{color:tc}}}}});
+}
+document.querySelectorAll('#p-tar th.sort').forEach(th=>th.addEventListener('click',()=>{const k=+th.dataset.k;if(sk===k)sd*=-1;else{sk=k;sd=[0,6].includes(k)?1:-1}table()}));
+const tb=document.getElementById('tr_tbT');tb.addEventListener('click',e=>{const tr=e.target.closest('tr.row');if(tr)detail(P.find(r=>r[0]+'|'+r[3]===tr.dataset.k))});tb.addEventListener('keydown',e=>{if(e.key==='Enter')e.target.closest('tr.row')?.click()});
+document.getElementById('tr_tDet').addEventListener('click',e=>{const b=e.target.closest('button[data-open]');if(b)openSite(b.dataset.open)});
+const t2=document.getElementById('tr_tbT2');t2.addEventListener('click',e=>{const tr=e.target.closest('tr.row');if(tr)openSite(tr.dataset.id)});t2.addEventListener('keydown',e=>{if(e.key==='Enter')e.target.closest('tr.row')?.click()});
+return{render}})();
+
+const COS=__PG.cosphi;
+const cosEff=c=>c==null?'Non mesuré':c<0.8?'Pénalité (< 0,80)':c>=0.95?'Bonification (≥ 0,95)':'Neutre (0,80 à 0,95)';
+const cosF=v=>v==null?'–':v.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const RED=(()=>{
+const D=__PG.redevance;
+const fN=new Intl.NumberFormat('fr-FR',{maximumFractionDigits:0});const f1=v=>v.toLocaleString('fr-FR',{maximumFractionDigits:1});const f2=v=>v.toLocaleString('fr-FR',{maximumFractionDigits:2});
+const sg=v=>(v>0?'+':'')+fN.format(v);const pc=v=>v==null?'–':(v>0?'+':'')+f1(v*100)+' %';
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const MO=['janv.','févr.','mars','avr.','mai','juin','juil.','août'];const ml=m=>MO[+m.slice(5)-1];
+const STC=['var(--red)','#E88A8D','var(--mut)','#7CC896','var(--grn)','var(--amb)','#9AA4AE'];
+// site: [id,name,reg,tarif,nm,load,typo,conf,kwh_p,cible_p,ec_p,ht_paye_p,apayer,red_p,delta,dp,pu,pu_red,sol,st,piste,ht_total,nm_p,kwh_total] (_p = périmètre des mois entièrement payés)
+const S=D.sites;const sum=(a,i)=>a.reduce((x,r)=>x+(r[i]||0),0);
+const crt=sum(S,24),npt=D.mon.reduce((a,m)=>a+(m[15]||0),0);const kwh=sum(S,8),cib=sum(S,9),ht=sum(S,11),ap=sum(S,12),red=sum(S,13),del=sum(S,14),sol=sum(S,18),htT=sum(S,21);const SC=S.filter(r=>r[14]!=null);const sgn=v=>v==null?'–':sg(v);
+const mon=D.mon;const kc=mon.reduce((a,m)=>a+m[4],0);const ec=kc/cib-1;
+document.getElementById('r_sub').textContent=`${fN.format(S.length)} sites facturés à AKTIVCO | Delta calculé sur les sites-mois payés sur plus de 20 jours | Janvier–août 2026 | Load de juin révisé | Grille redevance déc. 2025`;
+document.getElementById('r_cards').innerHTML=[[fN.format(S.length),'Sites AKTIVCO','blue',`${fN.format(SC.length)} avec delta calculé`],[f2(htT/1e9)+' Md','HTVA AKTIVCO total','blue',`hors calcul : ${f1(npt/1e6)} M non entièrement payés, ${f1(crt/1e6)} M payés ≤ 20 j`],[f2(ht/1e9)+' Md','HTVA payé (périmètre)','blue',`${f1(kwh/1e6)} GWh réseau`],[f2(red/1e9)+' Md','Redevance (périmètre)','blue',''],[sg(Math.round(del/1e6))+' M','Delta FCFA',del<0?'red':'grn',pc(del/ht)+' du HTVA payé'],[pc(ec),'Écart conso / cible','red','mois payés'],[f2(sol/1e6)+' GWh','Solaire (monitoring)','grn','août partiel']].map(c=>`<div class="card"><div class="v ${c[2]}">${c[0]}</div><div class="l">${c[1]}</div>${c[3]?`<div class="s">${c[3]}</div>`:''}</div>`).join('');
+const mx=Math.max(...mon.map(m=>Math.max(m[5],m[7])));
+document.getElementById('r_bars').innerHTML=mon.map(m=>`<div class="bm"><div class="bb"><span class="b1" style="height:${(m[5]/mx*100).toFixed(1)}%" title="HTVA ${fN.format(m[5])} FCFA"></span><span class="b2" style="height:${(m[7]/mx*100).toFixed(1)}%" title="Redevance ${fN.format(m[7])} FCFA"></span></div><div class="bl">${ml(m[0])}</div><div class="bd ${m[1]<100?'mut':m[8]<0?'neg':'pos'}">${m[1]<100?'à payer':sg(Math.round(m[8]/1e6))+' M'}</div></div>`).join('');
+const row=(lab,i,fmt,cls)=>`<tr${cls?` class="${cls}"`:''}><td><b>${lab}</b></td>${mon.map(m=>`<td class="n">${fmt(m,i)}</td>`).join('')}<td class="n"><b>${fmt(mon.reduce((a,m)=>{const x=[...m];return a},null)??'',i,true)}</b></td></tr>`;
+const T=(i)=>mon.reduce((a,m)=>a+m[i],0);
+const cellv=(v,signed)=>signed?`<span class="${v<0?'neg':'pos'}">${sg(v)}</span>`:fN.format(v);
+document.getElementById('r_mtab').innerHTML=`<table><thead><tr><th>Tous sites AKTIVCO</th>${mon.map(m=>`<th class="n">${ml(m[0])}</th>`).join('')}<th class="n">Janv.–août</th></tr></thead><tbody>
+${[['Sites-mois facturés',10,0],['HTVA AKTIVCO total (FCFA)',11,0],['Sites-mois non entièrement payés – hors calcul (FCFA)',15,0],['   dont reste à payer (FCFA)',6,0],['Payé sur 20 jours ou moins – hors calcul (FCFA)',13,0],['Sites-mois payés (périmètre)',1,0],['HTVA AKTIVCO payé (FCFA)',5,0],['Redevance (FCFA)',7,0],['Delta (FCFA)',8,1],['Conso réseau payée (kWh)',2,0],['Cible (kWh)',3,0],['Solaire monitoring (kWh)',9,0]].map(([l,i,s])=>`<tr${i==8?' class="tot"':''}><td><b>${l}</b></td>${mon.map(m=>`<td class="n">${cellv(m[i],s)}</td>`).join('')}<td class="n"><b>${i==1||i==10?'–':cellv(T(i),s)}</b></td></tr>`).join('')}
+<tr><td><b>Écart conso / cible</b></td>${mon.map(m=>`<td class="n">${m[1]<100?'–':pc(m[4]/m[3]-1)}</td>`).join('')}<td class="n"><b>${pc(ec)}</b></td></tr></tbody></table><p class="mut" style="margin:6px 2px 0">Delta calculé uniquement sur les sites-mois dont toutes les factures AKTIVCO sont payées et couvrent plus de 20 jours du mois ; les autres montants sont séparés du HTVA payé. Août 2026 : ${fN.format(mon[mon.length-1][1])} sites-mois dans le calcul sur ${fN.format(mon[mon.length-1][10])}.</p>`;
+// statuts
+const cnt=D.st.map((s,i)=>S.filter(r=>r[19]===i));
+document.getElementById('r_stack').innerHTML=cnt.map((a,i)=>`<span style="width:${a.length/S.length*100}%;background:${STC[i]}" title="${D.st[i]} : ${a.length} sites"></span>`).join('');
+document.getElementById('r_leg').innerHTML=cnt.map((a,i)=>`<span><span class="sw" style="background:${STC[i]}"></span>${D.st[i]} <b>${a.length}</b> sites · <span class="${sum(a,14)<0?'neg':'pos'}">${sg(Math.round(sum(a,14)/1e6))} M FCFA</span></span>`).join('');
+const srt=[...SC].sort((a,b)=>a[14]-b[14]);
+const item=r=>`<li><button data-s="${esc(r[0])}">${esc(r[0])}</button> — ${esc(r[1])}, ${esc(r[6])} ${r[5]!=null?fN.format(r[5])+' W':''} : delta ${sg(r[14])} FCFA (${pc(r[15])}), conso ${pc(r[10])} vs cible${r[20]?` <span class="pill ${r[20].startsWith('Conso >')?'a':r[20].startsWith('Aucune')?'':'b'}">${esc(r[20].split(' :')[0])}</span>`:''}</li>`;
+document.getElementById('r_topneg').innerHTML=srt.slice(0,10).map(item).join('');
+document.getElementById('r_toppos').innerHTML=srt.slice(-10).reverse().map(item).join('');
+const neg=SC.filter(r=>r[14]<0),pos=SC.filter(r=>r[14]>0);
+document.getElementById('r_bilan').innerHTML=`<b class="blue">Bilan :</b> de janvier à août 2026, ${fN.format(S.length)} sites ont été facturés à AKTIVCO pour ${f2(htT/1e9)} Md FCFA HTVA, dont ${f1(npt/1e6)} M FCFA sur des sites-mois non entièrement payés (${f1(ap/1e6)} M encore à payer : factures retenues ou non certifiées) et ${f1(crt/1e6)} M FCFA sur des sites-mois payés sur 20 jours ou moins : ces montants sont séparés du HTVA payé et exclus du calcul d'écart. Sur les sites-mois entièrement payés sur plus de 20 jours, le HTVA est de ${f2(ht/1e9)} Md FCFA et la redevance de ${f2(red/1e9)} Md FCFA : le delta est de <b>${sg(Math.round(del/1e6))} M FCFA</b> (${pc(del/ht)} du HTVA payé). ${fN.format(neg.length)} sites sont en delta négatif (${sg(Math.round(sum(neg,14)/1e6))} M FCFA) et ${fN.format(pos.length)} en delta positif (${sg(Math.round(sum(pos,14)/1e6))} M FCFA). La consommation réseau est ${pc(ec)} au-dessus de la cible sur les mois où elle existe ; ${fN.format(cnt[0].length)} sites ont un delta inférieur à −20 % et concentrent ${sg(Math.round(sum(cnt[0],14)/1e6))} M FCFA.`;
+// sites sans redevance payés
+(()=>{const N=S.filter(r=>r[25]>0).sort((a,b)=>b[25]-a[25]);const tot=sum(N,25),nm=sum(N,26);
+const mot=id=>{const c={};(D.det[id]||[]).forEach(m=>{if(m[14])c[m[15]]=(c[m[15]]||0)+1});return Object.entries(c).sort((a,b)=>b[1]-a[1])[0]?.[0]||''};
+const MC={};N.forEach(r=>{(D.det[r[0]]||[]).forEach(m=>{if(m[14]){MC[m[15]]=MC[m[15]]||[0,0];MC[m[15]][0]++;MC[m[15]][1]+=m[13]}})});
+document.getElementById('r_nr').innerHTML=`<b>${fN.format(N.length)} sites</b> (${fN.format(nm)} sites-mois) n'ont aucune redevance dans la grille alors qu'AKTIVCO a payé leurs factures Senelec : <b>${f1(tot/1e6)} M FCFA</b> payés sans contrepartie de janvier à août 2026, de ${f1(mon[0][16]/1e6)} M en janvier à ${f1(mon[mon.length-1][16]/1e6)} M en août. Motifs : ${Object.entries(MC).sort((a,b)=>b[1][1]-a[1][1]).map(([k,v])=>`${esc(k.toLowerCase())} (${v[0]} sites-mois, ${f1(v[1]/1e6)} M)`).join(' ; ')}. Ces sites sont surlignés en jaune dans les tableaux ; cliquez sur une ligne pour le détail.`;
+document.getElementById('r_tnr').innerHTML=N.map(r=>`<tr class="row hlr" data-s="${esc(r[0])}" tabindex="0"><td><b>${esc(r[0])}</b></td><td>${esc(r[1])}</td><td>${esc(r[2])}</td><td>${esc(r[3])}</td><td>${esc(r[6]||'Non renseignée')}</td><td class="n">${r[5]==null?'–':fN.format(r[5])}</td><td class="n">${r[26]}</td><td class="n">${fN.format((D.det[r[0]]||[]).filter(m=>m[14]).reduce((a,m)=>a+m[2],0))}</td><td class="n"><b>${fN.format(r[25])}</b></td><td>${esc(mot(r[0]))}</td></tr>`).join('');
+document.getElementById('r_tnr').addEventListener('click',e=>{const tr=e.target.closest('tr.row');if(tr){detail(tr.dataset.s);document.getElementById('r_det').scrollIntoView({behavior:'smooth'})}});
+document.getElementById('r_tnr').addEventListener('keydown',e=>{if(e.key==='Enter')e.target.closest('tr.row')?.click()});})();
+// pistes
+const PI={};SC.forEach(r=>{const k=r[20]||'Aucune piste (delta ≥ −5 %)';(PI[k]=PI[k]||[]).push(r)});
+document.getElementById('r_pistes').innerHTML=Object.entries(PI).sort((a,b)=>sum(a[1],14)-sum(b[1],14)).map(([k,a])=>`<tr><td>${esc(k)}</td><td class="n">${fN.format(a.length)}</td><td class="n">${fN.format(sum(a,11))}</td><td class="n">${cellv(sum(a,14),1)}</td></tr>`).join('');
+// régions
+const RG={};S.forEach(r=>{(RG[r[2]]=RG[r[2]]||[]).push(r)});
+document.getElementById('r_regs').innerHTML=Object.entries(RG).sort((a,b)=>sum(b[1],11)-sum(a[1],11)).map(([k,a])=>{const h=sum(a,11),d=sum(a,14),c=sum(a,9);return`<tr><td><b>${esc(k)}</b></td><td class="n">${a.length}</td><td class="n">${fN.format(sum(a,8))}</td><td class="n">${fN.format(c)}</td><td class="n">${pc(c?sum(a,8)/c-1:null)}</td><td class="n">${fN.format(h)}</td><td class="n">${fN.format(sum(a,13))}</td><td class="n">${cellv(d,1)}</td><td class="n ${d<0?'neg':'pos'}">${pc(h?d/h:null)}</td><td class="n mut">${fN.format(sum(a,12))}</td></tr>`}).join('');
+// table interactive
+const fSt=document.getElementById('r_fSt'),fReg=document.getElementById('r_fReg'),fPi=document.getElementById('r_fPi'),q=document.getElementById('r_q');
+fSt.innerHTML+=D.st.map((s,i)=>`<option value="${i}">${s}</option>`).join('');fReg.innerHTML+=Object.keys(RG).sort().map(r=>`<option>${esc(r)}</option>`).join('');fPi.innerHTML+=Object.keys(PI).sort().map(r=>`<option>${esc(r)}</option>`).join('');
+let sk=14,sd=1,shown=100,cur=null;
+function view(){const t=q.value.trim().toLowerCase();return S.filter(r=>(fSt.value===''||r[19]==+fSt.value)&&(!fReg.value||r[2]===fReg.value)&&(!fPi.value||(r[20]||'Aucune piste (delta ≥ −5 %)')===fPi.value)&&(!t||(r[0]+' '+r[1]).toLowerCase().includes(t))).sort((a,b)=>{const x=a[sk],y=b[sk];if(x==null)return 1;if(y==null)return -1;return(typeof x==='string'?x.localeCompare(y,'fr'):x-y)*sd})}
+function render(){const v=view();document.getElementById('r_cnt').textContent=`${fN.format(Math.min(shown,v.length))} sur ${fN.format(v.length)} sites · delta ${sg(Math.round(sum(v,14)/1e6))} M FCFA`;
+document.getElementById('r_tb').innerHTML=v.slice(0,shown).map(r=>`<tr class="row${r===cur?' on':''}${r[25]>0?' hlr':''}" data-s="${esc(r[0])}" tabindex="0"><td><b>${esc(r[0])}</b>${r[25]>0?'<span class="pill y" title="Mois sans redevance payés par AKTIVCO">sans redevance</span>':''}</td><td>${esc(r[1])}</td><td>${esc(r[6])}</td><td class="n">${r[5]==null?'–':fN.format(r[5])}</td><td class="n">${fN.format(r[8])}</td><td class="n">${fN.format(r[9])}</td><td class="n ${r[10]!=null&&Math.abs(r[10])>0.2?'neg':''}">${pc(r[10])}</td><td class="n">${fN.format(r[11])}</td><td class="n mut">${r[12]>0?fN.format(r[12]):'–'}</td><td class="n">${fN.format(r[13])}</td><td class="n ${r[14]==null?'mut':r[14]<0?'neg':'pos'}">${sgn(r[14])}</td><td class="n">${pc(r[15])}</td><td class="n">${r[16]==null?'–':fN.format(r[16])}</td><td><span class="st" style="color:${STC[r[19]]}">${D.st[r[19]]}</span></td></tr>`).join('')||'<tr><td colspan="14" class="mut">Aucun site ne correspond aux filtres.</td></tr>';
+document.getElementById('r_more').style.display=shown<v.length?'':'none'}
+function detail(id){const r=S.find(x=>x[0]===id);if(!r)return;cur=r;render();const d=D.det[id]||[];
+document.getElementById('r_det').innerHTML=`<p style="margin:0 0 8px"><button class="btn" data-open="${esc(r[0])}">Ouvrir la fiche complète du site</button></p><h3>${esc(r[0])} — ${esc(r[1])} <span class="mut">${esc(r[2])} · ${esc(r[3])} · ${esc(r[6])} · ${esc(r[7])}</span></h3><p class="mut" style="margin:0 0 8px">HTVA AKTIVCO total ${fN.format(r[21])} FCFA${r[12]>0?` dont ${fN.format(r[12])} FCFA à payer (hors calcul)`:''} · ${r[20]?'<b>Piste :</b> '+esc(r[20])+' · ':''}Coût Senelec ${r[16]==null?'–':fN.format(r[16])} FCFA/kWh · prix implicite de la redevance ${r[17]==null?'–':fN.format(r[17])} FCFA/kWh cible</p>
+<div class="tw"><table><thead><tr><th>Mois</th><th class="n">Jours couverts</th><th class="n">Load (W)</th><th>Typologie</th><th class="n">Conso (kWh)</th><th class="n">Cible (kWh)</th><th class="n">Écart</th><th class="n">HTVA AKTIVCO</th><th class="n">dont à payer</th><th class="n">Redevance</th><th class="n">Delta</th><th class="n">Solaire (kWh)</th></tr></thead><tbody>
+${d.map(m=>`<tr${m[14]?' class="hlr" title="'+esc(m[15])+'"':''}><td>${ml(m[0])} 2026${m[14]?' <span class="pill y">sans redevance</span>':''}</td><td class="n">${m[1]}</td><td class="n">${m[7]==null?'–':fN.format(m[7])}</td><td>${esc(m[8])}</td><td class="n">${fN.format(m[2])}</td><td class="n">${m[3]==null?'–':fN.format(m[3])}</td><td class="n">${m[3]?pc(m[2]/m[3]-1):'–'}</td><td class="n">${fN.format(m[4])}</td><td class="n mut">${m[11]>0?fN.format(m[11]):'–'}</td><td class="n">${m[5]==null?'–':fN.format(m[5])}</td><td class="n ${m[6]==null?'mut':m[6]<0?'neg':'pos'}">${m[6]==null?(m[12]?'payé ≤ 20 jours – hors calcul':'à payer – hors calcul'):sg(m[6])}</td><td class="n">${m[9]==null?'–':fN.format(m[9])}</td></tr>`).join('')}
+<tr class="tot"><td>Mois payés (${r[22]}/${r[4]})</td><td></td><td></td><td></td><td class="n">${fN.format(r[8])}</td><td class="n">${fN.format(r[9])}</td><td class="n">${pc(r[10])}</td><td class="n">${fN.format(r[11])}</td><td class="n">–</td><td class="n">${fN.format(r[13])}</td><td class="n">${sgn(r[14])}</td><td class="n">${fN.format(r[18])}</td></tr></tbody></table></div>`}
+document.querySelectorAll('#p-red th.s').forEach(th=>th.addEventListener('click',()=>{const k=+th.dataset.k;if(sk===k)sd*=-1;else{sk=k;sd=[0,1,6,19].includes(k)?-1:1;sd=[0,1,6].includes(k)?1:sd}shown=100;render()}));
+[fSt,fReg,fPi].forEach(x=>x.addEventListener('change',()=>{shown=100;render()}));q.addEventListener('input',()=>{shown=100;render()});
+document.getElementById('r_more').onclick=()=>{shown+=100;render()};
+document.getElementById('r_tb').addEventListener('click',e=>{const tr=e.target.closest('tr.row');if(tr)detail(tr.dataset.s)});
+document.getElementById('r_tb').addEventListener('keydown',e=>{if(e.key==='Enter')e.target.closest('tr.row')?.click()});
+document.querySelectorAll('#r_topneg,#r_toppos').forEach(el=>el.addEventListener('click',e=>{const b=e.target.closest('button');if(b){detail(b.dataset.s);document.getElementById('r_det').scrollIntoView({behavior:'smooth'})}}));
+(()=>{const c=D.ch6;document.getElementById('r_j6').innerHTML=`Le load de juin provient désormais du fichier LOAD_JUIN_2, qui remplace la proposition de juin. Sur les sites facturés à AKTIVCO, <b>${fN.format(c.n)}</b> loads changent (${fN.format(c.down)} baisses, ${fN.format(c.up)} hausses) ; la redevance de juin passe de ${f1(c.old/1e6)} M à ${f1(c.new/1e6)} M FCFA, soit <b class="${c.dred<0?'neg':'pos'}">${sg(c.dred)} FCFA</b>.`;
+document.getElementById('r_tj6').innerHTML=c.rows.map(r=>`<tr><td><b>${esc(r[0])}</b></td><td>${esc(r[1])}</td><td>${esc(r[2])}</td><td class="n">${r[3]==null?'–':fN.format(r[3])}</td><td class="n">${fN.format(r[4])}</td><td class="n ${r[3]!=null&&r[4]-r[3]<0?'neg':'pos'}">${r[3]==null?'–':sg(r[4]-r[3])}</td><td class="n">${r[5]==null?'–':fN.format(r[5])}</td><td class="n">${fN.format(r[6])}</td><td class="n ${r[7]<0?'neg':'pos'}">${sg(r[7])}</td><td class="n">${fN.format(r[8])}</td></tr>`).join('')})();
+document.getElementById('r_ctl').innerHTML=D.ctl.map(c=>`<tr><td>${esc(c[0])}</td><td class="n">${fN.format(c[1])}</td><td class="n">${fN.format(c[2])}</td></tr>`).join('');
+document.getElementById('r_det').addEventListener('click',e=>{const b=e.target.closest('button[data-open]');if(b&&window.openSite)openSite(b.dataset.open)});
+let done=false;return{render(){if(!done){done=true;render();detail(srt[0][0])}},look:id=>{const r=S.find(x=>x[0]===id);return r?{red:r[13],ht:r[11],delta:r[14],dp:r[15],ec:r[10],st:D.st[r[19]],piste:r[20],htT:r[21],ap:r[12],nmp:r[22],nm:r[4]}:null}};})();
+const R={tar:()=>TAR.render(),red:()=>RED.render(),nb:renderNB,dem:()=>DEM.render(),eff:()=>EFF.render(),gap:renderGap,syn:renderSyn,pay:renderPay,sit:renderSit,fic:renderFic,ctr:renderCtr};
+[fReg,fPor,fTar,fTen,fFrom,fTo].forEach(s=>s.addEventListener('change',()=>{if(+fFrom.value>+fTo.value){if(s===fFrom)fTo.value=fFrom.value;else fFrom.value=fTo.value}refresh()}));
+document.getElementById('reset').onclick=()=>{fReg.value=fPor.value=fTar.value=fTen.value='';fFrom.value=defFrom;fTo.value=defTo;refresh()};
+let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{if(active==='fic'&&cur)timeline(cur)},150)});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{Object.values(charts).forEach(c=>c.destroy());for(const k in charts)delete charts[k];DEM.destroy();EFF.destroy();dirty.add('dem');dirty.add('eff');refresh()});
+dirty.delete('syn');renderSyn();
+// ===== Sélection de lignes dans les tableaux =====
+(function(){
+const TABLES=[
+ {tb:'tbS',label:['site','sites',0],key:tr=>tr.dataset.id},
+ {tb:'tbU',label:['facture','factures',1],key:tr=>tr.cells[0]?.textContent.trim()},
+ {tb:'tbG',label:['site','sites',0],key:tr=>tr.dataset.id},
+ {tb:'tbR',label:['changement de contrat','changements de contrat',0],key:tr=>tr.dataset.id+'|'+(tr.cells[1]?.textContent||'')},
+ {tb:'d_tb',label:['site','sites',0],only:['Total'],key:tr=>tr.querySelector('button.of')?.dataset.id},
+ {tb:'nbS',label:['site','sites',0],key:tr=>tr.dataset.id},
+ {tb:'nbF',label:['facture','factures',1],key:tr=>tr.dataset.k},
+ {tb:'e_tb',label:['site','sites',0],key:tr=>tr.dataset.i},
+];
+const NOSUM=/%|→|\/ ?kWh|Part|Écart|Baisse|P\. |Jours|Mois|Date|Fin |Contrat|N°|Compte|Tarif|Statut|Nature|Site|Agence|Région|Porteur|Tendance|Évolution|souscrite|FCFA \/ kWh|Prix/i;
+const num=t=>{const s=String(t).replace(/[\s\u202f\u00a0]/g,'').replace('−','-').replace(',','.');return /^-?\d+(\.\d+)?$/.test(s)?parseFloat(s):null};
+const fmt=new Intl.NumberFormat('fr-FR',{maximumFractionDigits:0});
+function setup(cfg){
+  const tb=document.getElementById(cfg.tb);if(!tb)return;const table=tb.closest('table');const wrap=table.closest('.scroll')||table;
+  if(!table.tHead||!table.tHead.rows.length){const mo=new MutationObserver(()=>{if(table.tHead.rows.length){mo.disconnect();setup(cfg)}});mo.observe(table.tHead,{childList:true});return}
+  const st={sel:new Map(),only:false,last:null};cfg.st=st;
+  // header
+  const hrows=[...table.tHead.rows];
+  hrows.forEach((r,i)=>{const th=document.createElement('th');th.className='selc';if(i===hrows.length-1){th.innerHTML='<input type="checkbox" aria-label="Sélectionner toutes les lignes affichées" title="Tout sélectionner (lignes affichées)">';}else th.innerHTML='';r.insertBefore(th,r.firstChild)});
+  const all=table.tHead.querySelector('th.selc input');
+  const heads=()=>[...hrows[hrows.length-1].cells].slice(1).map(th=>th.textContent.trim());
+  // bar
+  const bar=document.createElement('div');bar.className='selbar';bar.hidden=true;
+  bar.innerHTML=`<span class="selcount"></span><span class="selsums"></span><span class="spacer"></span><button class="btn selonly" aria-pressed="false">Afficher la sélection seulement</button><button class="btn selcopy">Copier pour Excel</button><button class="btn selclear">Tout désélectionner</button>`;
+  wrap.parentNode.insertBefore(bar,wrap);
+  const ta=document.createElement('textarea');ta.className='selta';ta.hidden=true;ta.setAttribute('aria-label','Sélection au format tableur');bar.after(ta);
+  let busy=false;
+  function snap(tr){const c=tr.cloneNode(true);c.classList.add('sel-on');const i=c.querySelector('td.selc input');if(i)i.setAttribute('checked','');return{html:c.outerHTML,cells:[...tr.cells].slice(1).map(c=>c.textContent.trim())}}
+  function decorate(){if(busy)return;busy=true;
+    [...tb.rows].forEach(tr=>{
+      if(tr.querySelector('td.selc'))return;
+      const c1=tr.cells[0];if(tr.cells.length===1&&c1&&c1.colSpan>1){c1.colSpan+=1;return}
+      const k=cfg.key(tr);const td=document.createElement('td');td.className='selc';
+      td.innerHTML=k==null?'':`<input type="checkbox" aria-label="Sélectionner la ligne">`;tr.insertBefore(td,tr.firstChild);tr.dataset.sk=k;
+      const on=st.sel.has(k);if(on){td.firstChild.checked=true;tr.classList.add('sel-on');st.sel.set(k,snap(tr))}
+    });
+    if(st.only){
+      const present=new Set();[...tb.rows].forEach(tr=>{if(tr.dataset.sk===undefined)return;if(!st.sel.has(tr.dataset.sk))tr.remove();else present.add(tr.dataset.sk)});
+      [...tb.rows].forEach(tr=>{if(tr.dataset.sk===undefined&&tr.cells.length===1)tr.remove()});
+      st.sel.forEach((v,k)=>{if(!present.has(k))tb.insertAdjacentHTML('beforeend',v.html)});
+      if(!st.sel.size)tb.innerHTML=`<tr><td colspan="${heads().length+1}" style="color:var(--muted);padding:16px">Aucune ligne sélectionnée.</td></tr>`;
+    }
+    const mb=wrap.parentNode.querySelector('[id^="more"],[id$="_more"],[id^="more"]');if(mb&&st.only)mb.style.display='none';
+    sync();busy=false}
+  function sync(){
+    const n=st.sel.size;bar.hidden=n===0&&!st.only;
+    const[sg,pl,fe]=cfg.label;bar.querySelector('.selcount').innerHTML=`<b>${fmt.format(n)}</b> ${n>1?pl:sg} sélectionné${fe?'e':''}${n>1?'s':''}`;
+    const H=heads();const sums=[];
+    H.forEach((h,j)=>{if(cfg.only?!cfg.only.includes(h):NOSUM.test(h))return;let s=0,ok=0;for(const v of st.sel.values()){const x=num(v.cells[j]);if(x==null){if(v.cells[j]&&v.cells[j]!=='–'){ok=-1;break}}else{s+=x;ok++}}if(ok>0)sums.push(`<span class="selsum">${h} : <b>${fmt.format(s)}</b></span>`)});
+    bar.querySelector('.selsums').innerHTML=sums.slice(0,6).join('');
+    const vis=[...tb.rows].filter(tr=>tr.dataset.sk!==undefined&&tr.dataset.sk!=='undefined');
+    all.checked=vis.length>0&&vis.every(tr=>st.sel.has(tr.dataset.sk));all.indeterminate=!all.checked&&vis.some(tr=>st.sel.has(tr.dataset.sk));
+    bar.querySelector('.selonly').setAttribute('aria-pressed',st.only);bar.querySelector('.selonly').textContent=st.only?'Revenir à la liste complète':'Afficher la sélection seulement';
+  }
+  function toggleRow(tr,on){const k=tr.dataset.sk;if(k===undefined||k==='undefined')return;const cb=tr.querySelector('td.selc input');
+    if(on){st.sel.set(k,null);tr.classList.add('sel-on');if(cb)cb.checked=true;st.sel.set(k,snap(tr))}else{st.sel.delete(k);tr.classList.remove('sel-on');if(cb)cb.checked=false}}
+  tb.addEventListener('click',e=>{const cb=e.target.closest('td.selc input');if(!cb){if(e.target.closest('td.selc'))e.stopPropagation();return}
+    e.stopPropagation();const tr=cb.closest('tr');const rows=[...tb.rows];
+    if(e.shiftKey&&st.last){const a=rows.indexOf(st.last),b=rows.indexOf(tr);if(a>=0&&b>=0){const[lo,hi]=a<b?[a,b]:[b,a];rows.slice(lo,hi+1).forEach(r=>toggleRow(r,cb.checked))}}
+    else toggleRow(tr,cb.checked);
+    st.last=tr;if(st.only&&!cb.checked){busy=true;tr.remove();busy=false}sync()},true);
+  tb.addEventListener('keydown',e=>{if(e.target.closest('td.selc'))e.stopPropagation()},true);
+  all.addEventListener('change',()=>{[...tb.rows].forEach(tr=>toggleRow(tr,all.checked));sync()});
+  bar.querySelector('.selclear').onclick=()=>{st.sel.clear();[...tb.rows].forEach(tr=>{tr.classList.remove('sel-on');const cb=tr.querySelector('td.selc input');if(cb)cb.checked=false});if(st.only){st.only=false;rerender()}sync();ta.hidden=true};
+  bar.querySelector('.selonly').onclick=()=>{st.only=!st.only;if(st.only){decorate()}else rerender();sync()};
+  bar.querySelector('.selcopy').onclick=async()=>{const H=heads();const lines=[H.join('\t')];st.sel.forEach(v=>lines.push(v.cells.map(c=>c.replace(/\t|\n/g,' ')).join('\t')));const txt=lines.join('\n');
+    const b=bar.querySelector('.selcopy');try{await navigator.clipboard.writeText(txt);b.textContent='Copié ✓';setTimeout(()=>b.textContent='Copier pour Excel',1500);ta.hidden=true}
+    catch(err){ta.value=txt;ta.hidden=false;ta.focus();ta.select();b.textContent='Copiez le texte sélectionné (Ctrl+C)'}};
+  function rerender(){// relance le rendu du tableau
+    const fn={tbS:()=>renderS(),tbU:()=>renderU(),tbG:()=>renderG(),tbR:()=>renderCtr()}[cfg.tb];
+    if(fn)fn();else if(cfg.tb==='d_tb'||cfg.tb==='e_tb'){(cfg.tb==='d_tb'?DEM:EFF).render()}}
+  new MutationObserver(()=>decorate()).observe(tb,{childList:true});
+  decorate();
+}
+TABLES.forEach(setup);
+})();
+
+
+};
+
+(function(){
+  var started=false,pending=null,origin=location.origin;
+  function go(id){var t=document.getElementById('t-'+id);if(t)t.click();}
+  window.addEventListener('message',function(e){
+    if(e.origin!==origin||e.source!==window.parent)return;
+    var d=e.data||{};
+    if(d.type==='pg:data'&&!started){
+      started=true;
+      try{window.__pgStart(d.data);if(pending)go(pending);parent.postMessage({type:'pg:started'},origin);}
+      catch(err){document.body.insertAdjacentHTML('afterbegin','<p style="padding:16px;color:#B0425A">Erreur d’affichage : '+String(err&&err.message||err)+'</p>');parent.postMessage({type:'pg:error',message:String(err&&err.message||err)},origin);}
+    }
+    if(d.type==='pg:section'){pending=d.id;if(started)go(d.id);}
+  });
+  parent.postMessage({type:'pg:ready'},origin);
+})();
+
+</script>
+</body>
+</html>
+
+</body></html>

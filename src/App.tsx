@@ -38,6 +38,7 @@ import PredictionPage from "./features/prediction/PredictionPage";
 import OptimizationPage from "./features/optimization/OptimizationPage";
 import PenaltyTrackingPage from "./features/penalties/PenaltyTrackingPage";
 import FuelTrackingPage from "./features/fuel-tracking/FuelTrackingPage";
+import PilotageGridPage from "./features/pilotage-grid/PilotageGridPage";
 import BOWorkspacePage from "./features/bo-analysis/BOWorkspacePage";
 
 const queryClient = new QueryClient();
@@ -127,6 +128,11 @@ export default function App() {
 
                 <Route path="/modules/suivi-penalites" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
                   <Route index element={<PenaltyTrackingPage />} />
+                </Route>
+
+                <Route path="/pilotage-grid" element={<RouteGuard allowedRoles={["admin", "analyst", "manager"]} />}>
+                  <Route index element={<Navigate to="/pilotage-grid/synthese" replace />} />
+                  <Route path=":section" element={<PilotageGridPage />} />
                 </Route>
 
                 <Route path="/modules/suivi-carburant" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
