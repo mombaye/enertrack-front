@@ -23,6 +23,7 @@ export const IMPORT_SOURCE_LABEL: Record<string, string> = {
   SCSS: "SCSS — relevés de stock terrain",
   HISTORICAL_REFUELING: "Historique refueling — source historique",
   TANK_MODELS: "Modèles de cuves — calculateur et conversion cm vers litres",
+  TARGET_FUEL: "Target fuel mensuel par site — onglet « NR analyse variation conso fuel » du Closing",
   ENOC: "ENOC (lu par eGrid)",
 };
 

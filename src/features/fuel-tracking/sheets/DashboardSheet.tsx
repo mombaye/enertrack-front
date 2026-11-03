@@ -515,6 +515,8 @@ export function DashboardSheet({
 
   if (!data || data.months.length === 0) {
     return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <ConsoDashboardCard onOpen={onNavigateTab ? () => onNavigateTab("CONSOMMATION") : undefined} />
       <Card>
         <SheetTitle icon={<LayoutGrid size={17} />} title="Dashboard" subtitle="Vue d'ensemble du module suivi-carburant." />
         <EmptyState
@@ -523,6 +525,7 @@ export function DashboardSheet({
           subtitle="Ce résumé s'alimente automatiquement dès que la synchro Consommation (Snowflake + ENOC) a tourné au moins un mois."
         />
       </Card>
+      </div>
     );
   }
 
