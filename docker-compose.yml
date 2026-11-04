@@ -10,4 +10,4 @@ services:
         VITE_FINANCIAL_ACCESS_CODE: ${VITE_FINANCIAL_ACCESS_CODE:-}
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "8081:80"
