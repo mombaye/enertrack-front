@@ -12,6 +12,7 @@ import { FT, type Tone } from "../theme";
 import { HelpTip } from "./cphBadges";
 import { CoverageKpis } from "./cphDiagnostics";
 import { BalanceDetailModal } from "./StockPeriodBalance";
+import { DataHealthPanel } from "./DataHealthPanel";
 import { SiteDetailModal } from "./ControleCphSheet";
 
 const nf = (v: number | null | undefined, d = 0) => (v === null || v === undefined ? "—" : v.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d }));
@@ -309,6 +310,12 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
         </div>
       )}
       <DataQualityNotice f={d?.fraicheur} />
+      <DataHealthPanel />
+      {(d?.kpis.sans_correspondance?.sites ?? 0) > 0 && (
+        <div role="note" style={{ padding: 10, borderRadius: FT.radius, background: FT.orangeL, fontSize: 12.5 }}>
+          {d!.kpis.sans_correspondance!.sites} site(s) absent(s) du fichier Closing : affichés dans le tableau mais exclus des totaux et indicateurs (filtre « Base Closing »).
+        </div>
+      )}
       {q.isError && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.redL, color: FT.red, fontWeight: 700, fontSize: 13 }}>Impossible de charger les consommations (erreur serveur).</div>}
 
       <div style={{ border: FT.borderCrisp, background: FT.card, borderRadius: FT.radius, boxShadow: FT.shadow, padding: "12px 14px", display: "grid", gap: 10 }}>
@@ -343,6 +350,7 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
             {sel("source_runtime", "Source runtime", d?.facettes.sources_runtime)}
             {sel("source_puissance", "Source puissance", d?.facettes.sources_puissance)}
             {sel("source_target", "Source target", d?.facettes.sources_target)}
+            {sel("correspondance", "Base Closing", ["avec", "sans"], (o) => (o === "avec" ? "Présents dans le Closing" : "Absents du Closing (non utilisés)"))}
             {sel("qualite", "Qualité / réserve", ["reserve", "sans_reserve", "anomalie"], (o) => (o === "reserve" ? "Avec réserve" : o === "sans_reserve" ? "Sans réserve" : "Anomalie"))}
             {sel("tri", "Tri", ["gravite", "variation", "ecart_target"], (o) => (o === "gravite" ? "Gravité" : o === "variation" ? "Plus grosse variation" : "Plus gros écart vs target"))}
           </div>
@@ -437,6 +445,20 @@ function DetailHub({ row: r, periode, A, onClose, onPick }: { row: ConsoRow; per
       {line("Consommation réelle certifiée (L)", r.certification.valeur_l === null ? "— (non certifiée)" : `${nf(r.certification.valeur_l)} L`, A.certifiee)}
       {line("Consommation Closing (L)", r.closing.conso_l === null ? "—" : `${nf(r.closing.conso_l)} L`, A.closing)}
       {line("Écart variation vs Closing", g(r.closing.ecart_l, r.closing.ecart_pct, r.closing.pct_na), A.ecart_closing)}
+      {r.correspondance && !r.correspondance.utilise && <div role="note" style={{ margin: "6px 0", padding: 8, borderRadius: 8, background: FT.orangeL, fontSize: 12.5 }}>{r.correspondance.motif}</div>}
+      {r.closing.explication && r.closing.explication.ecart_l !== null && (
+        <div style={{ margin: "8px 0", padding: 10, borderRadius: 8, border: `1px solid ${FT.border}`, fontSize: 12.5 }}>
+          <strong>Ce qui explique l'écart avec le Closing ({signed(r.closing.explication.ecart_l)} L)</strong>
+          <ul style={{ margin: "6px 0 0 18px" }}>
+            {r.closing.explication.items.map((it) => <li key={it.code + it.label}><strong>{it.label}</strong>{it.montant_l !== null && <> : <span style={mono}>{signed(it.montant_l)} L</span></>} — {it.detail}</li>)}
+          </ul>
+          <div style={{ marginTop: 6, color: FT.textMid }}>
+            {r.closing.explication.quantifiable
+              ? <>Expliqué : {signed(r.closing.explication.explique_l ?? 0)} L · résiduel non expliqué : {signed(r.closing.explication.residuel_l ?? 0)} L</>
+              : "Décomposition chiffrée impossible : stocks ou mouvements du Closing non disponibles (aucune valeur inventée)."}
+          </div>
+        </div>
+      )}
       {line("Target fuel période (L)", r.target.periode_l === null ? "—" : `${nf(r.target.periode_l)} L · ${TARGET_META[r.target.statut].label}`, A.target)}
       {line("Écart variation vs target", g(r.target.ecart_l, r.target.ecart_pct, r.target.pct_na), A.ecart_target)}
       {line("Consommation instrumentée Snowflake (L)", r.instrumentee.conso_l === null ? "—" : `${nf(r.instrumentee.conso_l)} L`, A.instrumentee)}

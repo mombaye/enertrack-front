@@ -2053,6 +2053,11 @@ export async function downloadStockReport(kind: string, params: { debut?: string
 export type ConsoStatutBilan = "NON_CALCULABLE" | "VARIATION_CALCULEE" | "ESTIMATION_AVEC_RESERVE" | "PRET_A_CERTIFIER" | "CONSOMMATION_REELLE_CERTIFIEE";
 export type ConsoTargetStatut = "SOUS_TARGET" | "DANS_TARGET" | "AU_DESSUS_TARGET" | "TARGET_HISTORIQUE_A_CONFIRMER" | "TARGET_INDISPONIBLE";
 
+export type ConsoGapExplication = {
+  ecart_l: number | null; explique_l: number | null; residuel_l: number | null; quantifiable: boolean;
+  items: Array<{ code: string; label: string; montant_l: number | null; detail: string }>;
+};
+
 export type ConsoGap = { ecart_l: number | null; ecart_pct: number | null; pct_na: string | null };
 
 export type ConsoRow = {
@@ -2072,7 +2077,8 @@ export type ConsoRow = {
     final_l: number | null; source_final: string | null; variation_l: number | null; statut: ConsoStatutBilan; statut_moteur: string | null; cause: string | null;
     score: number | null; reserves: string[]; alertes: string[]; alertes_comparaison: string[]; bilan_id: number | null; motif: string | null; action: string;
   };
-  closing: { conso_l: number | null; controle_independant: boolean | null } & ConsoGap;
+  closing: { conso_l: number | null; controle_independant: boolean | null; explication?: ConsoGapExplication } & ConsoGap;
+  correspondance?: { base_closing: boolean; utilise: boolean; motif: string | null };
   target: { periode_l: number | null; mensuel_l: number | null; source: string | null; statut: ConsoTargetStatut; position: string | null; annee_reference: number | null } & ConsoGap;
   instrumentee: { conso_l: number | null; jours_mesure: number; jours: number; couverture_pct: number | null; disponible: boolean } & ConsoGap;
   cph: {
@@ -2100,6 +2106,7 @@ export type ConsoKpis = {
   ponctions: { entrantes_l: number | null; sortantes_l: number | null; ecart_perimetre_l: number | null; note: string };
   alertes: { stock_identique_suspect: number; instrumentee_ecart_extreme: number; cph_ecart_extreme: number; cph_nulle_variation_positive: number; closing_non_independant: number };
   couverture_cph_pct: number | null;
+  sans_correspondance?: { sites: number; base_closing_sites: number; note: string };
 };
 
 export type ConsoFraicheur = {
@@ -2131,7 +2138,7 @@ export type ConsoResponse = {
 export type ConsoFilters = {
   date_debut?: string; date_fin?: string; pays?: string; zone?: string; site?: string; typologie?: string; typologie_energie?: string;
   statut_bilan?: string; statut_certification?: string; source_stock?: string; source_runtime?: string; source_puissance?: string; source_target?: string;
-  qualite?: string; tri?: string; page?: number; page_size?: number;
+  qualite?: string; correspondance?: string; tri?: string; page?: number; page_size?: number;
 };
 
 export async function getConsommations(params: ConsoFilters) {
@@ -2157,4 +2164,24 @@ export async function downloadConsoExport(kind: "controle_complet" | "anomalies_
   a.click();
   URL.revokeObjectURL(url);
   return { name, rows: Number(res.headers["x-row-count"] ?? NaN) };
+}
+
+
+export type DataHealth = {
+  generated_at: string;
+  sources: {
+    closing: { fichier: string; recu_le: string; lignes: number; acceptees: number; rejetees: number; statut: string } | null;
+    gardiennage: { dernier_releve: string | null; sites_avec_releve: number };
+    enoc: { derniere_synchro: string | null; statut: string | null; dernier_mouvement: string | null };
+    snowflake: { derniere_journee: string | null; age_jours: number | null };
+    target_fuel: { fichier: string; recu_le: string } | null;
+  };
+  couverture: { sites_base_closing: number; sites_releve_gardien_recent: number; seuil_jours: number; sites_releve_en_retard: number; sites_sans_releve_gardien: number; sites_enoc_hors_base_closing: number | null };
+  releves_en_retard: Array<{ site_id: string; dernier_releve: string; jours: number }>;
+  sites_sans_releve: string[];
+};
+
+export async function getDataHealth() {
+  const { data } = await api.get<DataHealth>(`${BASE}/consommations/sante/`);
+  return data;
 }
