@@ -2,7 +2,7 @@
 // Cinq mesures distinctes : variation de stock · Closing · instrumentée Snowflake · CPH (complète / partielle) · consommation réelle certifiée (vide avant validation).
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Download, Eye, RefreshCw, CalendarDays } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, Download, Eye, Layers, List, MapPin, RefreshCw, Tag, XCircle } from "lucide-react";
 import {
   downloadConsoExport, getConsoEvolution, getConsommations, getConsommationsPeriodes,
   type ConsoFilters, type ConsoFraicheur, type ConsoRow, type ConsoStatutBilan, type ConsoTargetStatut,
@@ -27,6 +27,13 @@ const STATUT_META: Record<ConsoStatutBilan, { label: string; tone: Tone }> = {
   ESTIMATION_AVEC_RESERVE: { label: "Estimation avec réserve", tone: "orange" },
   PRET_A_CERTIFIER: { label: "Prêt à certifier", tone: "green" },
   CONSOMMATION_REELLE_CERTIFIEE: { label: "Réelle certifiée", tone: "blue" },
+};
+const STATUT_PILL: Record<ConsoStatutBilan, { label: string; bg: string; fg: string; icon: typeof CheckCircle2 }> = {
+  PRET_A_CERTIFIER: { label: "Bilan OK", bg: "#E4F7EC", fg: "#12805C", icon: CheckCircle2 },
+  CONSOMMATION_REELLE_CERTIFIEE: { label: "Certifié", bg: "#E5EEFF", fg: "#1D4ED8", icon: CheckCircle2 },
+  ESTIMATION_AVEC_RESERVE: { label: "Avec réserve", bg: "#FFF1DD", fg: "#C2660A", icon: AlertTriangle },
+  VARIATION_CALCULEE: { label: "À contrôler", bg: "#FDE8E8", fg: "#B42323", icon: XCircle },
+  NON_CALCULABLE: { label: "Non calculable", bg: "#EEF1F6", fg: "#5B6B82", icon: XCircle },
 };
 const TARGET_META: Record<ConsoTargetStatut, { label: string; tone: Tone }> = {
   SOUS_TARGET: { label: "Sous target", tone: "green" },
@@ -196,6 +203,7 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
   const [detail, setDetail] = useState<{ row: ConsoRow; tab: "hub" | "stock" | "cph" } | null>(null);
   const [more, setMore] = useState(false);
   const [full, setFull] = useState(false);
+  const [adv, setAdv] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -249,38 +257,72 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
   cols.forEach((c) => { const last = groups[groups.length - 1]; if (last && last.name === c.group) last.n += 1; else groups.push({ name: c.group, n: 1 }); });
   const stickyStyle = (i: number, z = 3): CSSProperties => (i < 3 ? { position: "sticky", left: STICKY[i], zIndex: z } : {});
 
+  const MOIS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+  const fr = (v: string) => new Date(`${v}T00:00:00`).toLocaleDateString("fr-FR");
+  const periodLabel = (a: string, b: string) => {
+    const da = new Date(`${a}T00:00:00`), db = new Date(`${b}T00:00:00`);
+    const lastDay = new Date(db.getFullYear(), db.getMonth() + 1, 0).getDate();
+    return da.getDate() === 1 && db.getDate() === lastDay && da.getMonth() === db.getMonth() && da.getFullYear() === db.getFullYear() ? `${MOIS[da.getMonth()]} ${da.getFullYear()}` : `${fr(a)} → ${fr(b)}`;
+  };
+  const monthRange = (offset: number): [string, string] => { const t = new Date(); const a = new Date(t.getFullYear(), t.getMonth() + offset, 1); const e = new Date(t.getFullYear(), t.getMonth() + offset + 1, 0); return [iso(a), iso(e)]; };
+  const pickPreset = (v: string) => {
+    setPage(1);
+    if (v === "defaut") { setDebut(""); setFin(""); return; }
+    const off = v === "mois_courant" ? 0 : v === "mois_precedent" ? -1 : v === "mois_m2" ? -2 : null;
+    if (off !== null) { const [a, b] = monthRange(off); setDebut(a); setFin(b); }
+  };
+  const fieldBox: CSSProperties = { display: "grid", gap: 4, minWidth: 0 };
+  const fieldLabel = (Icon: typeof CalendarDays, text: string) => <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: FT.textMid }}><Icon size={14} aria-hidden /> {text}</span>;
+  const control: CSSProperties = { fontSize: 13, fontWeight: 700, padding: "9px 10px", borderRadius: 10, border: `1px solid ${FT.border}`, background: FT.card, color: FT.text, minWidth: 0 };
+  const curA = per?.debut ?? "", curB = per?.fin ?? "";
+  const alertCount = (d?.fraicheur && (d.fraicheur.perime || d.fraicheur.synchro_en_echec || d.fraicheur.periode_incomplete) ? 1 : 0) + ((d?.kpis.sans_correspondance?.sites ?? 0) > 0 ? 1 : 0);
+
   return (
     <section aria-label="Suivis Consommations" style={{ display: "grid", gap: 14 }}>
-      <SectionTitle title="Suivis Consommations" subtitle="Analyse et suivi de la consommation de carburant par période et par site"
+      <SectionTitle title="Suivis Consommations" subtitle="Analyse et suivi de la consommation de carburant par période et site"
         right={per && (
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 12, border: FT.borderCrisp, background: FT.card, boxShadow: FT.shadow, fontWeight: 800, fontSize: 13 }}>
-            <CalendarDays size={16} aria-hidden /> {new Date(per.debut).toLocaleDateString("fr-FR")} → {new Date(per.fin).toLocaleDateString("fr-FR")}
-          </div>
+          <label style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: 12, border: FT.borderCrisp, background: FT.card, boxShadow: FT.shadow, fontWeight: 800, fontSize: 13 }}>
+            <CalendarDays size={16} aria-hidden />
+            <select aria-label="Période affichée" value={`${curA}|${curB}`} onChange={(e) => { const [x, y] = e.target.value.split("|"); setDebut(x); setFin(y); setPage(1); }}
+              style={{ appearance: "none", border: "none", background: "transparent", fontWeight: 800, fontSize: 13, color: FT.text, paddingRight: 18, cursor: "pointer" }}>
+              {!(periods.data?.periodes ?? []).some((p) => p.debut === curA && p.fin === curB) && <option value={`${curA}|${curB}`}>{periodLabel(curA, curB)}</option>}
+              {(periods.data?.periodes ?? []).map((p) => <option key={`${p.debut}|${p.fin}`} value={`${p.debut}|${p.fin}`}>{periodLabel(p.debut, p.fin)}</option>)}
+            </select>
+            <ChevronDown size={14} aria-hidden style={{ position: "absolute", right: 12, pointerEvents: "none" }} />
+          </label>
         )} />
-      <div style={{ border: FT.borderCrisp, background: FT.card, borderRadius: FT.radius, boxShadow: FT.shadow, padding: "12px 14px", display: "grid", gap: 10 }}>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
-          <label style={{ display: "grid", gap: 3, fontSize: 10.5, fontWeight: 800, color: FT.textSub, textTransform: "uppercase" }}>
-            Périodes avec bilan
-            <select aria-label="Périodes avec bilan" value="" onChange={(e) => { const p = periods.data?.periodes[Number(e.target.value)]; if (p) { setDebut(p.debut); setFin(p.fin); setPage(1); } }} style={{ fontSize: 12, padding: "7px 8px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, color: FT.text, fontWeight: 600, minWidth: 200 }}>
+      <div style={{ border: FT.borderCrisp, background: FT.card, borderRadius: 16, boxShadow: FT.shadow, padding: "14px 16px", display: "grid", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(210px,1.3fr) minmax(170px,1.2fr) repeat(auto-fit, minmax(130px, 1fr))", gap: 12, alignItems: "end" }}>
+          <label style={fieldBox}>{fieldLabel(CalendarDays, "Période")}
+            <select aria-label="Période" value="cur" onChange={(e) => pickPreset(e.target.value)} style={control}>
+              <option value="cur">{per ? `${fr(per.debut)} → ${fr(per.fin)}` : "—"}</option>
+              <option value="defaut">Période par défaut</option><option value="mois_courant">Mois en cours</option><option value="mois_precedent">Mois précédent</option><option value="mois_m2">Il y a 2 mois</option>
+            </select></label>
+          <label style={fieldBox}>{fieldLabel(Layers, "Périodes avec bilan")}
+            <select aria-label="Périodes avec bilan" value="" onChange={(e) => { const p = periods.data?.periodes[Number(e.target.value)]; if (p) { setDebut(p.debut); setFin(p.fin); setPage(1); } }} style={control}>
               <option value="">Choisir…</option>
               {(periods.data?.periodes ?? []).map((p, i) => <option key={`${p.debut}-${p.fin}`} value={i}>{p.libelle} — {p.calculables}/{p.sites} calculables</option>)}
-            </select>
-          </label>
-          {dateIn("Date début", debut || per?.debut || "", setDebut)}
-          {dateIn("Date fin", fin || per?.fin || "", setFin)}
-          <label style={{ display: "grid", gap: 3, fontSize: 10.5, fontWeight: 800, color: FT.textSub, textTransform: "uppercase" }}>
-            Site / nom
-            <input value={site} onChange={(e) => { setSite(e.target.value); setPage(1); }} placeholder="ID ou nom" style={{ fontSize: 12, padding: "7px 8px", borderRadius: 8, border: `1px solid ${FT.border}`, minWidth: 150 }} />
-          </label>
-          {sel("typologie", "Typologie site", d?.facettes.typologies)}
-          <button type="button" onClick={() => { const t = new Date(); const e = new Date(t.getFullYear(), t.getMonth(), 0); setDebut(iso(new Date(e.getFullYear(), e.getMonth(), 1))); setFin(iso(e)); setPage(1); }} style={{ fontSize: 12, fontWeight: 700, padding: "8px 10px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}>Mois précédent</button>
-          <button type="button" onClick={() => { setDebut(""); setFin(""); setPage(1); }} style={{ fontSize: 12, fontWeight: 700, padding: "8px 10px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}>Période par défaut</button>
-          <button type="button" onClick={() => { void q.refetch(); void evo.refetch(); }} disabled={q.isFetching} style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 800, padding: "9px 16px", borderRadius: 10, border: "none", background: FT.blue, color: "#fff", cursor: "pointer" }}>
-            <RefreshCw size={14} aria-hidden /> {q.isFetching ? "Actualisation…" : "Actualiser"}
+            </select></label>
+          <label style={fieldBox}>{fieldLabel(CalendarDays, "Date début")}
+            <input type="date" aria-label="Date début" value={debut || per?.debut || ""} onChange={(e) => { setDebut(e.target.value); setPage(1); }} style={control} /></label>
+          <label style={fieldBox}>{fieldLabel(CalendarDays, "Date fin")}
+            <input type="date" aria-label="Date fin" value={fin || per?.fin || ""} onChange={(e) => { setFin(e.target.value); setPage(1); }} style={control} /></label>
+          <label style={fieldBox}>{fieldLabel(MapPin, "Site / Nom")}
+            <input aria-label="Site ou nom" value={site} onChange={(e) => { setSite(e.target.value); setPage(1); }} placeholder="ID ou nom" style={control} /></label>
+          <label style={fieldBox}>{fieldLabel(Tag, "Typologie site")}
+            <select aria-label="Typologie site" value={f.typologie ?? ""} onChange={(e) => set("typologie", e.target.value)} style={control}>
+              <option value="">Tous</option>{(d?.facettes.typologies ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+            </select></label>
+          <button type="button" onClick={() => { void q.refetch(); void evo.refetch(); }} disabled={q.isFetching}
+            style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 14, fontWeight: 800, padding: "11px 20px", borderRadius: 12, border: "none", background: "#1D5FE0", color: "#fff", cursor: "pointer", boxShadow: "0 6px 14px rgba(29,95,224,.28)" }}>
+            <RefreshCw size={15} aria-hidden /> {q.isFetching ? "Actualisation…" : "Actualiser"}
           </button>
         </div>
-        {per && <div style={{ fontSize: 11.5, color: FT.textMid }}>Période exacte {per.libelle}{per.par_defaut ? " (dernière période complète avec bilan)" : ""} · {per.sites_calculables.toLocaleString("fr-FR")} site(s) avec variation de stock calculable sur {per.sites_avec_bilan.toLocaleString("fr-FR")} bilans — {per.jours} jour(s).</div>}
-        <hr aria-hidden style={{ border: 0, borderTop: `1px solid ${FT.border}`, margin: "2px 0" }} />
+        <button type="button" aria-expanded={adv} onClick={() => setAdv((v) => !v)} style={{ justifySelf: "start", fontSize: 12, fontWeight: 800, background: "none", border: "none", color: FT.blue, cursor: "pointer", padding: 0 }}>
+          {adv ? "Masquer les filtres avancés et les exports ▲" : "Filtres avancés et exports ▼"}
+        </button>
+        {adv && (
+          <div style={{ display: "grid", gap: 10, borderTop: `1px solid ${FT.border}`, paddingTop: 10 }}>
         <div role="group" aria-label="Vues rapides" style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
           {([["Tous", {}], ["Prêts à certifier", { statut_bilan: "PRET_A_CERTIFIER" }], ["Avec réserve", { statut_bilan: "ESTIMATION_AVEC_RESERVE" }], ["Non calculables", { statut_bilan: "NON_CALCULABLE" }],
             ["Variation à contrôler", { statut_bilan: "VARIATION_CALCULEE" }], ["Certifiés", { statut_bilan: "CONSOMMATION_REELLE_CERTIFIEE" }]] as Array<[string, Partial<ConsoFilters>]>).map(([label, patch]) => {
@@ -318,6 +360,8 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
           ))}
           {msg && <span role="status" style={{ fontSize: 12, color: FT.textMid }}>{msg}</span>}
         </div>
+          </div>
+        )}
       </div>
 
       {d?.detail && !per && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.orangeL, color: FT.orange, fontWeight: 700, fontSize: 13 }}>{d.detail}</div>}
@@ -326,13 +370,20 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
           Aucun bilan de stock enregistré pour cette période exacte ({per.libelle}). Choisissez une période de la liste « Périodes avec bilan ».
         </div>
       )}
-      <DataQualityNotice f={d?.fraicheur} />
-      <DataHealthPanel />
-      {(d?.kpis.sans_correspondance?.sites ?? 0) > 0 && (
-        <div role="note" style={{ padding: 10, borderRadius: FT.radius, background: FT.orangeL, fontSize: 12.5 }}>
-          {d!.kpis.sans_correspondance!.sites} site(s) absent(s) du fichier Closing : affichés dans le tableau mais exclus des totaux et indicateurs (filtre « Base Closing »).
+      <details style={{ border: FT.borderCrisp, borderRadius: 14, background: alertCount > 0 ? FT.orangeL : FT.card, padding: "8px 14px" }}>
+        <summary style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 800, color: FT.text, display: "flex", alignItems: "center", gap: 8 }}>
+          <AlertTriangle size={14} aria-hidden color={alertCount > 0 ? FT.orange : FT.textSub} /> Qualité des données et alertes{alertCount > 0 ? ` (${alertCount})` : " — aucune alerte bloquante"}
+        </summary>
+        <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+          <DataQualityNotice f={d?.fraicheur} />
+          <DataHealthPanel />
+          {(d?.kpis.sans_correspondance?.sites ?? 0) > 0 && (
+            <div role="note" style={{ padding: 10, borderRadius: FT.radius, background: FT.orangeL, fontSize: 12.5 }}>
+              {d!.kpis.sans_correspondance!.sites} site(s) absent(s) du fichier Closing : affichés dans le tableau mais exclus des totaux et indicateurs (filtre « Base Closing »).
+            </div>
+          )}
         </div>
-      )}
+      </details>
       {q.isError && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.redL, color: FT.red, fontWeight: 700, fontSize: 13 }}>Impossible de charger les consommations (erreur serveur).</div>}
 
       {k && (() => {
@@ -402,42 +453,49 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
         </div>
       </details>
 
-      <section aria-label="Suivis par site" style={{ border: FT.borderCrisp, background: FT.card, borderRadius: FT.radius, boxShadow: FT.shadow, overflow: "hidden" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", gap: 8, flexWrap: "wrap" }}>
-          <h3 style={{ margin: 0, fontSize: 15 }}>{full ? "Tous les résultats — vue détaillée" : "Suivis par site"}</h3>
-          <button type="button" onClick={() => setFull((v) => !v)} style={{ fontSize: 12.5, fontWeight: 800, padding: "7px 14px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}>
+      <section aria-label="Derniers suivis" style={{ border: FT.borderCrisp, background: FT.card, borderRadius: 16, boxShadow: FT.shadow, overflow: "hidden" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", gap: 8, flexWrap: "wrap" }}>
+          <h3 style={{ margin: 0, fontSize: 17, display: "flex", alignItems: "center", gap: 8 }}><List size={18} color={FT.blue} aria-hidden /> {full ? "Tous les résultats — vue détaillée" : "Derniers suivis"}</h3>
+          <button type="button" onClick={() => setFull((v) => !v)} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, padding: "8px 14px", borderRadius: 10, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}>
             {full ? "← Vue simplifiée" : "Voir tous les résultats →"}
           </button>
         </div>
         {!full && (
-          <div style={{ overflow: "auto" }}>
-            <table aria-label="Aperçu des suivis par site" style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
+          <div style={{ overflow: "auto", padding: "0 10px 10px" }}>
+            <table aria-label="Derniers suivis par site" style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
               <thead>
-                <tr style={{ background: "#F1F5FA", textAlign: "left", color: FT.textMid, fontSize: 12 }}>
-                  {["Site ID", "Nom du site", "Statut bilan", "Pays", "Zone", "Typologie site", "Variation (L)", "Closing (L)", "Écart vs Closing (L)", ""].map((h) => <th key={h} scope="col" style={{ padding: "10px 12px", fontWeight: 700 }}>{h}</th>)}
+                <tr style={{ background: "#F3F6FB", textAlign: "left", color: FT.textMid, fontSize: 12.5 }}>
+                  {["Site ID", "Nom du site", "Statut bilan", "Pays", "Zone", "Typologie site", "Typologie énergie", "Modèle GE", "Puissance (KVA)", "Source puissance", "Date"].map((h, i, all) => (
+                    <th key={h || "act"} scope="col" style={{ padding: "11px 8px", fontWeight: 700, whiteSpace: "nowrap", borderRadius: i === 0 ? "10px 0 0 10px" : i === all.length - 1 ? "0 10px 10px 0" : 0 }}>{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {(d?.rows ?? []).slice(0, 8).map(safeRow).map((r) => (
-                  <tr key={r.site_id} style={{ borderTop: `1px solid ${FT.border}` }}>
-                    <td style={{ padding: "10px 12px", fontWeight: 800 }}>{r.site_id}</td>
-                    <td style={{ padding: "10px 12px" }}>{r.site_name ?? "—"}{r.correspondance && !r.correspondance.utilise && <span title={r.correspondance.motif ?? ""} style={{ marginLeft: 6, fontSize: 10, color: FT.orange, fontWeight: 800 }}>hors Closing</span>}</td>
-                    <td style={{ padding: "10px 12px" }}><span style={{ fontWeight: 700, color: TONE_COLORS[STATUT_META[r.stock.statut].tone].fg }}>{STATUT_META[r.stock.statut].label}</span></td>
-                    <td style={{ padding: "10px 12px" }}>{r.country ?? "—"}</td>
-                    <td style={{ padding: "10px 12px" }}>{r.zone ?? "—"}</td>
-                    <td style={{ padding: "10px 12px" }}>{r.typologie ?? "—"}</td>
-                    <td style={{ padding: "10px 12px", ...mono }}>{nf(r.stock.variation_l)}</td>
-                    <td style={{ padding: "10px 12px", ...mono }}>{nf(r.closing.conso_l)}</td>
-                    <td style={{ padding: "10px 12px", ...mono }}>{signed(r.closing.ecart_l)}</td>
-                    <td style={{ padding: "6px 12px" }}>
-                      <button type="button" onClick={() => setDetail({ row: r, tab: "hub" })} aria-label={`Voir le détail du site ${r.site_id}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 800, padding: "5px 9px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}><Eye size={12} aria-hidden /> Détail</button>
-                    </td>
-                  </tr>
-                ))}
-                {d && d.rows.length === 0 && <tr><td colSpan={10} style={{ padding: 24, color: FT.textMid }}>Aucun site ne correspond aux filtres pour cette période.</td></tr>}
+                {(d?.rows ?? []).slice(0, 5).map(safeRow).map((r) => {
+                  const st = STATUT_PILL[r.stock.statut];
+                  const Ico = st.icon;
+                  return (
+                    <tr key={r.site_id} style={{ borderTop: `1px solid ${FT.border}` }}>
+                      <td style={{ padding: "12px 8px", whiteSpace: "nowrap" }}><button type="button" onClick={() => setDetail({ row: r, tab: "hub" })} aria-label={`Voir le détail du site ${r.site_id}`} title="Voir le détail" style={{ border: "none", background: "none", padding: 0, fontWeight: 800, fontSize: 13, color: FT.text, cursor: "pointer", textDecoration: "underline dotted" }}>{r.site_id}</button></td>
+                      <td style={{ padding: "12px 8px", minWidth: 120 }}>{r.site_name ?? "—"}{r.correspondance && !r.correspondance.utilise && <span title={r.correspondance.motif ?? ""} aria-label="hors Closing" style={{ marginLeft: 6, fontSize: 10, color: FT.orange, fontWeight: 800, whiteSpace: "nowrap" }}>⚠ hors Closing</span>}</td>
+                      <td style={{ padding: "12px 8px", whiteSpace: "nowrap" }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 999, fontSize: 12, fontWeight: 700, background: st.bg, color: st.fg }}><Ico size={13} aria-hidden /> {st.label}</span>
+                      </td>
+                      <td style={{ padding: "12px 8px" }}>{r.country ?? "—"}</td>
+                      <td style={{ padding: "12px 8px" }}>{r.zone ?? "—"}</td>
+                      <td style={{ padding: "12px 8px", whiteSpace: "nowrap" }}>{r.typologie ?? "—"}</td>
+                      <td style={{ padding: "12px 8px", minWidth: 110 }}>{r.typologie_energie ?? "—"}</td>
+                      <td style={{ padding: "12px 8px", whiteSpace: "nowrap" }}>{r.modele_ge ?? "—"}</td>
+                      <td style={{ padding: "12px 8px", ...mono }}>{r.puissance_nominale_kva === null || r.puissance_nominale_kva === undefined ? "—" : nf(r.puissance_nominale_kva)}</td>
+                      <td style={{ padding: "12px 8px" }}>{r.source_puissance ?? "—"}</td>
+                      <td style={{ padding: "12px 8px", whiteSpace: "nowrap", ...mono }}>{r.periode?.fin ? fr(r.periode.fin) : "—"}</td>
+                    </tr>
+                  );
+                })}
+                {d && d.rows.length === 0 && <tr><td colSpan={11} style={{ padding: 24, color: FT.textMid }}>Aucun site ne correspond aux filtres pour cette période.</td></tr>}
               </tbody>
             </table>
-            <div style={{ padding: "8px 16px", fontSize: 12, color: FT.textMid }}>{Math.min(8, d?.rows.length ?? 0)} premiers sites sur {nf(d?.total ?? 0)} — « Voir tous les résultats » pour le tableau complet (cinq mesures, écarts, sources, pagination).</div>
+            <div style={{ padding: "8px 12px 2px", fontSize: 12, color: FT.textMid }}>{Math.min(5, d?.rows.length ?? 0)} sites affichés sur {nf(d?.total ?? 0)} — Cliquez sur un identifiant de site pour son détail ; « Voir tous les résultats » pour le tableau complet (variation, Closing, écarts, CPH, target, certification).</div>
           </div>
         )}
       </section>
