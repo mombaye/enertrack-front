@@ -2070,9 +2070,9 @@ export type ConsoRow = {
     initial_l: number | null; source_initial: string | null; entrees_l: number | null; carte_total_l: number | null; truck_l: number | null; livraisons_externes_l: number | null;
     ponctions_entrantes_l: number | null; ponctions_sortantes_l: number | null; rajouts_l: number | null; retraits_l: number | null; vols_l: number | null; vidanges_l: number | null;
     final_l: number | null; source_final: string | null; variation_l: number | null; statut: ConsoStatutBilan; statut_moteur: string | null; cause: string | null;
-    score: number | null; reserves: string[]; alertes: string[]; bilan_id: number | null; motif: string | null; action: string;
+    score: number | null; reserves: string[]; alertes: string[]; alertes_comparaison: string[]; bilan_id: number | null; motif: string | null; action: string;
   };
-  closing: { conso_l: number | null } & ConsoGap;
+  closing: { conso_l: number | null; controle_independant: boolean | null } & ConsoGap;
   target: { periode_l: number | null; mensuel_l: number | null; source: string | null; statut: ConsoTargetStatut; position: string | null; annee_reference: number | null } & ConsoGap;
   instrumentee: { conso_l: number | null; jours_mesure: number; jours: number; couverture_pct: number | null; disponible: boolean } & ConsoGap;
   cph: {
@@ -2097,6 +2097,8 @@ export type ConsoKpis = {
     sites_comparables: number; ecart_global_l: number | null; ecart_global_pct: number | null; couverture_pct: number | null; a_confirmer: number;
   };
   bilans: { prets: number; avec_reserve: number; non_calculables: number; certifies: number; variation_calculee: number };
+  ponctions: { entrantes_l: number | null; sortantes_l: number | null; ecart_perimetre_l: number | null; note: string };
+  alertes: { stock_identique_suspect: number; instrumentee_ecart_extreme: number; cph_ecart_extreme: number; cph_nulle_variation_positive: number; closing_non_independant: number };
   couverture_cph_pct: number | null;
 };
 

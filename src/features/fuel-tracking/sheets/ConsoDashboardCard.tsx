@@ -11,7 +11,8 @@ const signed = (v: number | null | undefined, d = 0) => (v === null || v === und
 export function ConsoDashboardCard({ onOpen }: { onOpen?: () => void }) {
   const q = useQuery({ queryKey: ["consommations-dashboard"], queryFn: () => getConsommations({ page_size: 1 }), staleTime: 60_000 });
   const d = q.data;
-  const k = d?.kpis;
+  const compatible = !!(d?.kpis as { variation?: unknown } | undefined)?.variation;
+  const k = compatible ? d?.kpis : undefined;
   const A = d?.aide ?? {};
   const t = k?.target;
   const items: Array<[string, string, string, string | undefined]> = k && t ? [
@@ -40,6 +41,7 @@ export function ConsoDashboardCard({ onOpen }: { onOpen?: () => void }) {
         </div>
         {onOpen && <button type="button" onClick={onOpen} style={{ fontSize: 12, fontWeight: 800, padding: "7px 12px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}>Ouvrir Suivis Consommations</button>}
       </div>
+      {d && !compatible && <div role="alert" style={{ color: FT.orange, fontSize: 12.5, fontWeight: 700 }}>Version de l'API incompatible : redémarrez le backend sur la dernière version.</div>}
       {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 12.5, fontWeight: 700 }}>Synthèse indisponible (erreur serveur).</div>}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 10 }}>
         {items.map(([label, value, sub, help]) => (

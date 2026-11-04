@@ -94,7 +94,8 @@ function buildColsDef(A: Record<string, string>): Col[] {
     { k: "action", group: "Stock", label: "Action attendue", left: true, min: 300, render: (r) => r.stock.action },
     // Comparaisons
     { k: "clo", group: "Comparaisons", label: "Consommation Closing (L)", help: A.closing, render: (r) => num(r.closing.conso_l) },
-    { k: "cle", group: "Comparaisons", label: "Écart variation vs Closing (L)", help: A.ecart_closing, render: (r) => gap(r.closing.ecart_l, r.closing.ecart_pct, r.closing.pct_na, "l") },
+    { k: "cle", group: "Comparaisons", label: "Écart variation vs Closing (L)", help: `${A.ecart_closing ?? ""} Un écart nul n'est pas un contrôle indépendant quand les stocks et mouvements viennent eux-mêmes du Closing (mention « non indépendant »).`,
+      render: (r) => (r.closing.ecart_l === null ? dash : <span>{gap(r.closing.ecart_l, r.closing.ecart_pct, r.closing.pct_na, "l")}{r.closing.controle_independant === false && <span title="Stocks et mouvements issus du Closing : écart mécanique, pas un contrôle indépendant" style={{ marginLeft: 4, fontSize: 10, color: FT.orange, fontWeight: 800 }}>non indép.</span>}</span>) },
     { k: "clp", group: "Comparaisons", label: "Écart variation vs Closing (%)", render: (r) => gap(r.closing.ecart_l, r.closing.ecart_pct, r.closing.pct_na, "pct") },
     { k: "tg", group: "Comparaisons", label: "Target fuel période (L)", help: A.target, render: (r) => num(r.target.periode_l) },
     { k: "tgs", group: "Comparaisons", label: "Source target", left: true, render: (r) => r.target.source ?? "—" },
@@ -110,6 +111,8 @@ function buildColsDef(A: Record<string, string>): Col[] {
     { k: "ccv", group: "Comparaisons", label: "Couverture CPH (%)", render: (r) => (r.cph.couverture_pct === null ? dash : `${nf(r.cph.couverture_pct, 0)} %`) },
     { k: "cce", group: "Comparaisons", label: "Écart variation vs CPH complète (L)", help: A.ecart_cph, render: (r) => gap(r.cph.ecart_l, r.cph.ecart_pct, r.cph.pct_na, "l") },
     { k: "ccp", group: "Comparaisons", label: "Écart variation vs CPH complète (%)", render: (r) => gap(r.cph.ecart_l, r.cph.ecart_pct, r.cph.pct_na, "pct") },
+    { k: "alc", group: "Comparaisons", label: "Alertes de comparaison", left: true, min: 220, help: "Écart extrême entre mesures (valeurs conservées, à investiguer) : INSTRUMENTEE_ECART_EXTREME, CPH_ECART_EXTREME, CPH_NULLE_VARIATION_POSITIVE. Seuils configurables (FUEL_COMPARE_EXTREME_RATIO, FUEL_COMPARE_EXTREME_MIN_L).",
+      render: (r) => (r.stock.alertes_comparaison.length ? <span style={{ color: FT.red, fontWeight: 700 }}>{r.stock.alertes_comparaison.join(" · ")}</span> : dash) },
     // CPH
     { k: "rt", group: "CPH", label: "Runtime retenu (h)", render: (r) => num(r.cph.runtime_h, 1) },
     { k: "rts", group: "CPH", label: "Source runtime", left: true, render: (r) => r.cph.runtime_source ?? "—" },
@@ -125,6 +128,22 @@ function buildColsDef(A: Record<string, string>): Col[] {
     { k: "cd", group: "Certification", label: "Date validation", render: (r) => (r.certification.date ? new Date(r.certification.date).toLocaleDateString("fr-FR") : "—") },
     { k: "cc2", group: "Certification", label: "Commentaire certification", left: true, min: 220, render: (r) => r.certification.commentaire ?? "—" },
   ];
+}
+
+// Blocs absents ou incomplets dans une réponse du serveur : valeurs vides (jamais de plantage de l'écran, jamais de 0 inventé).
+const EMPTY_GAP = { ecart_l: null, ecart_pct: null, pct_na: null };
+function safeRow(r: ConsoRow): ConsoRow {
+  const x = r as Partial<ConsoRow>;
+  return {
+    ...r,
+    periode: x.periode ?? { debut: "", fin: "", jours: 0 },
+    stock: { reserves: [], alertes: [], alertes_comparaison: [], statut: "NON_CALCULABLE", action: "—", ...(x.stock ?? {}) } as ConsoRow["stock"],
+    closing: { conso_l: null, controle_independant: null, ...EMPTY_GAP, ...(x.closing ?? {}) },
+    target: { periode_l: null, mensuel_l: null, source: null, statut: "TARGET_INDISPONIBLE", position: null, annee_reference: null, ...EMPTY_GAP, ...(x.target ?? {}) } as ConsoRow["target"],
+    instrumentee: { conso_l: null, jours_mesure: 0, jours: 0, couverture_pct: null, disponible: false, ...EMPTY_GAP, ...(x.instrumentee ?? {}) },
+    cph: { complete_l: null, partielle_l: null, statut: null, jours_cph: null, couverture_pct: null, motif_code: null, runtime_h: null, runtime_source: null, runtime_disponibilite: null, power_source: null, charge_pct: null, cph_l_h: null, niveau_mediane: null, nb_mesures: null, ...EMPTY_GAP, ...(x.cph ?? {}) },
+    certification: { valeur_l: null, par: null, date: null, commentaire: null, niveau: null, ...(x.certification ?? {}) },
+  };
 }
 
 const GROUP_BG: Record<string, string> = { Identification: FT.navy, Période: "#475569", Stock: "#0F7A52", Comparaisons: "#1A56C4", CPH: "#6D28D9", Certification: "#B45309" };
@@ -213,6 +232,12 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
   );
 
   if (q.isLoading) return <Skeleton h={420} />;
+  // Interface plus récente que l'API : message clair au lieu d'une page blanche (le serveur doit être redémarré sur la même version).
+  if (d && (!d.kpis || !(d.kpis as { variation?: unknown }).variation || (d.rows[0] && !(d.rows[0] as { stock?: unknown }).stock))) {
+    return <div role="alert" style={{ padding: 16, borderRadius: FT.radius, background: FT.orangeL, color: FT.text, fontSize: 13.5 }}>
+      <strong>Version de l'API incompatible.</strong> Le serveur renvoie l'ancien format de « Suivis Consommations ». Redémarrez le backend (conteneur web) sur la dernière version, puis rechargez la page.
+    </div>;
+  }
   const k = d?.kpis;
   const totalPages = d ? Math.max(1, Math.ceil(d.total / d.page_size)) : 1;
   const noBilan = !per || !per.bilan_disponible;
@@ -265,6 +290,8 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
               <div><b>Target</b> : moyen/site couvert {nf(k.target.target_moyen_site_l)} L · variation moyenne/site couvert {nf(k.target.variation_moyenne_site_l)} L · {nf(k.target.sites_sans_target)} site(s) sans target · {nf(k.target.a_confirmer)} à confirmer.</div>
               <div><b>Bilans</b> : {nf(k.bilans.prets)} prêts · {nf(k.bilans.avec_reserve)} avec réserve · {nf(k.bilans.variation_calculee)} variation à contrôler · {nf(k.bilans.non_calculables)} non calculables · {nf(k.bilans.certifies)} certifiés.</div>
               <div><b>Couvertures</b> : CPH complète {nf(k.couverture_cph_pct, 0)} % · target {nf(k.target.couverture_pct, 0)} %.</div>
+              <div title={k.ponctions.note}><b>Ponctions (périmètre affiché)</b> : entrantes {nf(k.ponctions.entrantes_l)} L · sortantes {nf(k.ponctions.sortantes_l)} L · écart {signed(k.ponctions.ecart_perimetre_l)} L (contrepartie hors périmètre ; impact global ENOC = 0 L).</div>
+              <div><b>Alertes</b> : {nf(k.alertes.stock_identique_suspect)} stock(s) identique(s) suspect(s) · {nf(k.alertes.instrumentee_ecart_extreme)} instrumentée à investiguer · {nf(k.alertes.cph_ecart_extreme + k.alertes.cph_nulle_variation_positive)} CPH à investiguer · {nf(k.alertes.closing_non_independant)} écart(s) Closing non indépendant(s).</div>
             </div>
           )}
           <div>
@@ -350,7 +377,7 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
               </tr>
             </thead>
             <tbody>
-              {(d?.rows ?? []).map((r, idx) => {
+              {(d?.rows ?? []).map(safeRow).map((r, idx) => {
                 const bg = idx % 2 ? "#F8FAFD" : FT.card;
                 return (
                   <tr key={r.site_id} style={{ background: bg }}>

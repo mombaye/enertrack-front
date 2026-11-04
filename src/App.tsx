@@ -39,6 +39,7 @@ import OptimizationPage from "./features/optimization/OptimizationPage";
 import PenaltyTrackingPage from "./features/penalties/PenaltyTrackingPage";
 import FuelTrackingPage from "./features/fuel-tracking/FuelTrackingPage";
 import PilotageGridPage from "./features/pilotage-grid/PilotageGridPage";
+import { RouteErrorBoundary } from "./components/ErrorBoundary";
 import BOWorkspacePage from "./features/bo-analysis/BOWorkspacePage";
 
 const queryClient = new QueryClient();
@@ -48,6 +49,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <BrowserRouter>
+          <RouteErrorBoundary>
           <Routes>
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<LoginPage />} />
@@ -167,6 +169,7 @@ export default function App() {
               </Route>
             </Route>
           </Routes>
+          </RouteErrorBoundary>
         </BrowserRouter>
 
         <ToastContainer position="top-center" />
