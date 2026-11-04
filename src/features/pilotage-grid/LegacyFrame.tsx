@@ -58,7 +58,7 @@ export function LegacyFrame({ metas, tab, siteKey }: { metas: PgDatasetMeta[]; t
       {error && <div role="alert" style={{ color: "#B0425A", fontWeight: 700 }}>Erreur d'affichage : {error}</div>}
       {!started && !failed && !error && <div role="status" style={{ fontSize: 13, color: "#5A6B73" }}>Chargement des données depuis la base…</div>}
       <iframe ref={frameRef} title="Pilotage Grid" src={FRAME_SRC}
-        style={{ flex: 1, width: "100%", minHeight: 480, border: "1px solid #D3DCD9", borderRadius: 12, background: "#EEF2F1", display: loaded ? "block" : "none" }} />
+        style={{ flex: 1, width: "100%", minHeight: "calc(100vh - 130px)", border: "none", borderRadius: 0, background: "#FFFFFF", display: loaded ? "block" : "none" }} />
     </div>
   );
 }
