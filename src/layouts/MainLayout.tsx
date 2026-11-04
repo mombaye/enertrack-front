@@ -1,6 +1,7 @@
 // src/layouts/MainLayout.tsx
 import { Outlet } from "react-router-dom";
 import { RouteErrorBoundary } from "@/components/ErrorBoundary";
+import { UpdateWatcher } from "@/components/UpdateWatcher";
 import Sidebar from "@/layouts/Sidebar";
 
 export default function MainLayout() {
@@ -56,6 +57,7 @@ export default function MainLayout() {
       <div className="main-area">
         <main className="page-content">
           <RouteErrorBoundary><Outlet /></RouteErrorBoundary>
+          <UpdateWatcher />
         </main>
       </div>
     </div>

@@ -33,7 +33,12 @@ class Boundary extends Component<Props, State> {
   }
 }
 
-/** Boundary réinitialisée à chaque navigation (la barre latérale reste utilisable après une erreur). */
+/** Filet de dernier recours autour de toute l'application (non réinitialisé à la navigation : n'entraîne aucun remontage de la mise en page). */
+export function AppErrorBoundary({ children }: Props) {
+  return <Boundary>{children}</Boundary>;
+}
+
+/** Boundary réinitialisée à chaque navigation, placée autour du contenu de page (la barre latérale reste utilisable après une erreur). */
 export function RouteErrorBoundary({ children }: Props) {
   const { pathname } = useLocation();
   return <Boundary key={pathname}>{children}</Boundary>;

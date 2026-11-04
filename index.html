@@ -4,6 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Energie Tracker</title>
+    <script>
+      // Fichier généré introuvable (ancienne page gardée par le navigateur après une mise à jour) : on recharge UNE fois au lieu de rester sur un écran blanc.
+      window.addEventListener('error', function (e) {
+        var t = e.target;
+        if (t && t.tagName === 'SCRIPT' && /\/assets\//.test(t.src || '')) {
+          try { if (sessionStorage.getItem('egrid-stale-reload')) return; sessionStorage.setItem('egrid-stale-reload', '1'); } catch (_) {}
+          location.reload();
+        }
+      }, true);
+    </script>
   </head>
   <body>
     <div id="root"></div>
