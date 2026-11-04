@@ -2,9 +2,9 @@
 // Cinq mesures distinctes : variation de stock · Closing · instrumentée Snowflake · CPH (complète / partielle) · consommation réelle certifiée (vide avant validation).
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Download, Eye } from "lucide-react";
+import { Download, Eye, RefreshCw, CalendarDays } from "lucide-react";
 import {
-  downloadConsoExport, getConsommations, getConsommationsPeriodes,
+  downloadConsoExport, getConsoEvolution, getConsommations, getConsommationsPeriodes,
   type ConsoFilters, type ConsoFraicheur, type ConsoRow, type ConsoStatutBilan, type ConsoTargetStatut,
 } from "@/services/fuelTracking";
 import { Modal, Skeleton } from "../ui";
@@ -12,6 +12,7 @@ import { FT, type Tone } from "../theme";
 import { HelpTip } from "./cphBadges";
 import { CoverageKpis } from "./cphDiagnostics";
 import { BalanceDetailModal } from "./StockPeriodBalance";
+import { EvolutionChart, KpiCards, SectionTitle, StatusDonut, type OverviewCard } from "./ConsoOverview";
 import { DataHealthPanel } from "./DataHealthPanel";
 import { SiteDetailModal } from "./ControleCphSheet";
 
@@ -194,12 +195,14 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<{ row: ConsoRow; tab: "hub" | "stock" | "cph" } | null>(null);
   const [more, setMore] = useState(false);
+  const [full, setFull] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   const params: ConsoFilters = { ...f, site: site || undefined, date_debut: debut || undefined, date_fin: fin || undefined, page, page_size: 50 };
   const periods = useQuery({ queryKey: ["conso-periods"], queryFn: getConsommationsPeriodes, staleTime: 60_000 });
   const q = useQuery({ queryKey: ["consommations", params], queryFn: () => getConsommations(params), placeholderData: keepPreviousData });
+  const evo = useQuery({ queryKey: ["conso-evolution"], queryFn: getConsoEvolution, staleTime: 60_000 });
   const d = q.data;
   const per = d?.periode ?? null;
   const A = d?.aide ?? {};
@@ -248,25 +251,35 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
 
   return (
     <section aria-label="Suivis Consommations" style={{ display: "grid", gap: 14 }}>
+      <SectionTitle title="Suivis Consommations" subtitle="Analyse et suivi de la consommation de carburant par période et par site"
+        right={per && (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 12, border: FT.borderCrisp, background: FT.card, boxShadow: FT.shadow, fontWeight: 800, fontSize: 13 }}>
+            <CalendarDays size={16} aria-hidden /> {new Date(per.debut).toLocaleDateString("fr-FR")} → {new Date(per.fin).toLocaleDateString("fr-FR")}
+          </div>
+        )} />
       <div style={{ border: FT.borderCrisp, background: FT.card, borderRadius: FT.radius, boxShadow: FT.shadow, padding: "12px 14px", display: "grid", gap: 10 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
-          <div>
-            <div style={{ fontSize: 10.5, fontWeight: 800, color: FT.textSub, textTransform: "uppercase" }}>Période exacte (commune à toutes les mesures)</div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: FT.text, ...mono }}>{per?.libelle ?? "—"}{per?.par_defaut ? <span style={{ marginLeft: 8, fontSize: 11, color: FT.textMid, fontWeight: 600 }}>(dernière période complète avec bilan)</span> : null}</div>
-          </div>
           <label style={{ display: "grid", gap: 3, fontSize: 10.5, fontWeight: 800, color: FT.textSub, textTransform: "uppercase" }}>
             Périodes avec bilan
-            <select aria-label="Périodes avec bilan" value="" onChange={(e) => { const p = periods.data?.periodes[Number(e.target.value)]; if (p) { setDebut(p.debut); setFin(p.fin); setPage(1); } }} style={{ fontSize: 12, padding: "6px 8px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, color: FT.text, fontWeight: 600 }}>
+            <select aria-label="Périodes avec bilan" value="" onChange={(e) => { const p = periods.data?.periodes[Number(e.target.value)]; if (p) { setDebut(p.debut); setFin(p.fin); setPage(1); } }} style={{ fontSize: 12, padding: "7px 8px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, color: FT.text, fontWeight: 600, minWidth: 200 }}>
               <option value="">Choisir…</option>
               {(periods.data?.periodes ?? []).map((p, i) => <option key={`${p.debut}-${p.fin}`} value={i}>{p.libelle} — {p.calculables}/{p.sites} calculables</option>)}
             </select>
           </label>
           {dateIn("Date début", debut || per?.debut || "", setDebut)}
           {dateIn("Date fin", fin || per?.fin || "", setFin)}
-          <button type="button" onClick={() => { const t = new Date(); const e = new Date(t.getFullYear(), t.getMonth(), 0); setDebut(iso(new Date(e.getFullYear(), e.getMonth(), 1))); setFin(iso(e)); setPage(1); }} style={{ fontSize: 12, fontWeight: 700, padding: "7px 10px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}>Mois précédent</button>
-          <button type="button" onClick={() => { setDebut(""); setFin(""); setPage(1); }} style={{ fontSize: 12, fontWeight: 700, padding: "7px 10px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}>Période par défaut</button>
+          <label style={{ display: "grid", gap: 3, fontSize: 10.5, fontWeight: 800, color: FT.textSub, textTransform: "uppercase" }}>
+            Site / nom
+            <input value={site} onChange={(e) => { setSite(e.target.value); setPage(1); }} placeholder="ID ou nom" style={{ fontSize: 12, padding: "7px 8px", borderRadius: 8, border: `1px solid ${FT.border}`, minWidth: 150 }} />
+          </label>
+          {sel("typologie", "Typologie site", d?.facettes.typologies)}
+          <button type="button" onClick={() => { const t = new Date(); const e = new Date(t.getFullYear(), t.getMonth(), 0); setDebut(iso(new Date(e.getFullYear(), e.getMonth(), 1))); setFin(iso(e)); setPage(1); }} style={{ fontSize: 12, fontWeight: 700, padding: "8px 10px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}>Mois précédent</button>
+          <button type="button" onClick={() => { setDebut(""); setFin(""); setPage(1); }} style={{ fontSize: 12, fontWeight: 700, padding: "8px 10px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}>Période par défaut</button>
+          <button type="button" onClick={() => { void q.refetch(); void evo.refetch(); }} disabled={q.isFetching} style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 800, padding: "9px 16px", borderRadius: 10, border: "none", background: FT.blue, color: "#fff", cursor: "pointer" }}>
+            <RefreshCw size={14} aria-hidden /> {q.isFetching ? "Actualisation…" : "Actualiser"}
+          </button>
         </div>
-        {per && <div style={{ fontSize: 11.5, color: FT.textMid }}>{per.sites_calculables.toLocaleString("fr-FR")} site(s) avec variation de stock calculable sur {per.sites_avec_bilan.toLocaleString("fr-FR")} bilans — {per.jours} jour(s).</div>}
+        {per && <div style={{ fontSize: 11.5, color: FT.textMid }}>Période exacte {per.libelle}{per.par_defaut ? " (dernière période complète avec bilan)" : ""} · {per.sites_calculables.toLocaleString("fr-FR")} site(s) avec variation de stock calculable sur {per.sites_avec_bilan.toLocaleString("fr-FR")} bilans — {per.jours} jour(s).</div>}
         <hr aria-hidden style={{ border: 0, borderTop: `1px solid ${FT.border}`, margin: "2px 0" }} />
         <div role="group" aria-label="Vues rapides" style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
           {([["Tous", {}], ["Prêts à certifier", { statut_bilan: "PRET_A_CERTIFIER" }], ["Avec réserve", { statut_bilan: "ESTIMATION_AVEC_RESERVE" }], ["Non calculables", { statut_bilan: "NON_CALCULABLE" }],
@@ -278,20 +291,13 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
             );
           })}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
-          {sel("pays", "Pays", d?.facettes.pays)}
-          {sel("zone", "Zone", d?.facettes.zones)}
-          <label style={{ display: "grid", gap: 3, fontSize: 10.5, fontWeight: 800, color: FT.textSub, textTransform: "uppercase" }}>
-            Site / nom
-            <input value={site} onChange={(e) => { setSite(e.target.value); setPage(1); }} placeholder="ID ou nom" style={{ fontSize: 12, padding: "6px 8px", borderRadius: 8, border: `1px solid ${FT.border}` }} />
-          </label>
-          {sel("typologie", "Typologie site", d?.facettes.typologies)}
-        </div>
         <button type="button" aria-expanded={more} onClick={() => setMore((m) => !m)} style={{ justifySelf: "start", fontSize: 12, fontWeight: 800, background: "none", border: "none", color: FT.blue, cursor: "pointer", padding: 0 }}>
-          {more ? "Moins de filtres ▲" : "Plus de filtres (typologie énergie, certification, sources, qualité, tri) ▼"}
+          {more ? "Moins de filtres ▲" : "Plus de filtres (pays, zone, typologie énergie, certification, sources, qualité, tri) ▼"}
         </button>
         {more && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+            {sel("pays", "Pays", d?.facettes.pays)}
+            {sel("zone", "Zone", d?.facettes.zones)}
             {sel("typologie_energie", "Typologie énergie", d?.facettes.typologies_energie)}
             {sel("statut_bilan", "Statut bilan", d?.facettes.statuts_bilan, (o) => STATUT_META[o as ConsoStatutBilan]?.label ?? o)}
             {sel("statut_certification", "Statut certification", ["certifie", "non_certifie"], (o) => (o === "certifie" ? "Certifié" : "Non certifié"))}
@@ -329,7 +335,44 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
       )}
       {q.isError && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.redL, color: FT.red, fontWeight: 700, fontSize: 13 }}>Impossible de charger les consommations (erreur serveur).</div>}
 
-      {k && (
+      {k && (() => {
+        const ps = evo.data?.periodes ?? [];
+        const i = per ? ps.findIndex((x) => x.fin === per.fin && x.debut === per.debut) : -1;
+        const trendOf = (key: "variation_l" | "closing_l"): { trend: number | null; trendNote: string } => {
+          const cur = i >= 0 ? ps[i][key] : null, prev = i > 0 ? ps[i - 1][key] : null;
+          if (cur === null || prev === null || prev === 0) return { trend: null, trendNote: "pas de période précédente comparable" };
+          return { trend: ((cur - prev) / Math.abs(prev)) * 100, trendNote: "" };
+        };
+        const cards: OverviewCard[] = [
+          { key: "var", label: "Variation de stock", help: A.variation, value: k.variation.total_l, icon: "sigma", color: "#2563EB", bg: "#E8F0FE", series: ps.map((x) => x.variation_l),
+            sub: `${nf(k.variation.sites)} sites calculables${k.variation.negatives ? ` · ${nf(k.variation.negatives)} négative(s)` : ""}`, ...trendOf("variation_l") },
+          { key: "clo", label: "Consommation Closing", help: A.closing, value: k.closing.total_l, icon: "closing", color: "#16A34A", bg: "#E6F7EC", series: ps.map((x) => x.closing_l),
+            sub: `${nf(k.closing.sites)} sites · référence de contrôle`, ...trendOf("closing_l") },
+          { key: "ins", label: "Instrumentée Snowflake", help: A.instrumentee, value: k.instrumentee.total_l, icon: "snow", color: "#EA7A0C", bg: "#FFF1E0", sub: `${nf(k.instrumentee.sites)} sites couverts · mesure capteur` },
+          { key: "cph", label: "CPH complète", help: A.cph_complete, value: k.cph_complete.total_l, icon: "cph", color: "#7C3AED", bg: "#F1EAFE",
+            sub: `${nf(k.cph_complete.sites)} sites complets · partielle ${k.cph_partielle.total_l === null ? "—" : `${nf(k.cph_partielle.total_l)} L`} (${nf(k.cph_partielle.sites)} sites)` },
+        ];
+        const b = k.bilans;
+        const donut = [
+          { label: "Prêt à certifier", n: b.prets, color: "#16A34A" }, { label: "Avec réserve", n: b.avec_reserve, color: "#EA7A0C" },
+          { label: "Variation à contrôler", n: b.variation_calculee, color: "#DC2626" }, { label: "Non calculable", n: b.non_calculables, color: "#94A3B8" },
+          { label: "Certifié", n: b.certifies, color: "#2563EB" },
+        ];
+        return (
+          <>
+            <KpiCards cards={cards} />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+              <div style={{ flex: "2 1 460px", minWidth: 0 }}><EvolutionChart evo={evo.data} loading={evo.isLoading} error={evo.isError} /></div>
+              <div style={{ flex: "1 1 340px", minWidth: 0 }}><StatusDonut items={donut} total={donut.reduce((t, x) => t + x.n, 0)} /></div>
+            </div>
+          </>
+        );
+      })()}
+
+      <details style={{ border: FT.borderCrisp, borderRadius: FT.radius, background: FT.card, padding: "9px 14px" }}>
+        <summary style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 800, color: FT.text }}>Tous les indicateurs (certifiée, target) · bilans · qualité du calcul CPH{extra ? " et couverture GE officielle" : ""}</summary>
+        <div style={{ marginTop: 10, display: "grid", gap: 12 }}>
+          {k && (
         <KpiStrip cells={[
           { tone: "green", label: "Variation de stock (L)", help: A.variation, value: k.variation.total_l === null ? "—" : `${nf(k.variation.total_l)} L`,
             sub: `${nf(k.variation.sites)} sites calculables · ${nf(k.bilans.prets)} prêts · ${nf(k.bilans.avec_reserve)} avec réserve${k.variation.negatives ? ` · ${nf(k.variation.negatives)} négative(s)` : ""}` },
@@ -341,11 +384,7 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
           { tone: "orange", label: "Target fuel période (L)", help: A.target, value: k.target.total_periode_l === null ? "—" : `${nf(k.target.total_periode_l)} L`,
             sub: `${nf(k.target.sites_avec_target)} sites avec target (${nf(k.target.couverture_pct, 0)} %) · écart variation vs target ${k.target.ecart_global_l === null ? "—" : `${signed(k.target.ecart_global_l)} L`}${k.target.ecart_global_pct === null ? "" : ` (${signed(k.target.ecart_global_pct, 1)} %)`}` },
         ]} />
-      )}
-
-      <details style={{ border: FT.borderCrisp, borderRadius: FT.radius, background: FT.card, padding: "9px 14px" }}>
-        <summary style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 800, color: FT.text }}>Indicateurs secondaires : target, bilans et qualité du calcul CPH{extra ? " et couverture GE officielle" : ""}</summary>
-        <div style={{ marginTop: 10, display: "grid", gap: 12 }}>
+          )}
           {k && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 10, fontSize: 12.5, color: FT.text }}>
               <div><b>Target</b> : moyen/site couvert {nf(k.target.target_moyen_site_l)} L · variation moyenne/site couvert {nf(k.target.variation_moyenne_site_l)} L · {nf(k.target.sites_sans_target)} site(s) sans target · {nf(k.target.a_confirmer)} à confirmer.</div>
@@ -363,6 +402,47 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
         </div>
       </details>
 
+      <section aria-label="Suivis par site" style={{ border: FT.borderCrisp, background: FT.card, borderRadius: FT.radius, boxShadow: FT.shadow, overflow: "hidden" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", gap: 8, flexWrap: "wrap" }}>
+          <h3 style={{ margin: 0, fontSize: 15 }}>{full ? "Tous les résultats — vue détaillée" : "Suivis par site"}</h3>
+          <button type="button" onClick={() => setFull((v) => !v)} style={{ fontSize: 12.5, fontWeight: 800, padding: "7px 14px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}>
+            {full ? "← Vue simplifiée" : "Voir tous les résultats →"}
+          </button>
+        </div>
+        {!full && (
+          <div style={{ overflow: "auto" }}>
+            <table aria-label="Aperçu des suivis par site" style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: "#F1F5FA", textAlign: "left", color: FT.textMid, fontSize: 12 }}>
+                  {["Site ID", "Nom du site", "Statut bilan", "Pays", "Zone", "Typologie site", "Variation (L)", "Closing (L)", "Écart vs Closing (L)", ""].map((h) => <th key={h} scope="col" style={{ padding: "10px 12px", fontWeight: 700 }}>{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {(d?.rows ?? []).slice(0, 8).map(safeRow).map((r) => (
+                  <tr key={r.site_id} style={{ borderTop: `1px solid ${FT.border}` }}>
+                    <td style={{ padding: "10px 12px", fontWeight: 800 }}>{r.site_id}</td>
+                    <td style={{ padding: "10px 12px" }}>{r.site_name ?? "—"}{r.correspondance && !r.correspondance.utilise && <span title={r.correspondance.motif ?? ""} style={{ marginLeft: 6, fontSize: 10, color: FT.orange, fontWeight: 800 }}>hors Closing</span>}</td>
+                    <td style={{ padding: "10px 12px" }}><span style={{ fontWeight: 700, color: TONE_COLORS[STATUT_META[r.stock.statut].tone].fg }}>{STATUT_META[r.stock.statut].label}</span></td>
+                    <td style={{ padding: "10px 12px" }}>{r.country ?? "—"}</td>
+                    <td style={{ padding: "10px 12px" }}>{r.zone ?? "—"}</td>
+                    <td style={{ padding: "10px 12px" }}>{r.typologie ?? "—"}</td>
+                    <td style={{ padding: "10px 12px", ...mono }}>{nf(r.stock.variation_l)}</td>
+                    <td style={{ padding: "10px 12px", ...mono }}>{nf(r.closing.conso_l)}</td>
+                    <td style={{ padding: "10px 12px", ...mono }}>{signed(r.closing.ecart_l)}</td>
+                    <td style={{ padding: "6px 12px" }}>
+                      <button type="button" onClick={() => setDetail({ row: r, tab: "hub" })} aria-label={`Voir le détail du site ${r.site_id}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 800, padding: "5px 9px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}><Eye size={12} aria-hidden /> Détail</button>
+                    </td>
+                  </tr>
+                ))}
+                {d && d.rows.length === 0 && <tr><td colSpan={10} style={{ padding: 24, color: FT.textMid }}>Aucun site ne correspond aux filtres pour cette période.</td></tr>}
+              </tbody>
+            </table>
+            <div style={{ padding: "8px 16px", fontSize: 12, color: FT.textMid }}>{Math.min(8, d?.rows.length ?? 0)} premiers sites sur {nf(d?.total ?? 0)} — « Voir tous les résultats » pour le tableau complet (cinq mesures, écarts, sources, pagination).</div>
+          </div>
+        )}
+      </section>
+
+      {full && (
       <div style={{ border: FT.borderCrisp, background: FT.card, borderRadius: FT.radius, boxShadow: FT.shadow, overflow: "hidden" }}>
         <div style={{ overflow: "auto", maxHeight: "70vh" }} tabIndex={0} aria-label="Tableau des consommations par site">
           <table style={{ borderCollapse: "separate", borderSpacing: 0, width: "max-content", minWidth: "100%" }}>
@@ -415,6 +495,7 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
           </span>
         </div>
       </div>
+      )}
 
       {detail && per && detail.tab === "hub" && <DetailHub row={detail.row} periode={per.libelle} A={A} onClose={() => setDetail(null)} onPick={(tab) => setDetail({ row: detail.row, tab })} />}
       {detail && per && detail.tab === "stock" && detail.row.stock.bilan_id !== null && (

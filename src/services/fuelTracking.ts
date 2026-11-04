@@ -2185,3 +2185,12 @@ export async function getDataHealth() {
   const { data } = await api.get<DataHealth>(`${BASE}/consommations/sante/`);
   return data;
 }
+
+export type ConsoEvolution = {
+  periodes: Array<{ debut: string; fin: string; jours: number; sites: number; variation_l: number | null; sites_variation: number; closing_l: number | null; sites_closing: number }>;
+};
+
+export async function getConsoEvolution() {
+  const { data } = await api.get<ConsoEvolution>(`${BASE}/consommations/evolution/`);
+  return data;
+}
