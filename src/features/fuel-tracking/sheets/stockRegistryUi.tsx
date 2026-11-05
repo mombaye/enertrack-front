@@ -13,6 +13,7 @@ export const SOURCE_LABEL: Record<string, string> = {
   CLOSING: "Closing mensuel",
   HISTORICAL_REFUELING: "Historique refueling",
   TANK_MODELS: "Modèles de cuves (calculateur)",
+  TERRAIN_MENSUEL: "Remontées terrain mensuelles",
   MANUAL: "Saisie manuelle",
 };
 
@@ -24,6 +25,7 @@ export const IMPORT_SOURCE_LABEL: Record<string, string> = {
   HISTORICAL_REFUELING: "Historique refueling — source historique",
   TANK_MODELS: "Modèles de cuves — calculateur et conversion cm vers litres",
   TARGET_FUEL: "Target fuel mensuel par site — onglet « NR analyse variation conso fuel » du Closing",
+  TERRAIN_MENSUEL: "Remontées terrain mensuelles — fichier complémentaire (jamais prioritaire, mouvements non retenus tant qu'ils ne sont pas validés)",
   ENOC: "ENOC (lu par eGrid)",
 };
 

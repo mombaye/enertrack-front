@@ -294,7 +294,7 @@ export function FileAnalysisCard() {
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: "12px 0" }}>
         <select aria-label="Type de fichier" value={source} onChange={(e) => setSource(e.target.value)} style={inputStyle}>
           <option value="">Type : détection automatique</option>
-          {["CLOSING", "LOLIFORCE", "SCSS", "HISTORICAL_REFUELING", "TANK_MODELS"].map((s) => <option key={s} value={s}>{IMPORT_SOURCE_LABEL[s] ?? s}</option>)}
+          {["CLOSING", "LOLIFORCE", "SCSS", "TERRAIN_MENSUEL", "HISTORICAL_REFUELING", "TANK_MODELS"].map((s) => <option key={s} value={s}>{IMPORT_SOURCE_LABEL[s] ?? s}</option>)}
         </select>
         <input ref={ref} type="file" accept=".xlsx,.xlsm,.xlsb" aria-label="Fichier à analyser" onChange={(e) => onFile(e.target.files?.[0])} disabled={busy} />
         {busy && <span role="status" style={{ fontSize: 12 }}>Analyse en cours…</span>}

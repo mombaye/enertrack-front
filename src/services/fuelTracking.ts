@@ -1227,7 +1227,7 @@ export async function createGuardScope(body: { site_id: string; provider: "LOLIF
   return data;
 }
 
-export type ImportSourceType = "ENOC" | "LOLIFORCE" | "SCSS" | "CLOSING" | "HISTORICAL_REFUELING" | "TANK_MODELS" | "TARGET_FUEL";
+export type ImportSourceType = "ENOC" | "LOLIFORCE" | "SCSS" | "CLOSING" | "HISTORICAL_REFUELING" | "TANK_MODELS" | "TARGET_FUEL" | "TERRAIN_MENSUEL";
 export type ImportBatchStatus = "RECEIVED" | "PROCESSING" | "VALIDATION_REQUIRED" | "ACCEPTED" | "REJECTED" | "FAILED";
 
 export type StockImportBatch = {
