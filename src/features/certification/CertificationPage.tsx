@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ShieldCheck, Wifi, WifiOff, Upload, FileSpreadsheet,
-  X, ChevronRight, Loader2, CheckCircle2,
+  X, ChevronLeft, ChevronRight, Loader2, CheckCircle2,
   AlertTriangle, RefreshCw, BarChart3, Filter,
   Zap, Check, Database, Calendar, FileDown,
   Cpu, Receipt, Activity, TrendingUp,
@@ -34,6 +34,9 @@ async function importBillingFile(file: File, echeance: string) {
 }
 
 // ─── Config statuts ───────────────────────────────────────────────────────────
+// Taille de page du tableau des résultats (pagination serveur).
+const RESULTS_PAGE_SIZE = 50;
+
 const STATUS_CFG: Record<string, { label: string; dot: string; pill: string }> = {
   PENDING_CERTIFICATION: { label: "En attente",    dot: "bg-slate-300",   pill: "bg-slate-50   text-slate-500  border-slate-200" },
   CERTIFIED_FMS:         { label: "Certifié FMS",  dot: "bg-emerald-500", pill: "bg-emerald-50 text-emerald-700 border-emerald-200" },
@@ -706,6 +709,7 @@ export default function CertificationPage() {
   const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter]   = useState("");
   const [onlyAlerts, setOnlyAlerts]       = useState(false); // ✅ v4 filtre alerte
+  const [resultsPage, setResultsPage]     = useState(1);
   const [isExporting, setIsExporting]     = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
 
@@ -785,16 +789,23 @@ export default function CertificationPage() {
     }
   }, [pollData]);
 
-  const { data: resultsRaw, isLoading: loadingResults } = useQuery({
-    queryKey: ["cert-results", selectedBatchId, statusFilter, onlyAlerts],
+  // Pagination serveur : l'API renvoie les résultats par pages ; sans elle, seules les 20 premières factures s'affichaient.
+  useEffect(() => { setResultsPage(1); }, [selectedBatchId, statusFilter, onlyAlerts]);
+  const { data: resultsRaw, isLoading: loadingResults, isError: resultsError } = useQuery({
+    queryKey: ["cert-results", selectedBatchId, statusFilter, onlyAlerts, resultsPage],
     queryFn: () => listCertResults({
       cert_batch: selectedBatchId!,
       status: (statusFilter || undefined) as CertResultStatus,
       flag_mesure_alert: onlyAlerts ? true : undefined, // ✅ v4
+      page: resultsPage,
+      page_size: RESULTS_PAGE_SIZE,
     }),
     enabled: selectedBatchId !== null,
+    placeholderData: (prev) => prev,
   });
   const results: CertificationResult[] = Array.isArray(resultsRaw) ? resultsRaw : (resultsRaw as any)?.results ?? [];
+  const resultsTotal: number = Array.isArray(resultsRaw) ? resultsRaw.length : (resultsRaw as any)?.count ?? results.length;
+  const resultsPages = Math.max(1, Math.ceil(resultsTotal / RESULTS_PAGE_SIZE));
   const selectedBatch = certBatches.find(b => b.id === selectedBatchId);
 
   const handleExport = async () => {
@@ -1003,7 +1014,7 @@ export default function CertificationPage() {
                 </button>
 
                 <div className="ml-auto flex items-center gap-2">
-                  <span className="text-[11px] text-slate-400 tabular-nums">{results.length} résultats</span>
+                  <span className="text-[11px] text-slate-400 tabular-nums">{resultsTotal.toLocaleString("fr-FR")} résultat{resultsTotal > 1 ? "s" : ""}</span>
                   {selectedBatch?.status === "DONE" && (
                     <button onClick={handleExport} disabled={isExporting}
                       className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-[11px] font-bold transition-all">
@@ -1018,6 +1029,11 @@ export default function CertificationPage() {
                 {loadingResults ? (
                   <div className="flex items-center justify-center py-16 text-slate-400 gap-2 text-[13px]">
                     <Loader2 className="w-4 h-4 animate-spin" /> Chargement…
+                  </div>
+                ) : resultsError ? (
+                  <div role="alert" className="flex flex-col items-center justify-center py-16 text-red-600">
+                    <AlertTriangle className="w-6 h-6 mb-2" />
+                    <span className="text-[13px]">Impossible de charger les résultats</span>
                   </div>
                 ) : results.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 text-slate-400">
@@ -1049,6 +1065,22 @@ export default function CertificationPage() {
                   </table>
                 )}
               </div>
+              {resultsPages > 1 && (
+                <div className="px-4 py-2.5 border-t border-slate-100 flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                  <span className="tabular-nums">
+                    {((resultsPage - 1) * RESULTS_PAGE_SIZE + 1).toLocaleString("fr-FR")}–{Math.min(resultsPage * RESULTS_PAGE_SIZE, resultsTotal).toLocaleString("fr-FR")} sur {resultsTotal.toLocaleString("fr-FR")}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => setResultsPage(p => Math.max(1, p - 1))} disabled={resultsPage <= 1}
+                      aria-label="Page précédente"
+                      className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-40 transition"><ChevronLeft className="w-3.5 h-3.5" /></button>
+                    <span className="px-2 tabular-nums font-semibold text-slate-700">Page {resultsPage} / {resultsPages}</span>
+                    <button onClick={() => setResultsPage(p => Math.min(resultsPages, p + 1))} disabled={resultsPage >= resultsPages}
+                      aria-label="Page suivante"
+                      className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-40 transition"><ChevronRight className="w-3.5 h-3.5" /></button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
