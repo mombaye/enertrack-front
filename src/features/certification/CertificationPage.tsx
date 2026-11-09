@@ -712,7 +712,8 @@ export default function CertificationPage() {
   const [onlyAlerts, setOnlyAlerts]       = useState(false); // ✅ v4 filtre alerte
   const [resultsPage, setResultsPage]     = useState(1);
   const [summaryBatchId, setSummaryBatchId] = useState<number | null>(null);
-  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  // Campagne à supprimer (fenêtre de confirmation ouverte tant que non null).
+  const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
   const [isExporting, setIsExporting]     = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
 
@@ -812,6 +813,8 @@ export default function CertificationPage() {
   const resultsTotal: number = Array.isArray(resultsRaw) ? resultsRaw.length : (resultsRaw as any)?.count ?? results.length;
   const resultsPages = Math.max(1, Math.ceil(resultsTotal / RESULTS_PAGE_SIZE));
   const selectedBatch = certBatches.find(b => b.id === selectedBatchId);
+  const deleteTarget = deleteTargetId === null ? undefined : certBatches.find(b => b.id === deleteTargetId);
+  const batchLabel = (b: { echeance: string; import_batch: number }) => (b.echeance !== "N/A" ? b.echeance : `#${b.import_batch}`);
 
   const handleExport = async () => {
     if (!selectedBatchId || !selectedBatch) return;
@@ -865,7 +868,7 @@ export default function CertificationPage() {
     mutationFn: (id: number) => deleteCertBatch(id),
     onSuccess: (_d, id) => {
       toast.success("Campagne supprimée — les factures importées sont conservées");
-      setConfirmDeleteOpen(false);
+      setDeleteTargetId(null);
       if (selectedBatchId === id) setSelectedBatchId(null);
       qc.invalidateQueries({ queryKey: ["cert-batches"] });
       qc.removeQueries({ queryKey: ["cert-results", id] });
@@ -949,17 +952,24 @@ export default function CertificationPage() {
                 <span className="text-[11px] text-slate-400">Aucune campagne</span>
               ) : (
                 <div className="flex gap-1.5 flex-wrap">
-                  {certBatches.map(b => (
-                    <button key={b.id} onClick={() => setSelectedBatchId(b.id)}
-                      className={`px-2.5 py-1 rounded text-[11px] font-semibold border transition-all ${
-                        selectedBatchId === b.id
-                          ? "bg-slate-950 text-white border-slate-950"
-                          : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                  {certBatches.map(b => {
+                    const active = selectedBatchId === b.id;
+                    return (
+                      <div key={b.id} className={`inline-flex items-stretch rounded border text-[11px] font-semibold transition-all ${
+                        active ? "bg-slate-950 text-white border-slate-950" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
                       }`}>
-                      {b.echeance !== "N/A" ? b.echeance : `#${b.import_batch}`}
-                      <span className={`ml-1 text-[10px] ${selectedBatchId === b.id ? "text-slate-400" : "text-slate-400"}`}>({b.total})</span>
-                    </button>
-                  ))}
+                        <button onClick={() => setSelectedBatchId(b.id)} aria-pressed={active} className="pl-2.5 pr-1.5 py-1">
+                          {batchLabel(b)}
+                          <span className="ml-1 text-[10px] text-slate-400">({b.total})</span>
+                        </button>
+                        <button onClick={() => setDeleteTargetId(b.id)}
+                          aria-label={`Supprimer la campagne ${batchLabel(b)}`} title="Supprimer cette campagne"
+                          className={`px-1.5 border-l ${active ? "border-slate-700 text-slate-400 hover:text-red-400" : "border-slate-200 text-slate-400 hover:text-red-600 hover:bg-red-50"} rounded-r transition`}>
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -996,7 +1006,7 @@ export default function CertificationPage() {
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition">
                         <ListChecks className="w-3 h-3" /> Résumé
                       </button>
-                      <button onClick={() => setConfirmDeleteOpen(true)}
+                      <button onClick={() => setDeleteTargetId(selectedBatch.id)}
                         aria-label={`Supprimer la campagne ${selectedBatch.echeance}`}
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-red-200 text-[11px] font-semibold text-red-600 hover:bg-red-50 transition">
                         <Trash2 className="w-3 h-3" /> Supprimer
@@ -1123,20 +1133,20 @@ export default function CertificationPage() {
         onShowStatus={(st) => { if (summaryBatchId) setSelectedBatchId(summaryBatchId); setOnlyAlerts(false); setStatusFilter(st); }}
       />
 
-      <Dialog open={confirmDeleteOpen} onOpenChange={(o) => { if (!o && !deleteMut.isPending) setConfirmDeleteOpen(false); }}>
+      <Dialog open={deleteTarget !== undefined} onOpenChange={(o) => { if (!o && !deleteMut.isPending) setDeleteTargetId(null); }}>
         <DialogContent className="max-w-md">
-          <DialogTitle className="text-[15px] font-bold text-slate-900">Supprimer la campagne {selectedBatch?.echeance} ?</DialogTitle>
+          <DialogTitle className="text-[15px] font-bold text-slate-900">Supprimer la campagne {deleteTarget ? batchLabel(deleteTarget) : ""} ?</DialogTitle>
           <DialogDescription className="text-[13px] text-slate-600">
-            Les {selectedBatch ? selectedBatch.total.toLocaleString("fr-FR") : ""} résultats de certification seront supprimés définitivement.
+            Les {deleteTarget ? deleteTarget.total.toLocaleString("fr-FR") : ""} résultats de certification seront supprimés définitivement.
             Les factures importées sont conservées : vous pourrez relancer la certification.
           </DialogDescription>
-          {selectedBatch?.status === "RUNNING" && (
+          {deleteTarget?.status === "RUNNING" && (
             <p className="text-[12px] text-amber-700">Calcul en cours : la suppression ne sera acceptée qu'une fois le calcul terminé (ou bloqué depuis plus de 2 h).</p>
           )}
           <div className="flex justify-end gap-2 mt-2">
-            <button onClick={() => setConfirmDeleteOpen(false)} disabled={deleteMut.isPending}
+            <button onClick={() => setDeleteTargetId(null)} disabled={deleteMut.isPending}
               className="px-3 py-1.5 rounded-lg border border-slate-200 text-[12px] font-semibold text-slate-600 hover:bg-slate-50">Annuler</button>
-            <button onClick={() => selectedBatch && deleteMut.mutate(selectedBatch.id)} disabled={deleteMut.isPending || !selectedBatch}
+            <button onClick={() => deleteTarget && deleteMut.mutate(deleteTarget.id)} disabled={deleteMut.isPending || !deleteTarget}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-[12px] font-bold">
               {deleteMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />} Supprimer
             </button>
