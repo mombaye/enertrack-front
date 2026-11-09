@@ -8,19 +8,20 @@ import {
   X, ChevronLeft, ChevronRight, Loader2, CheckCircle2,
   AlertTriangle, RefreshCw, BarChart3, Filter,
   Zap, Check, Database, Calendar, FileDown,
-  Cpu, Receipt, Activity, TrendingUp,
+  Cpu, Receipt, Activity, TrendingUp, Trash2, ListChecks,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import {
   listCertBatches, launchCertification, pollBatchStatus,
-  listCertResults, checkEfmsHealth, pollBillingImportStatus,
+  listCertResults, checkEfmsHealth, pollBillingImportStatus, deleteCertBatch,
 } from "@/services/certification";
+import { CertSummaryDialog } from "./CertSummaryDialog";
 import {
   CertificationBatch, CertResultStatus, CertificationResult,
 } from "@/services/certification";
 import { api } from "@/services/api";
 import { toast } from "react-toastify";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 
 // ─── Import billing ──────────────────────────────────────────────────────────
 async function importBillingFile(file: File, echeance: string) {
@@ -710,6 +711,8 @@ export default function CertificationPage() {
   const [statusFilter, setStatusFilter]   = useState("");
   const [onlyAlerts, setOnlyAlerts]       = useState(false); // ✅ v4 filtre alerte
   const [resultsPage, setResultsPage]     = useState(1);
+  const [summaryBatchId, setSummaryBatchId] = useState<number | null>(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [isExporting, setIsExporting]     = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
 
@@ -782,7 +785,9 @@ export default function CertificationPage() {
       if (pollData.status === "DONE") {
         toast.success("✓ Certification terminée");
         setSelectedBatchId(pollData.cert_batch_id);
-        setTimeout(() => setShowImportModal(false), 600);
+        qc.invalidateQueries({ queryKey: ["cert-summary", pollData.cert_batch_id] });
+        // Fin du calcul : on remplace la fenêtre d'import par le résumé de la campagne.
+        setTimeout(() => { setShowImportModal(false); setSummaryBatchId(pollData.cert_batch_id); }, 600);
       } else {
         toast.error("Certification échouée");
       }
@@ -854,6 +859,19 @@ export default function CertificationPage() {
       toast.info("Fichier reçu — import en cours…");
     },
     onError: (err: any) => toast.error(err?.response?.data?.detail ?? "Erreur import"),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => deleteCertBatch(id),
+    onSuccess: (_d, id) => {
+      toast.success("Campagne supprimée — les factures importées sont conservées");
+      setConfirmDeleteOpen(false);
+      if (selectedBatchId === id) setSelectedBatchId(null);
+      qc.invalidateQueries({ queryKey: ["cert-batches"] });
+      qc.removeQueries({ queryKey: ["cert-results", id] });
+      qc.removeQueries({ queryKey: ["cert-summary", id] });
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.detail ?? "Suppression impossible"),
   });
 
   const launchMut = useMutation({
@@ -972,11 +990,23 @@ export default function CertificationPage() {
                         {selectedBatch.finished_at && <> · fin {fmtDT(selectedBatch.finished_at)}</>}
                       </div>
                     </div>
-                    <span className={`text-[11px] px-2.5 py-1 rounded font-bold border ${
-                      selectedBatch.status === "DONE"    ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
-                      selectedBatch.status === "RUNNING" ? "bg-sky-50 text-sky-700 border-sky-200" :
-                      "bg-slate-50 text-slate-500 border-slate-200"
-                    }`}>{selectedBatch.status}</span>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => setSummaryBatchId(selectedBatch.id)} disabled={selectedBatch.status !== "DONE"}
+                        title={selectedBatch.status !== "DONE" ? "Disponible à la fin du calcul" : undefined}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition">
+                        <ListChecks className="w-3 h-3" /> Résumé
+                      </button>
+                      <button onClick={() => setConfirmDeleteOpen(true)}
+                        aria-label={`Supprimer la campagne ${selectedBatch.echeance}`}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-red-200 text-[11px] font-semibold text-red-600 hover:bg-red-50 transition">
+                        <Trash2 className="w-3 h-3" /> Supprimer
+                      </button>
+                      <span className={`text-[11px] px-2.5 py-1 rounded font-bold border ${
+                        selectedBatch.status === "DONE"    ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                        selectedBatch.status === "RUNNING" ? "bg-sky-50 text-sky-700 border-sky-200" :
+                        "bg-slate-50 text-slate-500 border-slate-200"
+                      }`}>{selectedBatch.status}</span>
+                    </div>
                   </div>
                   <CertProgress
                     status={selectedBatch.status}
@@ -1087,6 +1117,33 @@ export default function CertificationPage() {
       </main>
 
       {/* ── Modal import + certification ── */}
+      <CertSummaryDialog
+        batchId={summaryBatchId}
+        onClose={() => setSummaryBatchId(null)}
+        onShowStatus={(st) => { if (summaryBatchId) setSelectedBatchId(summaryBatchId); setOnlyAlerts(false); setStatusFilter(st); }}
+      />
+
+      <Dialog open={confirmDeleteOpen} onOpenChange={(o) => { if (!o && !deleteMut.isPending) setConfirmDeleteOpen(false); }}>
+        <DialogContent className="max-w-md">
+          <DialogTitle className="text-[15px] font-bold text-slate-900">Supprimer la campagne {selectedBatch?.echeance} ?</DialogTitle>
+          <DialogDescription className="text-[13px] text-slate-600">
+            Les {selectedBatch ? selectedBatch.total.toLocaleString("fr-FR") : ""} résultats de certification seront supprimés définitivement.
+            Les factures importées sont conservées : vous pourrez relancer la certification.
+          </DialogDescription>
+          {selectedBatch?.status === "RUNNING" && (
+            <p className="text-[12px] text-amber-700">Calcul en cours : la suppression ne sera acceptée qu'une fois le calcul terminé (ou bloqué depuis plus de 2 h).</p>
+          )}
+          <div className="flex justify-end gap-2 mt-2">
+            <button onClick={() => setConfirmDeleteOpen(false)} disabled={deleteMut.isPending}
+              className="px-3 py-1.5 rounded-lg border border-slate-200 text-[12px] font-semibold text-slate-600 hover:bg-slate-50">Annuler</button>
+            <button onClick={() => selectedBatch && deleteMut.mutate(selectedBatch.id)} disabled={deleteMut.isPending || !selectedBatch}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-[12px] font-bold">
+              {deleteMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />} Supprimer
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showImportModal} onOpenChange={(next) => { if (!next) setShowImportModal(false); }}>
         <DialogContent
           className="p-0 gap-0 border-0 max-w-2xl"

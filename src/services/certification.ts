@@ -219,3 +219,48 @@ export async function pollBillingImportStatus(batchId: number) {
   );
   return data;
 }
+// ─── Suppression et résumé d'une campagne ────────────────────────────────────
+/** Supprime la campagne et ses résultats (les factures importées sont conservées). 409 si calcul en cours. */
+export async function deleteCertBatch(id: number) {
+  await api.delete(`${BASE}/batches/${id}/`);
+}
+
+export type CertSummaryGroup = { count: number; pct: number | null; montant_ttc: number };
+
+export type CertSummaryRow = {
+  result_id: number;
+  numero_facture: string;
+  numero_compte_contrat: string;
+  site_id: string | null;
+  site_name: string | null;
+  status: CertResultStatus;
+  montant_ttc: number | null;
+  variation_montant_pct: number | null;
+  ratio_fms_periode: number | null;
+  flag_mesure_alert: boolean;
+};
+
+export type CertBatchSummary = {
+  cert_batch_id: number;
+  echeance: string;
+  status: CertBatchStatus;
+  launched_at: string;
+  finished_at: string | null;
+  duration_s: number | null;
+  total: number;
+  montant_ttc_total: number;
+  factures_sans_montant: number;
+  groups: Record<"certified" | "to_review" | "unknown_contract" | "fms_unavailable" | "pending", CertSummaryGroup>;
+  by_status: Record<CertResultStatus, { count: number; montant_ttc: number }>;
+  certified_by_rule: Partial<Record<CertifiedByRule, number>>;
+  coverage: { sites_rattaches: number; factures_avec_site: number; factures_avec_fms: number; factures_avec_acm: number };
+  montant_check: { incoherent: number; non_verifie: number };
+  top_to_review: CertSummaryRow[];
+  unknown_contracts_sample: string[];
+  unknown_contracts_total: number;
+};
+
+export async function getCertBatchSummary(id: number) {
+  const { data } = await api.get<CertBatchSummary>(`${BASE}/batches/${id}/summary/`);
+  return data;
+}
