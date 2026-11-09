@@ -8,12 +8,12 @@ import {
   X, ChevronLeft, ChevronRight, Loader2, CheckCircle2,
   AlertTriangle, RefreshCw, BarChart3, Filter,
   Zap, Check, Database, Calendar, FileDown,
-  Cpu, Receipt, Activity, TrendingUp, Trash2, ListChecks,
+  Cpu, Receipt, Activity, TrendingUp, Trash2, ListChecks, RotateCcw,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import {
   listCertBatches, launchCertification, pollBatchStatus,
-  listCertResults, checkEfmsHealth, pollBillingImportStatus, deleteCertBatch,
+  listCertResults, checkEfmsHealth, pollBillingImportStatus, deleteCertBatch, resumeCertBatch,
 } from "@/services/certification";
 import { CertSummaryDialog } from "./CertSummaryDialog";
 import {
@@ -234,6 +234,18 @@ type Counters = {
   needs_review: number; unknown_contract: number; fms_unavailable: number;
   mesure_alert?: number; // ✅ v4
 };
+
+// Campagne à reprendre : arrêtée, bloquée depuis plus de 2 h (même délai que le serveur), ou terminée avec des factures en attente.
+const STUCK_AFTER_MS = 2 * 3600 * 1000;
+function pendingCount(b: CertificationBatch) {
+  const done = b.certified_fms + b.certified_senelec + b.needs_review + b.unknown_contract + b.fms_unavailable + (b.mesure_alert ?? 0);
+  return Math.max(0, b.total - done);
+}
+function canResume(b: CertificationBatch) {
+  if (b.status === "FAILED") return true;
+  if (b.status === "RUNNING" || b.status === "PENDING") return Date.now() - new Date(b.launched_at).getTime() > STUCK_AFTER_MS;
+  return pendingCount(b) > 0;
+}
 
 function CertProgress({ counters, status }: { counters: Counters; status: string }) {
   const t = Math.max(counters.total, 1);
@@ -722,6 +734,12 @@ export default function CertificationPage() {
   });
   const { data: batchesRaw, refetch: refetchBatches } = useQuery({
     queryKey: ["cert-batches"], queryFn: () => listCertBatches(),
+    // Une campagne en cours se met à jour seule (progression et fin), sans rouvrir la fenêtre d'import.
+    refetchInterval: (q) => {
+      const d: any = q.state.data;
+      const list: CertificationBatch[] = Array.isArray(d) ? d : d?.results ?? [];
+      return list.some(b => b.status === "RUNNING" || b.status === "PENDING") ? 5000 : false;
+    },
   });
   const certBatches: CertificationBatch[] = Array.isArray(batchesRaw) ? batchesRaw : (batchesRaw as any)?.results ?? [];
 
@@ -864,6 +882,18 @@ export default function CertificationPage() {
     onError: (err: any) => toast.error(err?.response?.data?.detail ?? "Erreur import"),
   });
 
+  const resumeMut = useMutation({
+    mutationFn: (id: number) => resumeCertBatch(id),
+    onSuccess: (d) => {
+      toast.success(d.pending > 0
+        ? `Reprise lancée — ${d.pending.toLocaleString("fr-FR")} facture(s) restant à calculer`
+        : "Aucune facture en attente — la campagne est marquée terminée");
+      setPollingBatchId(d.cert_batch_id);
+      qc.invalidateQueries({ queryKey: ["cert-batches"] });
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.detail ?? "Reprise impossible"),
+  });
+
   const deleteMut = useMutation({
     mutationFn: (id: number) => deleteCertBatch(id),
     onSuccess: (_d, id) => {
@@ -1000,7 +1030,14 @@ export default function CertificationPage() {
                         {selectedBatch.finished_at && <> · fin {fmtDT(selectedBatch.finished_at)}</>}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {canResume(selectedBatch) && (
+                        <button onClick={() => resumeMut.mutate(selectedBatch.id)} disabled={resumeMut.isPending}
+                          title="Calcule uniquement les factures encore en attente — rien n'est supprimé"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-sky-200 bg-sky-50 text-[11px] font-semibold text-sky-700 hover:bg-sky-100 disabled:opacity-50 transition">
+                          {resumeMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />} Reprendre le calcul
+                        </button>
+                      )}
                       <button onClick={() => setSummaryBatchId(selectedBatch.id)} disabled={selectedBatch.status !== "DONE"}
                         title={selectedBatch.status !== "DONE" ? "Disponible à la fin du calcul" : undefined}
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition">

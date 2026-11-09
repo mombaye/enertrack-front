@@ -225,6 +225,12 @@ export async function deleteCertBatch(id: number) {
   await api.delete(`${BASE}/batches/${id}/`);
 }
 
+/** Reprend une campagne arrêtée ou bloquée : seules les factures « En attente » sont calculées, rien n'est supprimé. 409 si calcul en cours. */
+export async function resumeCertBatch(id: number) {
+  const { data } = await api.post<{ cert_batch_id: number; pending: number; celery_task_id: string }>(`${BASE}/batches/${id}/resume/`);
+  return data;
+}
+
 export type CertSummaryGroup = { count: number; pct: number | null; montant_ttc: number };
 
 export type CertSummaryRow = {
