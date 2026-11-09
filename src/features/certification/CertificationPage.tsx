@@ -816,6 +816,15 @@ export default function CertificationPage() {
     finally { setIsExporting(false); }
   };
 
+  // Import resté « en file d'attente » trop longtemps : le service de traitement est saturé ou arrêté — on le dit au lieu d'attendre sans fin.
+  const [queuedTooLong, setQueuedTooLong] = useState(false);
+  useEffect(() => {
+    setQueuedTooLong(false);
+    if (!importResult || importResult.taskStatus !== "PENDING") return;
+    const t = setTimeout(() => setQueuedTooLong(true), 90_000);
+    return () => clearTimeout(t);
+  }, [importResult?.batchId, importResult?.taskStatus]);
+
   const uploadMut = useMutation({
     mutationFn: async (file: File) => {
       setUploadProgress(0);
@@ -1116,6 +1125,11 @@ export default function CertificationPage() {
                          importResult.taskStatus === "FAILURE" ? "Import échoué" :
                          `${importResult.taskMessage ?? "En cours…"} (${importResult.taskProgress}%)`}
                       </div>
+                      {queuedTooLong && importResult.taskStatus === "PENDING" && (
+                        <div role="alert" className="text-[11px] text-amber-700 mt-1">
+                          Toujours en attente après 90 s : le service de traitement des imports semble occupé ou arrêté. Le fichier est bien reçu (lot #{importResult.batchId}) et sera traité dès que le service reprend ; contactez l'administrateur si cela dure.
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
