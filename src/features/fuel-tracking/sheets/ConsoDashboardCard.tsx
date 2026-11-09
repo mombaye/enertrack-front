@@ -31,6 +31,10 @@ export function ConsoDashboardCard({ onOpen }: { onOpen?: () => void }) {
     ["Bilans non calculables", N(k.bilans.non_calculables), `${N(k.bilans.variation_calculee)} variation(s) à contrôler en plus`, undefined],
     ["Bilans certifiés", N(k.bilans.certifies), "validés par le Fuel Manager", undefined],
     ["Taux de couverture target", `${N(t.couverture_pct)} %`, `${N(t.a_confirmer)} target(s) historique(s) à confirmer`, undefined],
+    // KPI 15 — Couverture CPH : % de sites GE avec CPH calculable sur la période
+    ["Couverture CPH (%)", k.couverture_cph_pct === null ? "—" : `${N(k.couverture_cph_pct)} %`,
+      `${N(k.cph_complete.sites)} sites CPH complète + ${N(k.cph_partielle.sites)} partielle / ${N(k.sites)} sites`,
+      "Part des sites GE pour lesquels une consommation théorique CPH a pu être calculée (complète ou partielle) sur la période sélectionnée. Un site sans courbe abaque ou sans runtime donne 0 % de couverture CPH même si le GE a tourné."],
   ] : [];
   return (
     <section aria-label="Synthèse des consommations" style={{ border: FT.borderCrisp, background: FT.card, borderRadius: FT.radius, boxShadow: FT.shadow, padding: "14px 16px", display: "grid", gap: 10 }}>

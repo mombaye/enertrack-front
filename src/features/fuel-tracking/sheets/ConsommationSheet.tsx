@@ -324,14 +324,33 @@ export function ConsommationSheet({
       )}
 
       <HorsReferentielBanner count={data?.sites_hors_referentiel} />
-      <ConsoComparaisonSection
-        extra={data?.kpis ? (
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: FT.textSub, textTransform: "uppercase", marginBottom: 6 }}>Couverture GE officielle du mois (fichier Stan)</div>
+      {/* Indicateurs mensuels Stan — référence opérateur (fichier Stan, mois sélectionné).
+          Ces KPIs sont calculés sur le mois complet, pas sur la plage exacte du tableau ci-dessous.
+          Ils servent de dénominateur officiel Ops ; ne pas les confondre avec les mesures
+          de la plage sélectionnée affichées dans le tableau de comparaison. */}
+      {data?.kpis && (
+        <details style={{ border: `1px solid ${FT.border}`, borderRadius: FT.radius, padding: "2px 0" }}>
+          <summary style={{
+            cursor: "pointer", padding: "9px 14px", fontSize: 12.5, fontWeight: 800,
+            color: FT.textMid, listStyle: "none", display: "flex", alignItems: "center", gap: 8,
+          }}>
+            <Gauge size={13} color={FT.blue} aria-hidden />
+            Indicateurs de référence mensuelle (fichier Stan) · mois {data.month_year ?? "—"}
+            <span style={{ marginLeft: "auto", fontSize: 11, color: FT.textSub, fontWeight: 600 }}>
+              ▸ cliquer pour afficher
+            </span>
+          </summary>
+          <div style={{ padding: "0 14px 14px" }}>
+            <div style={{ fontSize: 11, color: FT.textSub, marginBottom: 10 }}>
+              Ces indicateurs concernent le <strong>mois complet</strong> {data.month_year ?? "—"}.
+              Le tableau ci-dessous couvre la <strong>plage de dates exacte sélectionnée</strong>.
+            </div>
             <ConsommationKpis data={data} stickyTop={0} />
           </div>
-        ) : undefined}
-      />
+        </details>
+      )}
+
+      <ConsoComparaisonSection />
     </div>
   );
 }
