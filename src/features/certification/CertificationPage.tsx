@@ -1178,7 +1178,7 @@ export default function CertificationPage() {
             Les factures importées sont conservées : vous pourrez relancer la certification.
           </DialogDescription>
           {deleteTarget?.status === "RUNNING" && (
-            <p className="text-[12px] text-amber-700">Calcul en cours : la suppression ne sera acceptée qu'une fois le calcul terminé (ou bloqué depuis plus de 2 h).</p>
+            <p className="text-[12px] text-amber-700">Calcul en cours : il sera arrêté, et les factures restantes ne seront pas calculées.</p>
           )}
           <div className="flex justify-end gap-2 mt-2">
             <button onClick={() => setDeleteTargetId(null)} disabled={deleteMut.isPending}
