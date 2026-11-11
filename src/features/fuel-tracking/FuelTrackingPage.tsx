@@ -13,7 +13,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { BarChart3, Calculator, Calendar, Droplets, Fuel, Gauge, LayoutGrid, RefreshCw, Warehouse } from "lucide-react";
 
 import {
@@ -32,7 +32,9 @@ import { ConsoBi } from "./bi/ConsoBi";
 import { CphBi } from "./bi/CphBi";
 import { StockBi } from "./bi/StockBi";
 import { CommandeBi, EstimationBi } from "./bi/CommandeBi";
-import { DetailSection } from "./bi/kit";
+import { DetailSection, OpenSiteContext } from "./bi/kit";
+import { SiteBi } from "./bi/SiteBi";
+import { SiteSearch } from "./bi/SiteSearch";
 import { StockSheet } from "./sheets/StockSheet";
 import { CommandeSheet } from "./sheets/CommandeSheet";
 import { EstimationSheet } from "./sheets/EstimationSheet";
@@ -103,6 +105,11 @@ export default function FuelTrackingPage() {
   const { tab: tabSlug } = useParams();
   const navigate = useNavigate();
   const activeTab: MainTab = TAB_BY_SLUG[tabSlug ?? ""] ?? "CONSOMMATION";
+  // Fiche site : ?site=<id> dans l'adresse (lien partageable, bouton Retour du navigateur).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const siteId = searchParams.get("site");
+  const openSite = (id: string) => { setSearchParams((p) => { const n = new URLSearchParams(p); n.set("site", id); return n; }); window.scrollTo({ top: 0 }); };
+  const closeSite = () => setSearchParams((p) => { const n = new URLSearchParams(p); n.delete("site"); return n; });
   const setActiveTab = (t: MainTab) => {
     navigate(`/modules/suivi-carburant/${SLUG_BY_TAB[t]}`);
     window.scrollTo({ top: 0 });
@@ -260,7 +267,8 @@ export default function FuelTrackingPage() {
             <div style={{ flex: 1 }} />
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              {activeTab !== "COMMANDE" && activeTab !== "ESTIMATION" && (
+              <SiteSearch onSelect={openSite} />
+              {(siteId || (activeTab !== "COMMANDE" && activeTab !== "ESTIMATION")) && (
                 <div title="Mois des indicateurs mensuels (tendance du Dashboard, couverture GE)" style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "5px 10px" }}>
                   <Calendar size={14} color={FT.textSub} aria-hidden />
                   <input
@@ -297,7 +305,14 @@ export default function FuelTrackingPage() {
 
         </div>
 
-        {activeTab === "CONSOMMATION" && (
+        {siteId && (
+          <div className="ft-fade" key={siteId}>
+            <SiteBi siteId={siteId} fromMonth={fromMonth} toMonth={toMonth} onClose={closeSite} />
+          </div>
+        )}
+
+        <OpenSiteContext.Provider value={openSite}>
+        {!siteId && activeTab === "CONSOMMATION" && (
           <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <ConsoBi fromMonth={fromMonth} toMonth={toMonth} />
             <DetailSection title="Détail par site, couverture GE et comparaison des consommations">
@@ -310,7 +325,7 @@ export default function FuelTrackingPage() {
           </div>
         )}
 
-        {activeTab === "CPH" && (
+        {!siteId && activeTab === "CPH" && (
           <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <CphBi fromMonth={fromMonth} toMonth={toMonth} />
             <DetailSection title="Contrôle CPH détaillé (tableau par site, diagnostics, référentiel)">
@@ -319,7 +334,7 @@ export default function FuelTrackingPage() {
           </div>
         )}
 
-        {activeTab === "STOCK" && (
+        {!siteId && activeTab === "STOCK" && (
           <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <StockBi toMonth={toMonth} />
             <DetailSection title="Stock détaillé (registre, relevés, bilans, imports)">
@@ -344,7 +359,7 @@ export default function FuelTrackingPage() {
           </div>
         )}
 
-        {activeTab === "COMMANDE" && (
+        {!siteId && activeTab === "COMMANDE" && (
           <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <CommandeSheet
               overview={<CommandeBi data={commandeQ.data} loading={commandeQ.isLoading} error={commandeQ.isError} />}
@@ -362,7 +377,7 @@ export default function FuelTrackingPage() {
           </div>
         )}
 
-        {activeTab === "ESTIMATION" && (
+        {!siteId && activeTab === "ESTIMATION" && (
           <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <EstimationSheet
               overview={<EstimationBi data={estimationQ.data} loading={estimationQ.isLoading} error={estimationQ.isError} />}
@@ -374,6 +389,7 @@ export default function FuelTrackingPage() {
             />
           </div>
         )}
+        </OpenSiteContext.Provider>
       </div>
     </>
   );

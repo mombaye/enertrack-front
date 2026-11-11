@@ -21,7 +21,7 @@ const MOTIF_LABEL: Record<string, string> = {
   MAPPING_GE_A_VALIDER: "Mapping GE à valider", MODELE_GE_AMBIGU: "Modèle GE ambigu", SITE_MULTI_GE: "Site multi-GE",
   TYPE_GE_ABSENT: "Type de GE absent", PERIODE_INCOMPLETE: "Période incomplète", AUTRE: "Autre",
 };
-const motif = (code: string) => MOTIF_LABEL[code] ?? code.replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase());
+export const motif = (code: string) => MOTIF_LABEL[code] ?? code.replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase());
 
 /** Période CPH dérivée des mois du header : 3 mois max (limite du calcul), jamais au-delà d'hier. */
 export function cphPeriod(fromMonth: string | null, toMonth: string | null): { start: string; end: string; label: string } | null {
@@ -38,12 +38,24 @@ export function cphPeriod(fromMonth: string | null, toMonth: string | null): { s
   return { start, end: iso(end), label: startMonth === toMonth ? monthLabel(toMonth) : `${monthLabel(startMonth)} → ${monthLabel(toMonth)}` };
 }
 
+/** Mois de la période du header, du plus récent au plus ancien. */
+function monthsBetween(fromMonth: string | null, toMonth: string | null): string[] {
+  if (!fromMonth || !toMonth) return [];
+  const idx = (m: string) => Number(m.slice(0, 4)) * 12 + Number(m.slice(5, 7)) - 1;
+  const out: string[] = [];
+  for (let i = idx(toMonth); i >= idx(fromMonth) && out.length < 36; i--) out.push(`${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}`);
+  return out;
+}
+
 export function CphBi({ fromMonth, toMonth }: { fromMonth: string | null; toMonth: string | null }) {
-  const [country, setCountry] = useState("");
-  const p = cphPeriod(fromMonth, toMonth);
+  const [zone, setZone] = useState("");
+  const [month, setMonth] = useState("");
+  const monthOptions = monthsBetween(fromMonth, toMonth);
+  const effMonth = monthOptions.includes(month) ? month : "";
+  const p = effMonth ? cphPeriod(effMonth, effMonth) : cphPeriod(fromMonth, toMonth);
   const q = useQuery({
-    queryKey: ["fuel-bi-cph", p?.start, p?.end, country],
-    queryFn: () => getBiCph({ start: p!.start, end: p!.end, country }),
+    queryKey: ["fuel-bi-cph", p?.start, p?.end, zone],
+    queryFn: () => getBiCph({ start: p!.start, end: p!.end, zone }),
     enabled: !!p,
     staleTime: 5 * 60_000,
     placeholderData: (prev) => prev,
@@ -51,31 +63,32 @@ export function CphBi({ fromMonth, toMonth }: { fromMonth: string | null; toMont
   const d = q.data;
   const k = d?.kpis;
   const loading = q.isLoading || !p;
-  const countries = (d?.by_country ?? []).map((c) => c.label).filter((c) => c !== "Non renseigné");
-  const byCountry = (d?.by_country ?? []).map((c) => ({ ...c, partiel: c.nb_sites - c.nb_cph_complet }));
+  const x = d?.explain;
+  const byCountry = (d?.by_zone ?? []).map((c) => ({ ...c, partiel: c.nb_sites - c.nb_cph_complet }));
   const statuts = ["COMPLET", "PARTIEL", "NON_CALCULE"].map((s) => ({ label: STATUT_LABEL[s], nb_sites: d?.statuts_cph?.find((x) => x.label === s)?.nb_sites ?? 0 }));
   const motifs = (d?.motifs_non_calcule ?? []).map((m) => ({ ...m, name: motif(m.label) }));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <FilterBar
-        note={p ? `${p.label} (3 mois au plus)${d?.periode?.incomplete ? ` · données Snowflake jusqu'au ${d.periode.donnees_jusqu_au ?? "—"}` : ""}` : undefined}
-        onExport={p ? () => downloadBiExport("cph", { start: p.start, end: p.end, country }, `controle_cph_${p.start}_${p.end}.xlsx`) : undefined}
+        note={p ? `Sénégal · ${p.label}${effMonth ? "" : " (3 mois au plus)"}${d?.periode?.incomplete ? ` · données Snowflake jusqu'au ${d.periode.donnees_jusqu_au ?? "—"}` : ""}` : undefined}
+        onExport={p ? () => downloadBiExport("cph", { start: p.start, end: p.end, zone }, `controle_cph_${p.start}_${p.end}.xlsx`) : undefined}
       >
-        <FilterSelect label="Pays" value={country} options={countries.length ? countries : country ? [country] : []} onChange={setCountry} />
+        <FilterSelect label="Mois" value={effMonth} options={monthOptions} onChange={setMonth} allLabel="3 derniers mois" format={monthLabel} />
+        <FilterSelect label="Zone" value={zone} options={d?.filters?.zones ?? (zone ? [zone] : [])} onChange={setZone} allLabel="Toutes" />
       </FilterBar>
 
       {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 12.5 }}>Calcul CPH indisponible (calcul ou Snowflake en erreur). Le contrôle détaillé plus bas reste consultable.</div>}
 
       <KpiRow>
-        <BiKpi label="Sites au CPH complet" value={fPct(k?.couverture_cph_pct)} sub={k ? `${fNum(k.nb_cph_complet)} / ${fNum(k.nb_sites_ge)} sites GE` : undefined} />
-        <BiKpi label="Conso estimée CPH" value={fNum(k?.conso_theorique_l)} unit="L" sub="CPH × heures de marche, sites complets" />
-        <BiKpi label="Heures de marche GE" value={fNum(k?.runtime_total_h)} unit="h" />
-        <BiKpi label="CPH moyen" value={fRatio(k?.cph_moy_l_h)} unit="L/h" hint="Conso estimée ÷ heures de marche, sites au CPH complet." />
+        <BiKpi label="Sites au CPH complet" value={fPct(k?.couverture_cph_pct)} explain={x?.couverture_cph_pct} sub={k ? `${fNum(k.nb_cph_complet)} / ${fNum(k.nb_sites_ge)} sites GE` : undefined} />
+        <BiKpi label="Conso estimée CPH" value={fNum(k?.conso_theorique_l)} unit="L" explain={x?.conso_theorique_l} sub="CPH × heures de marche, sites complets" />
+        <BiKpi label="Heures de marche GE" value={fNum(k?.runtime_total_h)} unit="h" explain={x?.runtime_total_h} />
+        <BiKpi label="CPH moyen" value={fRatio(k?.cph_moy_l_h)} unit="L/h" explain={x?.cph_moy_l_h} />
         <BiKpi label="Charge moyenne GE" value={fDec1(k?.charge_moy_pct)} unit="%"
           alert={k?.charge_moy_pct != null && k.charge_moy_pct < 30 ? "warn" : null}
-          sub="pondérée par les heures" hint="Sous 30 % de charge, un diesel consomme plus par kWh produit." />
-        <BiKpi label="Mesuré vs CPH" value={fSignedPct(k?.ecart_global_pct)}
+          sub="pondérée par les heures" explain={x?.charge_moy_pct} />
+        <BiKpi label="Mesuré vs CPH" value={fSignedPct(k?.ecart_global_pct)} explain={x?.ecart_global_pct}
           alert={k?.ecart_global_pct == null ? null : Math.abs(k.ecart_global_pct) > 15 ? "bad" : null}
           sub={k ? `${fNum(k.nb_sites_comparables)} sites ayant les deux` : undefined} />
       </KpiRow>
@@ -106,7 +119,7 @@ export function CphBi({ fromMonth, toMonth }: { fromMonth: string | null; toMont
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
-        <ChartCard title="Couverture par pays" loading={loading} error={q.isError} empty={!byCountry.length}
+        <ChartCard title="CPH complet par zone" loading={loading} error={q.isError} empty={!byCountry.length}
           legend={[{ label: "CPH complet", color: BI.primary }, { label: "Autres sites GE", color: BI.light }]}
           height={Math.max(200, byCountry.length * 32 + 20)}>
           <ResponsiveContainer>

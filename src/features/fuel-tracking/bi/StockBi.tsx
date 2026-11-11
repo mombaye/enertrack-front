@@ -7,7 +7,7 @@ import { monthLabel } from "../helpers";
 import { FT } from "../theme";
 import {
   BI, BiKpi, ChartCard, FilterBar, FilterSelect, Grid, KpiRow, SectionTitle, SiteCell, TopTable,
-  axisProps, fDays, fDec1, fL, fLabel, fNum, fPct, labelStyle, tooltipStyle,
+  axisProps, fDays, fDec1, fL, fNum, fPct, labelStyle, tooltipStyle,
 } from "./kit";
 
 const LEVEL_COLOR = { critique: BI.bad, alerte: BI.warn, moyen: BI.light, bon: BI.primary, inconnu: BI.unknown } as const;
@@ -15,16 +15,17 @@ const AUTONOMY_COLOR = [BI.bad, BI.warn, BI.light, BI.secondary, BI.primary];
 const AGE_COLOR = [BI.primary, BI.secondary, BI.light, BI.warn, BI.bad, BI.unknown];
 
 export function StockBi({ toMonth }: { toMonth: string | null }) {
-  const [country, setCountry] = useState("");
-  const params = { country, month: toMonth ?? undefined };
+  const [zone, setZone] = useState("");
+  const params = { zone, month: toMonth ?? undefined };
   const q = useQuery({
-    queryKey: ["fuel-bi-stock", country, toMonth],
+    queryKey: ["fuel-bi-stock", zone, toMonth],
     queryFn: () => getBiStock(params),
     staleTime: 60_000,
     placeholderData: (prev) => prev,
   });
   const d = q.data;
   const k = d?.kpis;
+  const x = d?.explain;
   const loading = q.isLoading;
   const fillColor = (pct: number | null) => (pct == null ? BI.unknown : pct < 15 ? BI.bad : pct < 40 ? BI.warn : BI.secondary);
   const today = new Date().toISOString().slice(0, 10);
@@ -32,25 +33,23 @@ export function StockBi({ toMonth }: { toMonth: string | null }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <FilterBar
-        note={k ? `Dernier relevé ${k.derniere_mesure ? new Date(k.derniere_mesure).toLocaleDateString("fr-FR") : "—"} · autonomie calculée sur ${monthLabel(k.mois_reference_autonomie)}` : undefined}
+        note={k ? `Sénégal · dernier relevé ${k.derniere_mesure ? new Date(k.derniere_mesure).toLocaleDateString("fr-FR") : "—"} · autonomie calculée sur ${monthLabel(k.mois_reference_autonomie)}` : undefined}
         onExport={() => downloadBiExport("stock", params, `suivi_stock_${today}.xlsx`)}
       >
-        <FilterSelect label="Pays" value={country} options={d?.filters.countries ?? []} onChange={setCountry} />
+        <FilterSelect label="Zone" value={zone} options={d?.filters.zones ?? []} onChange={setZone} allLabel="Toutes" />
       </FilterBar>
 
       {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 12.5 }}>Chargement impossible. Les onglets détaillés plus bas restent consultables.</div>}
 
       <KpiRow>
         <BiKpi label="Stock en cuve" value={fNum(k?.stock_total_l)} unit="L"
-          sub={k?.remplissage_pct != null ? `${fPct(k.remplissage_pct)} de la capacité` : undefined}
-          hint="Somme des derniers relevés capteur des sites avec GE." />
-        <BiKpi label="Cuves sous 15 %" value={fNum(k?.nb_critique)} alert={k?.nb_critique ? "bad" : null}
+          sub={k?.remplissage_pct != null ? `${fPct(k.remplissage_pct)} de la capacité` : undefined} explain={x?.stock_total_l} />
+        <BiKpi label="Cuves sous 15 %" value={fNum(k?.nb_critique)} explain={x?.nb_critique} alert={k?.nb_critique ? "bad" : null}
           sub={k ? `${fNum(k.nb_alerte)} autres entre 15 et 40 %` : undefined} />
-        <BiKpi label="Autonomie < 3 jours" value={fNum(k?.nb_autonomie_moins_3j)} alert={k?.nb_autonomie_moins_3j ? "bad" : null} sub="sites à ravitailler en premier"
-          hint="Stock actuel ÷ conso mesurée moyenne par jour du mois de référence." />
-        <BiKpi label="Autonomie médiane" value={fDec1(k?.autonomie_mediane_j)} unit="jours" sub="sites à la conso mesurée connue" />
-        <BiKpi label="Stock connu" value={fPct(k?.stock_connu_pct)} sub={k ? `${fNum(k.nb_stock_connu)} / ${fNum(k.nb_sites)} sites GE` : undefined} />
-        <BiKpi label="Relevés de plus de 7 jours" value={fNum(k?.nb_releves_anciens)} alert={k?.nb_releves_anciens ? "warn" : null} sub="stock à confirmer sur place" />
+        <BiKpi label="Autonomie < 3 jours" value={fNum(k?.nb_autonomie_moins_3j)} alert={k?.nb_autonomie_moins_3j ? "bad" : null} sub="sites à ravitailler en premier" explain={x?.nb_autonomie_moins_3j} />
+        <BiKpi label="Autonomie médiane" value={fDec1(k?.autonomie_mediane_j)} unit="jours" explain={x?.autonomie_mediane_j} sub="sites à la conso mesurée connue" />
+        <BiKpi label="Stock connu" value={fPct(k?.stock_connu_pct)} explain={x?.stock_connu_pct} sub={k ? `${fNum(k.nb_stock_connu)} / ${fNum(k.nb_sites)} sites GE` : undefined} />
+        <BiKpi label="Relevés de plus de 7 jours" value={fNum(k?.nb_releves_anciens)} explain={x?.nb_releves_anciens} alert={k?.nb_releves_anciens ? "warn" : null} sub="stock à confirmer sur place" />
       </KpiRow>
 
       <Grid min={320}>
@@ -101,15 +100,20 @@ export function StockBi({ toMonth }: { toMonth: string | null }) {
         </ChartCard>
       </Grid>
 
-      <ChartCard title="Stock et cuves critiques par pays" loading={loading} error={q.isError} empty={!d?.by_country?.length}
-        height={Math.max(160, (d?.by_country?.length ?? 0) * 32 + 20)}>
+      <ChartCard title="Situation par zone" info="Stock capteur et nombre de sites en alerte (cuve sous 15 % ou autonomie sous 3 jours), par zone."
+        legend={[{ label: "Cuves sous 15 %", color: BI.bad }, { label: "Autonomie < 3 j", color: BI.warn }]}
+        loading={loading} error={q.isError} empty={!d?.by_zone?.length}>
         <ResponsiveContainer>
-          <BarChart data={d?.by_country ?? []} layout="vertical" margin={{ top: 0, right: 56, left: 0, bottom: 0 }}>
-            <XAxis type="number" hide />
-            <YAxis type="category" dataKey="label" {...axisProps} width={90} />
-            <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => (n === "Stock" ? fL(v as number | null) : `${fNum(v as number)} cuves`)} />
-            <Bar dataKey="stock_l" name="Stock" fill={BI.primary} maxBarSize={18}>
-              <LabelList dataKey="stock_l" position="right" formatter={fLabel} style={labelStyle} />
+          <BarChart data={d?.by_zone ?? []} margin={{ top: 16, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke={BI.grid} vertical={false} />
+            <XAxis dataKey="label" {...axisProps} interval={0} />
+            <YAxis {...axisProps} allowDecimals={false} width={36} />
+            <Tooltip contentStyle={tooltipStyle} formatter={(v) => `${fNum(v as number)} sites`} />
+            <Bar dataKey="nb_critique" name="Cuves sous 15 %" fill={BI.bad} maxBarSize={22}>
+              <LabelList dataKey="nb_critique" position="top" style={labelStyle} />
+            </Bar>
+            <Bar dataKey="nb_autonomie_moins_3j" name="Autonomie < 3 j" fill={BI.warn} maxBarSize={22}>
+              <LabelList dataKey="nb_autonomie_moins_3j" position="top" style={labelStyle} />
             </Bar>
           </BarChart>
         </ResponsiveContainer>

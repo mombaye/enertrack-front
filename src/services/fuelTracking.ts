@@ -2198,7 +2198,14 @@ export async function getConsoEvolution() {
 // ─── Vues BI (graphiques, KPI, Top 10) ───────────────────────────────────────
 // Valeurs absentes = null (jamais 0) ; mesuré et estimé jamais additionnés.
 
-export type BiSiteRef = { site_id: string; site_name: string | null; country: string | null };
+export type BiSiteRef = { site_id: string; site_name: string | null; zone?: string | null };
+/** Détail d'un indicateur (affiché au clic) : formule, valeurs réelles du calcul, sources, périmètre, exclusions. */
+export type KpiExplain = {
+  titre: string; formule: string;
+  valeurs: Array<{ label: string; valeur: number | string | null; unite: string }>;
+  sources: string[]; perimetre: string[]; exclusions: Array<{ label: string; nb: number }>;
+  mise_a_jour: string | null; note: string | null;
+};
 export type BiBreakdownRow = { label: string; nb_sites: number; conso_mesuree_l: number | null; l_site_jour: number | null; enoc_ajoutee_l: number | null; l_kwh: number | null };
 export type BiConsoTotals = {
   nb_sites: number; nb_sites_mesure: number; couverture_pct: number | null;
@@ -2212,7 +2219,14 @@ export type BiConsoSite = BiSiteRef & {
 };
 export type BiConsoResponse = {
   from_month?: string; to_month?: string; months: string[]; available_months: string[]; previous_months?: string[];
-  filters: { countries: string[]; typologies: string[] };
+  perimetre?: string;
+  /** true quand un seul mois est affiché : pas de comparaison à une période précédente (deltas null). */
+  mois_unique?: boolean;
+  filters: { zones: string[]; typologies: string[] };
+  explain?: Record<string, KpiExplain>;
+  daily?: Array<{ date: string; conso_mesuree_l: number | null; nb_sites: number; l_site: number | null }>;
+  zone_month?: { zones: string[]; months: string[]; cells: Array<{ zone: string; month: string; nb_sites: number; l_site_jour: number | null }> };
+  pareto?: { points: Array<{ pct_sites: number; pct_conso: number }>; nb_sites: number; pct_sites_50: number | null; pct_sites_80: number | null };
   kpis?: BiConsoTotals & {
     nb_sites_target: number; ecart_target_pct: number | null; nb_sites_au_dessus_target: number;
     nb_targets_a_confirmer: number; tolerance_target_pct: number;
@@ -2222,13 +2236,39 @@ export type BiConsoResponse = {
     month: string; target_l: number | null; conso_vs_target_l: number | null;
     qualite: { OK: number; LOW_QUALITY: number; NO_VALID_LEVEL: number; "Autre / absent": number };
   }>;
-  by_country?: BiBreakdownRow[]; by_typology?: BiBreakdownRow[];
+  by_zone?: BiBreakdownRow[]; by_typology?: BiBreakdownRow[];
   top_conso?: BiConsoSite[]; top_target?: BiConsoSite[]; top_ecart_enoc?: BiConsoSite[]; top_l_kwh?: BiConsoSite[];
   distribution_l_kwh?: Array<{ label: string; nb_sites: number; reference: boolean }>;
   reference_l_kwh?: [number, number];
 };
-export async function getBiConso(params: { from_month?: string; to_month?: string; country?: string; typology?: string }) {
+export async function getBiConso(params: { from_month?: string; to_month?: string; month?: string; zone?: string; typology?: string }) {
   const { data } = await api.get<BiConsoResponse>(`${BASE}/bi/conso/`, { params: cleanParams(params) });
+  return data;
+}
+
+/** Les 4 mesures de la consommation (mêmes chiffres que l'onglet Consommations), Sénégal, sites du fichier Closing.
+ * Jamais additionnées entre elles. `disponible: false` + `motif` quand la période dépasse 3 mois. */
+export type BiConsoSourceKey = "variation" | "closing" | "instrumentee" | "cph_complete";
+export type BiConsoSourcesResponse = {
+  perimetre: string; debut: string; fin: string; disponible: boolean; motif: string | null;
+  kpis: Partial<Record<BiConsoSourceKey, { total_l: number | null; sites: number }>>;
+  explain: Partial<Record<BiConsoSourceKey, KpiExplain>>;
+  sites?: number; sites_avec_bilan?: number;
+  /** Présent quand `site` est passé : détail du site (bilan de stock, Closing, instrumentée, CPH). null = aucune ligne pour ce site. */
+  site?: BiSiteMeasures | null;
+};
+export type BiSiteMeasures = {
+  stock: { initial_l: number | null; source_initial: string | null; entrees_l: number | null; final_l: number | null; source_final: string | null;
+    variation_l: number | null; statut: string; motif: string | null; action: string | null };
+  closing: { conso_l: number | null };
+  instrumentee: { conso_l: number | null; jours_mesure: number; jours: number; couverture_pct: number | null; disponible: boolean };
+  cph: { complete_l: number | null; partielle_l: number | null; statut: string | null; runtime_h: number | null; cph_l_h: number | null; charge_pct: number | null; motif_code: string | null };
+  target: { periode_l: number | null; mensuel_l: number | null; statut: string | null };
+  modele_ge: string | null; puissance_nominale_kva: number | null;
+  correspondance: { base_closing: boolean; utilise: boolean; motif: string | null };
+};
+export async function getBiConsoSources(params: { from_month?: string; to_month?: string; month?: string; zone?: string; site?: string }) {
+  const { data } = await api.get<BiConsoSourcesResponse>(`${BASE}/bi/conso/sources/`, { params: cleanParams(params) });
   return data;
 }
 
@@ -2237,7 +2277,9 @@ export type BiStockSite = BiSiteRef & {
   stock_enoc_l: number | null; autonomie_j: number | null; age_releve_j: number | null; conso_jour_l: number | null;
 };
 export type BiStockResponse = {
-  filters: { countries: string[] };
+  perimetre?: string;
+  filters: { zones: string[] };
+  explain?: Record<string, KpiExplain>;
   kpis: {
     nb_sites: number; nb_stock_connu: number; stock_connu_pct: number | null; stock_total_l: number | null; capacite_l: number | null;
     remplissage_pct: number | null; nb_critique: number; nb_alerte: number; nb_autonomie_moins_3j: number;
@@ -2247,15 +2289,18 @@ export type BiStockResponse = {
   distribution_remplissage: Array<{ label: string; nb_sites: number; niveau: "critique" | "alerte" | "moyen" | "bon" | "inconnu" }>;
   distribution_autonomie: Array<{ label: string; nb_sites: number }>;
   distribution_age_releve: Array<{ label: string; nb_sites: number }>;
-  by_country: Array<{ label: string; nb_sites: number; stock_l: number | null; remplissage_pct: number | null; nb_critique: number }>;
+  by_zone: Array<{ label: string; nb_sites: number; stock_l: number | null; remplissage_pct: number | null; nb_critique: number; nb_autonomie_moins_3j: number }>;
   top_critique: BiStockSite[]; top_autonomie_faible: BiStockSite[]; top_stock: BiStockSite[];
 };
-export async function getBiStock(params: { country?: string; month?: string }) {
+export async function getBiStock(params: { zone?: string; month?: string }) {
   const { data } = await api.get<BiStockResponse>(`${BASE}/bi/stock/`, { params: cleanParams(params) });
   return data;
 }
 
 export type BiCphResponse = {
+  perimetre?: string;
+  filters?: { zones: string[] };
+  explain?: Record<string, KpiExplain>;
   start: string; end: string; periode: { incomplete: boolean; donnees_jusqu_au: string | null; jours_sans_donnees: number };
   kpis: {
     nb_sites_ge: number; nb_cph_complet: number; couverture_cph_pct: number | null; conso_theorique_l: number | null;
@@ -2264,13 +2309,13 @@ export type BiCphResponse = {
   };
   statuts_cph: Array<{ label: string; nb_sites: number }>;
   motifs_non_calcule: Array<{ label: string; nb_sites: number }>;
-  by_country: Array<{ label: string; nb_sites: number; nb_cph_complet: number; conso_theorique_l: number | null; runtime_h: number }>;
+  by_zone: Array<{ label: string; nb_sites: number; nb_cph_complet: number; conso_theorique_l: number | null; runtime_h: number }>;
   charge_vs_cph: Array<{ site_id: string; charge_pct: number; cph_l_h: number }>;
   top_conso_theorique: Array<BiSiteRef & { conso_theorique_l: number | null; runtime_h: number | null; cph_l_h: number | null }>;
   top_ecart_mesure: Array<BiSiteRef & { conso_theorique_l: number | null; conso_mesuree_l: number | null; ecart_l: number | null; ecart_pct: number | null }>;
   top_runtime: Array<BiSiteRef & { runtime_h: number | null; charge_pct: number | null }>;
 };
-export async function getBiCph(params: { start: string; end: string; country?: string }) {
+export async function getBiCph(params: { start: string; end: string; zone?: string }) {
   const { data } = await api.get<BiCphResponse>(`${BASE}/bi/cph/`, { params: cleanParams(params) });
   return data;
 }
@@ -2287,4 +2332,38 @@ export async function downloadBiExport(kind: BiExportKind, params: Record<string
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+
+/* ─── Fiche site (BI) ─────────────────────────────────────────────────────── */
+export type BiSiteHit = { site_id: string; site_name: string | null; zone: string | null; typologie: string | null; has_genset: boolean };
+export async function searchBiSites(q: string) {
+  const { data } = await api.get<{ results: BiSiteHit[] }>(`${BASE}/bi/sites/`, { params: { q } });
+  return data.results;
+}
+export type BiSiteResponse = {
+  perimetre: string;
+  site: { site_id: string; site_name: string | null; zone: string | null; typologie: string | null; country: string | null;
+    alimentation: string | null; nb_ge: string | null; has_genset: boolean };
+  from_month: string; to_month: string; months: string[]; mois_unique: boolean; available_months: string[]; previous_months: string[];
+  target: { mensuel_l: number | null; confirme: boolean; source: string | null } | null;
+  tolerance_target_pct: number;
+  kpis: {
+    conso_mesuree_l: number | null; l_site_jour: number | null; enoc_ajoutee_l: number | null; l_kwh: number | null; ge_prod_kwh: number | null;
+    nb_ravitaillements: number | null; target_l: number | null; ecart_target_pct: number | null; statut_target: string | null;
+    ecart_enoc_l: number | null; jours_mesures: number | null; nb_mois_mesures: number | null;
+  };
+  deltas: { conso_mesuree_l: number | null; l_site_jour: number | null; enoc_ajoutee_l: number | null; l_kwh: number | null };
+  explain: Record<string, KpiExplain>;
+  monthly: Array<{ month: string; present: boolean; conso_mesuree_l: number | null; jours_mesures: number | null; l_jour: number | null;
+    enoc_ajoutee_l: number | null; nb_ravitaillements: number | null; ge_prod_kwh: number | null; l_kwh: number | null; qualite: string | null; target_l: number | null }>;
+  daily: Array<{ date: string; conso_mesuree_l: number | null; runtime_h: number | null; ge_kwh: number | null; points: number | null }>;
+  stock: { stock_l: number | null; capacite_l: number | null; remplissage_pct: number | null; date: string | null; age_releve_j: number | null;
+    stock_enoc_l: number | null; date_enoc: string | null; conso_jour_l: number | null; mois_reference: string | null; autonomie_j: number | null } | null;
+  enoc: Array<{ date: string | null; type: string | null; statut: string | null; demande_l: number | null; approuve_l: number | null;
+    ajoute_l: number | null; niveau_avant: number | null; niveau_apres: number | null; unite: string | null }>;
+};
+export async function getBiSite(siteId: string, params: { from_month?: string; to_month?: string; month?: string }) {
+  const { data } = await api.get<BiSiteResponse>(`${BASE}/bi/sites/${encodeURIComponent(siteId)}/`, { params: cleanParams(params) });
+  return data;
 }

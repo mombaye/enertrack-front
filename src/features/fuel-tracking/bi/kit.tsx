@@ -3,10 +3,11 @@
 // avec barres de données, filtres et export Excel. Couleurs Camusat (navy #0B1F4D / bleu #1A56C4,
 // voir theme.ts). Une valeur absente s'affiche « — », jamais 0.
 
-import { Children, useState, type CSSProperties, type ReactNode } from "react";
+import { Children, createContext, useContext, useState, type CSSProperties, type ReactNode } from "react";
 import { AlertTriangle, ChevronDown, Download, Info } from "lucide-react";
+import type { KpiExplain } from "@/services/fuelTracking";
 import { FT, toneColors, type Tone } from "../theme";
-import { Card, Skeleton } from "../ui";
+import { Card, Modal, Skeleton } from "../ui";
 
 // Palette des graphiques — deux bleus Camusat ; rouge/orange réservés aux alertes.
 export const BI = {
@@ -53,6 +54,7 @@ export function KpiRow({ children }: { children: ReactNode }) {
       display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(min(170px, 100%), 1fr))`,
       background: FT.card, border: FT.borderCrisp, borderRadius: 6, overflow: "hidden",
     }} data-kpis={n}>
+      <style>{`.bi-kpi:hover{background:#F4F7FC !important}.bi-kpi:focus-visible{outline:2px solid ${FT.gold};outline-offset:-2px}`}</style>
       {children}
     </div>
   );
@@ -61,18 +63,23 @@ export function KpiRow({ children }: { children: ReactNode }) {
 /**
  * Indicateur : libellé, valeur, puis une ligne de contexte (variation vs période précédente et/ou précision).
  * `upIsGood` décide de la couleur de la variation ; `alert` colore la valeur quand elle sort de la norme.
+ * Avec `explain`, la cellule est cliquable et ouvre le détail du calcul.
  */
-export function BiKpi({ label, value, unit, delta, deltaUnit = "%", upIsGood = true, sub, alert, hint }: {
+export function BiKpi({ label, value, unit, delta, deltaUnit = "%", upIsGood = true, sub, alert, explain }: {
   label: string; value: string; unit?: string; delta?: number | null; deltaUnit?: "%" | "pts"; upIsGood?: boolean;
-  sub?: ReactNode; alert?: "bad" | "warn" | null; hint?: string;
+  sub?: ReactNode; alert?: "bad" | "warn" | null; explain?: KpiExplain | null;
 }) {
+  const [open, setOpen] = useState(false);
   const hasDelta = delta != null;
   const color = !hasDelta || delta === 0 ? FT.textMid : (delta > 0) === upIsGood ? FT.green : FT.red;
-  return (
-    <div style={{ background: FT.card, padding: "12px 16px 13px", minWidth: 0, boxShadow: "1px 0 0 #E4E9F0, 0 1px 0 #E4E9F0" }} title={hint}>
+  const body = (
+    <>
       <div style={{ color: FT.textMid, fontSize: 12, fontWeight: 600, lineHeight: 1.3 }}>{label}</div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 5, marginTop: 6 }}>
-        <span style={{ color: alert === "bad" ? FT.red : alert === "warn" ? FT.orange : FT.navy, fontSize: 24, fontWeight: 700, lineHeight: 1.05, fontVariantNumeric: "tabular-nums" }}>{value}</span>
+        <span style={{
+          color: alert === "bad" ? FT.red : alert === "warn" ? FT.orange : FT.navy, fontSize: 24, fontWeight: 700, lineHeight: 1.05,
+          fontVariantNumeric: "tabular-nums", textDecoration: explain ? "underline dotted" : undefined, textUnderlineOffset: 5, textDecorationThickness: 1,
+        }}>{value}</span>
         {unit && value !== "—" && <span style={{ color: FT.textMid, fontSize: 12.5, fontWeight: 600 }}>{unit}</span>}
       </div>
       <div style={{ marginTop: 6, fontSize: 11.5, color: FT.textSub, lineHeight: 1.35 }}>
@@ -83,7 +90,84 @@ export function BiKpi({ label, value, unit, delta, deltaUnit = "%", upIsGood = t
         )}
         {sub}
       </div>
-    </div>
+    </>
+  );
+  const cell: CSSProperties = { background: FT.card, padding: "12px 16px 13px", minWidth: 0, boxShadow: "1px 0 0 #E4E9F0, 0 1px 0 #E4E9F0", textAlign: "left" };
+  if (!explain) return <div style={cell}>{body}</div>;
+  return (
+    <>
+      <button type="button" className="bi-kpi" onClick={() => setOpen(true)} aria-haspopup="dialog"
+        title="Voir le détail du calcul"
+        style={{ ...cell, border: "none", font: "inherit", cursor: "pointer", width: "100%", display: "block" }}>
+        {body}
+      </button>
+      {open && <ExplainModal x={explain} value={value} unit={unit} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+const fVal = (v: number | string | null, unite: string) => {
+  if (v == null) return "Non disponible";
+  if (typeof v === "string") return /^\d{4}-\d{2}-\d{2}/.test(v) ? new Date(v).toLocaleDateString("fr-FR") : `${v}${unite ? ` ${unite}` : ""}`;
+  const n = Math.abs(v) >= 100 ? nf0.format(v) : nf2.format(v).replace(/,00$/, "");
+  return `${n}${unite ? ` ${unite}` : ""}`;
+};
+
+/** Fenêtre « D'où vient ce chiffre » : formule, valeurs du calcul, sources, périmètre, exclusions, fraîcheur. */
+export function ExplainModal({ x, value, unit, onClose }: { x: KpiExplain; value: string; unit?: string; onClose: () => void }) {
+  const h: CSSProperties = { fontSize: 11.5, fontWeight: 700, color: FT.textMid, margin: "16px 0 6px" };
+  return (
+    <Modal title={x.titre} onClose={onClose} maxWidth={600}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+        <span style={{ fontSize: 30, fontWeight: 700, color: FT.navy, fontVariantNumeric: "tabular-nums" }}>{value}</span>
+        {unit && value !== "—" && <span style={{ fontSize: 14, color: FT.textMid, fontWeight: 600 }}>{unit}</span>}
+      </div>
+      <div style={{ marginTop: 10, padding: "10px 12px", background: FT.slateL, borderLeft: `3px solid ${FT.navy}`, fontSize: 13, color: FT.text, lineHeight: 1.45 }}>
+        {x.formule}
+      </div>
+
+      <div style={h}>Valeurs utilisées</div>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <tbody>
+          {x.valeurs.map((v) => (
+            <tr key={v.label}>
+              <td style={{ padding: "5px 0", borderBottom: "1px solid #EEF1F5", color: FT.textMid }}>{v.label}</td>
+              <td style={{ padding: "5px 0", borderBottom: "1px solid #EEF1F5", textAlign: "right", fontWeight: 600, color: v.valeur == null ? FT.textSub : FT.text, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                {fVal(v.valeur, v.unite)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {x.perimetre.length > 0 && (<>
+        <div style={h}>Périmètre</div>
+        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: FT.text, lineHeight: 1.6 }}>{x.perimetre.map((p) => <li key={p}>{p}</li>)}</ul>
+      </>)}
+
+      {x.exclusions.length > 0 && (<>
+        <div style={h}>Non pris en compte</div>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+          <tbody>
+            {x.exclusions.map((e) => (
+              <tr key={e.label}>
+                <td style={{ padding: "4px 0", color: FT.text }}>{e.label}</td>
+                <td style={{ padding: "4px 0", textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>{nf0.format(e.nb)} sites</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </>)}
+
+      <div style={h}>Sources</div>
+      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: FT.text, lineHeight: 1.6 }}>{x.sources.map((s) => <li key={s}>{s}</li>)}</ul>
+
+      {x.note && <div style={{ marginTop: 14, fontSize: 12.5, color: FT.textMid, lineHeight: 1.45 }}>{x.note}</div>}
+      <div style={{ marginTop: 16, paddingTop: 10, borderTop: "1px solid #EEF1F5", fontSize: 11.5, color: FT.textSub }}>
+        {x.mise_a_jour ? `Données synchronisées le ${new Date(x.mise_a_jour).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}` : "Date de synchronisation inconnue"}
+        {" · le détail site par site est dans l'export Excel."}
+      </div>
+    </Modal>
   );
 }
 
@@ -205,10 +289,17 @@ const td = (align: "left" | "right"): CSSProperties => ({
   fontVariantNumeric: "tabular-nums", verticalAlign: "middle", whiteSpace: align === "right" ? "nowrap" : undefined,
 });
 
+/** Ouvre la fiche d'un site (fournie par la page Suivi carburant). Absent = cellule non cliquable. */
+export const OpenSiteContext = createContext<((siteId: string) => void) | null>(null);
+
 export function SiteCell({ id, name }: { id: string; name?: string | null }) {
+  const open = useContext(OpenSiteContext);
   return (
     <div style={{ minWidth: 0, lineHeight: 1.25 }}>
-      <span style={{ fontWeight: 600, color: FT.navy }}>{id}</span>
+      {open
+        ? <button type="button" onClick={(e) => { e.stopPropagation(); open(id); }} title={`Ouvrir la fiche du site ${id}`}
+            style={{ all: "unset", cursor: "pointer", fontWeight: 600, color: FT.navy, textDecoration: "underline", textDecorationColor: "#B8C6DE", textUnderlineOffset: 3 }}>{id}</button>
+        : <span style={{ fontWeight: 600, color: FT.navy }}>{id}</span>}
       {name && name !== id && <div style={{ fontSize: 11, color: FT.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 210 }}>{name}</div>}
     </div>
   );
@@ -244,8 +335,8 @@ export function FilterBar({ children, note, onExport }: { children?: ReactNode; 
   );
 }
 
-export function FilterSelect({ label, value, options, onChange, allLabel = "Tous" }: {
-  label: string; value: string; options: string[]; onChange: (v: string) => void; allLabel?: string;
+export function FilterSelect({ label, value, options, onChange, allLabel = "Tous", format }: {
+  label: string; value: string; options: string[]; onChange: (v: string) => void; allLabel?: string; format?: (o: string) => string;
 }) {
   return (
     <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: FT.textMid }}>
@@ -256,7 +347,7 @@ export function FilterSelect({ label, value, options, onChange, allLabel = "Tous
         style={{ border: `1px solid #CBD3DF`, background: FT.card, borderRadius: 4, padding: "5px 8px", fontSize: 12.5, color: FT.text, minWidth: 110 }}
       >
         <option value="">{allLabel}</option>
-        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        {options.map((o) => <option key={o} value={o}>{format ? format(o) : o}</option>)}
       </select>
     </label>
   );
