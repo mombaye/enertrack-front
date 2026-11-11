@@ -2199,22 +2199,31 @@ export async function getConsoEvolution() {
 // Valeurs absentes = null (jamais 0) ; mesuré et estimé jamais additionnés.
 
 export type BiSiteRef = { site_id: string; site_name: string | null; country: string | null };
-export type BiBreakdownRow = { label: string; nb_sites: number; conso_mesuree_l: number | null; enoc_ajoutee_l: number | null; l_kwh: number | null };
+export type BiBreakdownRow = { label: string; nb_sites: number; conso_mesuree_l: number | null; l_site_jour: number | null; enoc_ajoutee_l: number | null; l_kwh: number | null };
 export type BiConsoTotals = {
   nb_sites: number; nb_sites_mesure: number; couverture_pct: number | null;
-  conso_mesuree_l: number | null; enoc_ajoutee_l: number | null; nb_ravitaillements: number | null;
-  conso_estimee_enoc_l: number | null; ge_prod_kwh: number | null; l_kwh: number | null;
+  conso_mesuree_l: number | null; l_site_jour: number | null; enoc_ajoutee_l: number | null; nb_ravitaillements: number | null; l_kwh: number | null;
+};
+export type BiConsoSite = BiSiteRef & {
+  typologie: string | null; nb_mois_mesures: number; jours_mesures: number | null;
+  conso_mesuree_l: number | null; l_site_jour: number | null; enoc_ajoutee_l: number | null; nb_ravitaillements: number | null;
+  ecart_enoc_l: number | null; ge_prod_kwh: number | null; l_kwh: number | null;
+  target_l: number | null; ecart_target_pct: number | null; statut_target: string | null; target_confirme: boolean;
 };
 export type BiConsoResponse = {
   from_month?: string; to_month?: string; months: string[]; available_months: string[]; previous_months?: string[];
   filters: { countries: string[]; typologies: string[] };
-  kpis?: BiConsoTotals;
-  deltas?: { conso_mesuree_l: number | null; enoc_ajoutee_l: number | null; l_kwh: number | null; couverture_pts?: number };
-  monthly?: Array<BiConsoTotals & { month: string }>;
+  kpis?: BiConsoTotals & {
+    nb_sites_target: number; ecart_target_pct: number | null; nb_sites_au_dessus_target: number;
+    nb_targets_a_confirmer: number; tolerance_target_pct: number;
+  };
+  deltas?: { conso_mesuree_l: number | null; enoc_ajoutee_l: number | null; l_kwh: number | null; l_site_jour: number | null; couverture_pts?: number };
+  monthly?: Array<BiConsoTotals & {
+    month: string; target_l: number | null; conso_vs_target_l: number | null;
+    qualite: { OK: number; LOW_QUALITY: number; NO_VALID_LEVEL: number; "Autre / absent": number };
+  }>;
   by_country?: BiBreakdownRow[]; by_typology?: BiBreakdownRow[];
-  top_conso?: Array<BiSiteRef & { conso_mesuree_l: number | null; nb_mois: number }>;
-  top_ecart_enoc?: Array<BiSiteRef & { conso_mesuree_l: number | null; enoc_ajoutee_l: number | null; ecart_l: number | null; ecart_pct: number | null }>;
-  top_l_kwh?: Array<BiSiteRef & { l_kwh: number | null; conso_mesuree_l: number | null; ge_prod_kwh: number | null }>;
+  top_conso?: BiConsoSite[]; top_target?: BiConsoSite[]; top_ecart_enoc?: BiConsoSite[]; top_l_kwh?: BiConsoSite[];
   distribution_l_kwh?: Array<{ label: string; nb_sites: number; reference: boolean }>;
   reference_l_kwh?: [number, number];
 };
@@ -2225,17 +2234,19 @@ export async function getBiConso(params: { from_month?: string; to_month?: strin
 
 export type BiStockSite = BiSiteRef & {
   stock_l: number | null; capacite_l: number | null; remplissage_pct: number | null; date: string | null;
-  stock_enoc_l: number | null; autonomie_j: number | null;
+  stock_enoc_l: number | null; autonomie_j: number | null; age_releve_j: number | null; conso_jour_l: number | null;
 };
 export type BiStockResponse = {
   filters: { countries: string[] };
   kpis: {
     nb_sites: number; nb_stock_connu: number; stock_connu_pct: number | null; stock_total_l: number | null; capacite_l: number | null;
     remplissage_pct: number | null; nb_critique: number; nb_alerte: number; nb_autonomie_moins_3j: number;
+    autonomie_mediane_j: number | null; nb_releves_anciens: number;
     derniere_mesure: string | null; mois_reference_autonomie: string | null;
   };
   distribution_remplissage: Array<{ label: string; nb_sites: number; niveau: "critique" | "alerte" | "moyen" | "bon" | "inconnu" }>;
   distribution_autonomie: Array<{ label: string; nb_sites: number }>;
+  distribution_age_releve: Array<{ label: string; nb_sites: number }>;
   by_country: Array<{ label: string; nb_sites: number; stock_l: number | null; remplissage_pct: number | null; nb_critique: number }>;
   top_critique: BiStockSite[]; top_autonomie_faible: BiStockSite[]; top_stock: BiStockSite[];
 };
@@ -2248,7 +2259,7 @@ export type BiCphResponse = {
   start: string; end: string; periode: { incomplete: boolean; donnees_jusqu_au: string | null; jours_sans_donnees: number };
   kpis: {
     nb_sites_ge: number; nb_cph_complet: number; couverture_cph_pct: number | null; conso_theorique_l: number | null;
-    runtime_total_h: number | null; cph_moy_l_h: number | null; nb_sites_comparables: number;
+    runtime_total_h: number | null; cph_moy_l_h: number | null; charge_moy_pct: number | null; nb_sites_comparables: number;
     conso_theorique_comparable_l: number | null; conso_mesuree_comparable_l: number | null; ecart_global_pct: number | null;
   };
   statuts_cph: Array<{ label: string; nb_sites: number }>;
@@ -2262,4 +2273,18 @@ export type BiCphResponse = {
 export async function getBiCph(params: { start: string; end: string; country?: string }) {
   const { data } = await api.get<BiCphResponse>(`${BASE}/bi/cph/`, { params: cleanParams(params) });
   return data;
+}
+
+export type BiExportKind = "conso" | "stock" | "cph" | "commande" | "estimation";
+/** Télécharge le classeur Excel complet (toutes les lignes) généré côté serveur. */
+export async function downloadBiExport(kind: BiExportKind, params: Record<string, string | undefined>, filename: string) {
+  const { data } = await api.get<Blob>(`${BASE}/bi/export/${kind}/`, { params: cleanParams(params), responseType: "blob" });
+  const url = URL.createObjectURL(data);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

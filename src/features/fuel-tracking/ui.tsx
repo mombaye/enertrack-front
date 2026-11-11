@@ -116,12 +116,13 @@ export function SheetTitle({
   );
 }
 
+/** Indicateur sobre (même style que les vues BI) : libellé, valeur, précision. `tone` ne colore la valeur
+ * que pour les alertes (rouge / orange) ; `icon` est conservé dans la signature mais n'est plus affiché. */
 export function KpiCard({
   label,
   value,
   sub,
   tone = "slate",
-  icon,
 }: {
   label: string;
   value: string;
@@ -129,40 +130,12 @@ export function KpiCard({
   tone: Tone;
   icon?: ReactNode;
 }) {
-  const c = toneColors(tone);
+  const valueColor = tone === "red" ? FT.red : tone === "orange" ? FT.orange : FT.navy;
   return (
-    <div
-      style={{
-        position: "relative",
-        border: FT.borderCrisp,
-        borderLeft: `3px solid ${c.fg}`,
-        background: FT.card,
-        borderRadius: FT.radius,
-        padding: "13px 15px 14px",
-        boxShadow: FT.shadow,
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
-        <div
-          style={{
-            color: FT.textSub,
-            fontSize: 10,
-            fontWeight: 700,
-            letterSpacing: ".06em",
-            textTransform: "uppercase",
-            lineHeight: 1.3,
-          }}
-        >
-          {label}
-        </div>
-        {icon && (
-          <div style={{ width: 24, height: 24, borderRadius: 7, border: `1px solid ${c.fg}35`, color: c.fg, display: "grid", placeItems: "center", flexShrink: 0 }}>
-            {icon}
-          </div>
-        )}
-      </div>
-      <div style={{ color: FT.text, fontSize: 21, fontWeight: 700, lineHeight: 1, letterSpacing: "-.01em", fontFamily: "ui-monospace, Menlo, monospace" }}>{value}</div>
-      {sub && <div style={{ color: FT.textMid, fontSize: 11.5, marginTop: 7 }}>{sub}</div>}
+    <div style={{ border: FT.borderCrisp, background: FT.card, borderRadius: 6, padding: "12px 16px 13px", minWidth: 0 }}>
+      <div style={{ color: FT.textMid, fontSize: 12, fontWeight: 600, lineHeight: 1.3 }}>{label}</div>
+      <div style={{ color: valueColor, fontSize: 22, fontWeight: 700, lineHeight: 1.05, marginTop: 6, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      {sub && <div style={{ color: FT.textSub, fontSize: 11.5, marginTop: 6 }}>{sub}</div>}
     </div>
   );
 }
