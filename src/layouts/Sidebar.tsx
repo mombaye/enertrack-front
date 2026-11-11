@@ -44,12 +44,11 @@ const LINKS: LinkItem[] = [
 
   { to: "/modules/prediction", icon: <BrainCircuit />, label: "Prédiction IA", section: "CONSO & ESTIMATION", end: true },
   // ── SUIVI CARBURANT — sous-rubriques (le contenu s'affiche à droite) ─────────────────────────────────
-  { to: "/modules/suivi-carburant/dashboard",           icon: <LayoutDashboard />, label: "Dashboard",             section: "SUIVI CARBURANT" },
-  { to: "/modules/suivi-carburant/consommations",       icon: <Fuel />,            label: "Suivis Consommations",  section: "SUIVI CARBURANT" },
+  { to: "/modules/suivi-carburant/consommations",       icon: <Fuel />,            label: "Suivi Conso",           section: "SUIVI CARBURANT" },
   { to: "/modules/suivi-carburant/controle-cph",        icon: <Cpu />,             label: "Contrôle CPH",          section: "SUIVI CARBURANT" },
-  { to: "/modules/suivi-carburant/stock",               icon: <ClipboardList />,   label: "Suivis Stock",          section: "SUIVI CARBURANT" },
-  { to: "/modules/suivi-carburant/commandes",           icon: <Receipt />,         label: "Commandes",             section: "SUIVI CARBURANT" },
-  { to: "/modules/suivi-carburant/estimation-commande", icon: <Calculator />,      label: "Estimation commande",   section: "SUIVI CARBURANT" },
+  { to: "/modules/suivi-carburant/stock",               icon: <ClipboardList />,   label: "Suivi Stock",           section: "SUIVI CARBURANT" },
+  { to: "/modules/suivi-carburant/commandes",           icon: <Receipt />,         label: "Commande",              section: "SUIVI CARBURANT" },
+  { to: "/modules/suivi-carburant/estimation-commande", icon: <Calculator />,      label: "Estimation",            section: "SUIVI CARBURANT" },
 
   // ── PILOTAGE GRID — les 11 parties du fichier, le contenu s'affiche à droite ────────────────────────
   { to: "/pilotage-grid/synthese",               icon: <LayoutDashboard />, label: "Synthèse",                section: "PILOTAGE GRID" },

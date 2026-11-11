@@ -2194,3 +2194,72 @@ export async function getConsoEvolution() {
   const { data } = await api.get<ConsoEvolution>(`${BASE}/consommations/evolution/`);
   return data;
 }
+
+// ─── Vues BI (graphiques, KPI, Top 10) ───────────────────────────────────────
+// Valeurs absentes = null (jamais 0) ; mesuré et estimé jamais additionnés.
+
+export type BiSiteRef = { site_id: string; site_name: string | null; country: string | null };
+export type BiBreakdownRow = { label: string; nb_sites: number; conso_mesuree_l: number | null; enoc_ajoutee_l: number | null; l_kwh: number | null };
+export type BiConsoTotals = {
+  nb_sites: number; nb_sites_mesure: number; couverture_pct: number | null;
+  conso_mesuree_l: number | null; enoc_ajoutee_l: number | null; nb_ravitaillements: number | null;
+  conso_estimee_enoc_l: number | null; ge_prod_kwh: number | null; l_kwh: number | null;
+};
+export type BiConsoResponse = {
+  from_month?: string; to_month?: string; months: string[]; available_months: string[]; previous_months?: string[];
+  filters: { countries: string[]; typologies: string[] };
+  kpis?: BiConsoTotals;
+  deltas?: { conso_mesuree_l: number | null; enoc_ajoutee_l: number | null; l_kwh: number | null; couverture_pts?: number };
+  monthly?: Array<BiConsoTotals & { month: string }>;
+  by_country?: BiBreakdownRow[]; by_typology?: BiBreakdownRow[];
+  top_conso?: Array<BiSiteRef & { conso_mesuree_l: number | null; nb_mois: number }>;
+  top_ecart_enoc?: Array<BiSiteRef & { conso_mesuree_l: number | null; enoc_ajoutee_l: number | null; ecart_l: number | null; ecart_pct: number | null }>;
+  top_l_kwh?: Array<BiSiteRef & { l_kwh: number | null; conso_mesuree_l: number | null; ge_prod_kwh: number | null }>;
+  distribution_l_kwh?: Array<{ label: string; nb_sites: number; reference: boolean }>;
+  reference_l_kwh?: [number, number];
+};
+export async function getBiConso(params: { from_month?: string; to_month?: string; country?: string; typology?: string }) {
+  const { data } = await api.get<BiConsoResponse>(`${BASE}/bi/conso/`, { params: cleanParams(params) });
+  return data;
+}
+
+export type BiStockSite = BiSiteRef & {
+  stock_l: number | null; capacite_l: number | null; remplissage_pct: number | null; date: string | null;
+  stock_enoc_l: number | null; autonomie_j: number | null;
+};
+export type BiStockResponse = {
+  filters: { countries: string[] };
+  kpis: {
+    nb_sites: number; nb_stock_connu: number; stock_connu_pct: number | null; stock_total_l: number | null; capacite_l: number | null;
+    remplissage_pct: number | null; nb_critique: number; nb_alerte: number; nb_autonomie_moins_3j: number;
+    derniere_mesure: string | null; mois_reference_autonomie: string | null;
+  };
+  distribution_remplissage: Array<{ label: string; nb_sites: number; niveau: "critique" | "alerte" | "moyen" | "bon" | "inconnu" }>;
+  distribution_autonomie: Array<{ label: string; nb_sites: number }>;
+  by_country: Array<{ label: string; nb_sites: number; stock_l: number | null; remplissage_pct: number | null; nb_critique: number }>;
+  top_critique: BiStockSite[]; top_autonomie_faible: BiStockSite[]; top_stock: BiStockSite[];
+};
+export async function getBiStock(params: { country?: string; month?: string }) {
+  const { data } = await api.get<BiStockResponse>(`${BASE}/bi/stock/`, { params: cleanParams(params) });
+  return data;
+}
+
+export type BiCphResponse = {
+  start: string; end: string; periode: { incomplete: boolean; donnees_jusqu_au: string | null; jours_sans_donnees: number };
+  kpis: {
+    nb_sites_ge: number; nb_cph_complet: number; couverture_cph_pct: number | null; conso_theorique_l: number | null;
+    runtime_total_h: number | null; cph_moy_l_h: number | null; nb_sites_comparables: number;
+    conso_theorique_comparable_l: number | null; conso_mesuree_comparable_l: number | null; ecart_global_pct: number | null;
+  };
+  statuts_cph: Array<{ label: string; nb_sites: number }>;
+  motifs_non_calcule: Array<{ label: string; nb_sites: number }>;
+  by_country: Array<{ label: string; nb_sites: number; nb_cph_complet: number; conso_theorique_l: number | null; runtime_h: number }>;
+  charge_vs_cph: Array<{ site_id: string; charge_pct: number; cph_l_h: number }>;
+  top_conso_theorique: Array<BiSiteRef & { conso_theorique_l: number | null; runtime_h: number | null; cph_l_h: number | null }>;
+  top_ecart_mesure: Array<BiSiteRef & { conso_theorique_l: number | null; conso_mesuree_l: number | null; ecart_l: number | null; ecart_pct: number | null }>;
+  top_runtime: Array<BiSiteRef & { runtime_h: number | null; charge_pct: number | null }>;
+};
+export async function getBiCph(params: { start: string; end: string; country?: string }) {
+  const { data } = await api.get<BiCphResponse>(`${BASE}/bi/cph/`, { params: cleanParams(params) });
+  return data;
+}
