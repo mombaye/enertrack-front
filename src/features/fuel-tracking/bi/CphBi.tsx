@@ -10,7 +10,7 @@ import { monthLabel } from "../helpers";
 import { FT } from "../theme";
 import {
   BI, BiKpi, ChartCard, FilterBar, FilterSelect, Grid, KpiRow, SectionTitle, SiteCell, TopTable,
-  axisProps, fL, fNum, fPct, fRatio, fShort, tooltipStyle,
+  axisProps, fL, fNum, fPct, fRatio, fShort, fSignedPct, tooltipStyle,
 } from "./kit";
 
 const STATUT_LABEL: Record<string, string> = { COMPLET: "CPH complet", PARTIEL: "CPH partiel", NON_CALCULE: "Non calculé" };
@@ -92,7 +92,7 @@ export function CphBi({ fromMonth, toMonth }: { fromMonth: string | null; toMont
         </ChartCard>
         <ChartCard title="Couverture CPH par pays" loading={loading} error={q.isError} empty={!d?.by_country?.length}
           legend={[{ label: "CPH complet", color: BI.primary }, { label: "Autres sites GE", color: BI.light }]}
-          height={Math.max(180, (d?.by_country?.length ?? 0) * 34 + 30)}>
+          height={Math.max(260, (d?.by_country?.length ?? 0) * 34 + 30)}>
           <ResponsiveContainer>
             <BarChart data={(d?.by_country ?? []).map((c) => ({ ...c, autres: c.nb_sites - c.nb_cph_complet }))} layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }}>
               <CartesianGrid stroke={BI.grid} horizontal={false} />
@@ -135,7 +135,7 @@ export function CphBi({ fromMonth, toMonth }: { fromMonth: string | null; toMont
             { label: "Site", render: (r) => <SiteCell id={r.site_id} name={r.site_name} /> },
             { label: "CPH", align: "right", render: (r) => fL(r.conso_theorique_l) },
             { label: "Mesuré", align: "right", render: (r) => fL(r.conso_mesuree_l) },
-            { label: "Écart", align: "right", render: (r) => <span style={{ fontWeight: 800, color: Math.abs(r.ecart_pct ?? 0) > 15 ? FT.red : FT.text }}>{fPct(r.ecart_pct)}</span> },
+            { label: "Écart", align: "right", render: (r) => <span style={{ fontWeight: 800, color: Math.abs(r.ecart_pct ?? 0) > 15 ? FT.red : FT.text }}>{fSignedPct(r.ecart_pct)}</span> },
           ]} />
         <TopTable title="Top 10 heures de marche" rows={d?.top_runtime} loading={loading} error={q.isError} barValue={(r) => r.runtime_h}
           columns={[

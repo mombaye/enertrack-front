@@ -92,7 +92,6 @@ export function EstimationBi({ data, loading, error }: { data: FuelCommandeEstim
             { label: "Confiance", align: "right", render: (r) => <span style={{ color: CONF_COLOR[r.confiance], fontWeight: 800 }}>{r.confiance}</span> },
           ]} />
         <TopTable title="Top 10 risques de rupture" subtitle="Stock final estimé le plus bas (sites au stock connu)." rows={topRupture} loading={loading} error={error}
-          barValue={(r) => r.stock_final_estime_l} barColor={(r) => (r.stock_final_estime_l < 0 ? BI.bad : BI.warn)}
           columns={[
             { label: "Site", render: (r) => <SiteCell id={r.site_id} name={r.site_name} /> },
             { label: "Stock final", align: "right", render: (r) => <span style={{ fontWeight: 800, color: r.stock_final_estime_l < 0 ? FT.red : FT.text }}>{fL(r.stock_final_estime_l)}</span> },

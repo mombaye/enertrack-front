@@ -346,8 +346,8 @@ export default function FuelTrackingPage() {
 
         {activeTab === "COMMANDE" && (
           <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <CommandeBi data={commandeQ.data} loading={commandeQ.isLoading} error={commandeQ.isError} />
             <CommandeSheet
+              overview={<CommandeBi data={commandeQ.data} loading={commandeQ.isLoading} error={commandeQ.isError} />}
               data={commandeQ.data}
               loading={commandeQ.isLoading}
               search={commandeSearch}
@@ -364,8 +364,8 @@ export default function FuelTrackingPage() {
 
         {activeTab === "ESTIMATION" && (
           <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <EstimationBi data={estimationQ.data} loading={estimationQ.isLoading} error={estimationQ.isError} />
             <EstimationSheet
+              overview={<EstimationBi data={estimationQ.data} loading={estimationQ.isLoading} error={estimationQ.isError} />}
               data={estimationQ.data}
               loading={estimationQ.isLoading}
               search={estimationSearch}

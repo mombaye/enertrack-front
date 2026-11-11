@@ -30,6 +30,8 @@ const nf2 = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFr
 export const fNum = (v: number | null | undefined) => (v == null ? "—" : nf0.format(v));
 export const fL = (v: number | null | undefined) => (v == null ? "—" : `${nf0.format(v)} L`);
 export const fPct = (v: number | null | undefined) => (v == null ? "—" : `${nf1.format(v)} %`);
+export const fSignedPct = (v: number | null | undefined) => (v == null ? "—" : `${v > 0 ? "+" : ""}${nf1.format(v)} %`);
+export const fDays = (v: number | null | undefined) => (v == null ? "—" : `${nf1.format(v)} j`);
 export const fRatio = (v: number | null | undefined) => (v == null ? "—" : nf2.format(v));
 export const fShort = (v: number) => (Math.abs(v) >= 1_000_000 ? `${nf1.format(v / 1_000_000)} M` : Math.abs(v) >= 1000 ? `${nf0.format(v / 1000)} k` : nf0.format(v));
 
@@ -120,12 +122,12 @@ export function StateBox({ height, text, tone = "slate" }: { height: number; tex
 export type TopColumn<T> = { label: string; render: (row: T) => ReactNode; align?: "left" | "right"; width?: string };
 
 /** Tableau Top N avec rang et barre de magnitude sur la colonne `barValue`. */
-export function TopTable<T>({ title, subtitle, rows, columns, barValue, barColor = BI.secondary, loading, error, onRowClick }: {
+export function TopTable<T>({ title, subtitle, rows, columns, barValue, barMax, barColor = BI.secondary, loading, error, onRowClick }: {
   title: string; subtitle?: string; rows: T[] | undefined; columns: TopColumn<T>[];
-  barValue?: (row: T) => number | null; barColor?: string | ((row: T) => string);
+  barValue?: (row: T) => number | null; barMax?: number; barColor?: string | ((row: T) => string);
   loading?: boolean; error?: boolean; onRowClick?: (row: T) => void;
 }) {
-  const max = Math.max(1, ...(rows ?? []).map((r) => Math.abs(barValue?.(r) ?? 0)));
+  const max = barMax ?? Math.max(1, ...(rows ?? []).map((r) => Math.abs(barValue?.(r) ?? 0)));
   return (
     <Card style={{ padding: "16px 18px", minWidth: 0 }}>
       <div style={{ fontSize: 13.5, fontWeight: 800, color: FT.text }}>{title}</div>
@@ -154,7 +156,7 @@ export function TopTable<T>({ title, subtitle, rows, columns, barValue, barColor
                           {c.render(r)}
                           {ci === 0 && bv != null && (
                             <div aria-hidden style={{ height: 4, borderRadius: 2, background: FT.slateL, marginTop: 4 }}>
-                              <div style={{ width: `${(Math.abs(bv) / max) * 100}%`, height: 4, borderRadius: 2, background: color }} />
+                              <div style={{ width: `${Math.min(100, (Math.abs(bv) / max) * 100)}%`, height: 4, borderRadius: 2, background: color }} />
                             </div>
                           )}
                         </td>

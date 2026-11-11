@@ -95,9 +95,9 @@ export function ConsoBi({ fromMonth, toMonth }: { fromMonth: string | null; toMo
             <AreaChart data={monthly} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid stroke={BI.grid} vertical={false} />
               <XAxis dataKey="label" {...axisProps} />
-              <YAxis {...axisProps} domain={[0, 100]} tickFormatter={(v) => `${v} %`} width={44} />
+              <YAxis {...axisProps} domain={[0, 100]} tickFormatter={(v) => `${v} %`} width={50} />
               <Tooltip contentStyle={tooltipStyle} formatter={(v) => fPct(v as number | null)} />
-              <Area dataKey="couverture_pct" name="Couverture" stroke={BI.primary} strokeWidth={2} fill={BI.primary} fillOpacity={0.1} />
+              <Area dataKey="couverture_pct" name="Couverture" stroke={BI.secondary} strokeWidth={2.5} fill={BI.secondary} fillOpacity={0.12} dot={{ r: 3, fill: BI.secondary }} />
             </AreaChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -106,7 +106,7 @@ export function ConsoBi({ fromMonth, toMonth }: { fromMonth: string | null; toMo
       <SectionTitle sub="Sur toute la période choisie">Répartition</SectionTitle>
       <Grid min={320}>
         <ChartCard title="Conso mesurée par pays" loading={loading} error={q.isError} empty={!d?.by_country?.length}
-          height={Math.max(180, (d?.by_country?.length ?? 0) * 34 + 30)}>
+          height={Math.max(260, (d?.by_country?.length ?? 0) * 34 + 30)}>
           <ResponsiveContainer>
             <BarChart data={d?.by_country ?? []} layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }}>
               <CartesianGrid stroke={BI.grid} horizontal={false} />

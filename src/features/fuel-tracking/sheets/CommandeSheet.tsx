@@ -9,7 +9,7 @@
 // Voir EstimationSheet.tsx (onglet séparé) pour l'estimation du mois
 // SUIVANT calculée à partir de la conso/du stock, indépendante de ce fichier.
 
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { AlertTriangle, Fuel, Search, TrendingUp, Warehouse } from "lucide-react";
 import type { FuelCommandeResponse, FuelCommandeSyntheseRow } from "@/services/fuelTracking";
 import { Card, EmptyState, KpiCard, Pager, Skeleton } from "../ui";
@@ -127,7 +127,9 @@ export function CommandeSheet({
   page,
   onPageChange,
   stickyTop = 0,
+  overview,
 }: {
+  overview?: ReactNode;
   data: FuelCommandeResponse | undefined;
   loading: boolean;
   search: string;
@@ -153,6 +155,7 @@ export function CommandeSheet({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <CommandeKpis data={data} stickyTop={stickyTop + 14} />
+      {overview}
 
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 480px", minWidth: 420 }}>
