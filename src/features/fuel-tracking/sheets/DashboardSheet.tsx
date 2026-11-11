@@ -424,7 +424,8 @@ function OverviewCircles({
 }) {
   const last = data.months[data.months.length - 1];
   const lastStats = data.monthly[data.monthly.length - 1];
-  const totalConso = data.monthly.reduce((a, m) => a + m.total_conso_snowflake_l, 0);
+  // Total du DERNIER mois (titre de l'anneau = ce mois), pas la somme de toute la plage.
+  const totalConso = lastStats?.total_conso_snowflake_l ?? 0;
   const couverture = lastStats && lastStats.nb_sites_ge > 0 ? Math.round((lastStats.nb_sites_avec_conso / lastStats.nb_sites_ge) * 100) : 0;
 
   const stockKpis = stockData?.kpis;
@@ -442,8 +443,8 @@ function OverviewCircles({
         <RingStat
           title={`Conso mesurée (capteur) — ${monthLabel(last)}`}
           pct={couverture}
-          centerValue={`${fmt.format(totalConso)} L`}
-          centerSub={`${couverture}% couv. conso mesurée`}
+          centerValue={lastStats ? `${fmt.format(totalConso)} L` : "—"}
+          centerSub={lastStats ? `${couverture}% couv. conso mesurée` : "indisponible"}
           caption={`${fmt.format(lastStats?.nb_sites_avec_conso ?? 0)} / ${fmt.format(lastStats?.nb_sites_ge ?? 0)} sites GE avec conso mesurée (VW_FUEL_REPORT) — couverture CPH : onglet Suivis Consommations`}
           color={FT.green}
           icon={<Droplets size={15} />}
@@ -452,9 +453,9 @@ function OverviewCircles({
         <RingStat
           title="Stock — état actuel"
           pct={pctStockConnu}
-          centerValue={`${fmt.format(stockKpis?.sites_avec_stock_snowflake ?? 0)} / ${fmt.format(stockKpis?.sites_avec_ge ?? 0)}`}
-          centerSub={`${pctStockConnu}% stock connu`}
-          caption={`${fmt.format(stockKpis?.sites_stock_critique ?? 0)} cuve(s) critique(s) (<15%)`}
+          centerValue={stockKpis ? `${fmt.format(stockKpis.sites_avec_stock_snowflake)} / ${fmt.format(stockKpis.sites_avec_ge)}` : "—"}
+          centerSub={stockKpis ? `${pctStockConnu}% stock connu` : "indisponible"}
+          caption={stockKpis ? `${fmt.format(stockKpis.sites_stock_critique)} cuve(s) critique(s) (<15%)` : "Données stock indisponibles"}
           color={FT.cyan}
           icon={<Warehouse size={15} />}
           onClick={onNavigateTab ? () => onNavigateTab("STOCK") : undefined}
@@ -462,9 +463,9 @@ function OverviewCircles({
         <RingStat
           title={commandeData?.month_year ? `Commandes — ${monthLabel(commandeData.month_year)}` : "Commandes"}
           pct={pctSitesCommande}
-          centerValue={`${fmt.format(commandeKpis?.total_commande_avec_marge_l ?? 0)} L`}
-          centerSub={`${pctSitesCommande}% des sites`}
-          caption={`${fmt.format(commandeKpis?.nb_sites_commande_positive ?? 0)} / ${fmt.format(commandeKpis?.total_sites ?? 0)} sites avec commande`}
+          centerValue={commandeKpis ? `${fmt.format(commandeKpis.total_commande_avec_marge_l ?? 0)} L` : "—"}
+          centerSub={commandeKpis ? `${pctSitesCommande}% des sites` : "indisponible"}
+          caption={commandeKpis ? `${fmt.format(commandeKpis.nb_sites_commande_positive)} / ${fmt.format(commandeKpis.total_sites)} sites avec commande` : "Données commandes indisponibles"}
           color={FT.gold}
           icon={<Fuel size={15} />}
           onClick={onNavigateTab ? () => onNavigateTab("COMMANDE") : undefined}
@@ -472,9 +473,9 @@ function OverviewCircles({
         <RingStat
           title={estimationData?.target_month ? `Estimation commande — ${monthLabel(estimationData.target_month)}` : "Estimation commande"}
           pct={pctConfianceElevee}
-          centerValue={`${fmt.format(estimKpis?.total_commande_estimee_l ?? 0)} L`}
-          centerSub={`${pctConfianceElevee}% confiance élevée`}
-          caption={`${fmt.format(estimKpis?.nb_sites_confiance_elevee ?? 0)} / ${fmt.format(estimKpis?.nb_sites ?? 0)} sites en confiance élevée`}
+          centerValue={estimKpis ? `${fmt.format(estimKpis.total_commande_estimee_l ?? 0)} L` : "—"}
+          centerSub={estimKpis ? `${pctConfianceElevee}% confiance élevée` : "indisponible"}
+          caption={estimKpis ? `${fmt.format(estimKpis.nb_sites_confiance_elevee)} / ${fmt.format(estimKpis.nb_sites)} sites en confiance élevée` : "Données estimation indisponibles"}
           color={FT.navy}
           icon={<Calculator size={15} />}
           onClick={onNavigateTab ? () => onNavigateTab("ESTIMATION") : undefined}

@@ -168,9 +168,7 @@ export default function FuelTrackingPage() {
       limit: 50,
       has_genset: stockGeFilter === "all" ? undefined : stockGeFilter,
     }),
-    // Aussi actif sur DASHBOARD : la section Stock du Dashboard réutilise
-    // cette même requête (pas de duplication d'appel réseau).
-    enabled: activeTab === "STOCK" || activeTab === "DASHBOARD",
+    enabled: activeTab === "STOCK",
     staleTime: 60_000,
   });
 
@@ -181,9 +179,23 @@ export default function FuelTrackingPage() {
       page: commandePage,
       limit: 50,
     }),
-    // Aussi actif sur DASHBOARD : la section Commandes du Dashboard
-    // réutilise cette même requête (pas de duplication d'appel réseau).
-    enabled: activeTab === "COMMANDE" || activeTab === "DASHBOARD",
+    enabled: activeTab === "COMMANDE",
+    staleTime: 60_000,
+  });
+
+  // Dashboard : ses propres requêtes, SANS la recherche / le filtre GE / la page des onglets Stock et Commandes —
+  // sinon une recherche "DKR" faite dans l'onglet Stock changeait les anneaux du Dashboard (ex: 3/4 sites).
+  const dashboardStockQ = useQuery({
+    queryKey: ["fuel-stock", "", 1, "true", "dashboard"],
+    queryFn: () => getFuelStock({ search: "", page: 1, limit: 1, has_genset: "true" }),
+    enabled: activeTab === "DASHBOARD",
+    staleTime: 60_000,
+  });
+
+  const dashboardCommandeQ = useQuery({
+    queryKey: ["fuel-commandes", "", 1, "dashboard"],
+    queryFn: () => getFuelCommandes({ search: "", page: 1, limit: 1 }),
+    enabled: activeTab === "DASHBOARD",
     staleTime: 60_000,
   });
 
@@ -304,10 +316,10 @@ export default function FuelTrackingPage() {
             <DashboardSheet
               data={dashboardQ.data}
               loading={dashboardQ.isLoading}
-              stockData={stockQ.data}
-              stockLoading={stockQ.isLoading}
-              commandeData={commandeQ.data}
-              commandeLoading={commandeQ.isLoading}
+              stockData={dashboardStockQ.data}
+              stockLoading={dashboardStockQ.isLoading}
+              commandeData={dashboardCommandeQ.data}
+              commandeLoading={dashboardCommandeQ.isLoading}
               estimationData={estimationQ.data}
               estimationLoading={estimationQ.isLoading}
               onNavigateTab={setActiveTab}
