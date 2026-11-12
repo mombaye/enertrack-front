@@ -2169,8 +2169,24 @@ export async function downloadConsoExport(kind: "controle_complet" | "anomalies_
 }
 
 
+export type SourceEtat = "OK" | "PARTIEL" | "RETARD" | "ECHEC" | "BLOQUE" | "JAMAIS";
+
+/** État de chaque source (journaux de synchro et d'import de la plateforme, lecture seule). */
+export type SourceStatus = {
+  source: string;
+  libelle: string;
+  etat: SourceEtat;
+  seuil_minutes: number;
+  derniere_execution: string | null;
+  dernier_succes: string | null;
+  erreur: string | null;
+  dernier_fichier?: string | null;
+};
+
 export type DataHealth = {
   generated_at: string;
+  /** Absent sur un backend antérieur au 2026-11-12. */
+  etat_sources?: { generated_at: string; etat_global: SourceEtat; sources: SourceStatus[]; a_traiter: string[] };
   sources: {
     closing: { fichier: string; recu_le: string; lignes: number; acceptees: number; rejetees: number; statut: string } | null;
     gardiennage: { dernier_releve: string | null; sites_avec_releve: number };
