@@ -3,7 +3,7 @@
 // avec barres de données, filtres et export Excel. Couleurs Camusat (navy #0B1F4D / bleu #1A56C4,
 // voir theme.ts). Une valeur absente s'affiche « — », jamais 0.
 
-import { Children, createContext, useContext, useState, type CSSProperties, type ReactNode } from "react";
+import { Children, createContext, useContext, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { AlertTriangle, ChevronDown, Download, Info } from "lucide-react";
 import type { KpiExplain } from "@/services/fuelTracking";
 import { FT, toneColors, type Tone } from "../theme";
@@ -23,6 +23,10 @@ export const BI = {
   axis: "#7A8699",
   band: "#E7F9F1",
 } as const;
+
+/** Valeurs exactes de la maquette validée (Suivi Carburant v6) pour le bandeau d'indicateurs. */
+export const KPI = { line: "#E6EAF0", fg: "#0B1220", fg2: "#4B5768", fg3: "#7D889B", crit: "#D03B3B", good: "#006300", radius: 10 } as const;
+export const kpiCell: CSSProperties = { background: "#FFFFFF", padding: "14px 18px 15px", minWidth: 0, textAlign: "left" };
 
 const nf0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const nf1 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 });
@@ -48,20 +52,29 @@ export const labelStyle = { fill: FT.textMid, fontSize: 10.5 } as const;
  * Enfants attendus : des <BiKpi/>.
  */
 export function KpiRow({ children }: { children: ReactNode }) {
-  const n = Children.count(children);
-  // Colonnes fixes selon le nombre d'indicateurs (6 → 3×2, 5 → 5, sinon 4 au plus) : jamais une ligne orpheline.
+  // Nombre de cases réellement affichées (un enfant peut en rendre plusieurs) : compté dans le DOM.
+  const ref = useRef<HTMLDivElement>(null);
+  const [n, setN] = useState(() => Children.count(children));
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const count = () => setN(Array.from(el.children).filter((c) => c.tagName !== "STYLE").length);
+    count();
+    const mo = new MutationObserver(count);
+    mo.observe(el, { childList: true });
+    return () => mo.disconnect();
+  }, []);
+  // Comme la maquette : 4 colonnes (3 pour 6 indicateurs), 2 sous 900 px, 1 sous 520 px.
   const cols = n === 6 ? 3 : n === 5 ? 5 : Math.min(Math.max(n, 1), 4);
-  const colsMid = n === 4 ? 2 : Math.min(Math.max(n, 1), 3); // écrans moyens
   return (
-    <div className="bi-kpirow" style={{
-      display: "grid", ["--n" as string]: cols, ["--nm" as string]: colsMid,
-      background: FT.card, border: FT.borderCrisp, borderRadius: 6, overflow: "hidden",
+    <div ref={ref} className="bi-kpirow" style={{
+      display: "grid", gap: 1, ["--n" as string]: cols,
+      background: KPI.line, border: `1px solid ${KPI.line}`, borderRadius: KPI.radius, overflow: "hidden",
     } as CSSProperties} data-kpis={n}>
       <style>{`.bi-kpirow{grid-template-columns:repeat(var(--n),minmax(0,1fr))}`
-        + `@media (max-width:1100px){.bi-kpirow{grid-template-columns:repeat(var(--nm),minmax(0,1fr))}}`
-        + `@media (max-width:760px){.bi-kpirow{grid-template-columns:repeat(2,minmax(0,1fr))}}`
-        + `@media (max-width:480px){.bi-kpirow{grid-template-columns:1fr}}`
-        + `.bi-kpi:hover{background:#F4F7FC !important}.bi-kpi:focus-visible{outline:2px solid ${FT.gold};outline-offset:-2px}`}</style>
+        + `@media (max-width:900px){.bi-kpirow{grid-template-columns:repeat(2,minmax(0,1fr))}.bi-kpirow>:last-child:nth-child(odd){grid-column:1/-1}}`
+        + `@media (max-width:520px){.bi-kpirow{grid-template-columns:1fr}}`
+        + `.bi-kpi:hover{background:#F6F8FB !important}.bi-kpi:focus-visible{outline:2px solid #1A56C4;outline-offset:-2px}`}</style>
       {children}
     </div>
   );
@@ -79,18 +92,15 @@ export function BiKpi({ label, value, unit, delta, deltaUnit = "%", upIsGood = t
 }) {
   const [open, setOpen] = useState(false);
   const hasDelta = delta != null;
-  const color = !hasDelta || delta === 0 ? FT.textMid : (delta > 0) === upIsGood ? FT.green : FT.red;
+  const color = !hasDelta || delta === 0 ? KPI.fg2 : (delta > 0) === upIsGood ? KPI.good : KPI.crit;
   const body = (
     <>
-      <div style={{ color: FT.textMid, fontSize: 12.5, fontWeight: 400, lineHeight: 1.3 }}>{label}</div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginTop: 5 }}>
-        <span style={{
-          color: alert === "bad" ? FT.red : alert === "warn" ? FT.orange : FT.text, fontSize: 24, fontWeight: 600, lineHeight: 1.1, letterSpacing: "-.01em",
-          fontVariantNumeric: "tabular-nums", textDecoration: explain ? "underline dotted" : undefined, textUnderlineOffset: 5, textDecorationThickness: 1,
-        }}>{value}</span>
-        {unit && value !== "—" && <span style={{ color: FT.textSub, fontSize: 12.5, fontWeight: 400 }}>{unit}</span>}
+      <div style={{ color: KPI.fg2, fontSize: 12.5, fontWeight: 400, lineHeight: 1.45 }}>{label}</div>
+      <div style={{ marginTop: 3, lineHeight: 1.15 }}>
+        <span style={{ color: alert ? KPI.crit : KPI.fg, fontSize: 25, fontWeight: 600, letterSpacing: "-.01em", fontVariantNumeric: "tabular-nums" }}>{value}</span>
+        {unit && value !== "—" && <span style={{ color: KPI.fg3, fontSize: 13, fontWeight: 400, marginLeft: 3 }}>{unit}</span>}
       </div>
-      <div style={{ marginTop: 5, fontSize: 12, color: FT.textSub, lineHeight: 1.35 }}>
+      <div style={{ marginTop: 3, fontSize: 12, color: KPI.fg3, lineHeight: 1.45 }}>
         {hasDelta && (
           <span style={{ color, fontWeight: 600, marginRight: 6, whiteSpace: "nowrap" }}>
             {delta > 0 ? "+" : delta < 0 ? "−" : ""}{nf1.format(Math.abs(delta))} {deltaUnit === "pts" ? "pt" : "%"}
@@ -100,7 +110,7 @@ export function BiKpi({ label, value, unit, delta, deltaUnit = "%", upIsGood = t
       </div>
     </>
   );
-  const cell: CSSProperties = { background: FT.card, padding: "14px 18px 15px", minWidth: 0, boxShadow: "1px 0 0 #E4E9F0, 0 1px 0 #E4E9F0", textAlign: "left" };
+  const cell = kpiCell;
   if (!explain) return <div style={cell}>{body}</div>;
   return (
     <>

@@ -130,12 +130,12 @@ export function KpiCard({
   tone: Tone;
   icon?: ReactNode;
 }) {
-  const valueColor = tone === "red" ? FT.red : tone === "orange" ? FT.orange : FT.text;
+  const alert = tone === "red" || tone === "orange";
   return (
-    <div style={{ border: FT.borderCrisp, background: FT.card, borderRadius: 6, padding: "14px 18px 15px", minWidth: 0 }}>
-      <div style={{ color: FT.textMid, fontSize: 12.5, fontWeight: 400, lineHeight: 1.3 }}>{label}</div>
-      <div style={{ color: valueColor, fontSize: 22, fontWeight: 600, lineHeight: 1.1, letterSpacing: "-.01em", marginTop: 5, fontVariantNumeric: "tabular-nums" }}>{value}</div>
-      {sub && <div style={{ color: FT.textSub, fontSize: 12, marginTop: 5 }}>{sub}</div>}
+    <div style={{ border: "1px solid #E6EAF0", background: "#FFFFFF", borderRadius: 10, padding: "14px 18px 15px", minWidth: 0 }}>
+      <div style={{ color: "#4B5768", fontSize: 12.5, lineHeight: 1.45 }}>{label}</div>
+      <div style={{ color: alert ? "#D03B3B" : "#0B1220", fontSize: 25, fontWeight: 600, lineHeight: 1.15, letterSpacing: "-.01em", marginTop: 3, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      {sub && <div style={{ color: "#7D889B", fontSize: 12, marginTop: 3, lineHeight: 1.45 }}>{sub}</div>}
     </div>
   );
 }

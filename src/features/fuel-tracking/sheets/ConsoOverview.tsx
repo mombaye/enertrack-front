@@ -5,6 +5,7 @@ import { Area, AreaChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, R
 import { BarChart3, PieChart as PieIcon } from "lucide-react";
 import type { ConsoEvolution } from "@/services/fuelTracking";
 import { HelpTip } from "./cphBadges";
+import { KpiRow } from "../bi/kit";
 import { FT } from "../theme";
 
 const nf = (v: number | null | undefined, d = 0) => (v === null || v === undefined ? "—" : v.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d }));
@@ -30,28 +31,27 @@ function Spark({ data }: { data: Array<number | null> }) {
 /** Bande de chiffres sobre : libellé, valeur, précision, tendance en texte simple, petite courbe grise. */
 export function KpiCards({ cards }: { cards: OverviewCard[] }) {
   return (
-    <div role="group" aria-label="Indicateurs de la période"
-      style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))", border: FT.borderCrisp, borderRadius: 6, overflow: "hidden", background: FT.card }}>
+    <div role="group" aria-label="Indicateurs de la période"><KpiRow>
       {cards.map((c) => (
-        <div key={c.key} style={{ padding: "14px 18px 15px", minWidth: 0, boxShadow: "1px 0 0 #E4E9F0, 0 1px 0 #E4E9F0" }}>
-          <div style={{ fontSize: 12.5, color: FT.textMid }}>{c.label}{c.help && <HelpTip text={c.help} label={c.label} />}</div>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginTop: 5 }}>
-            <span style={{ fontSize: 24, fontWeight: 600, color: FT.text, fontVariantNumeric: "tabular-nums", lineHeight: 1.1, letterSpacing: "-.01em" }}>{c.value === null ? "—" : nf(c.value)}</span>
-            {c.value !== null && <span style={{ fontSize: 12.5, color: FT.textSub }}>L</span>}
+        <div key={c.key} style={{ padding: "14px 18px 15px", minWidth: 0, background: "#FFFFFF" }}>
+          <div style={{ fontSize: 12.5, color: "#4B5768", lineHeight: 1.45 }}>{c.label}{c.help && <HelpTip text={c.help} label={c.label} />}</div>
+          <div style={{ marginTop: 3, lineHeight: 1.15 }}>
+            <span style={{ fontSize: 25, fontWeight: 600, color: "#0B1220", fontVariantNumeric: "tabular-nums", letterSpacing: "-.01em" }}>{c.value === null ? "—" : nf(c.value)}</span>
+            {c.value !== null && <span style={{ fontSize: 13, color: "#7D889B", marginLeft: 3 }}>L</span>}
           </div>
-          <div style={{ fontSize: 12, color: FT.textSub, marginTop: 5 }}>
+          <div style={{ fontSize: 12, color: "#7D889B", marginTop: 3, lineHeight: 1.45 }}>
             {c.sub}
             {c.trend !== undefined && (
               <> · {c.trend === null
                 ? (c.trendNote ?? "tendance indisponible")
-                : <span style={{ color: c.trend >= 0 ? FT.green : FT.red, fontWeight: 600 }}>{c.trend >= 0 ? "+" : "−"}{nf(Math.abs(c.trend), 1)} %</span>}
+                : <span style={{ color: c.trend >= 0 ? "#006300" : "#D03B3B", fontWeight: 600 }}>{c.trend >= 0 ? "+" : "−"}{nf(Math.abs(c.trend), 1)} %</span>}
                 {c.trend !== null && " sur la période précédente"}</>
             )}
           </div>
           {c.series && <Spark data={c.series} />}
         </div>
       ))}
-    </div>
+    </KpiRow></div>
   );
 }
 
