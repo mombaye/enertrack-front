@@ -2338,7 +2338,33 @@ export async function getBiCph(params: { start: string; end: string; zone?: stri
   return data;
 }
 
-export type BiExportKind = "conso" | "stock" | "cph" | "commande" | "estimation";
+export type RavitaillementRow = BiSiteRef & {
+  stock_releve_l: number; date_releve: string | null; age_releve_j: number | null; releve_ancien: boolean;
+  stock_estime_l: number; capacite_l: number | null; conso_jour_l: number; jours_avant_rupture: number;
+  date_rupture: string; livrer_avant: string; priorite: "URGENT" | "PLANIFIE";
+  quantite_l: number | null; quantite_motif: string | null;
+};
+export type RavitaillementParams = { zone?: string; month?: string; horizon?: string; securite?: string; cible?: string };
+export type RavitaillementResponse = {
+  parametres: { horizon: number; securite: number; cible: number; mois_reference: string | null; aujourdhui: string };
+  filters: { zones: string[] };
+  explain?: Record<string, KpiExplain>;
+  kpis: {
+    nb_sites: number; nb_urgent: number; quantite_l: number; nb_sans_quantite: number; nb_hors_plan: number;
+    nb_sites_ge: number; nb_au_dela: number; nb_releves_anciens: number;
+  };
+  plan: RavitaillementRow[];
+  hors_plan: Array<BiSiteRef & { motif: string }>;
+  by_zone: Array<{ zone: string; nb_sites: number; nb_urgent: number; quantite_l: number }>;
+  by_day: Array<{ date: string; nb_sites: number; quantite_l: number }>;
+};
+/** Plan de ravitaillement : sites à livrer dans l'horizon, date limite et quantité (règles décrites dans `explain`). */
+export async function getRavitaillement(params: RavitaillementParams) {
+  const { data } = await api.get<RavitaillementResponse>(`${BASE}/bi/ravitaillement/`, { params: cleanParams(params) });
+  return data;
+}
+
+export type BiExportKind = "conso" | "stock" | "cph" | "commande" | "estimation" | "ravitaillement";
 /** Télécharge le classeur Excel complet (toutes les lignes) généré côté serveur. */
 export async function downloadBiExport(kind: BiExportKind, params: Record<string, string | undefined>, filename: string) {
   const { data } = await api.get<Blob>(`${BASE}/bi/export/${kind}/`, { params: cleanParams(params), responseType: "blob" });

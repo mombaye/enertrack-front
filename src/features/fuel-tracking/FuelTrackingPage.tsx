@@ -30,6 +30,7 @@ import { GLOBAL_STYLES } from "./ui";
 import { ConsoBi } from "./bi/ConsoBi";
 import { CphBi } from "./bi/CphBi";
 import { StockBi } from "./bi/StockBi";
+import { RavitaillementBi } from "./bi/RavitaillementBi";
 import { CommandeBi, EstimationBi } from "./bi/CommandeBi";
 import { DetailSection, OpenSiteContext } from "./bi/kit";
 import { SiteBi } from "./bi/SiteBi";
@@ -40,13 +41,14 @@ import { EstimationSheet } from "./sheets/EstimationSheet";
 import { ControleCphSheet } from "./sheets/ControleCphSheet";
 import { ConfigurationSheet } from "./sheets/ConfigurationSheet";
 
-export type MainTab = "CONSOMMATION" | "CPH" | "STOCK" | "COMMANDE" | "ESTIMATION" | "CONFIGURATION";
+export type MainTab = "CONSOMMATION" | "CPH" | "STOCK" | "RAVITAILLEMENT" | "COMMANDE" | "ESTIMATION" | "CONFIGURATION";
 
 // L'ancienne rubrique Dashboard est fusionnée dans Suivi Conso (vue BI) : son adresse y mène désormais.
 export const FUEL_TAB_SLUGS: Array<{ tab: MainTab; slug: string }> = [
   { tab: "CONSOMMATION", slug: "consommations" },
   { tab: "CPH", slug: "controle-cph" },
   { tab: "STOCK", slug: "stock" },
+  { tab: "RAVITAILLEMENT", slug: "ravitaillement" },
   { tab: "COMMANDE", slug: "commandes" },
   { tab: "ESTIMATION", slug: "estimation-commande" },
   { tab: "CONFIGURATION", slug: "configuration" },
@@ -350,6 +352,12 @@ export default function FuelTrackingPage() {
               stickyTop={headerHeight}
             />
             </DetailSection>
+          </div>
+        )}
+
+        {!siteId && activeTab === "RAVITAILLEMENT" && (
+          <div className="ft-fade">
+            <RavitaillementBi toMonth={toMonth} />
           </div>
         )}
 
