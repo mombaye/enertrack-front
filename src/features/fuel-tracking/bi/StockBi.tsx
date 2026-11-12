@@ -42,14 +42,14 @@ export function StockBi({ toMonth }: { toMonth: string | null }) {
       {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 12.5 }}>Chargement impossible. Les onglets détaillés plus bas restent consultables.</div>}
 
       <KpiRow>
-        <BiKpi label="Stock en cuve" value={fNum(k?.stock_total_l)} unit="L"
+        <BiKpi label="Stock en cuve" detail={"Plus gros stocks"} value={fNum(k?.stock_total_l)} unit="L"
           sub={k?.remplissage_pct != null ? `${fPct(k.remplissage_pct)} de la capacité` : undefined} explain={x?.stock_total_l} />
-        <BiKpi label="Cuves sous 15 %" value={fNum(k?.nb_critique)} explain={x?.nb_critique} alert={k?.nb_critique ? "bad" : null}
+        <BiKpi label="Cuves sous 15 %" detail={"Cuves les plus basses"} detailLabel="Voir les cuves les plus basses" value={fNum(k?.nb_critique)} explain={x?.nb_critique} alert={k?.nb_critique ? "bad" : null}
           sub={k ? `${fNum(k.nb_alerte)} autres entre 15 et 40 %` : undefined} />
-        <BiKpi label="Autonomie < 3 jours" value={fNum(k?.nb_autonomie_moins_3j)} alert={k?.nb_autonomie_moins_3j ? "bad" : null} sub="sites à ravitailler en premier" explain={x?.nb_autonomie_moins_3j} />
-        <BiKpi label="Autonomie médiane" value={fDec1(k?.autonomie_mediane_j)} unit="jours" explain={x?.autonomie_mediane_j} sub="sites à la conso mesurée connue" />
-        <BiKpi label="Stock connu" value={fPct(k?.stock_connu_pct)} explain={x?.stock_connu_pct} sub={k ? `${fNum(k.nb_stock_connu)} / ${fNum(k.nb_sites)} sites GE` : undefined} />
-        <BiKpi label="Relevés de plus de 7 jours" value={fNum(k?.nb_releves_anciens)} explain={x?.nb_releves_anciens} alert={k?.nb_releves_anciens ? "warn" : null} sub="stock à confirmer sur place" />
+        <BiKpi label="Autonomie < 3 jours" detail={"Autonomie la plus courte"} detailLabel="Voir les sites à ravitailler" value={fNum(k?.nb_autonomie_moins_3j)} alert={k?.nb_autonomie_moins_3j ? "bad" : null} sub="sites à ravitailler en premier" explain={x?.nb_autonomie_moins_3j} />
+        <BiKpi label="Autonomie médiane" detail={"Autonomie restante"} detailLabel="Voir la répartition" value={fDec1(k?.autonomie_mediane_j)} unit="jours" explain={x?.autonomie_mediane_j} sub="sites à la conso mesurée connue" />
+        <BiKpi label="Stock connu" detail={"Ancienneté du dernier relevé"} detailLabel="Voir l'ancienneté des relevés" value={fPct(k?.stock_connu_pct)} explain={x?.stock_connu_pct} sub={k ? `${fNum(k.nb_stock_connu)} / ${fNum(k.nb_sites)} sites GE` : undefined} />
+        <BiKpi label="Relevés de plus de 7 jours" detail={"Ancienneté du dernier relevé"} detailLabel="Voir l'ancienneté des relevés" value={fNum(k?.nb_releves_anciens)} explain={x?.nb_releves_anciens} alert={k?.nb_releves_anciens ? "warn" : null} sub="stock à confirmer sur place" />
       </KpiRow>
 
       <Grid min={320}>

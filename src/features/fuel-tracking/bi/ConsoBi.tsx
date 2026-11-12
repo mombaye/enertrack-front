@@ -56,7 +56,7 @@ function ConsoSources({ params, enabled, single, kpis, children }: {
       )}
       <KpiRow>
         {SOURCES.map((c) => (
-          <BiKpi key={c.key} label={c.label} value={value(c.key)} unit="L"
+          <BiKpi key={c.key} label={c.label} detail={"Les 4 mesures côte à côte"} detailLabel="Comparer les 4 mesures" value={value(c.key)} unit="L"
             sub={ok ? `${fNum(s.kpis[c.key]?.sites)} / ${fNum(s.sites)} sites` : undefined}
             alert={c.key === "variation" && ok && (s.explain.variation?.valeurs.find((v) => v.label.startsWith("Variations négatives"))?.valeur ?? 0) as number > 0 ? "warn" : null}
             explain={ok ? s.explain[c.key] : null} />
@@ -202,9 +202,9 @@ export function ConsoBi({ fromMonth, toMonth }: { fromMonth: string | null; toMo
       <ConsoSources params={{ from_month: params.from_month, to_month: params.to_month, month: params.month, zone: zone || undefined }}
         enabled={!!fromMonth && !!toMonth} single={single}
         kpis={<>
-          <BiKpi label="Conso mesurée" value={fNum(k?.conso_mesuree_l)} unit="L" delta={delta(d?.deltas?.conso_mesuree_l)} upIsGood={false}
+          <BiKpi label="Conso mesurée" detail={"Plus gros consommateurs"} value={fNum(k?.conso_mesuree_l)} unit="L" delta={delta(d?.deltas?.conso_mesuree_l)} upIsGood={false}
             sub={vsPrev || (k ? `${fNum(k.nb_sites_mesure)} sites mesurés` : undefined)} explain={x?.conso_mesuree_l} />
-          <BiKpi label="Moyenne par site et par jour" value={fDec1(k?.l_site_jour)} unit="L" delta={delta(d?.deltas?.l_site_jour)} upIsGood={false}
+          <BiKpi label="Moyenne par site et par jour" detail={"Moyenne L / site / jour, par zone et par mois"} detailLabel="Voir par zone et par mois" value={fDec1(k?.l_site_jour)} unit="L" delta={delta(d?.deltas?.l_site_jour)} upIsGood={false}
             sub={vsPrev || undefined} explain={x?.l_site_jour} />
         </>}>
         {fromMonth && toMonth && <ConsoComparaisonSection scope={{ ...tablePeriod(fromMonth, toMonth, effMonth), zone: zone || undefined }} />}

@@ -28,6 +28,28 @@ export const BI = {
 export const KPI = { line: "#E6EAF0", fg: "#0B1220", fg2: "#4B5768", fg3: "#7D889B", crit: "#D03B3B", good: "#006300", radius: 10 } as const;
 export const kpiCell: CSSProperties = { background: "#FFFFFF", padding: "14px 18px 15px", minWidth: 0, textAlign: "left" };
 
+/** Identifiant stable d'un bloc (graphique ou classement) à partir de son titre : cible des clics sur les KPIs. */
+export const blocId = (title: string) => "bloc-" + title.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+/** Fait défiler jusqu'au bloc et le met brièvement en évidence. Retourne false si le bloc n'est pas affiché. */
+export function goToBloc(title: string): boolean {
+  const el = document.getElementById(blocId(title));
+  if (!el) return false;
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+  // Sécurité : si le défilement animé n'a pas abouti (navigateur qui l'interrompt), saut direct.
+  window.setTimeout(() => { if (Math.abs(el.getBoundingClientRect().top - 110) > 60) el.scrollIntoView({ block: "start" }); }, 700);
+  el.classList.remove("ft-focus");
+  void el.offsetWidth; // relance l'animation
+  el.classList.add("ft-focus");
+  // Focus clavier sur le bloc une fois le défilement terminé (un focus pendant l'animation l'interrompt).
+  if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
+  let done = false;
+  const focus = () => { if (done) return; done = true; el.focus({ preventScroll: true }); };
+  window.addEventListener("scrollend", focus, { once: true });
+  window.setTimeout(focus, 1200);
+  return true;
+}
+
 const nf0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const nf1 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 });
 const nf2 = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -86,9 +108,11 @@ export function KpiRow({ children }: { children: ReactNode }) {
  * `upIsGood` décide de la couleur de la variation ; `alert` colore la valeur quand elle sort de la norme.
  * Avec `explain`, la cellule est cliquable et ouvre le détail du calcul.
  */
-export function BiKpi({ label, value, unit, delta, deltaUnit = "%", upIsGood = true, sub, alert, explain }: {
+export function BiKpi({ label, value, unit, delta, deltaUnit = "%", upIsGood = true, sub, alert, explain, detail, detailLabel }: {
   label: string; value: string; unit?: string; delta?: number | null; deltaUnit?: "%" | "pts"; upIsGood?: boolean;
   sub?: ReactNode; alert?: "bad" | "warn" | null; explain?: KpiExplain | null;
+  /** Titre du bloc de la page qui détaille ce chiffre (classement ou graphique). */
+  detail?: string; detailLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const hasDelta = delta != null;
@@ -111,15 +135,24 @@ export function BiKpi({ label, value, unit, delta, deltaUnit = "%", upIsGood = t
     </>
   );
   const cell = kpiCell;
+  if (!explain && detail) {
+    return (
+      <button type="button" className="bi-kpi" onClick={() => goToBloc(detail)} title={`Voir : ${detail}`}
+        style={{ ...cell, border: "none", font: "inherit", cursor: "pointer", width: "100%", display: "block" }}>
+        {body}
+      </button>
+    );
+  }
   if (!explain) return <div style={cell}>{body}</div>;
   return (
     <>
       <button type="button" className="bi-kpi" onClick={() => setOpen(true)} aria-haspopup="dialog"
-        title="Voir le détail du calcul"
+        title={detail ? "Voir le calcul et les sites concernés" : "Voir le détail du calcul"}
         style={{ ...cell, border: "none", font: "inherit", cursor: "pointer", width: "100%", display: "block" }}>
         {body}
       </button>
-      {open && <ExplainModal x={explain} value={value} unit={unit} onClose={() => setOpen(false)} />}
+      {open && <ExplainModal x={explain} value={value} unit={unit} onClose={() => setOpen(false)}
+        detail={detail} detailLabel={detailLabel} />}
     </>
   );
 }
@@ -132,13 +165,23 @@ const fVal = (v: number | string | null, unite: string) => {
 };
 
 /** Fenêtre « D'où vient ce chiffre » : formule, valeurs du calcul, sources, périmètre, exclusions, fraîcheur. */
-export function ExplainModal({ x, value, unit, onClose }: { x: KpiExplain; value: string; unit?: string; onClose: () => void }) {
+export function ExplainModal({ x, value, unit, onClose, detail, detailLabel }: {
+  x: KpiExplain; value: string; unit?: string; onClose: () => void; detail?: string; detailLabel?: string;
+}) {
   const h: CSSProperties = { fontSize: 11.5, fontWeight: 700, color: FT.textMid, margin: "16px 0 6px" };
   return (
     <Modal title={x.titre} onClose={onClose} maxWidth={600}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-        <span style={{ fontSize: 30, fontWeight: 700, color: FT.navy, fontVariantNumeric: "tabular-nums" }}>{value}</span>
-        {unit && value !== "—" && <span style={{ fontSize: 14, color: FT.textMid, fontWeight: 600 }}>{unit}</span>}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 6, flex: 1 }}>
+          <span style={{ fontSize: 30, fontWeight: 700, color: FT.navy, fontVariantNumeric: "tabular-nums" }}>{value}</span>
+          {unit && value !== "—" && <span style={{ fontSize: 14, color: FT.textMid, fontWeight: 600 }}>{unit}</span>}
+        </div>
+        {detail && (
+          <button type="button" onClick={() => { onClose(); window.setTimeout(() => goToBloc(detail), 60); }}
+            style={{ border: "none", background: FT.navy, color: "#fff", borderRadius: 8, padding: "9px 14px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+            {detailLabel ?? "Voir les sites concernés"} →
+          </button>
+        )}
       </div>
       <div style={{ marginTop: 10, padding: "10px 12px", background: FT.slateL, borderLeft: `3px solid ${FT.navy}`, fontSize: 13, color: FT.text, lineHeight: 1.45 }}>
         {x.formule}
@@ -183,7 +226,7 @@ export function ExplainModal({ x, value, unit, onClose }: { x: KpiExplain; value
       {x.note && <div style={{ marginTop: 14, fontSize: 12.5, color: FT.textMid, lineHeight: 1.45 }}>{x.note}</div>}
       <div style={{ marginTop: 16, paddingTop: 10, borderTop: "1px solid #EEF1F5", fontSize: 11.5, color: FT.textSub }}>
         {x.mise_a_jour ? `Données synchronisées le ${new Date(x.mise_a_jour).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}` : "Date de synchronisation inconnue"}
-        {" · le détail site par site est dans l'export Excel."}
+        {" · la liste complète site par site est dans l'export Excel."}
       </div>
     </Modal>
   );
@@ -208,7 +251,7 @@ export function ChartCard({ title, info, legend, loading, error, empty, height =
   loading?: boolean; error?: boolean; empty?: boolean; height?: number; children: ReactNode; action?: ReactNode;
 }) {
   return (
-    <Card style={{ padding: "14px 16px", minWidth: 0, borderRadius: 6 }}>
+    <Card id={blocId(title)} style={{ padding: "14px 16px", minWidth: 0, borderRadius: 6 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: FT.text, display: "inline-flex", alignItems: "center", gap: 6 }}>
           {title}{info && <InfoTip text={info} />}
@@ -257,7 +300,7 @@ export function TopTable<T>({ title, info, rows, columns, barValue, barMax, barC
 }) {
   const max = barMax ?? Math.max(1, ...(rows ?? []).map((r) => Math.abs(barValue?.(r) ?? 0)));
   return (
-    <Card style={{ padding: "14px 16px", minWidth: 0, borderRadius: 6 }}>
+    <Card id={blocId(title)} style={{ padding: "14px 16px", minWidth: 0, borderRadius: 6 }}>
       <div style={{ fontSize: 13, fontWeight: 700, color: FT.text, display: "inline-flex", alignItems: "center", gap: 6 }}>
         {title}{info && <InfoTip text={info} />}
       </div>

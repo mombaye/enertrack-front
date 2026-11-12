@@ -81,14 +81,14 @@ export function CphBi({ fromMonth, toMonth }: { fromMonth: string | null; toMont
       {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 12.5 }}>Calcul CPH indisponible (calcul ou Snowflake en erreur). Le contrôle détaillé plus bas reste consultable.</div>}
 
       <KpiRow>
-        <BiKpi label="Sites au CPH complet" value={fPct(k?.couverture_cph_pct)} explain={x?.couverture_cph_pct} sub={k ? `${fNum(k.nb_cph_complet)} / ${fNum(k.nb_sites_ge)} sites GE` : undefined} />
-        <BiKpi label="Conso estimée CPH" value={fNum(k?.conso_theorique_l)} unit="L" explain={x?.conso_theorique_l} sub="CPH × heures de marche, sites complets" />
-        <BiKpi label="Heures de marche GE" value={fNum(k?.runtime_total_h)} unit="h" explain={x?.runtime_total_h} />
-        <BiKpi label="CPH moyen" value={fRatio(k?.cph_moy_l_h)} unit="L/h" explain={x?.cph_moy_l_h} />
-        <BiKpi label="Charge moyenne GE" value={fDec1(k?.charge_moy_pct)} unit="%"
+        <BiKpi label="Sites au CPH complet" detail={"Motifs de non-calcul"} detailLabel="Voir pourquoi certains sites ne sont pas calculés" value={fPct(k?.couverture_cph_pct)} explain={x?.couverture_cph_pct} sub={k ? `${fNum(k.nb_cph_complet)} / ${fNum(k.nb_sites_ge)} sites GE` : undefined} />
+        <BiKpi label="Conso estimée CPH" detail={"Plus forte conso estimée"} value={fNum(k?.conso_theorique_l)} unit="L" explain={x?.conso_theorique_l} sub="CPH × heures de marche, sites complets" />
+        <BiKpi label="Heures de marche GE" detail="Plus d'heures de marche" value={fNum(k?.runtime_total_h)} unit="h" explain={x?.runtime_total_h} />
+        <BiKpi label="CPH moyen" detail={"Charge du GE et CPH par site"} detailLabel="Voir site par site" value={fRatio(k?.cph_moy_l_h)} unit="L/h" explain={x?.cph_moy_l_h} />
+        <BiKpi label="Charge moyenne GE" detail={"Charge du GE et CPH par site"} detailLabel="Voir site par site" value={fDec1(k?.charge_moy_pct)} unit="%"
           alert={k?.charge_moy_pct != null && k.charge_moy_pct < 30 ? "warn" : null}
           sub="pondérée par les heures" explain={x?.charge_moy_pct} />
-        <BiKpi label="Mesuré vs CPH" value={fSignedPct(k?.ecart_global_pct)} explain={x?.ecart_global_pct}
+        <BiKpi label="Mesuré vs CPH" detail={"Écarts mesuré / CPH"} detailLabel="Voir les plus gros écarts" value={fSignedPct(k?.ecart_global_pct)} explain={x?.ecart_global_pct}
           alert={k?.ecart_global_pct == null ? null : Math.abs(k.ecart_global_pct) > 15 ? "bad" : null}
           sub={k ? `${fNum(k.nb_sites_comparables)} sites ayant les deux` : undefined} />
       </KpiRow>

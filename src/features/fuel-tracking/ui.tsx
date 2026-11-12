@@ -9,13 +9,16 @@ export function Card({
   children,
   style,
   padded = true,
+  id,
 }: {
   children: ReactNode;
   style?: CSSProperties;
   padded?: boolean;
+  id?: string;
 }) {
   return (
     <div
+      id={id}
       style={{
         background: FT.card,
         borderRadius: FT.radius,
@@ -409,6 +412,9 @@ export const GLOBAL_STYLES = `
   @keyframes ftSpin { to { transform: rotate(360deg); } }
   @keyframes ftShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
   .ft-fade { animation: ftFadeUp .25s ease-out both; }
+  [id^="bloc-"] { scroll-margin-top: 110px; }
+  @keyframes ftFocus { 0%, 60% { box-shadow: 0 0 0 3px #1A56C4; } 100% { box-shadow: 0 0 0 3px rgba(26,86,196,0); } }
+  .ft-focus { animation: ftFocus 1.8s ease-out; }
   .ft-skel { background: linear-gradient(90deg, #EEF2F7 25%, #E2E9F2 50%, #EEF2F7 75%); background-size: 200% 100%; animation: ftShimmer 1.2s infinite; }
   .ft-spin { animation: ftSpin .75s linear infinite; }
   .fuelbook input, .fuelbook select, .fuelbook button { font-family: inherit; }
