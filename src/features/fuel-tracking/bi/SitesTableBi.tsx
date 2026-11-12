@@ -1,5 +1,6 @@
-// Données par site (un mois) : activité GE, conso mesurée et conso estimée CPH (deux colonnes, jamais additionnées),
-// comparaisons, stock retenu (relevé le plus récent, toutes sources), livraisons et alertes.
+// Données par site (un mois), en deux parties :
+//  - vue « conso » (Suivi Conso)  : conso mesurée et conso estimée CPH (jamais additionnées), écart, activité GE, comparaisons ;
+//  - vue « stock » (Suivi Stock)  : stock retenu (relevé le plus récent, toutes sources), autonomie, livraisons.
 // Pagination et tri côté serveur ; export Excel de toutes les lignes.
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -10,28 +11,33 @@ import { FT } from "../theme";
 import { BiKpi, FilterBar, FilterSelect, KpiRow, SiteCell, StateBox, blocId, fDays, fDec1, fL, fNum, fPct, fRatio, fSignedPct } from "./kit";
 import { monthLabel } from "../helpers";
 
-const TITLE = "Données par site";
+const TITLES = { conso: "Consommation par site", stock: "Stock par site" } as const;
+type Vue = keyof typeof TITLES;
 const PAGE_SIZE = 50;
 type Group = "ge" | "conso" | "comp" | "stock" | "liv";
-const GROUPS: Array<[Group, string]> = [["ge", "Activité GE"], ["conso", "Conso"], ["comp", "Comparaisons"], ["stock", "Stock"], ["liv", "Livraisons"]];
+const GROUPS: Record<Vue, Array<[Group, string]>> = {
+  conso: [["conso", "Conso"], ["ge", "Activité GE"], ["comp", "Comparaisons"]],
+  stock: [["stock", "Stock"], ["liv", "Livraisons"]],
+};
 type Col = { key: string; label: string; group: Group | "site"; sort?: string; render: (r: SiteTableRow) => ReactNode; title?: string };
 
 const muted = (t: ReactNode) => <span style={{ color: FT.textSub }}>{t}</span>;
 const signed = (v: number | null, bad: number) => v == null ? "—" : <span style={{ color: Math.abs(v) > bad ? FT.red : FT.text, fontWeight: Math.abs(v) > bad ? 600 : 400 }}>{fSignedPct(v)}</span>;
 const fDate = (iso: string | null) => (iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }) : "—");
 
-export function SitesTableBi({ toMonth }: { toMonth: string | null }) {
+export function SitesTableBi({ toMonth, vue }: { toMonth: string | null; vue: Vue }) {
+  const TITLE = TITLES[vue];
   const [zone, setZone] = useState("");
   const [alerte, setAlerte] = useState("");
   const [text, setText] = useState("");
   const [q, setQ] = useState("");
-  const [sort, setSort] = useState("nb_alertes");
-  const [desc, setDesc] = useState(true);
+  const [sort, setSort] = useState(vue === "stock" ? "autonomie_j" : "nb_alertes");
+  const [desc, setDesc] = useState(vue !== "stock");
   const [page, setPage] = useState(1);
   const [hidden, setHidden] = useState<Group[]>([]);
   useEffect(() => { const t = setTimeout(() => { setQ(text.trim()); setPage(1); }, 250); return () => clearTimeout(t); }, [text]);
 
-  const params = { month: toMonth ?? undefined, zone, q, alerte, sort, desc: desc ? "1" : "0", page: String(page), page_size: String(PAGE_SIZE) };
+  const params = { vue, month: toMonth ?? undefined, zone, q, alerte, sort, desc: desc ? "1" : "0", page: String(page), page_size: String(PAGE_SIZE) };
   const r = useQuery({
     queryKey: ["fuel-bi-sites-table", params],
     queryFn: () => getSiteTable(params),
@@ -46,22 +52,24 @@ export function SitesTableBi({ toMonth }: { toMonth: string | null }) {
   const pages = d ? Math.max(1, Math.ceil(d.total / (d.page_size || PAGE_SIZE))) : 1;
 
   const cols: Col[] = [
-    { key: "site", label: "Site", group: "site", sort: "site_id", render: (r) => <SiteCell id={r.site_id} name={r.site_name} /> },
-    { key: "zone", label: "Zone", group: "site", sort: "zone", render: (r) => r.zone ?? "—" },
-    { key: "conf", label: "Config.", group: "site", render: (r) => <span style={{ whiteSpace: "nowrap", color: FT.textSub }}>{r.configuration ?? "—"}<br />{r.energie ?? ""}</span> },
-    { key: "kva", label: "GE", group: "ge", render: (r) => (r.ge_kva != null ? <span style={{ whiteSpace: "nowrap" }}>{fDec1(r.ge_kva)} kVA</span> : "—") },
-    { key: "rt", label: "Running time", group: "ge", sort: "runtime_h", render: (r) => r.runtime_h == null ? "—" : <>{fNum(r.runtime_h)} h<br />{muted(`${fDec1(r.h_jour)} h/j`)}</> },
-    { key: "cph", label: "CPH", group: "ge", sort: "cph_l_h", title: "Consommation horaire du GE (L/h)", render: (r) => r.cph_l_h == null ? <span title={r.motif_cph ?? undefined}>{muted("—")}</span> : `${fRatio(r.cph_l_h)} L/h` },
-    { key: "charge", label: "Charge", group: "ge", sort: "charge_pct", render: (r) => r.charge_pct == null ? "—" : <span style={{ color: s && r.charge_pct < s.sous_charge_pct ? "#9A6200" : FT.text }}>{fPct(r.charge_pct)}</span> },
-    { key: "kwh", label: "kWh GE", group: "ge", render: (r) => fNum(r.ge_prod_kwh) },
+    { key: "site", label: "Site", group: "site", sort: "site_id", render: (r) => (
+      <span style={{ display: "block", maxWidth: 230 }}>
+        <SiteCell id={r.site_id} name={r.site_name} />
+        <span style={{ display: "block", fontSize: 11, color: FT.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {[r.zone, r.configuration, r.energie, r.ge_kva != null ? `${fDec1(r.ge_kva)} kVA` : null].filter(Boolean).join(" · ") || "—"}
+        </span>
+      </span>) },
     { key: "mes", label: "Conso mesurée", group: "conso", sort: "conso_mesuree_l", render: (r) => r.conso_mesuree_l == null ? "—" : <><b style={{ fontWeight: 600 }}>{fL(r.conso_mesuree_l)}</b><br />{muted(`${fDec1(r.l_jour)} L/j · ${r.jours_mesures ?? 0} j`)}</> },
     { key: "est", label: "Conso estimée (CPH)", group: "conso", sort: "conso_estimee_l", render: (r) => r.conso_estimee_l == null ? <span title={r.motif_cph ?? undefined}>{muted("—")}</span> : fL(r.conso_estimee_l) },
     { key: "ecart", label: "Écart mesuré / estimé", group: "conso", sort: "ecart_pct", render: (r) => r.ecart_pct == null ? "—" : <>{signed(r.ecart_pct, s?.ecart_pct ?? 20)}<br />{muted(`${r.ecart_l! > 0 ? "+" : ""}${fL(r.ecart_l)}`)}</> },
     { key: "lkwh", label: "L/kWh", group: "conso", sort: "l_kwh", render: (r) => r.l_kwh == null ? "—" : <span style={{ color: s && r.l_kwh > s.l_kwh ? FT.red : FT.text }}>{fRatio(r.l_kwh)}</span> },
+    { key: "rt", label: "Running time", group: "ge", sort: "runtime_h", render: (r) => r.runtime_h == null ? "—" : <>{fNum(r.runtime_h)} h<br />{muted(`${fDec1(r.h_jour)} h/j`)}</> },
+    { key: "cph", label: "CPH", group: "ge", sort: "cph_l_h", title: "Consommation horaire du GE (L/h)", render: (r) => r.cph_l_h == null ? <span title={r.motif_cph ?? undefined}>{muted("—")}</span> : `${fRatio(r.cph_l_h)} L/h` },
+    { key: "charge", label: "Charge", group: "ge", sort: "charge_pct", render: (r) => r.charge_pct == null ? "—" : <><span style={{ color: s && r.charge_pct < s.sous_charge_pct ? "#9A6200" : FT.text }}>{fPct(r.charge_pct)}</span><br />{muted(r.ge_prod_kwh != null ? `${fNum(r.ge_prod_kwh)} kWh` : "")}</> },
     { key: "evo", label: "vs mois préc.", group: "comp", sort: "evolution_pct", title: "Évolution de la conso mesurée par jour", render: (r) => r.evolution_pct == null ? "—" : <>{fSignedPct(r.evolution_pct)}<br />{muted(fL(r.conso_prec_l))}</> },
     { key: "tgt", label: "vs target", group: "comp", sort: "ecart_target_pct", render: (r) => r.ecart_target_pct == null ? "—" : <>{signed(r.ecart_target_pct, s?.tolerance_target_pct ?? 10)}<br />{muted(fL(r.target_l))}</> },
-    { key: "stock", label: "Stock", group: "stock", sort: "stock_l", render: (r) => r.stock_l == null ? "—" : <>{fL(r.stock_l)}{r.stock_estime && <span style={{ marginLeft: 4, fontSize: 10.5, color: "#9A6200" }}>estimé</span>}<br />{muted(`${r.source_stock ?? ""} · ${fDate(r.date_stock)}`)}</> },
-    { key: "fill", label: "Remplissage", group: "stock", render: (r) => r.remplissage_pct == null ? "—" : <>{fPct(r.remplissage_pct)}<br />{muted(fL(r.capacite_l))}</> },
+    { key: "stock", label: "Stock", group: "stock", sort: "stock_l", render: (r) => r.stock_l == null ? "—" : <>{fL(r.stock_l)}{r.stock_estime && <span style={{ marginLeft: 4, fontSize: 10.5, color: "#9A6200" }}>estimé</span>}<br />{muted(`${r.source_stock ?? ""} · ${fDate(r.date_stock)}${r.remplissage_pct != null ? ` · ${fPct(r.remplissage_pct)}` : ""}`)}</> },
+    { key: "ljs", label: "Conso / jour", group: "stock", sort: "l_jour", title: "Conso mesurée moyenne par jour du mois", render: (r) => r.l_jour == null ? "—" : `${fDec1(r.l_jour)} L/j` },
     { key: "auto", label: "Autonomie", group: "stock", sort: "autonomie_j", render: (r) => r.autonomie_j == null ? "—" : <span style={{ color: r.autonomie_j < 3 ? FT.red : FT.text, fontWeight: r.autonomie_j < 3 ? 600 : 400 }}>{fDays(r.autonomie_j)}</span> },
     { key: "enoc", label: "Livré ENOC", group: "liv", sort: "enoc_livre_l", render: (r) => r.enoc_livre_l == null ? "—" : <>{fL(r.enoc_livre_l)}<br />{muted(`${r.nb_livraisons} livraison${r.nb_livraisons > 1 ? "s" : ""}`)}</> },
     { key: "al", label: "Alertes", group: "site", sort: "nb_alertes", render: (r) => r.alertes.length === 0 ? muted("—") : (
@@ -69,7 +77,8 @@ export function SitesTableBi({ toMonth }: { toMonth: string | null }) {
         {r.alertes.map((a) => <span key={a} style={{ fontSize: 10.5, padding: "1px 6px", borderRadius: 4, background: "#FDECEC", color: "#A42B2B", whiteSpace: "nowrap" }}>{alertLabels?.[a] ?? a}</span>)}
       </span>) },
   ];
-  const shown = cols.filter((c) => c.group === "site" || !hidden.includes(c.group));
+  const groups = GROUPS[vue];
+  const shown = cols.filter((c) => c.group === "site" || (groups.some(([g]) => g === c.group) && !hidden.includes(c.group)));
   const sortBy = (key?: string) => {
     if (!key) return;
     if (key === sort) setDesc(!desc); else { setSort(key); setDesc(key !== "site_id" && key !== "zone"); }
@@ -83,7 +92,7 @@ export function SitesTableBi({ toMonth }: { toMonth: string | null }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <FilterBar
         note={d?.month ? `Sénégal · sites GE · ${monthLabel(d.month)}${d.cph_disponible === false ? " · moteur CPH indisponible : conso estimée absente" : ""}` : undefined}
-        onExport={() => downloadBiExport("sites", { ...params, page: undefined, page_size: undefined }, `donnees_par_site_${d?.month ?? ""}.xlsx`)}
+        onExport={() => downloadBiExport("sites", { ...params, page: undefined, page_size: undefined }, `${vue === "stock" ? "stock" : "conso"}_par_site_${d?.month ?? ""}.xlsx`)}
       >
         <FilterSelect label="Zone" value={zone} options={d?.filters.zones ?? []} onChange={reset(setZone)} allLabel="Toutes" />
         <FilterSelect label="Alerte" value={alerte} options={Object.keys(alertLabels ?? {})} onChange={reset(setAlerte)} allLabel="Toutes"
@@ -97,27 +106,27 @@ export function SitesTableBi({ toMonth }: { toMonth: string | null }) {
 
       {r.isError && <div role="alert" style={{ color: FT.red, fontSize: 12.5 }}>Chargement impossible. Réessayez avec le bouton Rafraîchir.</div>}
 
-      <KpiRow>
-        <BiKpi label="Conso mesurée" detail={TITLE} detailLabel="Voir par site" value={fNum(k?.conso_mesuree_l)} unit="L" explain={x?.conso_mesuree_l}
-          sub={k ? `${fNum(k.nb_sites_mesure)} / ${fNum(k.nb_sites)} sites mesurés` : undefined} />
-        <BiKpi label="Conso estimée (CPH)" detail={TITLE} detailLabel="Voir par site" value={fNum(k?.conso_estimee_l)} unit="L" explain={x?.conso_estimee_l}
-          sub={k ? `running time × CPH · ${fNum(k.nb_sites_estime)} sites` : undefined} />
-        <BiKpi label="Écart mesuré / estimé" detail={TITLE} detailLabel="Voir les sites en écart" value={k?.ecart_pct == null ? "—" : fSignedPct(k.ecart_pct)} explain={x?.ecart_pct}
-          alert={k && k.nb_ecart_cph ? "warn" : null} sub={k ? `${fNum(k.nb_sites_comparables)} sites comparables · ${fNum(k.nb_ecart_cph)} au-delà de ${s?.ecart_pct ?? 20} %` : undefined} />
-        <BiKpi label="Running time GE" detail={TITLE} detailLabel="Voir par site" value={fNum(k?.runtime_total_h)} unit="h" explain={x?.runtime_total_h}
-          sub={k?.h_site_jour != null ? `${fDec1(k.h_site_jour)} h par site et par jour` : undefined} />
-        <BiKpi label="CPH moyen" detail={TITLE} detailLabel="Voir par site" value={k?.cph_moyen_l_h == null ? "—" : fRatio(k.cph_moyen_l_h)} unit="L/h" explain={x?.cph_moyen_l_h}
-          sub="pondéré par les heures de marche" />
-        <BiKpi label="Sites en alerte" detail={TITLE} detailLabel="Voir les sites" value={fNum(k?.nb_sites_alerte)} explain={x?.nb_sites_alerte}
-          alert={k?.nb_sites_alerte ? "bad" : null} sub={k ? `sur ${fNum(k.nb_sites)} sites GE` : undefined} />
-      </KpiRow>
+      {vue === "conso" && (
+    <KpiRow>
+          <BiKpi label="Conso estimée (CPH)" detail={TITLE} detailLabel="Voir par site" value={fNum(k?.conso_estimee_l)} unit="L" explain={x?.conso_estimee_l}
+            sub={k ? `running time × CPH · ${fNum(k.nb_sites_estime)} sites` : undefined} />
+          <BiKpi label="Écart mesuré / estimé" detail={TITLE} detailLabel="Voir les sites en écart" value={k?.ecart_pct == null ? "—" : fSignedPct(k.ecart_pct)} explain={x?.ecart_pct}
+            alert={k && k.nb_ecart_cph ? "warn" : null} sub={k ? `${fNum(k.nb_sites_comparables)} sites comparables · ${fNum(k.nb_ecart_cph)} au-delà de ${s?.ecart_pct ?? 20} %` : undefined} />
+          <BiKpi label="Running time GE" detail={TITLE} detailLabel="Voir par site" value={fNum(k?.runtime_total_h)} unit="h" explain={x?.runtime_total_h}
+            sub={k?.h_site_jour != null ? `${fDec1(k.h_site_jour)} h par site et par jour` : undefined} />
+          <BiKpi label="CPH moyen" detail={TITLE} detailLabel="Voir par site" value={k?.cph_moyen_l_h == null ? "—" : fRatio(k.cph_moyen_l_h)} unit="L/h" explain={x?.cph_moyen_l_h}
+            sub="pondéré par les heures de marche" />
+          <BiKpi label="Sites en alerte" detail={TITLE} detailLabel="Voir les sites" value={fNum(k?.nb_sites_alerte)} explain={x?.nb_sites_alerte}
+            alert={k?.nb_sites_alerte ? "bad" : null} sub={k ? `sur ${fNum(k.nb_sites)} sites GE` : undefined} />
+        </KpiRow>
+      )}
 
       <Card id={blocId(TITLE)} style={{ padding: 0, borderRadius: 6, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", flexWrap: "wrap", borderBottom: "1px solid #E4E9F0" }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: FT.text }}>{TITLE}</div>
           <div style={{ fontSize: 12, color: FT.textSub }}>{d ? `${fNum(d.total)} sites · trié par ${cols.find((c) => c.sort === sort)?.label.toLowerCase() ?? sort}` : ""}</div>
           <div role="group" aria-label="Colonnes affichées" style={{ marginLeft: "auto", display: "flex", gap: 4, flexWrap: "wrap" }}>
-            {GROUPS.map(([g, label]) => {
+            {groups.length > 1 && groups.map(([g, label]) => {
               const on = !hidden.includes(g);
               return (
                 <button key={g} type="button" aria-pressed={on} onClick={() => setHidden(on ? [...hidden, g] : hidden.filter((h) => h !== g))}

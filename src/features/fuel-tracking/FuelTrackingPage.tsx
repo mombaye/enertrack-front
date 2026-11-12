@@ -33,7 +33,7 @@ import { StockBi } from "./bi/StockBi";
 import { RavitaillementBi } from "./bi/RavitaillementBi";
 import { SitesTableBi } from "./bi/SitesTableBi";
 import { CommandeBi, EstimationBi } from "./bi/CommandeBi";
-import { DetailSection, OpenSiteContext } from "./bi/kit";
+import { DetailSection, OpenSiteContext, SectionTitle } from "./bi/kit";
 import { SiteBi } from "./bi/SiteBi";
 import { SiteSearch } from "./bi/SiteSearch";
 import { StockSheet } from "./sheets/StockSheet";
@@ -42,7 +42,7 @@ import { EstimationSheet } from "./sheets/EstimationSheet";
 import { ControleCphSheet } from "./sheets/ControleCphSheet";
 import { ConfigurationSheet } from "./sheets/ConfigurationSheet";
 
-export type MainTab = "CONSOMMATION" | "CPH" | "STOCK" | "RAVITAILLEMENT" | "SITES" | "COMMANDE" | "ESTIMATION" | "CONFIGURATION";
+export type MainTab = "CONSOMMATION" | "CPH" | "STOCK" | "RAVITAILLEMENT" | "COMMANDE" | "ESTIMATION" | "CONFIGURATION";
 
 // L'ancienne rubrique Dashboard est fusionnée dans Suivi Conso (vue BI) : son adresse y mène désormais.
 export const FUEL_TAB_SLUGS: Array<{ tab: MainTab; slug: string }> = [
@@ -50,12 +50,12 @@ export const FUEL_TAB_SLUGS: Array<{ tab: MainTab; slug: string }> = [
   { tab: "CPH", slug: "controle-cph" },
   { tab: "STOCK", slug: "stock" },
   { tab: "RAVITAILLEMENT", slug: "ravitaillement" },
-  { tab: "SITES", slug: "donnees-par-site" },
   { tab: "COMMANDE", slug: "commandes" },
   { tab: "ESTIMATION", slug: "estimation-commande" },
   { tab: "CONFIGURATION", slug: "configuration" },
 ];
-const TAB_BY_SLUG: Record<string, MainTab> = { ...Object.fromEntries(FUEL_TAB_SLUGS.map((x) => [x.slug, x.tab])), dashboard: "CONSOMMATION" };
+// « donnees-par-site » : ancienne rubrique, son contenu est maintenant dans Suivi Conso et Suivi Stock.
+const TAB_BY_SLUG: Record<string, MainTab> = { ...Object.fromEntries(FUEL_TAB_SLUGS.map((x) => [x.slug, x.tab])), dashboard: "CONSOMMATION", "donnees-par-site": "CONSOMMATION" };
 const SLUG_BY_TAB = Object.fromEntries(FUEL_TAB_SLUGS.map((x) => [x.tab, x.slug])) as Record<MainTab, string>;
 
 /** Mois calendaire précédent le mois courant réel (pas lié aux données),
@@ -320,6 +320,8 @@ export default function FuelTrackingPage() {
         {!siteId && activeTab === "CONSOMMATION" && (
           <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <ConsoBi fromMonth={fromMonth} toMonth={toMonth} />
+            <SectionTitle sub="un mois · conso mesurée et conso estimée (CPH) séparées · activité GE · comparaisons">Détail par site</SectionTitle>
+            <SitesTableBi vue="conso" toMonth={toMonth} />
           </div>
         )}
 
@@ -335,6 +337,8 @@ export default function FuelTrackingPage() {
         {!siteId && activeTab === "STOCK" && (
           <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <StockBi toMonth={toMonth} />
+            <SectionTitle sub="stock retenu (relevé le plus récent, toutes sources) · autonomie · livraisons">Détail par site</SectionTitle>
+            <SitesTableBi vue="stock" toMonth={toMonth} />
             <DetailSection title="Stock détaillé (registre, relevés, bilans, imports)">
             <StockSheet
               data={stockQ.data}
@@ -360,12 +364,6 @@ export default function FuelTrackingPage() {
         {!siteId && activeTab === "RAVITAILLEMENT" && (
           <div className="ft-fade">
             <RavitaillementBi toMonth={toMonth} />
-          </div>
-        )}
-
-        {!siteId && activeTab === "SITES" && (
-          <div className="ft-fade">
-            <SitesTableBi toMonth={toMonth} />
           </div>
         )}
 
