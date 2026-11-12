@@ -2139,6 +2139,8 @@ export type ConsoFilters = {
   date_debut?: string; date_fin?: string; pays?: string; zone?: string; site?: string; typologie?: string; typologie_energie?: string;
   statut_bilan?: string; statut_certification?: string; source_stock?: string; source_runtime?: string; source_puissance?: string; source_target?: string;
   qualite?: string; correspondance?: string; tri?: string; page?: number; page_size?: number;
+  /** "senegal" : uniquement les sites du Sénégal (pays vide inclus), même règle que les vues BI. */
+  perimetre?: string;
 };
 
 export async function getConsommations(params: ConsoFilters) {

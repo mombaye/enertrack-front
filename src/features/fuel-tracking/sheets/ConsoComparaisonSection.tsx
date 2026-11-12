@@ -194,7 +194,9 @@ function KpiStrip({ cells }: { cells: Array<{ tone: Tone; label: string; value: 
   );
 }
 
-export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
+/** `scope` : mode « tableau seul » piloté par la vue BI (période et zone du header, Sénégal) —
+ * seuls le tableau des suivis, la vue détaillée paginée et le détail d'un site sont affichés. */
+export function ConsoComparaisonSection({ extra, scope }: { extra?: ReactNode; scope?: { debut: string; fin: string; zone?: string; label?: string } }) {
   const [debut, setDebut] = useState<string>("");
   const [fin, setFin] = useState<string>("");
   const [f, setF] = useState<ConsoFilters>({});
@@ -207,10 +209,12 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const params: ConsoFilters = { ...f, site: site || undefined, date_debut: debut || undefined, date_fin: fin || undefined, page, page_size: 50 };
-  const periods = useQuery({ queryKey: ["conso-periods"], queryFn: getConsommationsPeriodes, staleTime: 60_000 });
+  const params: ConsoFilters = scope
+    ? { ...f, zone: scope.zone || undefined, perimetre: "senegal", date_debut: scope.debut, date_fin: scope.fin, page, page_size: 50 }
+    : { ...f, site: site || undefined, date_debut: debut || undefined, date_fin: fin || undefined, page, page_size: 50 };
+  const periods = useQuery({ queryKey: ["conso-periods"], queryFn: getConsommationsPeriodes, staleTime: 60_000, enabled: !scope });
   const q = useQuery({ queryKey: ["consommations", params], queryFn: () => getConsommations(params), placeholderData: keepPreviousData });
-  const evo = useQuery({ queryKey: ["conso-evolution"], queryFn: getConsoEvolution, staleTime: 60_000 });
+  const evo = useQuery({ queryKey: ["conso-evolution"], queryFn: getConsoEvolution, staleTime: 60_000, enabled: !scope });
   const d = q.data;
   const per = d?.periode ?? null;
   const A = d?.aide ?? {};
@@ -279,6 +283,7 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
 
   return (
     <section aria-label="Suivis Consommations" style={{ display: "grid", gap: 14 }}>
+      {!scope && <>
       <SectionTitle title="Suivis Consommations" subtitle="Analyse et suivi de la consommation de carburant par période et site"
         right={per && (
           <label style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: 12, border: FT.borderCrisp, background: FT.card, boxShadow: FT.shadow, fontWeight: 800, fontSize: 13 }}>
@@ -364,12 +369,15 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
         )}
       </div>
 
+      </>}
+
       {d?.detail && !per && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.orangeL, color: FT.orange, fontWeight: 700, fontSize: 13 }}>{d.detail}</div>}
       {per && noBilan && (
         <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.orangeL, color: FT.text, fontSize: 13 }}>
-          Aucun bilan de stock enregistré pour cette période exacte ({per.libelle}). Choisissez une période de la liste « Périodes avec bilan ».
+          Aucun bilan de stock enregistré pour cette période exacte ({per.libelle}).{scope ? " Les variations de stock sont non calculables ; les autres colonnes restent affichées." : " Choisissez une période de la liste « Périodes avec bilan »."}
         </div>
       )}
+      {!scope && <>
       <details style={{ border: FT.borderCrisp, borderRadius: 14, background: alertCount > 0 ? FT.orangeL : FT.card, padding: "8px 14px" }}>
         <summary style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 800, color: FT.text, display: "flex", alignItems: "center", gap: 8 }}>
           <AlertTriangle size={14} aria-hidden color={alertCount > 0 ? FT.orange : FT.textSub} /> Qualité des données et alertes{alertCount > 0 ? ` (${alertCount})` : " — aucune alerte bloquante"}
@@ -384,8 +392,10 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
           )}
         </div>
       </details>
+      </>}
       {q.isError && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.redL, color: FT.red, fontWeight: 700, fontSize: 13 }}>Impossible de charger les consommations (erreur serveur).</div>}
 
+      {!scope && <>
       {k && (() => {
         const ps = evo.data?.periodes ?? [];
         const i = per ? ps.findIndex((x) => x.fin === per.fin && x.debut === per.debut) : -1;
@@ -452,10 +462,12 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
           {extra}
         </div>
       </details>
+      </>}
 
       <section aria-label="Derniers suivis" style={{ border: FT.borderCrisp, background: FT.card, borderRadius: 16, boxShadow: FT.shadow, overflow: "hidden" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", gap: 8, flexWrap: "wrap" }}>
-          <h3 style={{ margin: 0, fontSize: 17, display: "flex", alignItems: "center", gap: 8 }}><List size={18} color={FT.blue} aria-hidden /> {full ? "Tous les résultats — vue détaillée" : "Derniers suivis"}</h3>
+          <h3 style={{ margin: 0, fontSize: 17, display: "flex", alignItems: "center", gap: 8 }}><List size={18} color={FT.blue} aria-hidden /> {full ? "Tous les résultats — vue détaillée" : "Derniers suivis"}
+            {scope && per && <span style={{ fontSize: 12.5, fontWeight: 500, color: FT.textMid }}>· {scope.label ?? per.libelle}</span>}</h3>
           <button type="button" onClick={() => setFull((v) => !v)} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, padding: "8px 14px", borderRadius: 10, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}>
             {full ? "← Vue simplifiée" : "Voir tous les résultats →"}
           </button>

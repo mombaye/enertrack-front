@@ -27,7 +27,6 @@ import {
 
 import { FT } from "./theme";
 import { GLOBAL_STYLES } from "./ui";
-import { ConsommationSheet } from "./sheets/ConsommationSheet";
 import { ConsoBi } from "./bi/ConsoBi";
 import { CphBi } from "./bi/CphBi";
 import { StockBi } from "./bi/StockBi";
@@ -315,13 +314,6 @@ export default function FuelTrackingPage() {
         {!siteId && activeTab === "CONSOMMATION" && (
           <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <ConsoBi fromMonth={fromMonth} toMonth={toMonth} />
-            <DetailSection title="Détail par site, couverture GE et comparaison des consommations">
-              <ConsommationSheet
-                data={consommationQ.data}
-                loading={consommationQ.isLoading}
-                stickyTop={headerHeight}
-              />
-            </DetailSection>
           </div>
         )}
 

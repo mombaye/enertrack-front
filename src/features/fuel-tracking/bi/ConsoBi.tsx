@@ -1,7 +1,7 @@
 // Vue BI — Suivi Conso (Sénégal) : tendance, conso journalière, concentration, target, rendement,
 // carte de chaleur zone × mois, qualité capteur, classements. Chaque indicateur s'explique au clic.
 // Pilotée par la période du header. Export Excel = mêmes calculs, toutes les lignes.
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Line, LineChart, ReferenceArea, ReferenceLine,
@@ -9,6 +9,7 @@ import {
 } from "recharts";
 import { downloadBiExport, getBiConso, getBiConsoSources, type BiConsoResponse, type BiConsoSourceKey } from "@/services/fuelTracking";
 import { monthLabel } from "../helpers";
+import { ConsoComparaisonSection } from "../sheets/ConsoComparaisonSection";
 import { FT } from "../theme";
 import {
   BI, BiKpi, ChartCard, FilterBar, FilterSelect, Grid, KpiRow, SectionTitle, SiteCell, TopTable,
@@ -30,8 +31,8 @@ const SOURCES: Array<{ key: BiConsoSourceKey; label: string; color: string }> = 
 ];
 
 /** Les 4 mesures de la consommation, chacune sur son propre périmètre de sites : jamais additionnées. */
-function ConsoSources({ params, enabled, single }: {
-  params: { from_month?: string; to_month?: string; month?: string; zone?: string }; enabled: boolean; single: boolean;
+function ConsoSources({ params, enabled, single, kpis, children }: {
+  params: { from_month?: string; to_month?: string; month?: string; zone?: string }; enabled: boolean; single: boolean; kpis?: ReactNode; children?: ReactNode;
 }) {
   const q = useQuery({
     queryKey: ["fuel-bi-conso-sources", params.from_month, params.to_month, params.month, params.zone],
@@ -47,9 +48,6 @@ function ConsoSources({ params, enabled, single }: {
   const value = (key: BiConsoSourceKey) => (q.isLoading ? "…" : q.isError || !ok ? "—" : fNum(s.kpis[key]?.total_l));
   return (
     <>
-      <SectionTitle sub={ok ? `Sites du fichier Closing · ${fmtDate(s.debut)} → ${fmtDate(s.fin)} · chaque mesure sur ses propres sites, jamais additionnées` : "Mêmes chiffres que l'onglet Consommations"}>
-        Les 4 mesures de la consommation
-      </SectionTitle>
       {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 12.5 }}>Mesures indisponibles pour le moment (calcul CPH ou bilans de stock en échec). Les autres indicateurs restent valables.</div>}
       {s && !s.disponible && (
         <div style={{ fontSize: 12.5, color: FT.textMid, background: FT.slateL, borderRadius: 4, padding: "8px 12px" }}>
@@ -63,7 +61,13 @@ function ConsoSources({ params, enabled, single }: {
             alert={c.key === "variation" && ok && (s.explain.variation?.valeurs.find((v) => v.label.startsWith("Variations négatives"))?.valeur ?? 0) as number > 0 ? "warn" : null}
             explain={ok ? s.explain[c.key] : null} />
         ))}
+        {kpis}
       </KpiRow>
+      <div style={{ fontSize: 11.5, color: FT.textSub, marginTop: -4 }}>
+        Cliquez sur un chiffre pour voir comment il est calculé.
+        {ok ? ` Les 4 mesures : sites du fichier Closing, du ${fmtDate(s.debut)} au ${fmtDate(s.fin)}, chacune sur ses propres sites, jamais additionnées.` : ""}
+      </div>
+      {children}
       {ok && chart.some((c) => c.total_l != null) && (
         <ChartCard title="Les 4 mesures côte à côte"
           info="Chaque barre est un total indépendant, calculé sur les sites où la mesure existe (nombre de sites à droite). Un écart important entre deux mesures se contrôle site par site dans l'onglet Consommations."
@@ -89,6 +93,19 @@ function ConsoSources({ params, enabled, single }: {
       )}
     </>
   );
+}
+
+/** Période exacte du tableau par site : le mois choisi, sinon la période du header si ≤ 3 mois, sinon son dernier mois.
+ * Fin bornée à hier (aucune donnée du jour en cours). */
+function tablePeriod(fromMonth: string, toMonth: string, month: string): { debut: string; fin: string; label: string } {
+  const idx = (m: string) => Number(m.slice(0, 4)) * 12 + Number(m.slice(5, 7)) - 1;
+  const a = month || (idx(toMonth) - idx(fromMonth) < 3 ? fromMonth : toMonth);
+  const b = month || toMonth;
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const last = new Date(Number(b.slice(0, 4)), Number(b.slice(5, 7)), 0);
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  const label = a === b ? monthLabel(a) : `${monthLabel(a)} → ${monthLabel(b)}`;
+  return { debut: `${a}-01`, fin: iso(last > yesterday ? yesterday : last), label: a !== fromMonth && !month ? `${label} (3 mois au plus)` : label };
 }
 
 const dayLabel = (iso: string) => new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
@@ -182,27 +199,16 @@ export function ConsoBi({ fromMonth, toMonth }: { fromMonth: string | null; toMo
 
       {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 12.5 }}>Chargement impossible. Les tableaux détaillés plus bas restent consultables.</div>}
 
-      <KpiRow>
-        <BiKpi label="Conso mesurée" value={fNum(k?.conso_mesuree_l)} unit="L" delta={delta(d?.deltas?.conso_mesuree_l)} upIsGood={false}
-          sub={vsPrev} explain={x?.conso_mesuree_l} />
-        <BiKpi label="Moyenne par site et par jour" value={fDec1(k?.l_site_jour)} unit="L" delta={delta(d?.deltas?.l_site_jour)} upIsGood={false}
-          sub={vsPrev} explain={x?.l_site_jour} />
-        <BiKpi label="Rendement GE" value={fRatio(k?.l_kwh)} unit="L/kWh" delta={delta(d?.deltas?.l_kwh)} upIsGood={false}
-          alert={k?.l_kwh == null ? null : k.l_kwh > refHi + 0.05 ? "bad" : k.l_kwh > refHi ? "warn" : null}
-          sub={`norme ${fRatio(refLo)} – ${fRatio(refHi)}`} explain={x?.l_kwh} />
-        <BiKpi label="Écart au target" value={fSignedPct(k?.ecart_target_pct)}
-          alert={k?.ecart_target_pct == null ? null : k.ecart_target_pct > tol ? "bad" : null}
-          sub={k ? `${fNum(k.nb_sites_au_dessus_target)} sites au-dessus sur ${fNum(k.nb_sites_target)}` : undefined}
-          explain={x?.ecart_target_pct} />
-        <BiKpi label="Livré ENOC" value={fNum(k?.enoc_ajoutee_l)} unit="L" delta={delta(d?.deltas?.enoc_ajoutee_l)} upIsGood={false}
-          sub={k?.nb_ravitaillements != null ? `${fNum(k.nb_ravitaillements)} demandes` : undefined} explain={x?.enoc_ajoutee_l} />
-        <BiKpi label="Sites mesurés" value={fPct(k?.couverture_pct)} delta={delta(d?.deltas?.couverture_pts)} deltaUnit="pts"
-          sub={k ? `${fNum(k.nb_sites_mesure)} / ${fNum(k.nb_sites)} sites GE` : undefined} explain={x?.couverture_pct} />
-      </KpiRow>
-      <div style={{ fontSize: 11.5, color: FT.textSub, marginTop: -4 }}>Cliquez sur un chiffre pour voir comment il est calculé.</div>
-
       <ConsoSources params={{ from_month: params.from_month, to_month: params.to_month, month: params.month, zone: zone || undefined }}
-        enabled={!!fromMonth && !!toMonth} single={single} />
+        enabled={!!fromMonth && !!toMonth} single={single}
+        kpis={<>
+          <BiKpi label="Conso mesurée" value={fNum(k?.conso_mesuree_l)} unit="L" delta={delta(d?.deltas?.conso_mesuree_l)} upIsGood={false}
+            sub={vsPrev || (k ? `${fNum(k.nb_sites_mesure)} sites mesurés` : undefined)} explain={x?.conso_mesuree_l} />
+          <BiKpi label="Moyenne par site et par jour" value={fDec1(k?.l_site_jour)} unit="L" delta={delta(d?.deltas?.l_site_jour)} upIsGood={false}
+            sub={vsPrev || undefined} explain={x?.l_site_jour} />
+        </>}>
+        {fromMonth && toMonth && <ConsoComparaisonSection scope={{ ...tablePeriod(fromMonth, toMonth, effMonth), zone: zone || undefined }} />}
+      </ConsoSources>
 
       {!single && <ChartCard title="Consommé et livré par mois"
         info="Barres : conso mesurée par capteur. Ligne : litres livrés ENOC. Les deux ne sont jamais additionnés ; un écart durable se contrôle site par site."
