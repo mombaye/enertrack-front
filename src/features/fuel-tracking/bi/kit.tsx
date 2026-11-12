@@ -49,19 +49,27 @@ export const labelStyle = { fill: FT.textMid, fontSize: 10.5 } as const;
  */
 export function KpiRow({ children }: { children: ReactNode }) {
   const n = Children.count(children);
+  // Colonnes fixes selon le nombre d'indicateurs (6 → 3×2, 5 → 5, sinon 4 au plus) : jamais une ligne orpheline.
+  const cols = n === 6 ? 3 : n === 5 ? 5 : Math.min(Math.max(n, 1), 4);
+  const colsMid = n === 4 ? 2 : Math.min(Math.max(n, 1), 3); // écrans moyens
   return (
-    <div style={{
-      display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(min(170px, 100%), 1fr))`,
+    <div className="bi-kpirow" style={{
+      display: "grid", ["--n" as string]: cols, ["--nm" as string]: colsMid,
       background: FT.card, border: FT.borderCrisp, borderRadius: 6, overflow: "hidden",
-    }} data-kpis={n}>
-      <style>{`.bi-kpi:hover{background:#F4F7FC !important}.bi-kpi:focus-visible{outline:2px solid ${FT.gold};outline-offset:-2px}`}</style>
+    } as CSSProperties} data-kpis={n}>
+      <style>{`.bi-kpirow{grid-template-columns:repeat(var(--n),minmax(0,1fr))}`
+        + `@media (max-width:1100px){.bi-kpirow{grid-template-columns:repeat(var(--nm),minmax(0,1fr))}}`
+        + `@media (max-width:760px){.bi-kpirow{grid-template-columns:repeat(2,minmax(0,1fr))}}`
+        + `@media (max-width:480px){.bi-kpirow{grid-template-columns:1fr}}`
+        + `.bi-kpi:hover{background:#F4F7FC !important}.bi-kpi:focus-visible{outline:2px solid ${FT.gold};outline-offset:-2px}`}</style>
       {children}
     </div>
   );
 }
 
 /**
- * Indicateur : libellé, valeur, puis une ligne de contexte (variation vs période précédente et/ou précision).
+ * Indicateur sobre : libellé, valeur, puis une courte phrase de contexte (variation en texte simple, sans flèche ni pastille).
+ * La couleur ne sert qu'aux alertes réelles.
  * `upIsGood` décide de la couleur de la variation ; `alert` colore la valeur quand elle sort de la norme.
  * Avec `explain`, la cellule est cliquable et ouvre le détail du calcul.
  */
@@ -74,25 +82,25 @@ export function BiKpi({ label, value, unit, delta, deltaUnit = "%", upIsGood = t
   const color = !hasDelta || delta === 0 ? FT.textMid : (delta > 0) === upIsGood ? FT.green : FT.red;
   const body = (
     <>
-      <div style={{ color: FT.textMid, fontSize: 12, fontWeight: 600, lineHeight: 1.3 }}>{label}</div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 5, marginTop: 6 }}>
+      <div style={{ color: FT.textMid, fontSize: 12.5, fontWeight: 400, lineHeight: 1.3 }}>{label}</div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginTop: 5 }}>
         <span style={{
-          color: alert === "bad" ? FT.red : alert === "warn" ? FT.orange : FT.navy, fontSize: 24, fontWeight: 700, lineHeight: 1.05,
+          color: alert === "bad" ? FT.red : alert === "warn" ? FT.orange : FT.text, fontSize: 24, fontWeight: 600, lineHeight: 1.1, letterSpacing: "-.01em",
           fontVariantNumeric: "tabular-nums", textDecoration: explain ? "underline dotted" : undefined, textUnderlineOffset: 5, textDecorationThickness: 1,
         }}>{value}</span>
-        {unit && value !== "—" && <span style={{ color: FT.textMid, fontSize: 12.5, fontWeight: 600 }}>{unit}</span>}
+        {unit && value !== "—" && <span style={{ color: FT.textSub, fontSize: 12.5, fontWeight: 400 }}>{unit}</span>}
       </div>
-      <div style={{ marginTop: 6, fontSize: 11.5, color: FT.textSub, lineHeight: 1.35 }}>
+      <div style={{ marginTop: 5, fontSize: 12, color: FT.textSub, lineHeight: 1.35 }}>
         {hasDelta && (
-          <span style={{ color, fontWeight: 700, marginRight: 6, whiteSpace: "nowrap" }}>
-            {delta > 0 ? "▲" : delta < 0 ? "▼" : "="} {delta > 0 ? "+" : ""}{nf1.format(delta)} {deltaUnit === "pts" ? "pt" : "%"}
+          <span style={{ color, fontWeight: 600, marginRight: 6, whiteSpace: "nowrap" }}>
+            {delta > 0 ? "+" : delta < 0 ? "−" : ""}{nf1.format(Math.abs(delta))} {deltaUnit === "pts" ? "pt" : "%"}
           </span>
         )}
         {sub}
       </div>
     </>
   );
-  const cell: CSSProperties = { background: FT.card, padding: "12px 16px 13px", minWidth: 0, boxShadow: "1px 0 0 #E4E9F0, 0 1px 0 #E4E9F0", textAlign: "left" };
+  const cell: CSSProperties = { background: FT.card, padding: "14px 18px 15px", minWidth: 0, boxShadow: "1px 0 0 #E4E9F0, 0 1px 0 #E4E9F0", textAlign: "left" };
   if (!explain) return <div style={cell}>{body}</div>;
   return (
     <>
