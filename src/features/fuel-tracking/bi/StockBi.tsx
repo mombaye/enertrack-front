@@ -2,12 +2,12 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { downloadBiExport, getBiStock } from "@/services/fuelTracking";
+import { downloadBiExport, getBiStock, getStockEvolution, type StockEvolutionMonth } from "@/services/fuelTracking";
 import { monthLabel } from "../helpers";
 import { FT } from "../theme";
 import {
   BI, BiKpi, ChartCard, FilterBar, FilterSelect, Grid, KpiRow, SectionTitle, SiteCell, TopTable,
-  axisProps, fDays, fDec1, fL, fNum, fPct, labelStyle, tooltipStyle,
+  axisProps, fDays, fDec1, fL, fNum, fPct, fShort, labelStyle, tooltipStyle,
 } from "./kit";
 
 const LEVEL_COLOR = { critique: BI.bad, alerte: BI.warn, moyen: BI.light, bon: BI.primary, inconnu: BI.unknown } as const;
@@ -23,6 +23,14 @@ export function StockBi({ toMonth }: { toMonth: string | null }) {
     staleTime: 60_000,
     placeholderData: (prev) => prev,
   });
+  const ev = useQuery({
+    queryKey: ["fuel-bi-stock-evolution", zone],
+    queryFn: () => getStockEvolution({ zone, mois: "12" }),
+    staleTime: 5 * 60_000,
+    placeholderData: (prev) => prev,
+  });
+  const [evMode, setEvMode] = useState<"litres" | "pct">("litres");
+  const evKey = evMode === "litres" ? "stock_l" : "remplissage_pct";
   const d = q.data;
   const k = d?.kpis;
   const x = d?.explain;
@@ -51,6 +59,35 @@ export function StockBi({ toMonth }: { toMonth: string | null }) {
         <BiKpi label="Stock connu" detail={"Ancienneté du dernier relevé"} detailLabel="Voir l'ancienneté des relevés" value={fPct(k?.stock_connu_pct)} explain={x?.stock_connu_pct} sub={k ? `${fNum(k.nb_stock_connu)} / ${fNum(k.nb_sites)} sites GE` : undefined} />
         <BiKpi label="Relevés de plus de 7 jours" detail={"Ancienneté du dernier relevé"} detailLabel="Voir l'ancienneté des relevés" value={fNum(k?.nb_releves_anciens)} explain={x?.nb_releves_anciens} alert={k?.nb_releves_anciens ? "warn" : null} sub="stock à confirmer sur place" />
       </KpiRow>
+
+      <ChartCard title="Évolution du stock" info="Stock de fin de mois : dernier relevé valide daté dans le mois (capteur, relevé terrain / gardiennage / ENOC, Synthèse). Un site sans relevé dans le mois n'est pas compté. Le remplissage reste comparable quand le nombre de sites relevés change."
+        loading={ev.isLoading} error={ev.isError} empty={!ev.data?.months.some((m) => m.stock_l != null)} height={240}
+        action={
+          <div role="group" aria-label="Unité du graphique" style={{ display: "flex", gap: 4 }}>
+            {([["litres", "Litres"], ["pct", "Remplissage %"]] as const).map(([v, l]) => (
+              <button key={v} type="button" aria-pressed={evMode === v} onClick={() => setEvMode(v)}
+                style={{ fontSize: 11.5, padding: "3px 9px", borderRadius: 4, cursor: "pointer", border: `1px solid ${evMode === v ? "#123C8C" : "#CBD3DF"}`, background: evMode === v ? "#EEF3FB" : "#fff", color: evMode === v ? "#123C8C" : FT.textSub }}>{l}</button>
+            ))}
+          </div>
+        }>
+        <ResponsiveContainer>
+          <BarChart data={ev.data?.months ?? []} margin={{ top: 18, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke={BI.grid} vertical={false} />
+            <XAxis dataKey="month" {...axisProps} interval={0} tickFormatter={(m: string) => monthLabel(m).replace(/ (\d{2})(\d{2})$/, " $2")} />
+            <YAxis {...axisProps} width={46} tickFormatter={(v: number) => (evMode === "pct" ? `${v} %` : fShort(v))} domain={evMode === "pct" ? [0, 100] : undefined} />
+            <Tooltip contentStyle={tooltipStyle} labelFormatter={(m) => monthLabel(m as string)}
+              formatter={(_v, _n, item) => {
+                const m = item.payload as StockEvolutionMonth;
+                const src = Object.entries(m.sources).map(([s, n]) => `${s} ${n}`).join(", ");
+                return [`${fL(m.stock_l)} · remplissage ${fPct(m.remplissage_pct)} · ${fNum(m.nb_sites_releves)} / ${fNum(m.nb_sites_ge)} sites relevés${m.nb_estimes ? ` (${m.nb_estimes} estimés)` : ""}${src ? ` · ${src}` : ""}${m.en_cours ? " · mois en cours" : ""}`, "Fin de mois"];
+              }} />
+            <Bar dataKey={evKey} maxBarSize={38}>
+              {(ev.data?.months ?? []).map((m) => <Cell key={m.month} fill={m.en_cours ? BI.light : BI.primary} />)}
+              <LabelList dataKey={evKey} position="top" style={labelStyle} formatter={(v: unknown) => (v == null ? "" : evMode === "pct" ? `${fDec1(v as number)} %` : fShort(v as number))} />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartCard>
 
       <Grid min={320}>
         <ChartCard title="Remplissage des cuves" info="Nombre de sites GE par tranche de remplissage. « Inconnu » : aucun relevé exploitable."

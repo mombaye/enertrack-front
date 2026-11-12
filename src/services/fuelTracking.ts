@@ -2316,6 +2316,17 @@ export async function getBiStock(params: { zone?: string; month?: string }) {
   return data;
 }
 
+export type StockEvolutionMonth = {
+  month: string; en_cours: boolean; stock_l: number | null; nb_sites_releves: number; nb_sites_ge: number; couverture_pct: number | null;
+  remplissage_pct: number | null; nb_sites_capacite: number; nb_estimes: number; sources: Record<string, number>; livre_enoc_l: number | null;
+};
+export type StockEvolutionResponse = { months: StockEvolutionMonth[]; zone: string | null; explain?: Record<string, KpiExplain> };
+/** Stock de fin de mois (dernier relevé valide daté dans le mois, toutes sources) sur les derniers mois. */
+export async function getStockEvolution(params: { zone?: string; mois?: string }) {
+  const { data } = await api.get<StockEvolutionResponse>(`${BASE}/bi/stock/evolution/`, { params: cleanParams(params) });
+  return data;
+}
+
 export type BiCphResponse = {
   perimetre?: string;
   filters?: { zones: string[] };
