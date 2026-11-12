@@ -2385,3 +2385,47 @@ export async function getBiSite(siteId: string, params: { from_month?: string; t
   const { data } = await api.get<BiSiteResponse>(`${BASE}/bi/sites/${encodeURIComponent(siteId)}/`, { params: cleanParams(params) });
   return data;
 }
+
+// ── Configuration (accès par code à 6 chiffres) ──────────────────────────────────────────────
+// Le code est vérifié par le serveur ; il renvoie un jeton signé, lié à l'utilisateur, à durée limitée.
+export type ConfigUploadType = Exclude<ImportSourceType, "ENOC">;
+export type ConfigFilesResponse = {
+  data: StockImportBatch[];
+  stockage: "REPERTOIRE_PARTAGE" | "VOLUME_PLATEFORME";
+  types: ConfigUploadType[];
+  formats: string[];
+};
+
+export async function requestConfigAccess(code: string) {
+  const { data } = await api.post<{ token: string; expires_in: number }>(`${BASE}/configuration/acces/`, { code });
+  return data;
+}
+
+/** Envoi traité en arrière-plan (un Closing .xlsb de 30 Mo prend ~2 min) : on suit son ticket. */
+export type ConfigUploadState = {
+  ticket: string;
+  etat: "EN_COURS" | "TERMINE" | "ECHEC";
+  file_name: string | null;
+  batch: StockImportBatch | null;
+  detail?: string;
+};
+
+export async function fetchConfigUploadState(token: string, ticket: string) {
+  const { data } = await api.get<ConfigUploadState>(`${BASE}/configuration/fichiers/`, { params: { ticket }, headers: { "X-Fuel-Config-Token": token } });
+  return data;
+}
+
+export async function fetchConfigFiles(token: string) {
+  const { data } = await api.get<ConfigFilesResponse>(`${BASE}/configuration/fichiers/`, { headers: { "X-Fuel-Config-Token": token } });
+  return data;
+}
+
+export async function uploadConfigFile(token: string, file: File, sourceType: ConfigUploadType) {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("source_type", sourceType);
+  const { data } = await api.post<ConfigUploadState>(`${BASE}/configuration/fichiers/`, fd, {
+    headers: { "Content-Type": "multipart/form-data", "X-Fuel-Config-Token": token },
+  });
+  return data;
+}

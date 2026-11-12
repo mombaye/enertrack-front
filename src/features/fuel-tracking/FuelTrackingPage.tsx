@@ -38,8 +38,9 @@ import { StockSheet } from "./sheets/StockSheet";
 import { CommandeSheet } from "./sheets/CommandeSheet";
 import { EstimationSheet } from "./sheets/EstimationSheet";
 import { ControleCphSheet } from "./sheets/ControleCphSheet";
+import { ConfigurationSheet } from "./sheets/ConfigurationSheet";
 
-export type MainTab = "CONSOMMATION" | "CPH" | "STOCK" | "COMMANDE" | "ESTIMATION";
+export type MainTab = "CONSOMMATION" | "CPH" | "STOCK" | "COMMANDE" | "ESTIMATION" | "CONFIGURATION";
 
 // L'ancienne rubrique Dashboard est fusionnée dans Suivi Conso (vue BI) : son adresse y mène désormais.
 export const FUEL_TAB_SLUGS: Array<{ tab: MainTab; slug: string }> = [
@@ -48,6 +49,7 @@ export const FUEL_TAB_SLUGS: Array<{ tab: MainTab; slug: string }> = [
   { tab: "STOCK", slug: "stock" },
   { tab: "COMMANDE", slug: "commandes" },
   { tab: "ESTIMATION", slug: "estimation-commande" },
+  { tab: "CONFIGURATION", slug: "configuration" },
 ];
 const TAB_BY_SLUG: Record<string, MainTab> = { ...Object.fromEntries(FUEL_TAB_SLUGS.map((x) => [x.slug, x.tab])), dashboard: "CONSOMMATION" };
 const SLUG_BY_TAB = Object.fromEntries(FUEL_TAB_SLUGS.map((x) => [x.tab, x.slug])) as Record<MainTab, string>;
@@ -267,7 +269,7 @@ export default function FuelTrackingPage() {
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <SiteSearch onSelect={openSite} />
-              {(siteId || (activeTab !== "COMMANDE" && activeTab !== "ESTIMATION")) && (
+              {(siteId || (activeTab !== "COMMANDE" && activeTab !== "ESTIMATION" && activeTab !== "CONFIGURATION")) && (
                 <div title="Mois des indicateurs mensuels (tendance du Dashboard, couverture GE)" style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "5px 10px" }}>
                   <Calendar size={14} color={FT.textSub} aria-hidden />
                   <input
@@ -379,6 +381,12 @@ export default function FuelTrackingPage() {
               onSearchChange={setEstimationSearch}
               stickyTop={headerHeight}
             />
+          </div>
+        )}
+
+        {!siteId && activeTab === "CONFIGURATION" && (
+          <div className="ft-fade">
+            <ConfigurationSheet />
           </div>
         )}
         </OpenSiteContext.Provider>
