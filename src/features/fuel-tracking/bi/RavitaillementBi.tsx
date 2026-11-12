@@ -113,7 +113,7 @@ export function RavitaillementBi({ toMonth }: { toMonth: string | null }) {
               <span title={`Relevé : ${fL(r.stock_releve_l)} le ${fDate(r.date_releve)}`}>
                 {fL(r.stock_estime_l)}
                 <span style={{ display: "block", fontSize: 11, color: r.releve_ancien ? "#9A6200" : FT.textSub }}>
-                  {r.releve_ancien ? `relevé ${r.date_releve ? `du ${fDate(r.date_releve)}` : "sans date"} · à confirmer` : `relevé du ${fDate(r.date_releve)}`}
+                  {r.source_stock ? `${r.source_stock}${r.stock_source_estime ? " (estimé)" : ""} · ` : ""}{r.releve_ancien ? `${r.date_releve ? fDate(r.date_releve) : "sans date"} · à confirmer` : fDate(r.date_releve)}
                 </span>
               </span>
             ),

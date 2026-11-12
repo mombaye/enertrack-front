@@ -2293,6 +2293,7 @@ export async function getBiConsoSources(params: { from_month?: string; to_month?
 export type BiStockSite = BiSiteRef & {
   stock_l: number | null; capacite_l: number | null; remplissage_pct: number | null; date: string | null;
   stock_enoc_l: number | null; autonomie_j: number | null; age_releve_j: number | null; conso_jour_l: number | null;
+  source_stock_label?: string | null; stock_estime?: boolean;
 };
 export type BiStockResponse = {
   perimetre?: string;
@@ -2340,6 +2341,7 @@ export async function getBiCph(params: { start: string; end: string; zone?: stri
 
 export type RavitaillementRow = BiSiteRef & {
   stock_releve_l: number; date_releve: string | null; age_releve_j: number | null; releve_ancien: boolean;
+  source_stock: string | null; stock_source_estime: boolean;
   stock_estime_l: number; capacite_l: number | null; conso_jour_l: number; jours_avant_rupture: number;
   date_rupture: string; livrer_avant: string; priorite: "URGENT" | "PLANIFIE";
   quantite_l: number | null; quantite_motif: string | null;
@@ -2364,7 +2366,37 @@ export async function getRavitaillement(params: RavitaillementParams) {
   return data;
 }
 
-export type BiExportKind = "conso" | "stock" | "cph" | "commande" | "estimation" | "ravitaillement";
+export type SiteTableAlerte = "ECART_CPH" | "L_KWH_HAUT" | "AU_DESSUS_TARGET" | "SOUS_CHARGE" | "AUTONOMIE_3J" | "RELEVE_ANCIEN";
+export type SiteTableRow = BiSiteRef & {
+  typologie: string | null; configuration: string | null; energie: string | null; ge_kva: number | null;
+  runtime_h: number | null; h_jour: number | null; cph_l_h: number | null; charge_pct: number | null; statut_cph: string | null; motif_cph: string | null;
+  ge_prod_kwh: number | null; conso_mesuree_l: number | null; jours_mesures: number | null; l_jour: number | null;
+  conso_estimee_l: number | null; ecart_l: number | null; ecart_pct: number | null; l_kwh: number | null;
+  conso_prec_l: number | null; evolution_pct: number | null; target_l: number | null; ecart_target_pct: number | null;
+  stock_l: number | null; date_stock: string | null; source_stock: string | null; stock_estime: boolean; capacite_l: number | null;
+  remplissage_pct: number | null; autonomie_j: number | null; age_releve_j: number | null;
+  enoc_livre_l: number | null; nb_livraisons: number; alertes: SiteTableAlerte[]; nb_alertes: number;
+};
+export type SiteTableParams = { month?: string; zone?: string; q?: string; alerte?: string; sort?: string; desc?: string; page?: string; page_size?: string };
+export type SiteTableResponse = {
+  month: string | null; periode?: { start: string; end: string; nb_jours: number }; cph_disponible?: boolean;
+  kpis: null | {
+    nb_sites: number; conso_mesuree_l: number | null; nb_sites_mesure: number; conso_estimee_l: number | null; nb_sites_estime: number;
+    ecart_l: number | null; ecart_pct: number | null; nb_sites_comparables: number; runtime_total_h: number | null; nb_sites_runtime: number;
+    h_site_jour: number | null; cph_moyen_l_h: number | null; nb_ecart_cph: number; nb_sites_alerte: number;
+  };
+  explain: Record<string, KpiExplain>;
+  rows: SiteTableRow[]; total: number; page: number; page_size: number;
+  filters: { zones: string[]; alertes: Record<SiteTableAlerte, string> };
+  seuils?: { ecart_pct: number; l_kwh: number; sous_charge_pct: number; tolerance_target_pct: number };
+};
+/** Données par site d'un mois (pagination serveur) : conso mesurée et conso estimée CPH en colonnes séparées. */
+export async function getSiteTable(params: SiteTableParams) {
+  const { data } = await api.get<SiteTableResponse>(`${BASE}/bi/sites-table/`, { params: cleanParams(params) });
+  return data;
+}
+
+export type BiExportKind = "conso" | "stock" | "cph" | "commande" | "estimation" | "ravitaillement" | "sites";
 /** Télécharge le classeur Excel complet (toutes les lignes) généré côté serveur. */
 export async function downloadBiExport(kind: BiExportKind, params: Record<string, string | undefined>, filename: string) {
   const { data } = await api.get<Blob>(`${BASE}/bi/export/${kind}/`, { params: cleanParams(params), responseType: "blob" });
