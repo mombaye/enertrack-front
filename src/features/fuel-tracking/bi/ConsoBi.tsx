@@ -23,20 +23,47 @@ const QUALITY = [
   { key: "Autre / absent", label: "Sans relevé", color: BI.unknown },
 ] as const;
 
+// « Instrumentée Snowflake » est affichée sous un nom plus parlant : c'est la conso lue par le capteur de niveau de la cuve.
 const SOURCES: Array<{ key: BiConsoSourceKey; label: string; color: string }> = [
   { key: "variation", label: "Variation de stock", color: BI.primary },
   { key: "closing", label: "Consommation Closing", color: BI.secondary },
-  { key: "instrumentee", label: "Instrumentée Snowflake", color: BI.light },
+  { key: "instrumentee", label: "Conso capteur de niveau", color: BI.light },
   { key: "cph_complete", label: "CPH complète", color: BI.enoc },
 ];
 
+const monthIndex = (m: string) => Number(m.slice(0, 4)) * 12 + Number(m.slice(5, 7));
+
+/** Période des 4 mesures : le mois choisi, sinon la période du header si ≤ 3 mois, sinon son dernier mois
+ * (même règle que le tableau par site : le calcul CPH et les bilans de stock se font sur une période courte). */
+function sourcesPeriod(p: { from_month?: string; to_month?: string; month?: string }): { from_month?: string; to_month?: string; month?: string; lastMonthOnly: boolean } {
+  if (p.month || !p.from_month || !p.to_month) return { ...p, lastMonthOnly: false };
+  if (monthIndex(p.to_month) - monthIndex(p.from_month) + 1 <= 3) return { ...p, lastMonthOnly: false };
+  return { month: p.to_month, lastMonthOnly: true };
+}
+
+/** Sous-titre de chaque mesure, repris de l'ancienne version (sites pris en compte et précisions utiles). */
+function sourceSub(key: BiConsoSourceKey, sites: number | null | undefined, total: number | null | undefined, valeurs: Array<{ label: string; valeur: number | string | null }> = []): string {
+  const v = (start: string) => valeurs.find((x) => x.label.startsWith(start))?.valeur;
+  const n = fNum(sites);
+  if (key === "variation") {
+    const neg = Number(v("Variations négatives") ?? 0);
+    return `${n} / ${fNum(total)} sites calculables${neg > 0 ? ` · ${fNum(neg)} négative(s)` : ""}`;
+  }
+  if (key === "closing") return `${n} sites · référence de contrôle`;
+  if (key === "instrumentee") return `${n} sites couverts · mesure du capteur de cuve`;
+  const partielle = v("Sites en CPH partielle");
+  return `${n} sites complets${partielle != null ? ` · ${fNum(Number(partielle))} en CPH partielle (non comptés)` : ""}`;
+}
+
 /** Les 4 mesures de la consommation, chacune sur son propre périmètre de sites : jamais additionnées. */
-function ConsoSources({ params, enabled, single, kpis, children }: {
-  params: { from_month?: string; to_month?: string; month?: string; zone?: string }; enabled: boolean; single: boolean; kpis?: ReactNode; children?: ReactNode;
+function ConsoSources({ params, enabled, kpis, children }: {
+  params: { from_month?: string; to_month?: string; month?: string; zone?: string }; enabled: boolean; kpis?: ReactNode; children?: ReactNode;
 }) {
+  const { lastMonthOnly, ...period } = sourcesPeriod(params);
+  const qp = { ...period, zone: params.zone };
   const q = useQuery({
-    queryKey: ["fuel-bi-conso-sources", params.from_month, params.to_month, params.month, params.zone],
-    queryFn: () => getBiConsoSources(params),
+    queryKey: ["fuel-bi-conso-sources", qp.from_month, qp.to_month, qp.month, qp.zone],
+    queryFn: () => getBiConsoSources(qp),
     enabled,
     staleTime: 5 * 60_000,
     retry: false,
@@ -51,21 +78,23 @@ function ConsoSources({ params, enabled, single, kpis, children }: {
       {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 12.5 }}>Mesures indisponibles pour le moment (calcul CPH ou bilans de stock en échec). Les autres indicateurs restent valables.</div>}
       {s && !s.disponible && (
         <div style={{ fontSize: 12.5, color: FT.textMid, background: FT.slateL, borderRadius: 4, padding: "8px 12px" }}>
-          Non calculé : {s.motif}{!single ? " Utilisez le filtre « Mois »." : ""}
+          Non calculé : {s.motif}
         </div>
       )}
       <KpiRow>
         {SOURCES.map((c) => (
-          <BiKpi key={c.key} label={c.label} detail={"Les 4 mesures côte à côte"} detailLabel="Comparer les 4 mesures" value={value(c.key)} unit="L"
-            sub={ok ? `${fNum(s.kpis[c.key]?.sites)} / ${fNum(s.sites)} sites` : undefined}
+          <BiKpi key={c.key} label={lastMonthOnly && qp.month ? `${c.label} · ${monthLabel(qp.month)}` : c.label}
+            detail={"Les 4 mesures côte à côte"} detailLabel="Comparer les 4 mesures" value={value(c.key)} unit="L"
+            sub={ok ? sourceSub(c.key, s.kpis[c.key]?.sites, s.sites, s.explain[c.key]?.valeurs) : undefined}
             alert={c.key === "variation" && ok && (s.explain.variation?.valeurs.find((v) => v.label.startsWith("Variations négatives"))?.valeur ?? 0) as number > 0 ? "warn" : null}
-            explain={ok ? s.explain[c.key] : null} />
+            explain={ok ? { ...s.explain[c.key], titre: c.label } : null} />
         ))}
         {kpis}
       </KpiRow>
       <div style={{ fontSize: 11.5, color: FT.textSub, marginTop: -4 }}>
         Cliquez sur un chiffre pour voir comment il est calculé.
         {ok ? ` Les 4 mesures : sites du fichier Closing, du ${fmtDate(s.debut)} au ${fmtDate(s.fin)}, chacune sur ses propres sites, jamais additionnées.` : ""}
+        {ok && lastMonthOnly ? " Sur une période de plus de 3 mois, elles portent sur le dernier mois ; le filtre « Mois » permet d'en choisir un autre." : ""}
       </div>
       {children}
       {ok && chart.some((c) => c.total_l != null) && (
@@ -200,7 +229,7 @@ export function ConsoBi({ fromMonth, toMonth }: { fromMonth: string | null; toMo
       {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 12.5 }}>Chargement impossible. Les tableaux détaillés plus bas restent consultables.</div>}
 
       <ConsoSources params={{ from_month: params.from_month, to_month: params.to_month, month: params.month, zone: zone || undefined }}
-        enabled={!!fromMonth && !!toMonth} single={single}
+        enabled={!!fromMonth && !!toMonth}
         kpis={<>
           <BiKpi label="Conso mesurée" detail={"Plus gros consommateurs"} value={fNum(k?.conso_mesuree_l)} unit="L" delta={delta(d?.deltas?.conso_mesuree_l)} upIsGood={false}
             sub={vsPrev || (k ? `${fNum(k.nb_sites_mesure)} sites mesurés` : undefined)} explain={x?.conso_mesuree_l} />

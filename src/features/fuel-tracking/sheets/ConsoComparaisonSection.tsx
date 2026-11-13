@@ -111,10 +111,10 @@ function buildColsDef(A: Record<string, string>): Col[] {
     { k: "tgst", group: "Comparaisons", label: "Statut target", left: true, render: (r) => <Pill label={TARGET_META[r.target.statut].label} tone={TARGET_META[r.target.statut].tone} /> },
     { k: "tge", group: "Comparaisons", label: "Écart variation vs target (L)", help: A.ecart_target, render: (r) => gap(r.target.ecart_l, r.target.ecart_pct, r.target.pct_na, "l") },
     { k: "tgp", group: "Comparaisons", label: "Écart variation vs target (%)", render: (r) => gap(r.target.ecart_l, r.target.ecart_pct, r.target.pct_na, "pct") },
-    { k: "in", group: "Comparaisons", label: "Consommation instrumentée Snowflake (L)", help: A.instrumentee, render: (r) => num(r.instrumentee.conso_l) },
-    { k: "inc", group: "Comparaisons", label: "Couverture instrumentée (%)", render: (r) => (r.instrumentee.couverture_pct === null ? dash : <span title={`${r.instrumentee.jours_mesure} / ${r.instrumentee.jours} jours`}>{nf(r.instrumentee.couverture_pct, 0)} %</span>) },
-    { k: "ine", group: "Comparaisons", label: "Écart variation vs instrumentée (L)", help: A.ecart_instrumentee, render: (r) => gap(r.instrumentee.ecart_l, r.instrumentee.ecart_pct, r.instrumentee.pct_na, "l") },
-    { k: "inp", group: "Comparaisons", label: "Écart variation vs instrumentée (%)", render: (r) => gap(r.instrumentee.ecart_l, r.instrumentee.ecart_pct, r.instrumentee.pct_na, "pct") },
+    { k: "in", group: "Comparaisons", label: "Conso capteur de niveau (L)", help: A.instrumentee, render: (r) => num(r.instrumentee.conso_l) },
+    { k: "inc", group: "Comparaisons", label: "Couverture capteur (%)", render: (r) => (r.instrumentee.couverture_pct === null ? dash : <span title={`${r.instrumentee.jours_mesure} / ${r.instrumentee.jours} jours`}>{nf(r.instrumentee.couverture_pct, 0)} %</span>) },
+    { k: "ine", group: "Comparaisons", label: "Écart variation vs capteur (L)", help: A.ecart_instrumentee, render: (r) => gap(r.instrumentee.ecart_l, r.instrumentee.ecart_pct, r.instrumentee.pct_na, "l") },
+    { k: "inp", group: "Comparaisons", label: "Écart variation vs capteur (%)", render: (r) => gap(r.instrumentee.ecart_l, r.instrumentee.ecart_pct, r.instrumentee.pct_na, "pct") },
     { k: "cc", group: "Comparaisons", label: "CPH complète (L)", help: A.cph_complete, render: (r) => num(r.cph.complete_l) },
     { k: "cp", group: "Comparaisons", label: "CPH partielle (L)", help: A.cph_partielle, render: (r) => (r.cph.partielle_l === null ? dash : <span style={{ color: FT.orange }} title="Partielle : ne couvre pas toute la période">{nf(r.cph.partielle_l)}</span>) },
     { k: "ccv", group: "Comparaisons", label: "Couverture CPH (%)", render: (r) => (r.cph.couverture_pct === null ? dash : `${nf(r.cph.couverture_pct, 0)} %`) },
@@ -168,9 +168,9 @@ function DataQualityNotice({ f }: { f: ConsoFraicheur | undefined }) {
   if (!f || (!f.perime && !f.periode_incomplete && !f.synchro_en_echec)) return null;
   const fr = (d: string) => d.split("-").reverse().join("/");
   const lines: string[] = [];
-  if (f.snowflake_derniere_date === null) lines.push("Aucune donnée Snowflake synchronisée : consommation instrumentée et CPH indisponibles.");
+  if (f.snowflake_derniere_date === null) lines.push("Aucune donnée Snowflake synchronisée : conso capteur de niveau et CPH indisponibles.");
   else if (f.perime) lines.push(`Données Snowflake à jour jusqu'au ${fr(f.snowflake_derniere_date)} (${f.age_jours} j de retard, seuil ${f.seuil_jours} j).`);
-  if (f.periode_incomplete && f.snowflake_derniere_date) lines.push(`${f.jours_non_couverts} jour(s) de la période ne sont pas couverts : l'instrumentée et la CPH ne portent que sur les jours disponibles (la variation de stock n'est pas concernée).`);
+  if (f.periode_incomplete && f.snowflake_derniere_date) lines.push(`${f.jours_non_couverts} jour(s) de la période ne sont pas couverts : la conso capteur et la CPH ne portent que sur les jours disponibles (la variation de stock n'est pas concernée).`);
   if (f.synchro_en_echec) lines.push(`Dernière synchronisation Snowflake en échec${f.erreur_synchro ? ` : ${f.erreur_synchro}` : ""}.`);
   return (
     <div role="status" style={{ padding: "9px 14px", borderRadius: FT.radius, background: FT.orangeL, border: "1px solid rgba(217,119,6,.3)", color: FT.text, fontSize: 12.5, display: "grid", gap: 2 }}>
@@ -409,7 +409,7 @@ export function ConsoComparaisonSection({ extra, scope }: { extra?: ReactNode; s
             sub: `${nf(k.variation.sites)} sites calculables${k.variation.negatives ? ` · ${nf(k.variation.negatives)} négative(s)` : ""}`, ...trendOf("variation_l") },
           { key: "clo", label: "Consommation Closing", help: A.closing, value: k.closing.total_l, icon: "closing", color: "#16A34A", bg: "#E6F7EC", series: ps.map((x) => x.closing_l),
             sub: `${nf(k.closing.sites)} sites · référence de contrôle`, ...trendOf("closing_l") },
-          { key: "ins", label: "Instrumentée Snowflake", help: A.instrumentee, value: k.instrumentee.total_l, icon: "snow", color: "#EA7A0C", bg: "#FFF1E0", sub: `${nf(k.instrumentee.sites)} sites couverts · mesure capteur` },
+          { key: "ins", label: "Conso capteur de niveau", help: A.instrumentee, value: k.instrumentee.total_l, icon: "snow", color: "#EA7A0C", bg: "#FFF1E0", sub: `${nf(k.instrumentee.sites)} sites couverts · mesure capteur` },
           { key: "cph", label: "CPH complète", help: A.cph_complete, value: k.cph_complete.total_l, icon: "cph", color: "#7C3AED", bg: "#F1EAFE",
             sub: `${nf(k.cph_complete.sites)} sites complets · partielle ${k.cph_partielle.total_l === null ? "—" : `${nf(k.cph_partielle.total_l)} L`} (${nf(k.cph_partielle.sites)} sites)` },
         ];
@@ -439,7 +439,7 @@ export function ConsoComparaisonSection({ extra, scope }: { extra?: ReactNode; s
             sub: `${nf(k.variation.sites)} sites calculables · ${nf(k.bilans.prets)} prêts · ${nf(k.bilans.avec_reserve)} avec réserve${k.variation.negatives ? ` · ${nf(k.variation.negatives)} négative(s)` : ""}` },
           { tone: "blue", label: "Consommation réelle certifiée (L)", help: A.certifiee, value: k.certifiee.total_l === null ? "—" : `${nf(k.certifiee.total_l)} L`, sub: `${nf(k.bilans.certifies)} bilan(s) certifié(s) par le Fuel Manager` },
           { tone: "slate", label: "Consommation Closing (L)", help: A.closing, value: k.closing.total_l === null ? "—" : `${nf(k.closing.total_l)} L`, sub: `${nf(k.closing.sites)} sites · référence de contrôle` },
-          { tone: "cyan", label: "Instrumentée Snowflake (L)", help: A.instrumentee, value: k.instrumentee.total_l === null ? "—" : `${nf(k.instrumentee.total_l)} L`, sub: `${nf(k.instrumentee.sites)} sites couverts · mesure capteur` },
+          { tone: "cyan", label: "Conso capteur de niveau (L)", help: A.instrumentee, value: k.instrumentee.total_l === null ? "—" : `${nf(k.instrumentee.total_l)} L`, sub: `${nf(k.instrumentee.sites)} sites couverts · mesure capteur` },
           { tone: "violet", label: "CPH complète (L)", help: A.cph_complete, value: k.cph_complete.total_l === null ? "—" : `${nf(k.cph_complete.total_l)} L`,
             sub: `${nf(k.cph_complete.sites)} sites complets · partielle ${k.cph_partielle.total_l === null ? "—" : `${nf(k.cph_partielle.total_l)} L`} (${nf(k.cph_partielle.sites)} sites)` },
           { tone: "orange", label: "Target fuel période (L)", help: A.target, value: k.target.total_periode_l === null ? "—" : `${nf(k.target.total_periode_l)} L`,
@@ -452,7 +452,7 @@ export function ConsoComparaisonSection({ extra, scope }: { extra?: ReactNode; s
               <div><b>Bilans</b> : {nf(k.bilans.prets)} prêts · {nf(k.bilans.avec_reserve)} avec réserve · {nf(k.bilans.variation_calculee)} variation à contrôler · {nf(k.bilans.non_calculables)} non calculables · {nf(k.bilans.certifies)} certifiés.</div>
               <div><b>Couvertures</b> : CPH complète {nf(k.couverture_cph_pct, 0)} % · target {nf(k.target.couverture_pct, 0)} %.</div>
               <div title={k.ponctions.note}><b>Ponctions (périmètre affiché)</b> : entrantes {nf(k.ponctions.entrantes_l)} L · sortantes {nf(k.ponctions.sortantes_l)} L · écart {signed(k.ponctions.ecart_perimetre_l)} L (contrepartie hors périmètre ; impact global ENOC = 0 L).</div>
-              <div><b>Alertes</b> : {nf(k.alertes.stock_identique_suspect)} stock(s) identique(s) suspect(s) · {nf(k.alertes.instrumentee_ecart_extreme)} instrumentée à investiguer · {nf(k.alertes.cph_ecart_extreme + k.alertes.cph_nulle_variation_positive)} CPH à investiguer · {nf(k.alertes.closing_non_independant)} écart(s) Closing non indépendant(s).</div>
+              <div><b>Alertes</b> : {nf(k.alertes.stock_identique_suspect)} stock(s) identique(s) suspect(s) · {nf(k.alertes.instrumentee_ecart_extreme)} conso capteur à investiguer · {nf(k.alertes.cph_ecart_extreme + k.alertes.cph_nulle_variation_positive)} CPH à investiguer · {nf(k.alertes.closing_non_independant)} écart(s) Closing non indépendant(s).</div>
             </div>
           )}
           <div>
@@ -610,7 +610,7 @@ function DetailHub({ row: r, periode, A, onClose, onPick }: { row: ConsoRow; per
       )}
       {line("Target fuel période (L)", r.target.periode_l === null ? "—" : `${nf(r.target.periode_l)} L · ${TARGET_META[r.target.statut].label}`, A.target)}
       {line("Écart variation vs target", g(r.target.ecart_l, r.target.ecart_pct, r.target.pct_na), A.ecart_target)}
-      {line("Consommation instrumentée Snowflake (L)", r.instrumentee.conso_l === null ? "—" : `${nf(r.instrumentee.conso_l)} L`, A.instrumentee)}
+      {line("Conso capteur de niveau (L)", r.instrumentee.conso_l === null ? "—" : `${nf(r.instrumentee.conso_l)} L`, A.instrumentee)}
       {line("CPH complète (L)", r.cph.complete_l === null ? "—" : `${nf(r.cph.complete_l)} L`, A.cph_complete)}
       {line("CPH partielle (L)", r.cph.partielle_l === null ? "—" : `${nf(r.cph.partielle_l)} L (partielle)`, A.cph_partielle)}
       {s.reserves.length > 0 && <div style={{ marginTop: 8, fontSize: 12.5 }}><strong>Réserves :</strong><ul style={{ margin: "4px 0 0 18px" }}>{s.reserves.map((x) => <li key={x}>{x}</li>)}</ul></div>}
