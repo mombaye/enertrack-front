@@ -1,11 +1,12 @@
 // Dashboard (vue d'ensemble d'un mois) : mise en page de la maquette validée (suivi-carburant-v5).
 // Chaque chiffre vient d'un endpoint existant ; un bloc sans source en production est affiché « non disponible », jamais inventé.
 import { useContext, useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   Bar, BarChart, CartesianGrid, Cell, ComposedChart, Pie, PieChart, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis,
 } from "recharts";
-import { getBiConso, getBiConsoSources, getBiStock, type BiConsoSite } from "@/services/fuelTracking";
+import { getBiClosingSynthese, getBiConso, getBiConsoSources, getBiStock, type BiConsoSite } from "@/services/fuelTracking";
 import { DEBUT_SUIVI, monthLabel } from "../helpers";
 import { FT } from "../theme";
 import { ConsoSources } from "./ConsoBi";
@@ -60,6 +61,11 @@ export function DashboardBi({ toMonth, zone, onTab }: { toMonth: string | null; 
     staleTime: 60_000, placeholderData: (p) => p,
   });
   const alertes = useAlertes(toMonth, zone);
+  // Fichier Closing du mois : target, vols, statuts, variation de stock — chiffres du fichier, avec le motif précis quand il manque.
+  const syn = useQuery({ queryKey: ["fuel-closing-synthese", toMonth], queryFn: () => getBiClosingSynthese(toMonth!), enabled: !!toMonth, staleTime: 5 * 60_000, retry: false });
+  const sy = syn.data?.disponible ? syn.data : null;
+  const noClosing = syn.data && !syn.data.disponible ? syn.data : null;
+  const manque = (what: string) => syn.isError ? `${what} : chargement impossible (réessayez)` : noClosing ? `${what} : ${noClosing.motif ?? "aucun Closing importé pour ce mois"}` : "…";
 
   const c = conso.data;
   const k = c?.kpis;
@@ -122,21 +128,31 @@ export function DashboardBi({ toMonth, zone, onTab }: { toMonth: string | null; 
 
       <ConsoSources compact enabled={!!toMonth} params={{ from_month: month, to_month: month, zone }} />
 
+            {(noClosing || (sy?.controle && !sy.controle.ok) || (sy?.lignes && sy.lignes.id_non_reconnus > 0)) && (
+        <div role={noClosing || (sy?.controle && !sy.controle.ok) ? "alert" : "note"} style={{ padding: "10px 14px", borderRadius: 8, background: "#FFF6E5", border: "1px solid #F3D9A4", fontSize: 12.5, color: "#5b4300", display: "grid", gap: 4 }}>
+          {noClosing && <span><strong>Fichier Closing absent.</strong> {noClosing.motif} <Link to="/modules/suivi-carburant/stock" style={{ color: "#1D5FE0", fontWeight: 700 }}>{noClosing.action?.libelle ?? "Importer le Closing"} →</Link></span>}
+          {sy?.controle && !sy.controle.ok && <span><strong>Contrôle d'import :</strong> {sy.controle.avertissement} ({sy.controle.totaux.filter((t) => !t.ok).map((t) => `${t.libelle} : fichier ${fNum(t.lu_fichier_l)} L, importé ${fNum(t.importe_l)} L`).join(" ; ")})</span>}
+          {sy?.lignes && sy.lignes.id_non_reconnus > 0 && <span>{fNum(sy.lignes.id_non_reconnus)} ligne(s) du fichier sur {fNum(sy.lignes.lues)} ont un identifiant absent de Gestion des sites : elles sont comptées dans la consommation Closing (comme dans le fichier) mais sans fiche site. {fNum(sy.lignes.id_en_double)} identifiant(s) en double et {fNum(sy.lignes.sans_region)} ligne(s) sans région conservés tels quels.</span>}
+        </div>
+      )}
+
       <KpiRow>
         <BiKpi label="Consommation du mois" value={src.isLoading ? "…" : fNum(closing)} unit="L"
           explain={src.data?.disponible && src.data.explain.closing ? { ...src.data.explain.closing, titre: "Consommation du mois (Closing)" } : null}
           sub={!prevOk ? "Closing · début du suivi, pas de comparaison"
             : closingPrev == null ? "Closing · mois précédent non disponible"
             : `${fNum(closingPrev)} L en ${moisPrev}${deltaPct != null ? ` · ${deltaPct > 0 ? "+" : ""}${fPct(deltaPct)}` : ""}`} />
-        <BiKpi label="Réalisé sur target" value={pTarget == null ? "—" : fPct(pTarget).replace(" %", "")} unit="%"
-          alert={pTarget != null && pTarget > 110 ? "bad" : null}
-          sub={withTarget.length ? `${fNum(tm)} L sur ${fNum(tt)} L prévus · conso Snowflake` : "aucun site avec conso et target"} />
+        <BiKpi label="Réalisé sur target" value={sy?.target?.atteinte_pct == null ? "—" : fPct(sy.target.atteinte_pct).replace(" %", "")} unit="%"
+          alert={sy?.target?.atteinte_pct != null && sy.target.atteinte_pct > 110 ? "bad" : null}
+          sub={sy?.target?.sites_comparables ? `${fNum(sy.target.conso_comparable_l)} L sur ${fNum(sy.target.target_comparable_l)} L prévus · ${fNum(sy.target.sites_comparables)} sites · fichier Closing`
+            : sy ? "aucun site avec conso et target dans le fichier" : manque("Target")} />
         <BiKpi label="Couverture stock" value={sk?.couverture_j == null ? "—" : fNum(sk.couverture_j)} unit="jours" explain={stock.data?.explain?.couverture_j}
           sub={sk ? `${fNum(sk.stock_total_l)} L en cuve aujourd'hui` : undefined} />
-        <BiKpi label="Sites en surconsommation" value={k ? `${fNum(k.nb_sites_au_dessus_target)}` : "—"} unit={k ? `/ ${fNum(k.nb_sites_target)}` : undefined}
-          alert={k?.nb_sites_au_dessus_target ? "warn" : null} explain={c?.explain?.ecart_target_pct}
-          sub={k ? `plus de ${fNum(k.tolerance_target_pct)} % au-dessus du target` : undefined} />
-        <BiKpi label="Vols déclarés" value="—" sub="non disponible : aucune source de vols en production" />
+        <BiKpi label="Sites en surconsommation" value={sy?.target ? `${fNum(sy.target.sites_au_dessus)}` : "—"} unit={sy?.target ? `/ ${fNum(sy.target.sites_comparables)}` : undefined}
+          alert={sy?.target?.sites_au_dessus ? "warn" : null} explain={c?.explain?.ecart_target_pct}
+          sub={sy?.target ? `plus de ${fNum(sy.target.tolerance_pct)} % au-dessus du target (fichier Closing)` : manque("Target")} />
+        <BiKpi label="Vols déclarés" value={sy?.vols ? fNum(sy.vols.total_l) : "—"} unit={sy?.vols ? "L" : undefined} alert={sy?.vols?.total_l ? "warn" : null}
+          sub={sy?.vols ? `${fNum(sy.vols.sites_concernes)} site(s) · « Qté volée » du fichier · fuite / vidange / écart : ${fNum(sy.vidange_fuite_ecart?.total_l)} L` : manque("Vols")} />
         <BiKpi label="Stocks mesurés" value={pctMesure == null ? "—" : fNum(pctMesure)} unit="%"
           sub={srcDist ? `${fNum(nbEstime)} estimés · ${fNum(nbSans)} sans relevé` : undefined} />
       </KpiRow>
@@ -177,8 +193,17 @@ export function DashboardBi({ toMonth, zone, onTab }: { toMonth: string | null; 
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Statut des bilans" sub="sites" height={190}>
-          <StateBox height={190} text="Non disponible : les statuts de bilan par site ne sont pas encore agrégés en production." />
+        <ChartCard title="Statut des bilans" sub="Analysis #1 à #9 du fichier · sites à vérifier" height={190}>
+          {sy?.statuts ? (
+            <div style={{ display: "grid", gap: 4, fontSize: 11.5, overflow: "auto", maxHeight: 190 }} role="list" aria-label="Analyses du fichier Closing">
+              {sy.statuts.map((a) => (
+                <div key={a.code} role="listitem" title={a.valeurs.map((v) => `${v.valeur} : ${v.nb}`).join(" · ")} style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                  <span style={{ color: "#3b4658" }}>#{a.code} {a.libelle}</span>
+                  <strong style={{ color: a.a_verifier ? "#B26A00" : "#0CA30C", whiteSpace: "nowrap" }}>{a.a_verifier ? `${fNum(a.a_verifier)} à vérifier` : "RAS"}</strong>
+                </div>
+              ))}
+            </div>
+          ) : <StateBox height={190} text={manque("Statuts des bilans")} />}
         </ChartCard>
       </div>
 

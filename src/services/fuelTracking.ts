@@ -2515,3 +2515,23 @@ export async function uploadConfigFile(token: string, file: File, sourceType: Co
   });
   return data;
 }
+
+
+export type ClosingSynthese = {
+  mois: string; disponible: boolean; motif?: string; action?: { libelle: string; cible: string };
+  fichier?: { lot: number; nom: string; importe_le: string | null };
+  lignes?: { lues: number; id_reconnus: number; id_non_reconnus: number; id_en_double: number; sans_region: number; sans_conso: number };
+  controle?: { ok: boolean; avertissement: string | null; totaux: Array<{ champ: string; libelle: string; lu_fichier_l: number | null; importe_l: number | null; kpi_fichier_l: number | null; ecart_import_l: number | null; ecart_kpi_l: number | null; ok: boolean }> } | null;
+  conso_closing?: { total_l: number | null; sites: number; lignes: number; sites_conso_positive: number; avec_ge: { total_l: number | null; sites: number } };
+  stock?: { initial_l: number | null; livraisons_l: number | null; final_l: number | null; delta_stock_l: number | null; variation_stock_l: number | null; formule: string };
+  vols?: { total_l: number | null; sites: number; sites_concernes: number };
+  vidange_fuite_ecart?: { total_l: number | null; sites: number; sites_concernes: number };
+  capteur?: { total_l: number | null; sites: number; sites_conso_positive: number };
+  target?: { total_mois_l: number; sites: number; sites_comparables: number; conso_comparable_l: number; target_comparable_l: number; atteinte_pct: number | null; tolerance_pct: number; sites_au_dessus: number; source: string };
+  statuts?: Array<{ code: string; libelle: string; a_verifier: number; valeurs: Array<{ valeur: string; nb: number; a_verifier: boolean }> }>;
+};
+
+export async function getBiClosingSynthese(month: string) {
+  const { data } = await api.get<ClosingSynthese>(`${BASE}/bi/closing/synthese/`, { params: { month } });
+  return data;
+}
