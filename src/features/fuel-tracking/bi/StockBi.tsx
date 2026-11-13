@@ -14,8 +14,7 @@ const LEVEL_COLOR = { critique: BI.bad, alerte: BI.warn, moyen: BI.light, bon: B
 const AUTONOMY_COLOR = [BI.bad, BI.warn, BI.light, BI.secondary, BI.primary];
 const AGE_COLOR = [BI.primary, BI.secondary, BI.light, BI.warn, BI.bad, BI.unknown];
 
-export function StockBi({ toMonth }: { toMonth: string | null }) {
-  const [zone, setZone] = useState("");
+export function StockBi({ toMonth, zone }: { toMonth: string | null; zone: string }) {
   const params = { zone, month: toMonth ?? undefined };
   const q = useQuery({
     queryKey: ["fuel-bi-stock", zone, toMonth],
@@ -40,11 +39,10 @@ export function StockBi({ toMonth }: { toMonth: string | null }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <FilterBar
+      <FilterBar title="Suivi Stock"
         note={k ? `Sénégal · dernier relevé ${k.derniere_mesure ? new Date(k.derniere_mesure).toLocaleDateString("fr-FR") : "—"} · autonomie calculée sur ${monthLabel(k.mois_reference_autonomie)}` : undefined}
         onExport={() => downloadBiExport("stock", params, `suivi_stock_${today}.xlsx`)}
       >
-        <FilterSelect label="Zone" value={zone} options={d?.filters.zones ?? []} onChange={setZone} allLabel="Toutes" />
       </FilterBar>
 
       {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 12.5 }}>Chargement impossible. Les onglets détaillés plus bas restent consultables.</div>}

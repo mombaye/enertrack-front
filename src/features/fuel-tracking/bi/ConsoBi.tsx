@@ -184,12 +184,13 @@ function ZoneMonthMatrix({ data }: { data: NonNullable<BiConsoResponse["zone_mon
   );
 }
 
-export function ConsoBi({ fromMonth, toMonth, siteText, onSiteText }: {
+export function ConsoBi({ fromMonth, toMonth, zone, siteText }: {
   fromMonth: string | null; toMonth: string | null;
-  /** Site cherché (champ « Site » ou recherche du haut de page) : KPIs et tableau suivent. */
-  siteText: string; onSiteText: (v: string) => void;
+  /** Région choisie dans le bandeau de filtres du module. */
+  zone: string;
+  /** Site choisi dans la recherche du bandeau : KPIs et tableau suivent. */
+  siteText: string;
 }) {
-  const [zone, setZone] = useState("");
   const [typology, setTypology] = useState("");
   const [month, setMonth] = useState("");
   const [siteQ, setSiteQ] = useState("");
@@ -227,18 +228,12 @@ export function ConsoBi({ fromMonth, toMonth, siteText, onSiteText }: {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <FilterBar
-        note={!d?.months?.length ? "Sénégal" : single ? `Sénégal · ${monthLabel(d.months[0])} uniquement` : `Sénégal · ${monthLabel(d.months[0])} → ${monthLabel(d.months[d.months.length - 1])}`}
+      <FilterBar title="Suivi Conso"
+        note={siteText ? `Site : ${siteText}` : !d?.months?.length ? "Sénégal" : single ? `Sénégal · ${monthLabel(d.months[0])} uniquement` : `Sénégal · ${monthLabel(d.months[0])} → ${monthLabel(d.months[d.months.length - 1])}`}
         onExport={() => downloadBiExport("conso", params, effMonth ? `suivi_conso_${effMonth}.xlsx` : `suivi_conso_${d?.from_month ?? fromMonth}_${d?.to_month ?? toMonth}.xlsx`)}
       >
         <FilterSelect label="Mois" value={effMonth} options={monthOptions} onChange={setMonth} allLabel="Toute la période" format={monthLabel} />
-        <FilterSelect label="Zone" value={zone} options={d?.filters.zones ?? []} onChange={setZone} allLabel="Toutes" />
         <FilterSelect label="Typologie" value={typology} options={d?.filters.typologies ?? []} onChange={setTypology} allLabel="Toutes" />
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: FT.textMid }}>
-          Site
-          <input value={siteText} onChange={(e) => onSiteText(e.target.value)} placeholder="identifiant ou nom" aria-label="Chercher un site"
-            style={{ border: "1px solid #CBD3DF", borderRadius: 4, padding: "5px 8px", fontSize: 12.5, width: 150 }} />
-        </label>
       </FilterBar>
 
       {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 12.5 }}>Chargement impossible. Les tableaux détaillés plus bas restent consultables.</div>}

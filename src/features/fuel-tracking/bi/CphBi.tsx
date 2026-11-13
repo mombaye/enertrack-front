@@ -47,8 +47,7 @@ function monthsBetween(fromMonth: string | null, toMonth: string | null): string
   return out;
 }
 
-export function CphBi({ fromMonth, toMonth }: { fromMonth: string | null; toMonth: string | null }) {
-  const [zone, setZone] = useState("");
+export function CphBi({ fromMonth, toMonth, zone }: { fromMonth: string | null; toMonth: string | null; zone: string }) {
   const [month, setMonth] = useState("");
   const monthOptions = monthsBetween(fromMonth, toMonth);
   const effMonth = monthOptions.includes(month) ? month : "";
@@ -70,12 +69,11 @@ export function CphBi({ fromMonth, toMonth }: { fromMonth: string | null; toMont
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <FilterBar
+      <FilterBar title="Contrôle CPH"
         note={p ? `Sénégal · ${p.label}${effMonth ? "" : " (3 mois au plus)"}${d?.periode?.incomplete ? ` · données Snowflake jusqu'au ${d.periode.donnees_jusqu_au ?? "—"}` : ""}` : undefined}
         onExport={p ? () => downloadBiExport("cph", { start: p.start, end: p.end, zone }, `controle_cph_${p.start}_${p.end}.xlsx`) : undefined}
       >
         <FilterSelect label="Mois" value={effMonth} options={monthOptions} onChange={setMonth} allLabel="3 derniers mois" format={monthLabel} />
-        <FilterSelect label="Zone" value={zone} options={d?.filters?.zones ?? (zone ? [zone] : [])} onChange={setZone} allLabel="Toutes" />
       </FilterBar>
 
       {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 12.5 }}>Calcul CPH indisponible (calcul ou Snowflake en erreur). Le contrôle détaillé plus bas reste consultable.</div>}

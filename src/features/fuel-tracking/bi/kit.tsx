@@ -385,9 +385,11 @@ export function ExportButton({ onExport, label = "Exporter Excel" }: { onExport:
 }
 
 /** Barre de filtres (segments) + export. */
-export function FilterBar({ children, note, onExport }: { children?: ReactNode; note?: ReactNode; onExport?: () => Promise<void> }) {
+/** Ligne de titre d'une page (comme la maquette) : titre, filtres propres à la page, note, export. */
+export function FilterBar({ children, note, onExport, title }: { children?: ReactNode; note?: ReactNode; onExport?: () => Promise<void>; title?: string }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", padding: "2px 0" }}>
+      {title && <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, letterSpacing: "-.015em", color: "#0B1220", marginRight: 6 }}>{title}</h2>}
       {children}
       {note && <span style={{ fontSize: 12, color: FT.textMid }}>{note}</span>}
       {onExport && <span style={{ marginLeft: "auto" }}><ExportButton onExport={onExport} /></span>}

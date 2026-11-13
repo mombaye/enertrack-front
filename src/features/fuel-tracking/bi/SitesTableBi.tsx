@@ -25,9 +25,8 @@ const muted = (t: ReactNode) => <span style={{ color: FT.textSub }}>{t}</span>;
 const signed = (v: number | null, bad: number) => v == null ? "—" : <span style={{ color: Math.abs(v) > bad ? FT.red : FT.text, fontWeight: Math.abs(v) > bad ? 600 : 400 }}>{fSignedPct(v)}</span>;
 const fDate = (iso: string | null) => (iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }) : "—");
 
-export function SitesTableBi({ toMonth, vue }: { toMonth: string | null; vue: Vue }) {
+export function SitesTableBi({ toMonth, vue, zone }: { toMonth: string | null; vue: Vue; zone: string }) {
   const TITLE = TITLES[vue];
-  const [zone, setZone] = useState("");
   const [alerte, setAlerte] = useState("");
   const [text, setText] = useState("");
   const [q, setQ] = useState("");
@@ -36,6 +35,7 @@ export function SitesTableBi({ toMonth, vue }: { toMonth: string | null; vue: Vu
   const [page, setPage] = useState(1);
   const [hidden, setHidden] = useState<Group[]>([]);
   useEffect(() => { const t = setTimeout(() => { setQ(text.trim()); setPage(1); }, 250); return () => clearTimeout(t); }, [text]);
+  useEffect(() => { setPage(1); }, [zone]);
 
   const params = { vue, month: toMonth ?? undefined, zone, q, alerte, sort, desc: desc ? "1" : "0", page: String(page), page_size: String(PAGE_SIZE) };
   const r = useQuery({
@@ -94,7 +94,6 @@ export function SitesTableBi({ toMonth, vue }: { toMonth: string | null; vue: Vu
         note={d?.month ? `Sénégal · sites GE · ${monthLabel(d.month)}${d.cph_disponible === false ? " · moteur CPH indisponible : conso estimée absente" : ""}` : undefined}
         onExport={() => downloadBiExport("sites", { ...params, page: undefined, page_size: undefined }, `${vue === "stock" ? "stock" : "conso"}_par_site_${d?.month ?? ""}.xlsx`)}
       >
-        <FilterSelect label="Zone" value={zone} options={d?.filters.zones ?? []} onChange={reset(setZone)} allLabel="Toutes" />
         <FilterSelect label="Alerte" value={alerte} options={Object.keys(alertLabels ?? {})} onChange={reset(setAlerte)} allLabel="Toutes"
           format={(o) => alertLabels?.[o as SiteTableAlerte] ?? o} />
         <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: FT.textMid }}>

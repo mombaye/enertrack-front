@@ -28,8 +28,7 @@ function Priority({ r, today }: { r: RavitaillementRow; today: string }) {
   );
 }
 
-export function RavitaillementBi({ toMonth }: { toMonth: string | null }) {
-  const [zone, setZone] = useState("");
+export function RavitaillementBi({ toMonth, zone }: { toMonth: string | null; zone: string }) {
   const [horizon, setHorizon] = useState("");
   const [securite, setSecurite] = useState("");
   const [cible, setCible] = useState("");
@@ -49,11 +48,10 @@ export function RavitaillementBi({ toMonth }: { toMonth: string | null }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <FilterBar
+      <FilterBar title="Plan de ravitaillement"
         note={p ? `Sénégal · conso de ${monthLabel(p.mois_reference)} · stock du jour estimé depuis le dernier relevé` : undefined}
         onExport={() => downloadBiExport("ravitaillement", params, `plan_ravitaillement_${today}.xlsx`)}
       >
-        <FilterSelect label="Zone" value={zone} options={d?.filters.zones ?? []} onChange={setZone} allLabel="Toutes" />
         <FilterSelect label="Horizon" value={horizon} options={["3", "14", "30"]} onChange={setHorizon} allLabel="7 jours" format={(o) => `${o} jours`} />
         <FilterSelect label="Marge" value={securite} options={["0", "1", "3", "5"]} onChange={setSecurite} allLabel="2 jours" format={(o) => `${o} jour${+o > 1 ? "s" : ""}`} />
         <FilterSelect label="Remplir à" value={cible} options={["80", "100"]} onChange={setCible} allLabel="90 %" format={(o) => `${o} %`} />
