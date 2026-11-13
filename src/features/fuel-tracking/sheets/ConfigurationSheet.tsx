@@ -327,7 +327,7 @@ export function ConfigurationSheet() {
           <li>Contrôle ligne par ligne en arrière-plan : on peut quitter la page pendant le traitement.</li>
           <li>Même fichier envoyé deux fois : reconnu par son empreinte, rien n'est réimporté.</li>
           <li>Lignes acceptées, à valider et rejetées comptées ; les rejetées restent consultables avec leur motif dans Suivi Stock → Imports.</li>
-          <li>Stock, bilans et alertes recalculés par les tâches automatiques. Rien n'est complété ni inventé.</li>
+          <li>Bilans de stock des mois couverts par le fichier recalculés automatiquement dans les minutes qui suivent l'import (comptez 5 à 15 min), puis chaque nuit. Rien n'est complété ni inventé.</li>
         </ol>
       </Card>
 

@@ -158,7 +158,7 @@ export function RemonteesBi() {
             <li>Anti-doublon : un fichier déjà reçu est reconnu par son empreinte, rien n'est réimporté.</li>
             <li>Niveaux en litres → relevés de stock ; niveaux en cm convertis quand la cuve du site est validée.</li>
             <li>Lignes rejetées conservées avec leur motif, consultables dans le rapport du lot.</li>
-            <li>Stock, bilans et alertes recalculés par les tâches automatiques.</li>
+            <li>Bilans de stock des mois couverts par le fichier recalculés automatiquement dans les minutes qui suivent l'import, puis chaque nuit.</li>
           </ol>
         </Card>
       </div>
