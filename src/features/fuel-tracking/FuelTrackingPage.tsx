@@ -338,7 +338,7 @@ export default function FuelTrackingPage() {
         <OpenSiteContext.Provider value={openSite}>
         {!siteId && activeTab === "DASHBOARD" && (
           <div className="ft-fade">
-            <DashboardBi toMonth={toMonth} zone={zone} onTab={setActiveTab} />
+            <DashboardBi fromMonth={fromMonth} toMonth={toMonth} zone={zone} onTab={setActiveTab} />
           </div>
         )}
 

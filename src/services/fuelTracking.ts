@@ -2518,7 +2518,7 @@ export async function uploadConfigFile(token: string, file: File, sourceType: Co
 
 
 export type ClosingSynthese = {
-  mois: string; disponible: boolean; motif?: string; action?: { libelle: string; cible: string };
+  mois: string; mois_fin?: string; mois_avec_closing?: string[]; mois_sans_closing?: string[]; disponible: boolean; motif?: string; action?: { libelle: string; cible: string };
   fichier?: { lot: number; nom: string; importe_le: string | null };
   lignes?: { lues: number; id_reconnus: number; id_non_reconnus: number; id_en_double: number; sans_region: number; sans_conso: number };
   controle?: { ok: boolean; avertissement: string | null; totaux: Array<{ champ: string; libelle: string; lu_fichier_l: number | null; importe_l: number | null; kpi_fichier_l: number | null; ecart_import_l: number | null; ecart_kpi_l: number | null; ok: boolean }> } | null;
@@ -2533,7 +2533,7 @@ export type ClosingSynthese = {
   top_sites?: Array<{ site: string; region: string | null; conso_l: number; jours: number | null }>;
 };
 
-export async function getBiClosingSynthese(month: string) {
-  const { data } = await api.get<ClosingSynthese>(`${BASE}/bi/closing/synthese/`, { params: { month } });
+export async function getBiClosingSynthese(fromMonth: string, toMonth?: string) {
+  const { data } = await api.get<ClosingSynthese>(`${BASE}/bi/closing/synthese/`, { params: { from_month: fromMonth, to_month: toMonth ?? fromMonth } });
   return data;
 }

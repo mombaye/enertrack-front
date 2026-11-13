@@ -22,11 +22,13 @@ const prevMonthOf = (m: string) => {
 };
 const sumOf = <T,>(rows: T[], f: (r: T) => number | null | undefined) => rows.reduce((a, r) => a + (f(r) ?? 0), 0);
 
-export function DashboardBi({ toMonth, zone, onTab }: { toMonth: string | null; zone: string; onTab?: (t: "ALERTES") => void }) {
+export function DashboardBi({ fromMonth, toMonth, zone, onTab }: { fromMonth?: string | null; toMonth: string | null; zone: string; onTab?: (t: "ALERTES") => void }) {
   const openSite = useContext(OpenSiteContext);
-    const month = toMonth ?? undefined;
-  const prev = toMonth ? prevMonthOf(toMonth) : null;
-  const prevOk = !!prev && prev >= DEBUT_SUIVI;   // pas de comparaison avant le début du suivi
+  const month = toMonth ?? undefined;
+  // Période affichée = celle de Suivi conso (du … au …) : le Closing du mois comptable vaut pour toute période qui le contient.
+  const from = fromMonth && toMonth && fromMonth <= toMonth ? fromMonth : month;
+  const prev = from ? prevMonthOf(from) : null;   // comparaison avec la période qui précède le début de la période affichée
+  const prevOk = !!prev && prev >= DEBUT_SUIVI && from === month;   // comparaison seulement pour un mois isolé (pas de période de longueur différente)
 
   const conso = useQuery({
     queryKey: ["fuel-dash-conso", toMonth, zone],
@@ -35,8 +37,8 @@ export function DashboardBi({ toMonth, zone, onTab }: { toMonth: string | null; 
   });
   // Même clé que le bloc des 4 mesures : une seule requête pour les deux.
   const src = useQuery({
-    queryKey: ["fuel-bi-conso-sources", month, month, undefined, zone, undefined, undefined],
-    queryFn: () => getBiConsoSources({ from_month: month, to_month: month, zone }),
+    queryKey: ["fuel-bi-conso-sources", from, month, undefined, zone, undefined, undefined],
+    queryFn: () => getBiConsoSources({ from_month: from, to_month: month, zone }),
     enabled: !!toMonth, staleTime: 5 * 60_000, retry: false,
   });
   const srcPrev = useQuery({
@@ -51,7 +53,7 @@ export function DashboardBi({ toMonth, zone, onTab }: { toMonth: string | null; 
   });
   const alertes = useAlertes(toMonth, zone);
   // Fichier Closing du mois : target, vols, statuts, variation de stock — chiffres du fichier, avec le motif précis quand il manque.
-  const syn = useQuery({ queryKey: ["fuel-closing-synthese", toMonth], queryFn: () => getBiClosingSynthese(toMonth!), enabled: !!toMonth, staleTime: 5 * 60_000, retry: false });
+  const syn = useQuery({ queryKey: ["fuel-closing-synthese", from, toMonth], queryFn: () => getBiClosingSynthese(from!, toMonth!), enabled: !!toMonth, staleTime: 5 * 60_000, retry: false });
   const sy = syn.data?.disponible ? syn.data : null;
   const noClosing = syn.data && !syn.data.disponible ? syn.data : null;
   const manque = (what: string) => syn.isError ? `${what} : chargement impossible (réessayez)` : noClosing ? `${what} : ${noClosing.motif ?? "aucun Closing importé pour ce mois"}` : "…";
@@ -84,7 +86,7 @@ export function DashboardBi({ toMonth, zone, onTab }: { toMonth: string | null; 
 
   const crit = (alertes.data?.alertes ?? []).filter((a) => a.sev === "crit");
   const alLabels = alertes.data?.labels;
-  const mois = toMonth ? monthLabel(toMonth) : "—";
+  const mois = toMonth ? (from && from !== toMonth ? `${monthLabel(from)} → ${monthLabel(toMonth)}` : monthLabel(toMonth)) : "—";
   const moisCourt = toMonth ? mois.split(" ")[0] : "—";
   const moisPrev = prev ? monthLabel(prev).split(" ")[0] : "";
   const loading = conso.isLoading;
@@ -95,7 +97,7 @@ export function DashboardBi({ toMonth, zone, onTab }: { toMonth: string | null; 
 
       {conso.isError && <div role="alert" style={{ color: FT.red, fontSize: 12.5 }}>Chargement de la consommation impossible. Réessayez avec le bouton Rafraîchir.</div>}
 
-      <ConsoSources compact enabled={!!toMonth} params={{ from_month: month, to_month: month, zone }} />
+      <ConsoSources compact enabled={!!toMonth} params={{ from_month: from, to_month: month, zone }} />
 
             {(noClosing || (sy?.controle && !sy.controle.ok) || (sy?.lignes && sy.lignes.id_non_reconnus > 0)) && (
         <div role={noClosing || (sy?.controle && !sy.controle.ok) ? "alert" : "note"} style={{ padding: "10px 14px", borderRadius: 8, background: "#FFF6E5", border: "1px solid #F3D9A4", fontSize: 12.5, color: "#5b4300", display: "grid", gap: 4 }}>
@@ -108,7 +110,8 @@ export function DashboardBi({ toMonth, zone, onTab }: { toMonth: string | null; 
       <KpiRow>
         <BiKpi label="Consommation du mois" value={src.isLoading ? "…" : fNum(closing)} unit="L"
           explain={src.data?.disponible && src.data.explain.closing ? { ...src.data.explain.closing, titre: "Consommation du mois (Closing)" } : null}
-          sub={!prevOk ? "Closing · début du suivi, pas de comparaison"
+          sub={from !== month ? `Closing du fichier · ${sy?.mois_avec_closing?.length ? sy.mois_avec_closing.map((m) => monthLabel(m)).join(", ") : "période choisie"}${sy?.mois_sans_closing?.length ? ` · sans fichier : ${sy.mois_sans_closing.map((m) => monthLabel(m)).join(", ")}` : ""}`
+            : !prevOk ? "Closing · début du suivi, pas de comparaison"
             : closingPrev == null ? "Closing · mois précédent non disponible"
             : `${fNum(closingPrev)} L en ${moisPrev}${deltaPct != null ? ` · ${deltaPct > 0 ? "+" : ""}${fPct(deltaPct)}` : ""}`} />
         <BiKpi label="Réalisé sur target" value={sy?.target?.atteinte_pct == null ? "—" : fPct(sy.target.atteinte_pct).replace(" %", "")} unit="%"
