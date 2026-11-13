@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { BarChart3, Calculator, Calendar, Droplets, Fuel, Gauge, LayoutGrid, RefreshCw, Warehouse } from "lucide-react";
+import { BarChart3, Calculator, Calendar, Droplets, Fuel, Gauge, LayoutGrid, RefreshCw, Warehouse, Bell } from "lucide-react";
 
 import {
   getFuelCommandeEstimation,
@@ -44,8 +44,9 @@ import { EstimationSheet } from "./sheets/EstimationSheet";
 import { ControleCphSheet } from "./sheets/ControleCphSheet";
 import { ConfigurationSheet } from "./sheets/ConfigurationSheet";
 import { DashboardBi } from "./bi/DashboardBi";
+import { AlertesBi, useAlertes } from "./bi/AlertesBi";
 
-export type MainTab = "DASHBOARD" | "CONSOMMATION" | "CPH" | "STOCK" | "RAVITAILLEMENT" | "COMMANDE" | "ESTIMATION" | "CONFIGURATION";
+export type MainTab = "DASHBOARD" | "ALERTES" | "CONSOMMATION" | "CPH" | "STOCK" | "RAVITAILLEMENT" | "COMMANDE" | "ESTIMATION" | "CONFIGURATION";
 
 export const FUEL_TAB_SLUGS: Array<{ tab: MainTab; slug: string }> = [
   { tab: "DASHBOARD", slug: "dashboard" },
@@ -53,6 +54,7 @@ export const FUEL_TAB_SLUGS: Array<{ tab: MainTab; slug: string }> = [
   { tab: "CPH", slug: "controle-cph" },
   { tab: "STOCK", slug: "stock" },
   { tab: "RAVITAILLEMENT", slug: "ravitaillement" },
+  { tab: "ALERTES", slug: "alertes" },
   { tab: "COMMANDE", slug: "commandes" },
   { tab: "ESTIMATION", slug: "estimation-commande" },
   { tab: "CONFIGURATION", slug: "configuration" },
@@ -262,11 +264,14 @@ export default function FuelTrackingPage() {
   // Barre d'onglets de la maquette ; Commande et Estimation sont gardées en fin de barre (fonctions existantes).
   const TABS: Array<{ tab: MainTab; label: string }> = [
     { tab: "DASHBOARD", label: "Dashboard" }, { tab: "CONSOMMATION", label: "Suivi Conso" }, { tab: "STOCK", label: "Suivi Stock" }, { tab: "RAVITAILLEMENT", label: "Ravitaillement" },
-    { tab: "CPH", label: "Contrôle CPH" }, { tab: "CONFIGURATION", label: "Configuration" }, { tab: "COMMANDE", label: "Commande" }, { tab: "ESTIMATION", label: "Estimation" },
+    { tab: "CPH", label: "Contrôle CPH" }, { tab: "ALERTES", label: "Alertes" }, { tab: "CONFIGURATION", label: "Configuration" }, { tab: "COMMANDE", label: "Commande" }, { tab: "ESTIMATION", label: "Estimation" },
   ];
+  // Compteur de la cloche : alertes critiques du mois et de la région (même requête que la page Alertes).
+  const alertesQ = useAlertes(toMonth, zone);
+  const nbCrit = (alertesQ.data?.alertes ?? []).filter((a) => a.sev === "crit").length;
   const srcFail = [sources?.snowflake, sources?.enoc].filter((x) => x && !x.connected).length;
   const showPeriod = !!siteId || (activeTab !== "COMMANDE" && activeTab !== "ESTIMATION" && activeTab !== "CONFIGURATION");
-  const showZone = !siteId && ["DASHBOARD", "CONSOMMATION", "STOCK", "RAVITAILLEMENT", "CPH"].includes(activeTab);
+  const showZone = !siteId && ["DASHBOARD", "ALERTES", "CONSOMMATION", "STOCK", "RAVITAILLEMENT", "CPH"].includes(activeTab);
 
   return (
     <>
@@ -282,6 +287,10 @@ export default function FuelTrackingPage() {
               <span className="ftm-pulse" data-state={srcFail ? "warn" : "ok"} aria-hidden />
               Snowflake : {snowflakeLastDataLabel} · ENOC : {enocLastDataLabel}{srcFail ? ` · ${srcFail} source${srcFail > 1 ? "s" : ""} en échec` : ""}
             </span>
+            <button type="button" className="ftm-bell" onClick={() => { if (siteId) closeSite(); setActiveTab("ALERTES"); }}
+              aria-label={`Voir les alertes${nbCrit ? ` : ${nbCrit} critiques` : ""}`}>
+              <Bell size={15} aria-hidden /> Alertes {alertesQ.data && <span className="ftm-badge" title="Alertes critiques">{nbCrit.toLocaleString("fr-FR")}</span>}
+            </button>
             <button type="button" className="ftm-icon" onClick={() => { consommationQ.refetch(); qc.invalidateQueries(); }} title="Rafraîchir toutes les données" aria-label="Rafraîchir">
               <RefreshCw size={15} className={consommationQ.isFetching ? "ft-spin" : ""} aria-hidden />
             </button>
@@ -289,7 +298,8 @@ export default function FuelTrackingPage() {
           <nav className="ftm-tabs" aria-label="Pages du suivi carburant">
             {TABS.map((t) => (
               <button key={t.tab} type="button" aria-current={!siteId && activeTab === t.tab ? "page" : undefined}
-                onClick={() => { if (siteId) closeSite(); setActiveTab(t.tab); }}>{t.label}</button>
+                onClick={() => { if (siteId) closeSite(); setActiveTab(t.tab); }}>{t.label}
+                {t.tab === "ALERTES" && nbCrit > 0 && <span className="ftm-cnt" aria-label={`${nbCrit} critiques`}>{nbCrit.toLocaleString("fr-FR")}</span>}</button>
             ))}
           </nav>
         </header>
@@ -327,6 +337,12 @@ export default function FuelTrackingPage() {
         {!siteId && activeTab === "DASHBOARD" && (
           <div className="ft-fade">
             <DashboardBi toMonth={toMonth} zone={zone} onTab={setActiveTab} />
+          </div>
+        )}
+
+        {!siteId && activeTab === "ALERTES" && (
+          <div className="ft-fade">
+            <AlertesBi toMonth={toMonth} zone={zone} />
           </div>
         )}
 

@@ -5,10 +5,11 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Bar, BarChart, CartesianGrid, Cell, ComposedChart, Pie, PieChart, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis,
 } from "recharts";
-import { getBiConso, getBiConsoSources, getBiStock, getSiteTable, type BiConsoSite } from "@/services/fuelTracking";
+import { getBiConso, getBiConsoSources, getBiStock, type BiConsoSite } from "@/services/fuelTracking";
 import { DEBUT_SUIVI, monthLabel } from "../helpers";
 import { FT } from "../theme";
 import { ConsoSources } from "./ConsoBi";
+import { AlerteRow, useAlertes } from "./AlertesBi";
 import { BI, BiKpi, ChartCard, FilterBar, KpiRow, OpenSiteContext, Pill, StateBox, axisProps, fL, fNum, fPct, fShort, tooltipStyle, CARD } from "./kit";
 import { Card } from "../ui";
 
@@ -25,7 +26,7 @@ const prevMonthOf = (m: string) => {
 };
 const sumOf = <T,>(rows: T[], f: (r: T) => number | null | undefined) => rows.reduce((a, r) => a + (f(r) ?? 0), 0);
 
-export function DashboardBi({ toMonth, zone, onTab }: { toMonth: string | null; zone: string; onTab?: (t: "CONSOMMATION") => void }) {
+export function DashboardBi({ toMonth, zone, onTab }: { toMonth: string | null; zone: string; onTab?: (t: "ALERTES") => void }) {
   const openSite = useContext(OpenSiteContext);
   const [topKey, setTopKey] = useState<TopKey>("conso");
   const month = toMonth ?? undefined;
@@ -58,11 +59,7 @@ export function DashboardBi({ toMonth, zone, onTab }: { toMonth: string | null; 
     queryFn: () => getBiStock({ zone, month }),
     staleTime: 60_000, placeholderData: (p) => p,
   });
-  const alertes = useQuery({
-    queryKey: ["fuel-dash-alertes", toMonth, zone],
-    queryFn: () => getSiteTable({ month, zone, sort: "nb_alertes", desc: "1", page_size: "10" }),
-    enabled: !!toMonth, staleTime: 60_000, placeholderData: (p) => p,
-  });
+  const alertes = useAlertes(toMonth, zone);
 
   const c = conso.data;
   const k = c?.kpis;
@@ -110,8 +107,8 @@ export function DashboardBi({ toMonth, zone, onTab }: { toMonth: string | null; 
     target: sumOf(sites.filter((s) => s.zone === z && s.target_l != null), (s) => s.target_l) || null,
   }));
 
-  const al = (alertes.data?.rows ?? []).filter((r) => r.alertes.length > 0).slice(0, 6);
-  const alLabels = alertes.data?.filters.alertes;
+  const crit = (alertes.data?.alertes ?? []).filter((a) => a.sev === "crit");
+  const alLabels = alertes.data?.labels;
   const mois = toMonth ? monthLabel(toMonth) : "—";
   const moisCourt = toMonth ? mois.split(" ")[0] : "—";
   const moisPrev = prev ? monthLabel(prev).split(" ")[0] : "";
@@ -211,23 +208,14 @@ export function DashboardBi({ toMonth, zone, onTab }: { toMonth: string | null; 
 
         <Card style={{ ...CARD, display: "flex", flexDirection: "column" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: "#0B1220" }}>Sites en alerte</div>
-            <span style={{ fontSize: 12, color: "#7D889B" }}>les plus d'alertes du mois</span>
-            {onTab && <button type="button" onClick={() => onTab("CONSOMMATION")} style={{ marginLeft: "auto", all: "unset", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#1A56C4" }}>tout voir →</button>}
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: "#0B1220" }}>Alertes critiques</div>
+            {onTab && <button type="button" onClick={() => onTab("ALERTES")} style={{ all: "unset", marginLeft: "auto", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#1A56C4" }}>tout voir →</button>}
           </div>
           <div style={{ marginTop: 10, overflowY: "auto", maxHeight: 340, display: "grid", gap: 8 }}>
             {alertes.isLoading ? <StateBox height={120} text="Chargement…" />
               : alertes.isError ? <StateBox height={120} tone="red" text="Alertes indisponibles (erreur de chargement)." />
-              : !al.length ? <StateBox height={120} text="Aucune alerte sur ce mois et ces filtres." />
-              : al.map((r) => (
-                <button key={r.site_id} type="button" onClick={() => openSite?.(r.site_id)}
-                  style={{ all: "unset", cursor: openSite ? "pointer" : "default", display: "grid", gap: 4, padding: "8px 10px", border: "1px solid #F0F2F6", borderLeft: "3px solid #D03B3B", borderRadius: 8 }}>
-                  <span style={{ fontSize: 12.5 }}><b style={{ fontWeight: 700 }}>{r.site_id}</b> <span style={{ color: "#7D889B" }}>{r.site_name ?? ""}{r.zone ? ` · ${r.zone}` : ""}</span></span>
-                  <span style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                    {r.alertes.map((a) => <Pill key={a} tone="crit">{alLabels?.[a] ?? a}</Pill>)}
-                  </span>
-                </button>
-              ))}
+              : !crit.length ? <span style={{ fontSize: 12, color: "#7D889B" }}>Aucune alerte critique.</span>
+              : crit.slice(0, 6).map((a) => <AlerteRow key={`${a.type}-${a.row.site_id}`} a={a} label={alLabels?.[a.type] ?? a.type} compact />)}
           </div>
         </Card>
       </div>

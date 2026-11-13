@@ -14,6 +14,11 @@ export const SHELL_CSS = `
 @media (prefers-reduced-motion: no-preference) { .ftm-pulse[data-state="warn"] { animation:ftmPulse 2s infinite; } }
 @keyframes ftmPulse { 70% { box-shadow:0 0 0 7px rgba(250,178,25,0); } 100% { box-shadow:0 0 0 0 rgba(250,178,25,0); } }
 .ftm-icon { margin-left:auto; width:34px; height:34px; border-radius:10px; border:1px solid var(--line); background:var(--surface); display:grid; place-items:center; cursor:pointer; color:var(--fg-2); }
+.ftm-bell { margin-left:auto; display:inline-flex; align-items:center; gap:8px; border:1px solid var(--line); background:var(--surface); border-radius:10px; padding:6px 12px; cursor:pointer; font-weight:700; font-size:13px; color:var(--fg); font-family:inherit; }
+.ftm-bell:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.ftm-badge { background:var(--crit); color:#fff; border-radius:999px; font-size:11px; padding:1px 7px; }
+.ftm-bell + .ftm-icon { margin-left:0; }
+.ftm-cnt { font-size:11px; background:var(--crit-soft); color:var(--crit); border-radius:999px; padding:0 6px; margin-left:4px; }
 .ftm-tabs { display:flex; gap:4px; overflow-x:auto; scrollbar-width:none; margin-top:8px; }
 .ftm-tabs button { all:unset; color:var(--fg-2); font-weight:600; font-size:13.5px; padding:10px 12px; border-bottom:2px solid transparent; white-space:nowrap; cursor:pointer; }
 .ftm-tabs button[aria-current="page"] { color:var(--accent); border-bottom-color:var(--accent); }
