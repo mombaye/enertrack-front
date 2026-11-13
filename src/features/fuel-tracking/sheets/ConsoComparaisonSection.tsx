@@ -8,6 +8,7 @@ import {
   type ConsoFilters, type ConsoFraicheur, type ConsoRow, type ConsoStatutBilan, type ConsoTargetStatut,
 } from "@/services/fuelTracking";
 import { Modal, Skeleton } from "../ui";
+import { DEBUT_SUIVI } from "../helpers";
 import { FT, type Tone } from "../theme";
 import { HelpTip } from "./cphBadges";
 import { CoverageKpis } from "./cphDiagnostics";
@@ -400,6 +401,8 @@ export function ConsoComparaisonSection({ extra, scope }: { extra?: ReactNode; s
         const ps = evo.data?.periodes ?? [];
         const i = per ? ps.findIndex((x) => x.fin === per.fin && x.debut === per.debut) : -1;
         const trendOf = (key: "variation_l" | "closing_l"): { trend: number | null; trendNote: string } => {
+          // Pas d'écart avec une période qui commence avant le début du suivi (septembre 2026).
+          if (i > 0 && ps[i - 1].debut < `${DEBUT_SUIVI}-01`) return { trend: null, trendNote: "début du suivi, pas de période précédente" };
           const cur = i >= 0 ? ps[i][key] : null, prev = i > 0 ? ps[i - 1][key] : null;
           if (cur === null || prev === null || prev === 0) return { trend: null, trendNote: "pas de période précédente comparable" };
           return { trend: ((cur - prev) / Math.abs(prev)) * 100, trendNote: "" };

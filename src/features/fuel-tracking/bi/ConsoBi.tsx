@@ -87,7 +87,8 @@ function ConsoSources({ params, enabled, kpis, children }: {
             detail={"Les 4 mesures côte à côte"} detailLabel="Comparer les 4 mesures" value={value(c.key)} unit="L"
             sub={ok ? sourceSub(c.key, s.kpis[c.key]?.sites, s.sites, s.explain[c.key]?.valeurs) : undefined}
             alert={c.key === "variation" && ok && (s.explain.variation?.valeurs.find((v) => v.label.startsWith("Variations négatives"))?.valeur ?? 0) as number > 0 ? "warn" : null}
-            explain={ok ? { ...s.explain[c.key], titre: c.label } : null} />
+            explain={ok ? { ...s.explain[c.key], titre: c.label }
+              : s && !s.disponible ? { titre: c.label, formule: `Non calculé : ${s.motif}`, valeurs: [], sources: [], perimetre: [], exclusions: [], mise_a_jour: null, note: null } : null} />
         ))}
         {kpis}
       </KpiRow>

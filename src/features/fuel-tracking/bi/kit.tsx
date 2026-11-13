@@ -135,15 +135,13 @@ export function BiKpi({ label, value, unit, delta, deltaUnit = "%", upIsGood = t
     </>
   );
   const cell = kpiCell;
-  if (!explain && detail) {
-    return (
-      <button type="button" className="bi-kpi" onClick={() => goToBloc(detail)} title={`Voir : ${detail}`}
-        style={{ ...cell, border: "none", font: "inherit", cursor: "pointer", width: "100%", display: "block" }}>
-        {body}
-      </button>
-    );
-  }
-  if (!explain) return <div style={cell}>{body}</div>;
+  // Un clic ouvre toujours le détail (jamais une redirection directe vers le tableau) ; le tableau reste accessible
+  // depuis la fenêtre. Sans détail de calcul reçu (chargement, mesure non calculée), la fenêtre le dit.
+  if (!explain && !detail) return <div style={cell}>{body}</div>;
+  const x: KpiExplain = explain ?? {
+    titre: label, formule: "Détail du calcul non disponible pour le moment (chiffre en cours de chargement ou non calculé sur cette période).",
+    valeurs: [], sources: [], perimetre: [], exclusions: [], mise_a_jour: null, note: null,
+  };
   return (
     <>
       <button type="button" className="bi-kpi" onClick={() => setOpen(true)} aria-haspopup="dialog"
@@ -151,7 +149,7 @@ export function BiKpi({ label, value, unit, delta, deltaUnit = "%", upIsGood = t
         style={{ ...cell, border: "none", font: "inherit", cursor: "pointer", width: "100%", display: "block" }}>
         {body}
       </button>
-      {open && <ExplainModal x={explain} value={value} unit={unit} onClose={() => setOpen(false)}
+      {open && <ExplainModal x={x} value={value} unit={unit} onClose={() => setOpen(false)}
         detail={detail} detailLabel={detailLabel} />}
     </>
   );
@@ -187,8 +185,8 @@ export function ExplainModal({ x, value, unit, onClose, detail, detailLabel }: {
         {x.formule}
       </div>
 
-      <div style={h}>Valeurs utilisées</div>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+      {x.valeurs.length > 0 && <div style={h}>Valeurs utilisées</div>}
+      {x.valeurs.length > 0 && <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
         <tbody>
           {x.valeurs.map((v) => (
             <tr key={v.label}>
@@ -199,7 +197,7 @@ export function ExplainModal({ x, value, unit, onClose, detail, detailLabel }: {
             </tr>
           ))}
         </tbody>
-      </table>
+      </table>}
 
       {x.perimetre.length > 0 && (<>
         <div style={h}>Périmètre</div>
@@ -220,8 +218,8 @@ export function ExplainModal({ x, value, unit, onClose, detail, detailLabel }: {
         </table>
       </>)}
 
-      <div style={h}>Sources</div>
-      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: FT.text, lineHeight: 1.6 }}>{x.sources.map((s) => <li key={s}>{s}</li>)}</ul>
+      {x.sources.length > 0 && <div style={h}>Sources</div>}
+      {x.sources.length > 0 && <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: FT.text, lineHeight: 1.6 }}>{x.sources.map((s) => <li key={s}>{s}</li>)}</ul>}
 
       {x.note && <div style={{ marginTop: 14, fontSize: 12.5, color: FT.textMid, lineHeight: 1.45 }}>{x.note}</div>}
       <div style={{ marginTop: 16, paddingTop: 10, borderTop: "1px solid #EEF1F5", fontSize: 11.5, color: FT.textSub }}>
