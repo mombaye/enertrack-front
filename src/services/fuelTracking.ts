@@ -2529,6 +2529,8 @@ export type ClosingSynthese = {
   capteur?: { total_l: number | null; sites: number; sites_conso_positive: number };
   target?: { total_mois_l: number; sites: number; sites_comparables: number; conso_comparable_l: number; target_comparable_l: number; atteinte_pct: number | null; tolerance_pct: number; sites_au_dessus: number; source: string };
   statuts?: Array<{ code: string; libelle: string; a_verifier: number; valeurs: Array<{ valeur: string; nb: number; a_verifier: boolean }> }>;
+  par_region?: Array<{ region: string; conso_l: number; sites: number }>;
+  top_sites?: Array<{ site: string; region: string | null; conso_l: number; jours: number | null }>;
 };
 
 export async function getBiClosingSynthese(month: string) {
