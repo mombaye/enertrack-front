@@ -109,11 +109,13 @@ export function KpiRow({ children }: { children: ReactNode }) {
  * `upIsGood` décide de la couleur de la variation ; `alert` colore la valeur quand elle sort de la norme.
  * Avec `explain`, la cellule est cliquable et ouvre le détail du calcul.
  */
-export function BiKpi({ label, value, unit, delta, deltaUnit = "%", upIsGood = true, sub, alert, explain, detail, detailLabel }: {
+export function BiKpi({ label, value, unit, delta, deltaUnit = "%", upIsGood = true, sub, alert, explain, detail, detailLabel, popup }: {
   label: string; value: string; unit?: string; delta?: number | null; deltaUnit?: "%" | "pts"; upIsGood?: boolean;
   sub?: ReactNode; alert?: "bad" | "warn" | null; explain?: KpiExplain | null;
   /** Titre du bloc de la page qui détaille ce chiffre (classement ou graphique). */
   detail?: string; detailLabel?: string;
+  /** Fenêtre propre à ce chiffre, à la place du détail du calcul. */
+  popup?: (close: () => void) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const hasDelta = delta != null;
@@ -138,7 +140,7 @@ export function BiKpi({ label, value, unit, delta, deltaUnit = "%", upIsGood = t
   const cell = kpiCell;
   // Un clic ouvre toujours le détail (jamais une redirection directe vers le tableau) ; le tableau reste accessible
   // depuis la fenêtre. Sans détail de calcul reçu (chargement, mesure non calculée), la fenêtre le dit.
-  if (!explain && !detail) return <div style={cell}>{body}</div>;
+  if (!explain && !detail && !popup) return <div style={cell}>{body}</div>;
   const x: KpiExplain = explain ?? {
     titre: label, formule: "Détail du calcul non disponible pour le moment (chiffre en cours de chargement ou non calculé sur cette période).",
     valeurs: [], sources: [], perimetre: [], exclusions: [], mise_a_jour: null, note: null,
@@ -150,7 +152,8 @@ export function BiKpi({ label, value, unit, delta, deltaUnit = "%", upIsGood = t
         style={{ ...cell, border: "none", font: "inherit", cursor: "pointer", width: "100%", display: "block" }}>
         {body}
       </button>
-      {open && <ExplainModal x={x} value={value} unit={unit} onClose={() => setOpen(false)}
+      {open && popup && popup(() => setOpen(false))}
+      {open && !popup && <ExplainModal x={x} value={value} unit={unit} onClose={() => setOpen(false)}
         detail={detail} detailLabel={detailLabel} />}
     </>
   );

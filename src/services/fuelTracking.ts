@@ -2278,6 +2278,8 @@ export type BiConsoSourcesResponse = {
   sites?: number; sites_avec_bilan?: number;
   /** Présent quand `site` est passé : détail du site (bilan de stock, Closing, instrumentée, CPH). null = aucune ligne pour ce site. */
   site?: BiSiteMeasures | null;
+  /** Présent avec `liste=instrumentee` : les sites comptés dans la mesure Snowflake. */
+  liste_sites?: Array<{ site_id: string; site_name: string | null; zone: string | null; conso_l: number | null; jours_mesure: number; jours: number; couverture_pct: number | null }>;
 };
 export type BiSiteMeasures = {
   stock: { initial_l: number | null; source_initial: string | null; entrees_l: number | null; final_l: number | null; source_final: string | null;
@@ -2289,7 +2291,7 @@ export type BiSiteMeasures = {
   modele_ge: string | null; puissance_nominale_kva: number | null;
   correspondance: { base_closing: boolean; utilise: boolean; motif: string | null };
 };
-export async function getBiConsoSources(params: { from_month?: string; to_month?: string; month?: string; zone?: string; site?: string; typology?: string }) {
+export async function getBiConsoSources(params: { from_month?: string; to_month?: string; month?: string; zone?: string; site?: string; typology?: string; liste?: "instrumentee" }) {
   const { data } = await api.get<BiConsoSourcesResponse>(`${BASE}/bi/conso/sources/`, { params: cleanParams(params) });
   return data;
 }

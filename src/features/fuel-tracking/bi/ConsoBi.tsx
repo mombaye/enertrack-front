@@ -1,7 +1,7 @@
 // Vue BI — Suivi Conso (Sénégal) : tendance, conso journalière, concentration, target, rendement,
 // carte de chaleur zone × mois, qualité capteur, classements. Chaque indicateur s'explique au clic.
 // Pilotée par la période du header. Export Excel = mêmes calculs, toutes les lignes.
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Line, LineChart, ReferenceArea, ReferenceLine,
@@ -11,8 +11,9 @@ import { downloadBiExport, getBiConso, getBiConsoSources, type BiConsoResponse, 
 import { monthLabel } from "../helpers";
 import { CONSO_TABLE_TITLE, ConsoSitesBi } from "./ConsoSitesBi";
 import { FT } from "../theme";
+import { Modal } from "../ui";
 import {
-  BI, BiKpi, ChartCard, FilterBar, FilterSelect, Grid, KpiRow, SectionTitle, SiteCell, TopTable,
+  BI, BiKpi, ChartCard, FilterBar, FilterSelect, Grid, KpiRow, OpenSiteContext, SectionTitle, SiteCell, StateBox, TH, TopTable,
   axisProps, fDec1, fL, fLabel, fNum, fPct, fRatio, fShort, fSignedPct, labelStyle, tooltipStyle,
 } from "./kit";
 
@@ -55,6 +56,60 @@ function sourceSub(key: BiConsoSourceKey, sites: number | null | undefined, tota
   return `${n} sites complets${partielle != null ? ` · ${fNum(Number(partielle))} en CPH partielle (non comptés)` : ""}`;
 }
 
+/** Fenêtre du KPI « Consommation Snowflake » : uniquement la liste des sites pris en compte (ceux du nombre affiché). */
+function SnowflakeSitesModal({ params, value, onClose }: {
+  params: { from_month?: string; to_month?: string; month?: string; zone?: string; typology?: string }; value: string; onClose: () => void;
+}) {
+  const openSite = useContext(OpenSiteContext);
+  const [text, setText] = useState("");
+  const q = useQuery({
+    queryKey: ["fuel-bi-conso-sources-liste", params.from_month, params.to_month, params.month, params.zone, params.typology],
+    queryFn: () => getBiConsoSources({ ...params, liste: "instrumentee" }),
+    staleTime: 5 * 60_000, retry: false,
+  });
+  const all = q.data?.liste_sites ?? [];
+  const t = text.trim().toLowerCase();
+  const rows = t ? all.filter((r) => r.site_id.toLowerCase().includes(t) || (r.site_name ?? "").toLowerCase().includes(t)) : all;
+  const th: CSSProperties = { ...TH, position: "sticky", top: 0 };
+  const td: CSSProperties = { padding: "7px 10px", borderBottom: "1px solid #F0F2F6", fontSize: 12.5, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
+  return (
+    <Modal title="Consommation Snowflake : sites pris en compte" onClose={onClose} maxWidth={640}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 26, fontWeight: 700, color: FT.navy, fontVariantNumeric: "tabular-nums" }}>{q.data ? fNum(all.length) : "…"}</span>
+        <span style={{ fontSize: 13, color: FT.textMid }}>sites · {value} L au total</span>
+        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Chercher un site" aria-label="Chercher un site dans la liste"
+          style={{ marginLeft: "auto", height: 32, border: "1px solid #E6EAF0", borderRadius: 8, padding: "0 10px", fontSize: 12.5, width: 180, fontFamily: "inherit" }} />
+      </div>
+      <div style={{ marginTop: 12, maxHeight: "60vh", overflow: "auto", border: "1px solid #E6EAF0", borderRadius: 10 }}>
+        {q.isLoading ? <StateBox height={160} text="Chargement…" />
+          : q.isError ? <StateBox height={120} tone="red" text="Liste indisponible (erreur de chargement)." />
+          : !rows.length ? <StateBox height={100} text={t ? "Aucun site ne correspond." : "Aucun site sur cette période."} />
+          : (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead><tr>
+                <th style={{ ...th, textAlign: "left" }}>Site</th><th style={{ ...th, textAlign: "left" }}>Région</th>
+                <th style={{ ...th, textAlign: "right" }}>Conso Snowflake</th><th style={{ ...th, textAlign: "right" }}>Jours mesurés</th>
+              </tr></thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.site_id}>
+                    <td style={td}>
+                      {openSite ? <button type="button" onClick={() => { onClose(); openSite(r.site_id); }} style={{ all: "unset", cursor: "pointer", fontWeight: 700, color: "#1A56C4" }}>{r.site_id}</button>
+                        : <b style={{ fontWeight: 700 }}>{r.site_id}</b>} <span style={{ color: FT.textSub }}>{r.site_name ?? ""}</span>
+                    </td>
+                    <td style={td}>{r.zone ?? "—"}</td>
+                    <td style={{ ...td, textAlign: "right" }}>{fL(r.conso_l)}</td>
+                    <td style={{ ...td, textAlign: "right" }}>{fNum(r.jours_mesure)} / {fNum(r.jours)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+      </div>
+    </Modal>
+  );
+}
+
 /** Les 4 mesures de la consommation, chacune sur son propre périmètre de sites : jamais additionnées. */
 export function ConsoSources({ params, enabled, kpis, children, compact = false }: {
   params: { from_month?: string; to_month?: string; month?: string; zone?: string; typology?: string; site?: string }; enabled: boolean; kpis?: ReactNode; children?: ReactNode;
@@ -85,7 +140,7 @@ export function ConsoSources({ params, enabled, kpis, children, compact = false 
       )}
       <KpiRow>
         {SOURCES.map((c) => (
-          <BiKpi key={c.key} label={lastMonthOnly && qp.month ? `${c.label} · ${monthLabel(qp.month)}` : c.label}
+          <BiKpi key={c.key} popup={c.key === "instrumentee" && ok && !params.site ? (close) => <SnowflakeSitesModal params={qp} value={value(c.key)} onClose={close} /> : undefined} label={lastMonthOnly && qp.month ? `${c.label} · ${monthLabel(qp.month)}` : c.label}
             detail={CONSO_TABLE_TITLE} detailLabel="Voir par site" value={value(c.key)} unit="L"
             sub={ok ? sourceSub(c.key, s.kpis[c.key]?.sites, s.sites, s.explain[c.key]?.valeurs) : undefined}
             alert={c.key === "variation" && ok && (s.explain.variation?.valeurs.find((v) => v.label.startsWith("Variations négatives"))?.valeur ?? 0) as number > 0 ? "warn" : null}
