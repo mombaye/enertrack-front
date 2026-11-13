@@ -184,11 +184,14 @@ function ZoneMonthMatrix({ data }: { data: NonNullable<BiConsoResponse["zone_mon
   );
 }
 
-export function ConsoBi({ fromMonth, toMonth }: { fromMonth: string | null; toMonth: string | null }) {
+export function ConsoBi({ fromMonth, toMonth, siteText, onSiteText }: {
+  fromMonth: string | null; toMonth: string | null;
+  /** Site cherché (champ « Site » ou recherche du haut de page) : KPIs et tableau suivent. */
+  siteText: string; onSiteText: (v: string) => void;
+}) {
   const [zone, setZone] = useState("");
   const [typology, setTypology] = useState("");
   const [month, setMonth] = useState("");
-  const [siteText, setSiteText] = useState("");
   const [siteQ, setSiteQ] = useState("");
   const [oneSite, setOneSite] = useState<string | null>(null);
   useEffect(() => { const t = setTimeout(() => setSiteQ(siteText.trim()), 300); return () => clearTimeout(t); }, [siteText]);
@@ -233,7 +236,7 @@ export function ConsoBi({ fromMonth, toMonth }: { fromMonth: string | null; toMo
         <FilterSelect label="Typologie" value={typology} options={d?.filters.typologies ?? []} onChange={setTypology} allLabel="Toutes" />
         <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: FT.textMid }}>
           Site
-          <input value={siteText} onChange={(e) => setSiteText(e.target.value)} placeholder="identifiant ou nom" aria-label="Chercher un site"
+          <input value={siteText} onChange={(e) => onSiteText(e.target.value)} placeholder="identifiant ou nom" aria-label="Chercher un site"
             style={{ border: "1px solid #CBD3DF", borderRadius: 4, padding: "5px 8px", fontSize: 12.5, width: 150 }} />
         </label>
       </FilterBar>

@@ -113,6 +113,8 @@ export default function FuelTrackingPage() {
   // Fiche site : ?site=<id> dans l'adresse (lien partageable, bouton Retour du navigateur).
   const [searchParams, setSearchParams] = useSearchParams();
   const siteId = searchParams.get("site");
+  // Suivi Conso : choisir un site dans la recherche filtre la page (KPIs et tableau) au lieu d'ouvrir la fiche du site.
+  const [consoSite, setConsoSite] = useState("");
   const openSite = (id: string) => { setSearchParams((p) => { const n = new URLSearchParams(p); n.set("site", id); return n; }); window.scrollTo({ top: 0 }); };
   const closeSite = () => setSearchParams((p) => { const n = new URLSearchParams(p); n.delete("site"); return n; });
   const setActiveTab = (t: MainTab) => {
@@ -272,7 +274,7 @@ export default function FuelTrackingPage() {
             <div style={{ flex: 1 }} />
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <SiteSearch onSelect={openSite} />
+              <SiteSearch onSelect={(id) => (!siteId && activeTab === "CONSOMMATION" ? setConsoSite(id) : openSite(id))} />
               {(siteId || (activeTab !== "COMMANDE" && activeTab !== "ESTIMATION" && activeTab !== "CONFIGURATION")) && (
                 <div title="Mois des indicateurs mensuels (tendance du Dashboard, couverture GE)" style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "5px 10px" }}>
                   <Calendar size={14} color={FT.textSub} aria-hidden />
@@ -320,7 +322,7 @@ export default function FuelTrackingPage() {
         {!siteId && activeTab === "CONSOMMATION" && (
           <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {/* KPIs, tableau unique par site et graphiques : tout est dans ConsoBi (mêmes filtres). */}
-            <ConsoBi fromMonth={fromMonth} toMonth={toMonth} />
+            <ConsoBi fromMonth={fromMonth} toMonth={toMonth} siteText={consoSite} onSiteText={setConsoSite} />
           </div>
         )}
 
