@@ -23,11 +23,11 @@ const QUALITY = [
   { key: "Autre / absent", label: "Sans relevé", color: BI.unknown },
 ] as const;
 
-// « Instrumentée Snowflake » est affichée sous un nom plus parlant : c'est la conso lue par le capteur de niveau de la cuve.
+// « Instrumentée Snowflake » est affichée sous le nom « Consommation Snowflake » : conso lue par le capteur de niveau de la cuve (VW_FUEL_REPORT).
 const SOURCES: Array<{ key: BiConsoSourceKey; label: string; color: string }> = [
   { key: "variation", label: "Variation de stock", color: BI.primary },
   { key: "closing", label: "Consommation Closing", color: BI.secondary },
-  { key: "instrumentee", label: "Conso capteur de niveau", color: BI.light },
+  { key: "instrumentee", label: "Consommation Snowflake", color: BI.light },
   { key: "cph_complete", label: "CPH complète", color: BI.enoc },
 ];
 

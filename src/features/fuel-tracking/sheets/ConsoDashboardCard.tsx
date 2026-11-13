@@ -19,7 +19,7 @@ export function ConsoDashboardCard({ onOpen }: { onOpen?: () => void }) {
     ["Variation de stock calculée (L)", L(k.variation.total_l), `${N(k.variation.sites)} sites calculables`, A.variation],
     ["Consommation réelle certifiée (L)", L(k.certifiee.total_l), `${N(k.bilans.certifies)} bilan(s) certifié(s)`, A.certifiee],
     ["Consommation Closing (L)", L(k.closing.total_l), `${N(k.closing.sites)} sites`, A.closing],
-    ["Conso capteur de niveau (L)", L(k.instrumentee.total_l), `${N(k.instrumentee.sites)} sites couverts`, A.instrumentee],
+    ["Consommation Snowflake (L)", L(k.instrumentee.total_l), `${N(k.instrumentee.sites)} sites couverts`, A.instrumentee],
     ["CPH complète (L)", L(k.cph_complete.total_l), `${N(k.cph_complete.sites)} sites · couverture ${N(k.couverture_cph_pct)} %`, A.cph_complete],
     ["CPH partielle (L)", L(k.cph_partielle.total_l), `${N(k.cph_partielle.sites)} sites (jamais un total complet)`, A.cph_partielle],
     ["Target fuel total période (L)", L(t.total_periode_l), `${N(t.sites_avec_target)} sites avec target · ${N(t.sites_sans_target)} exclus faute de target`, A.target],

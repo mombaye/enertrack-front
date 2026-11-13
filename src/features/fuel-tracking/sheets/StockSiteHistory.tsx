@@ -688,7 +688,7 @@ function SiteBalance({ siteId }: { siteId: string }) {
             <BalanceTile label="Consommation réelle (bilan stock)" value={b.conso_reelle_l} sub={c.label} color={c.color} />
             <BalanceTile label="Consommation théorique CPH" value={b.references?.conso_theorique_cph_l ?? null}
                          sub={b.references?.statut_cph ?? b.references?.motif ?? "—"} color={FT.navy} />
-            <BalanceTile label="Conso capteur de niveau" value={b.references?.conso_instrumentee_snowflake_l ?? null}
+            <BalanceTile label="Consommation Snowflake" value={b.references?.conso_instrumentee_snowflake_l ?? null}
                          sub="capteur de niveau (VW_FUEL_REPORT)" color={FT.cyan} />
           </div>
           {b.motifs.length > 0 && (

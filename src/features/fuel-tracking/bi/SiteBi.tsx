@@ -25,7 +25,7 @@ const BILAN: Record<string, string> = {
 const QUALITE: Record<string, string> = { OK: "Relevé valide", LOW_QUALITY: "Qualité faible", NO_VALID_LEVEL: "Niveau invalide" };
 const MEASURES: Array<{ key: BiConsoSourceKey; label: string }> = [
   { key: "variation", label: "Variation de stock" }, { key: "closing", label: "Consommation Closing" },
-  { key: "instrumentee", label: "Conso capteur de niveau" }, { key: "cph_complete", label: "CPH complète" },
+  { key: "instrumentee", label: "Consommation Snowflake" }, { key: "cph_complete", label: "CPH complète" },
 ];
 const dayLabel = (iso: string) => new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
 const dateFr = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "—");
