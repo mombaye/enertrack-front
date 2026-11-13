@@ -56,8 +56,10 @@ function sourceSub(key: BiConsoSourceKey, sites: number | null | undefined, tota
 }
 
 /** Les 4 mesures de la consommation, chacune sur son propre périmètre de sites : jamais additionnées. */
-function ConsoSources({ params, enabled, kpis, children }: {
+export function ConsoSources({ params, enabled, kpis, children, compact = false }: {
   params: { from_month?: string; to_month?: string; month?: string; zone?: string; typology?: string; site?: string }; enabled: boolean; kpis?: ReactNode; children?: ReactNode;
+  /** Sans la note ni le graphique « côte à côte » (Dashboard). */
+  compact?: boolean;
 }) {
   const { lastMonthOnly, ...period } = sourcesPeriod(params);
   const qp = { from_month: period.from_month, to_month: period.to_month, month: period.month, zone: params.zone, typology: params.typology, site: params.site };
@@ -92,14 +94,14 @@ function ConsoSources({ params, enabled, kpis, children }: {
         ))}
         {kpis}
       </KpiRow>
-      <div style={{ fontSize: 11.5, color: FT.textSub, marginTop: -4 }}>
+      {!compact && <div style={{ fontSize: 11.5, color: FT.textSub, marginTop: -4 }}>
         Cliquez sur un chiffre pour voir comment il est calculé.
         {ok ? (params.site ? ` Site ${params.site}, du ${fmtDate(s.debut)} au ${fmtDate(s.fin)}.`
           : ` Les 4 mesures : sites du fichier Closing, du ${fmtDate(s.debut)} au ${fmtDate(s.fin)}, chacune sur ses propres sites, jamais additionnées. Elles suivent les filtres et le site cherché.`) : ""}
         {ok && lastMonthOnly ? " Sur une période de plus de 3 mois, elles portent sur le dernier mois ; le filtre « Mois » permet d'en choisir un autre." : ""}
-      </div>
+      </div>}
       {children}
-      {ok && chart.some((c) => c.total_l != null) && (
+      {!compact && ok && chart.some((c) => c.total_l != null) && (
         <ChartCard title="Les 4 mesures côte à côte"
           info="Chaque barre est un total indépendant, calculé sur les sites où la mesure existe (nombre de sites à droite). Un écart important entre deux mesures se contrôle site par site dans l'onglet Consommations."
           height={170}>

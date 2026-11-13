@@ -2257,6 +2257,8 @@ export type BiConsoResponse = {
     qualite: { OK: number; LOW_QUALITY: number; NO_VALID_LEVEL: number; "Autre / absent": number };
   }>;
   by_zone?: BiBreakdownRow[]; by_typology?: BiBreakdownRow[];
+  /** Tous les sites de la période (déjà renvoyés par l'API). */
+  sites?: BiConsoSite[];
   top_conso?: BiConsoSite[]; top_target?: BiConsoSite[]; top_ecart_enoc?: BiConsoSite[]; top_l_kwh?: BiConsoSite[];
   distribution_l_kwh?: Array<{ label: string; nb_sites: number; reference: boolean }>;
   reference_l_kwh?: [number, number];
@@ -2305,6 +2307,8 @@ export type BiStockResponse = {
     nb_sites: number; nb_stock_connu: number; stock_connu_pct: number | null; stock_total_l: number | null; capacite_l: number | null;
     remplissage_pct: number | null; nb_critique: number; nb_alerte: number; nb_autonomie_moins_3j: number;
     autonomie_mediane_j: number | null; nb_releves_anciens: number;
+    /** Stock ÷ conso par jour cumulée (absent sur un ancien backend). */
+    couverture_j?: number | null;
     derniere_mesure: string | null; mois_reference_autonomie: string | null;
   };
   distribution_remplissage: Array<{ label: string; nb_sites: number; niveau: "critique" | "alerte" | "moyen" | "bon" | "inconnu" }>;

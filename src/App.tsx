@@ -138,7 +138,7 @@ export default function App() {
                 </Route>
 
                 <Route path="/modules/suivi-carburant" element={<RouteGuard allowedRoles={["admin", "analyst"]} />}>
-                  <Route index element={<Navigate to="/modules/suivi-carburant/consommations" replace />} />
+                  <Route index element={<Navigate to="/modules/suivi-carburant/dashboard" replace />} />
                   <Route path=":tab" element={<FuelTrackingPage />} />
                 </Route>
 

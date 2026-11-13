@@ -43,11 +43,12 @@ import { CommandeSheet } from "./sheets/CommandeSheet";
 import { EstimationSheet } from "./sheets/EstimationSheet";
 import { ControleCphSheet } from "./sheets/ControleCphSheet";
 import { ConfigurationSheet } from "./sheets/ConfigurationSheet";
+import { DashboardBi } from "./bi/DashboardBi";
 
-export type MainTab = "CONSOMMATION" | "CPH" | "STOCK" | "RAVITAILLEMENT" | "COMMANDE" | "ESTIMATION" | "CONFIGURATION";
+export type MainTab = "DASHBOARD" | "CONSOMMATION" | "CPH" | "STOCK" | "RAVITAILLEMENT" | "COMMANDE" | "ESTIMATION" | "CONFIGURATION";
 
-// L'ancienne rubrique Dashboard est fusionnée dans Suivi Conso (vue BI) : son adresse y mène désormais.
 export const FUEL_TAB_SLUGS: Array<{ tab: MainTab; slug: string }> = [
+  { tab: "DASHBOARD", slug: "dashboard" },
   { tab: "CONSOMMATION", slug: "consommations" },
   { tab: "CPH", slug: "controle-cph" },
   { tab: "STOCK", slug: "stock" },
@@ -57,7 +58,7 @@ export const FUEL_TAB_SLUGS: Array<{ tab: MainTab; slug: string }> = [
   { tab: "CONFIGURATION", slug: "configuration" },
 ];
 // « donnees-par-site » : ancienne rubrique, son contenu est maintenant dans Suivi Conso et Suivi Stock.
-const TAB_BY_SLUG: Record<string, MainTab> = { ...Object.fromEntries(FUEL_TAB_SLUGS.map((x) => [x.slug, x.tab])), dashboard: "CONSOMMATION", "donnees-par-site": "CONSOMMATION" };
+const TAB_BY_SLUG: Record<string, MainTab> = { ...Object.fromEntries(FUEL_TAB_SLUGS.map((x) => [x.slug, x.tab])), "donnees-par-site": "CONSOMMATION" };
 const SLUG_BY_TAB = Object.fromEntries(FUEL_TAB_SLUGS.map((x) => [x.tab, x.slug])) as Record<MainTab, string>;
 
 /** Mois calendaire précédent le mois courant réel (pas lié aux données),
@@ -111,7 +112,7 @@ export default function FuelTrackingPage() {
   // L'onglet actif vient de l'adresse (sous-rubriques de la barre latérale : /modules/suivi-carburant/<onglet>).
   const { tab: tabSlug } = useParams();
   const navigate = useNavigate();
-  const activeTab: MainTab = TAB_BY_SLUG[tabSlug ?? ""] ?? "CONSOMMATION";
+  const activeTab: MainTab = TAB_BY_SLUG[tabSlug ?? ""] ?? "DASHBOARD";
   // Fiche site : ?site=<id> dans l'adresse (lien partageable, bouton Retour du navigateur).
   const [searchParams, setSearchParams] = useSearchParams();
   const siteId = searchParams.get("site");
@@ -260,12 +261,12 @@ export default function FuelTrackingPage() {
 
   // Barre d'onglets de la maquette ; Commande et Estimation sont gardées en fin de barre (fonctions existantes).
   const TABS: Array<{ tab: MainTab; label: string }> = [
-    { tab: "CONSOMMATION", label: "Suivi Conso" }, { tab: "STOCK", label: "Suivi Stock" }, { tab: "RAVITAILLEMENT", label: "Ravitaillement" },
+    { tab: "DASHBOARD", label: "Dashboard" }, { tab: "CONSOMMATION", label: "Suivi Conso" }, { tab: "STOCK", label: "Suivi Stock" }, { tab: "RAVITAILLEMENT", label: "Ravitaillement" },
     { tab: "CPH", label: "Contrôle CPH" }, { tab: "CONFIGURATION", label: "Configuration" }, { tab: "COMMANDE", label: "Commande" }, { tab: "ESTIMATION", label: "Estimation" },
   ];
   const srcFail = [sources?.snowflake, sources?.enoc].filter((x) => x && !x.connected).length;
   const showPeriod = !!siteId || (activeTab !== "COMMANDE" && activeTab !== "ESTIMATION" && activeTab !== "CONFIGURATION");
-  const showZone = !siteId && ["CONSOMMATION", "STOCK", "RAVITAILLEMENT", "CPH"].includes(activeTab);
+  const showZone = !siteId && ["DASHBOARD", "CONSOMMATION", "STOCK", "RAVITAILLEMENT", "CPH"].includes(activeTab);
 
   return (
     <>
@@ -323,6 +324,12 @@ export default function FuelTrackingPage() {
         )}
 
         <OpenSiteContext.Provider value={openSite}>
+        {!siteId && activeTab === "DASHBOARD" && (
+          <div className="ft-fade">
+            <DashboardBi toMonth={toMonth} zone={zone} onTab={setActiveTab} />
+          </div>
+        )}
+
         {!siteId && activeTab === "CONSOMMATION" && (
           <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {/* KPIs, tableau unique par site et graphiques : tout est dans ConsoBi (mêmes filtres). */}
