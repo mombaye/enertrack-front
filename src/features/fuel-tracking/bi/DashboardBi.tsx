@@ -56,7 +56,7 @@ export function DashboardBi({ fromMonth, toMonth, zone, onTab }: { fromMonth?: s
   const syn = useQuery({ queryKey: ["fuel-closing-synthese", from, toMonth], queryFn: () => getBiClosingSynthese(from!, toMonth!), enabled: !!toMonth, staleTime: 5 * 60_000, retry: false });
   const sy = syn.data?.disponible ? syn.data : null;
   const noClosing = syn.data && !syn.data.disponible ? syn.data : null;
-  const manque = (what: string) => syn.isError ? `${what} : chargement impossible (réessayez)` : noClosing ? `${what} : ${noClosing.motif ?? "aucun Closing importé pour ce mois"}` : "…";
+  const manque = (what: string) => syn.isError ? `${what} : chargement impossible (réessayez)` : sy?.ancien_import ? `${what} : ${sy.motif}` : noClosing ? `${what} : ${noClosing.motif ?? "aucun Closing importé pour ce mois"}` : "…";
 
   const c = conso.data;
   const k = c?.kpis;
