@@ -3,7 +3,7 @@
 // avec barres de données, filtres et export Excel. Couleurs Camusat (navy #0B1F4D / bleu #1A56C4,
 // voir theme.ts). Une valeur absente s'affiche « — », jamais 0.
 
-import { Children, createContext, useContext, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Children, createContext, useContext, useState, type CSSProperties, type ReactNode } from "react";
 import { AlertTriangle, ChevronDown, Download, Info } from "lucide-react";
 import type { KpiExplain } from "@/services/fuelTracking";
 import { FT, toneColors, type Tone } from "../theme";
@@ -23,32 +23,6 @@ export const BI = {
   axis: "#7A8699",
   band: "#E7F9F1",
 } as const;
-
-/** Valeurs exactes de la maquette validée (Suivi Carburant v6) pour le bandeau d'indicateurs. */
-export const KPI = { line: "#E6EAF0", fg: "#0B1220", fg2: "#4B5768", fg3: "#7D889B", crit: "#D03B3B", good: "#006300", radius: 10 } as const;
-export const kpiCell: CSSProperties = { background: "#FFFFFF", padding: "14px 18px 15px", minWidth: 0, textAlign: "left" };
-
-/** Identifiant stable d'un bloc (graphique ou classement) à partir de son titre : cible des clics sur les KPIs. */
-export const blocId = (title: string) => "bloc-" + title.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-
-/** Fait défiler jusqu'au bloc et le met brièvement en évidence. Retourne false si le bloc n'est pas affiché. */
-export function goToBloc(title: string): boolean {
-  const el = document.getElementById(blocId(title));
-  if (!el) return false;
-  el.scrollIntoView({ behavior: "smooth", block: "start" });
-  // Sécurité : si le défilement animé n'a pas abouti (navigateur qui l'interrompt), saut direct.
-  window.setTimeout(() => { if (Math.abs(el.getBoundingClientRect().top - 110) > 60) el.scrollIntoView({ block: "start" }); }, 700);
-  el.classList.remove("ft-focus");
-  void el.offsetWidth; // relance l'animation
-  el.classList.add("ft-focus");
-  // Focus clavier sur le bloc une fois le défilement terminé (un focus pendant l'animation l'interrompt).
-  if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
-  let done = false;
-  const focus = () => { if (done) return; done = true; el.focus({ preventScroll: true }); };
-  window.addEventListener("scrollend", focus, { once: true });
-  window.setTimeout(focus, 1200);
-  return true;
-}
 
 const nf0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const nf1 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 });
@@ -74,87 +48,60 @@ export const labelStyle = { fill: FT.textMid, fontSize: 10.5 } as const;
  * Enfants attendus : des <BiKpi/>.
  */
 export function KpiRow({ children }: { children: ReactNode }) {
-  // Nombre de cases réellement affichées (un enfant peut en rendre plusieurs) : compté dans le DOM.
-  const ref = useRef<HTMLDivElement>(null);
-  const [n, setN] = useState(() => Children.count(children));
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const count = () => setN(Array.from(el.children).filter((c) => c.tagName !== "STYLE").length);
-    count();
-    const mo = new MutationObserver(count);
-    mo.observe(el, { childList: true });
-    return () => mo.disconnect();
-  }, []);
-  // Comme la maquette : 4 colonnes (3 pour 6 indicateurs), 2 sous 900 px, 1 sous 520 px.
-  const cols = n === 6 ? 3 : n === 5 ? 5 : Math.min(Math.max(n, 1), 4);
+  const n = Children.count(children);
   return (
-    <div ref={ref} className="bi-kpirow" style={{
-      display: "grid", gap: 1, ["--n" as string]: cols,
-      background: KPI.line, border: `1px solid ${KPI.line}`, borderRadius: KPI.radius, overflow: "hidden",
-    } as CSSProperties} data-kpis={n}>
-      {/* La balise style est le 1er enfant : une case seule en fin de ligne est donc un enfant de rang pair. */}
-      <style>{`.bi-kpirow{grid-template-columns:repeat(var(--n),minmax(0,1fr))}`
-        + `@media (max-width:900px){.bi-kpirow{grid-template-columns:repeat(2,minmax(0,1fr))}.bi-kpirow>:last-child:nth-child(even){grid-column:1/-1}}`
-        + `@media (max-width:520px){.bi-kpirow{grid-template-columns:1fr}}`
-        + `.bi-kpi:hover{background:#F6F8FB !important}.bi-kpi:focus-visible{outline:2px solid #1A56C4;outline-offset:-2px}`}</style>
+    <div style={{
+      display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(min(170px, 100%), 1fr))`,
+      background: FT.card, border: FT.borderCrisp, borderRadius: 6, overflow: "hidden",
+    }} data-kpis={n}>
+      <style>{`.bi-kpi:hover{background:#F4F7FC !important}.bi-kpi:focus-visible{outline:2px solid ${FT.gold};outline-offset:-2px}`}</style>
       {children}
     </div>
   );
 }
 
 /**
- * Indicateur sobre : libellé, valeur, puis une courte phrase de contexte (variation en texte simple, sans flèche ni pastille).
- * La couleur ne sert qu'aux alertes réelles.
+ * Indicateur : libellé, valeur, puis une ligne de contexte (variation vs période précédente et/ou précision).
  * `upIsGood` décide de la couleur de la variation ; `alert` colore la valeur quand elle sort de la norme.
  * Avec `explain`, la cellule est cliquable et ouvre le détail du calcul.
  */
-export function BiKpi({ label, value, unit, delta, deltaUnit = "%", upIsGood = true, sub, alert, explain, detail, detailLabel, popup }: {
+export function BiKpi({ label, value, unit, delta, deltaUnit = "%", upIsGood = true, sub, alert, explain }: {
   label: string; value: string; unit?: string; delta?: number | null; deltaUnit?: "%" | "pts"; upIsGood?: boolean;
   sub?: ReactNode; alert?: "bad" | "warn" | null; explain?: KpiExplain | null;
-  /** Titre du bloc de la page qui détaille ce chiffre (classement ou graphique). */
-  detail?: string; detailLabel?: string;
-  /** Fenêtre propre à ce chiffre, à la place du détail du calcul. */
-  popup?: (close: () => void) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const hasDelta = delta != null;
-  const color = !hasDelta || delta === 0 ? KPI.fg2 : (delta > 0) === upIsGood ? KPI.good : KPI.crit;
+  const color = !hasDelta || delta === 0 ? FT.textMid : (delta > 0) === upIsGood ? FT.green : FT.red;
   const body = (
     <>
-      <div style={{ color: KPI.fg2, fontSize: 12.5, fontWeight: 400, lineHeight: 1.45 }}>{label}</div>
-      <div style={{ marginTop: 3, lineHeight: 1.15 }}>
-        <span style={{ color: alert ? KPI.crit : KPI.fg, fontSize: 25, fontWeight: 600, letterSpacing: "-.01em", fontVariantNumeric: "tabular-nums" }}>{value}</span>
-        {unit && value !== "—" && <span style={{ color: KPI.fg3, fontSize: 13, fontWeight: 400, marginLeft: 3 }}>{unit}</span>}
+      <div style={{ color: FT.textMid, fontSize: 12, fontWeight: 600, lineHeight: 1.3 }}>{label}</div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 5, marginTop: 6 }}>
+        <span style={{
+          color: alert === "bad" ? FT.red : alert === "warn" ? FT.orange : FT.navy, fontSize: 24, fontWeight: 700, lineHeight: 1.05,
+          fontVariantNumeric: "tabular-nums", textDecoration: explain ? "underline dotted" : undefined, textUnderlineOffset: 5, textDecorationThickness: 1,
+        }}>{value}</span>
+        {unit && value !== "—" && <span style={{ color: FT.textMid, fontSize: 12.5, fontWeight: 600 }}>{unit}</span>}
       </div>
-      <div style={{ marginTop: 3, fontSize: 12, color: KPI.fg3, lineHeight: 1.45 }}>
+      <div style={{ marginTop: 6, fontSize: 11.5, color: FT.textSub, lineHeight: 1.35 }}>
         {hasDelta && (
-          <span style={{ color, fontWeight: 600, marginRight: 6, whiteSpace: "nowrap" }}>
-            {delta > 0 ? "+" : delta < 0 ? "−" : ""}{nf1.format(Math.abs(delta))} {deltaUnit === "pts" ? "pt" : "%"}
+          <span style={{ color, fontWeight: 700, marginRight: 6, whiteSpace: "nowrap" }}>
+            {delta > 0 ? "▲" : delta < 0 ? "▼" : "="} {delta > 0 ? "+" : ""}{nf1.format(delta)} {deltaUnit === "pts" ? "pt" : "%"}
           </span>
         )}
         {sub}
       </div>
     </>
   );
-  const cell = kpiCell;
-  // Un clic ouvre toujours le détail (jamais une redirection directe vers le tableau) ; le tableau reste accessible
-  // depuis la fenêtre. Sans détail de calcul reçu (chargement, mesure non calculée), la fenêtre le dit.
-  if (!explain && !detail && !popup) return <div style={cell}>{body}</div>;
-  const x: KpiExplain = explain ?? {
-    titre: label, formule: "Détail du calcul non disponible pour le moment (chiffre en cours de chargement ou non calculé sur cette période).",
-    valeurs: [], sources: [], perimetre: [], exclusions: [], mise_a_jour: null, note: null,
-  };
+  const cell: CSSProperties = { background: FT.card, padding: "12px 16px 13px", minWidth: 0, boxShadow: "1px 0 0 #E4E9F0, 0 1px 0 #E4E9F0", textAlign: "left" };
+  if (!explain) return <div style={cell}>{body}</div>;
   return (
     <>
       <button type="button" className="bi-kpi" onClick={() => setOpen(true)} aria-haspopup="dialog"
-        title={detail ? "Voir le calcul et les sites concernés" : "Voir le détail du calcul"}
+        title="Voir le détail du calcul"
         style={{ ...cell, border: "none", font: "inherit", cursor: "pointer", width: "100%", display: "block" }}>
         {body}
       </button>
-      {open && popup && popup(() => setOpen(false))}
-      {open && !popup && <ExplainModal x={x} value={value} unit={unit} onClose={() => setOpen(false)}
-        detail={detail} detailLabel={detailLabel} />}
+      {open && <ExplainModal x={explain} value={value} unit={unit} onClose={() => setOpen(false)} />}
     </>
   );
 }
@@ -167,30 +114,20 @@ const fVal = (v: number | string | null, unite: string) => {
 };
 
 /** Fenêtre « D'où vient ce chiffre » : formule, valeurs du calcul, sources, périmètre, exclusions, fraîcheur. */
-export function ExplainModal({ x, value, unit, onClose, detail, detailLabel }: {
-  x: KpiExplain; value: string; unit?: string; onClose: () => void; detail?: string; detailLabel?: string;
-}) {
+export function ExplainModal({ x, value, unit, onClose }: { x: KpiExplain; value: string; unit?: string; onClose: () => void }) {
   const h: CSSProperties = { fontSize: 11.5, fontWeight: 700, color: FT.textMid, margin: "16px 0 6px" };
   return (
     <Modal title={x.titre} onClose={onClose} maxWidth={600}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 6, flex: 1 }}>
-          <span style={{ fontSize: 30, fontWeight: 700, color: FT.navy, fontVariantNumeric: "tabular-nums" }}>{value}</span>
-          {unit && value !== "—" && <span style={{ fontSize: 14, color: FT.textMid, fontWeight: 600 }}>{unit}</span>}
-        </div>
-        {detail && (
-          <button type="button" onClick={() => { onClose(); window.setTimeout(() => goToBloc(detail), 60); }}
-            style={{ border: "none", background: FT.navy, color: "#fff", borderRadius: 8, padding: "9px 14px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
-            {detailLabel ?? "Voir les sites concernés"} →
-          </button>
-        )}
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+        <span style={{ fontSize: 30, fontWeight: 700, color: FT.navy, fontVariantNumeric: "tabular-nums" }}>{value}</span>
+        {unit && value !== "—" && <span style={{ fontSize: 14, color: FT.textMid, fontWeight: 600 }}>{unit}</span>}
       </div>
       <div style={{ marginTop: 10, padding: "10px 12px", background: FT.slateL, borderLeft: `3px solid ${FT.navy}`, fontSize: 13, color: FT.text, lineHeight: 1.45 }}>
         {x.formule}
       </div>
 
-      {x.valeurs.length > 0 && <div style={h}>Valeurs utilisées</div>}
-      {x.valeurs.length > 0 && <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+      <div style={h}>Valeurs utilisées</div>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
         <tbody>
           {x.valeurs.map((v) => (
             <tr key={v.label}>
@@ -201,7 +138,7 @@ export function ExplainModal({ x, value, unit, onClose, detail, detailLabel }: {
             </tr>
           ))}
         </tbody>
-      </table>}
+      </table>
 
       {x.perimetre.length > 0 && (<>
         <div style={h}>Périmètre</div>
@@ -222,49 +159,20 @@ export function ExplainModal({ x, value, unit, onClose, detail, detailLabel }: {
         </table>
       </>)}
 
-      {x.sources.length > 0 && <div style={h}>Sources</div>}
-      {x.sources.length > 0 && <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: FT.text, lineHeight: 1.6 }}>{x.sources.map((s) => <li key={s}>{s}</li>)}</ul>}
+      <div style={h}>Sources</div>
+      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: FT.text, lineHeight: 1.6 }}>{x.sources.map((s) => <li key={s}>{s}</li>)}</ul>
 
       {x.note && <div style={{ marginTop: 14, fontSize: 12.5, color: FT.textMid, lineHeight: 1.45 }}>{x.note}</div>}
       <div style={{ marginTop: 16, paddingTop: 10, borderTop: "1px solid #EEF1F5", fontSize: 11.5, color: FT.textSub }}>
         {x.mise_a_jour ? `Données synchronisées le ${new Date(x.mise_a_jour).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}` : "Date de synchronisation inconnue"}
-        {" · la liste complète site par site est dans l'export Excel."}
+        {" · le détail site par site est dans l'export Excel."}
       </div>
     </Modal>
   );
 }
 
-/** Pastille de statut de la maquette : couleur + texte, jamais la couleur seule. */
-export type PillTone = "good" | "warn" | "crit" | "mute";
-const PILL: Record<PillTone, [string, string]> = { good: ["#E3F5E3", "#006300"], warn: ["#FEF4DD", "#8A5A00"], crit: ["#FDECEC", "#D03B3B"], mute: ["#F6F8FB", "#7D889B"] };
-export function Pill({ tone, children, title }: { tone: PillTone; children: ReactNode; title?: string }) {
-  const [bg, fg] = PILL[tone];
-  return (
-    <span title={title} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 8px", borderRadius: 999, fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap", background: bg, color: fg }}>
-      {tone !== "mute" && <span aria-hidden style={{ width: 7, height: 7, borderRadius: "50%", background: "currentColor" }} />}
-      {children}
-    </span>
-  );
-}
-/** Barre de donnée de la maquette (piste grise + remplissage) suivie de la valeur. */
-export function DataBar({ pct, color, label, width = 80 }: { pct: number; color: string; label: ReactNode; width?: number }) {
-  return (
-    <span style={{ display: "inline-grid", gridTemplateColumns: `${width}px auto`, gap: 8, alignItems: "center" }}>
-      <span style={{ height: 8, background: "#F0F2F6", borderRadius: 4, overflow: "hidden", display: "block" }}>
-        <i style={{ display: "block", height: "100%", width: `${Math.max(0, Math.min(100, pct))}%`, background: color, borderRadius: 4 }} />
-      </span>
-      <span style={{ fontVariantNumeric: "tabular-nums" }}>{label}</span>
-    </span>
-  );
-}
-
-/** Carte de la maquette : rayon 14, bordure claire, ombre douce. */
-export const CARD: CSSProperties = { padding: "14px 16px 16px", minWidth: 0, borderRadius: 14, border: "1px solid #E6EAF0", boxShadow: "0 1px 2px rgba(11,31,77,.04), 0 8px 24px -16px rgba(11,31,77,.22)" };
-/** En-tête de tableau de la maquette : capitales 11 px sur fond --plane. */
-export const TH: CSSProperties = { padding: "8px 10px", fontSize: 11, fontWeight: 700, color: "#4B5768", textTransform: "uppercase", letterSpacing: ".03em", background: "#F6F8FB", borderBottom: "1px solid #E6EAF0", whiteSpace: "nowrap" };
-
 export function Grid({ min = 380, children }: { min?: number; children: ReactNode }) {
-  return <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(min(${min}px, 100%), 1fr))`, gap: 16 }}>{children}</div>;
+  return <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(min(${min}px, 100%), 1fr))`, gap: 12 }}>{children}</div>;
 }
 
 /** Petit « i » dont le survol donne la méthode de calcul (au lieu d'un sous-titre explicatif permanent). */
@@ -277,17 +185,16 @@ export function InfoTip({ text }: { text: string }) {
 }
 
 /** Carte de graphique : titre court + méthode en infobulle + états chargement / erreur / vide. */
-export function ChartCard({ title, info, sub, legend, loading, error, empty, height = 250, children, action }: {
-  title: string; info?: string; sub?: ReactNode; legend?: Array<{ label: string; color: string; dashed?: boolean }>;
+export function ChartCard({ title, info, legend, loading, error, empty, height = 250, children, action }: {
+  title: string; info?: string; legend?: Array<{ label: string; color: string; dashed?: boolean }>;
   loading?: boolean; error?: boolean; empty?: boolean; height?: number; children: ReactNode; action?: ReactNode;
 }) {
   return (
-    <Card id={blocId(title)} style={CARD}>
+    <Card style={{ padding: "14px 16px", minWidth: 0, borderRadius: 6 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-        <div style={{ fontSize: 13.5, fontWeight: 700, color: "#0B1220", display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: FT.text, display: "inline-flex", alignItems: "center", gap: 6 }}>
           {title}{info && <InfoTip text={info} />}
         </div>
-        {sub && <span style={{ fontSize: 12, color: "#7D889B", marginRight: "auto" }}>{sub}</span>}
         {action}
       </div>
       {legend && legend.length > 0 && (
@@ -325,19 +232,16 @@ export type TopColumn<T> = { label: string; render: (row: T) => ReactNode; align
  * Tableau classé (Top N). `barColumn` reçoit une barre de données en fond de cellule, comme dans Power BI,
  * proportionnelle à `barValue` (échelle `barMax`, sinon le maximum du tableau).
  */
-export function TopTable<T>({ title, info, sub, rows, columns, barValue, barMax, barColor = BI.light, barColumn = 1, loading, error, onRowClick }: {
-  title: string; info?: string; sub?: ReactNode; rows: T[] | undefined; columns: TopColumn<T>[];
+export function TopTable<T>({ title, info, rows, columns, barValue, barMax, barColor = BI.light, barColumn = 1, loading, error, onRowClick }: {
+  title: string; info?: string; rows: T[] | undefined; columns: TopColumn<T>[];
   barValue?: (row: T) => number | null; barMax?: number; barColor?: string | ((row: T) => string); barColumn?: number;
   loading?: boolean; error?: boolean; onRowClick?: (row: T) => void;
 }) {
   const max = barMax ?? Math.max(1, ...(rows ?? []).map((r) => Math.abs(barValue?.(r) ?? 0)));
   return (
-    <Card id={blocId(title)} style={CARD}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 13.5, fontWeight: 700, color: "#0B1220", display: "inline-flex", alignItems: "center", gap: 6 }}>
-          {title}{info && <InfoTip text={info} />}
-        </div>
-        {sub && <span style={{ fontSize: 12, color: "#7D889B" }}>{sub}</span>}
+    <Card style={{ padding: "14px 16px", minWidth: 0, borderRadius: 6 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: FT.text, display: "inline-flex", alignItems: "center", gap: 6 }}>
+        {title}{info && <InfoTip text={info} />}
       </div>
       <div style={{ marginTop: 8, overflowX: "auto" }}>
         {loading ? <Skeleton h={260} />
@@ -355,7 +259,7 @@ export function TopTable<T>({ title, info, sub, rows, columns, barValue, barMax,
                   const pct = bv == null ? 0 : Math.max(0, Math.min(100, (Math.abs(bv) / max) * 100));
                   return (
                     <tr key={i} onClick={onRowClick ? () => onRowClick(r) : undefined}
-                      style={{ cursor: onRowClick ? "pointer" : undefined }}>
+                      style={{ cursor: onRowClick ? "pointer" : undefined, background: i % 2 ? "#FAFBFD" : undefined }}>
                       {columns.map((c, ci) => (
                         <td key={c.label} style={{
                           ...td(c.align ?? "left"),
@@ -376,9 +280,12 @@ export function TopTable<T>({ title, info, sub, rows, columns, barValue, barMax,
   );
 }
 
-const th = (align: "left" | "right", width?: string): CSSProperties => ({ ...TH, textAlign: align, width });
+const th = (align: "left" | "right", width?: string): CSSProperties => ({
+  textAlign: align, padding: "6px 8px", fontSize: 11.5, fontWeight: 600, color: FT.textMid,
+  borderBottom: `2px solid ${FT.navy}`, width, whiteSpace: "nowrap",
+});
 const td = (align: "left" | "right"): CSSProperties => ({
-  textAlign: align, padding: "8px 10px", borderBottom: `1px solid #F0F2F6`, color: FT.text,
+  textAlign: align, padding: "6px 8px", borderBottom: `1px solid #EEF1F5`, color: FT.text,
   fontVariantNumeric: "tabular-nums", verticalAlign: "middle", whiteSpace: align === "right" ? "nowrap" : undefined,
 });
 
@@ -408,8 +315,8 @@ export function ExportButton({ onExport, label = "Exporter Excel" }: { onExport:
       <button type="button" disabled={busy}
         onClick={async () => { setBusy(true); setErr(false); try { await onExport(); } catch { setErr(true); } finally { setBusy(false); } }}
         style={{
-          display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid #E6EAF0", background: busy ? "#F6F8FB" : "#fff",
-          color: "#0B1220", borderRadius: 8, padding: "6px 11px", fontSize: 12.5, fontWeight: 600, cursor: busy ? "wait" : "pointer", whiteSpace: "nowrap",
+          display: "inline-flex", alignItems: "center", gap: 6, border: `1px solid ${FT.navy}`, background: busy ? FT.slateL : FT.card,
+          color: FT.navy, borderRadius: 4, padding: "5px 11px", fontSize: 12.5, fontWeight: 600, cursor: busy ? "wait" : "pointer",
         }}>
         <Download size={14} aria-hidden />{busy ? "Préparation…" : label}
       </button>
@@ -418,16 +325,12 @@ export function ExportButton({ onExport, label = "Exporter Excel" }: { onExport:
 }
 
 /** Barre de filtres (segments) + export. */
-/** Ligne de titre d'une page (comme la maquette) : titre, filtres propres à la page, note, export. */
-export function FilterBar({ children, note, onExport, title }: { children?: ReactNode; note?: ReactNode; onExport?: () => Promise<void>; title?: string }) {
+export function FilterBar({ children, note, onExport }: { children?: ReactNode; note?: ReactNode; onExport?: () => Promise<void> }) {
   return (
-    <div style={{ display: "grid", gap: 10 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-        {title && <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, letterSpacing: "-.015em", color: "#0B1220" }}>{title}</h2>}
-        {note && <span style={{ fontSize: 12, color: "#7D889B" }}>{note}</span>}
-        {onExport && <span style={{ marginLeft: "auto", alignSelf: "center" }}><ExportButton onExport={onExport} /></span>}
-      </div>
-      {children && <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>{children}</div>}
+    <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", padding: "2px 0" }}>
+      {children}
+      {note && <span style={{ fontSize: 12, color: FT.textMid }}>{note}</span>}
+      {onExport && <span style={{ marginLeft: "auto" }}><ExportButton onExport={onExport} /></span>}
     </div>
   );
 }
@@ -436,12 +339,12 @@ export function FilterSelect({ label, value, options, onChange, allLabel = "Tous
   label: string; value: string; options: string[]; onChange: (v: string) => void; allLabel?: string; format?: (o: string) => string;
 }) {
   return (
-    <label style={{ display: "grid", gap: 2, minWidth: 130 }}>
-      <span style={{ fontSize: 10.5, fontWeight: 700, color: "#7D889B", textTransform: "uppercase", letterSpacing: ".05em" }}>{label}</span>
+    <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: FT.textMid }}>
+      {label}
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        style={{ height: 34, border: `1px solid ${value ? "#1A56C4" : "#E6EAF0"}`, background: value ? "#EAF1FD" : "#fff", borderRadius: 8, padding: "0 8px", fontSize: 13, fontWeight: 600, color: value ? "#1A56C4" : "#0B1220", fontFamily: "inherit" }}
+        style={{ border: `1px solid #CBD3DF`, background: FT.card, borderRadius: 4, padding: "5px 8px", fontSize: 12.5, color: FT.text, minWidth: 110 }}
       >
         <option value="">{allLabel}</option>
         {options.map((o) => <option key={o} value={o}>{format ? format(o) : o}</option>)}
@@ -452,9 +355,9 @@ export function FilterSelect({ label, value, options, onChange, allLabel = "Tous
 
 export function SectionTitle({ children, sub, action }: { children: ReactNode; sub?: ReactNode; action?: ReactNode }) {
   return (
-    <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginTop: 6, flexWrap: "wrap" }}>
-      <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, letterSpacing: "-.01em", color: "#0B1220" }}>{children}</h3>
-      {sub && <div style={{ fontSize: 12, color: "#7D889B" }}>{sub}</div>}
+    <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginTop: 8, borderBottom: `1px solid #E4E9F0`, paddingBottom: 6 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: FT.navy }}>{children}</div>
+      {sub && <div style={{ fontSize: 12, color: FT.textSub }}>{sub}</div>}
       {action && <div style={{ marginLeft: "auto", alignSelf: "center" }}>{action}</div>}
     </div>
   );
@@ -465,7 +368,7 @@ export function SectionTitle({ children, sub, action }: { children: ReactNode; s
 export function DetailSection({ title, children, defaultOpen = false }: { title: string; children: ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <section style={{ background: "#fff", border: "1px solid #E6EAF0", borderRadius: 14 }}>
+    <section style={{ background: FT.card, border: FT.borderCrisp, borderRadius: 6 }}>
       <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)}
         style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "11px 16px", background: "transparent", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, color: FT.navy, textAlign: "left" }}>
         <ChevronDown size={16} aria-hidden style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform .15s" }} />

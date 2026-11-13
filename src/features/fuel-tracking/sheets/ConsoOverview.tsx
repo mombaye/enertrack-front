@@ -1,11 +1,10 @@
 // Blocs visuels de « Suivis Consommations » : cartes KPI (avec tendance), évolution par période, répartition des bilans.
 // Aucune valeur inventée : une série ou une tendance absente est affichée comme telle (« — », « pas de période précédente »).
 import type { CSSProperties, ReactNode } from "react";
-import { Area, AreaChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { BarChart3, PieChart as PieIcon } from "lucide-react";
+import { Area, AreaChart, CartesianGrid, Cell, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { BarChart3, CheckCircle2, Fuel, Gauge, PieChart as PieIcon, Droplets } from "lucide-react";
 import type { ConsoEvolution } from "@/services/fuelTracking";
 import { HelpTip } from "./cphBadges";
-import { KpiRow } from "../bi/kit";
 import { FT } from "../theme";
 
 const nf = (v: number | null | undefined, d = 0) => (v === null || v === undefined ? "—" : v.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d }));
@@ -13,45 +12,47 @@ const card: CSSProperties = { border: "1px solid #E6ECF5", background: FT.card, 
 
 export type OverviewCard = { key: string; label: string; value: number | null; sub: string; help?: string; color: string; bg: string; icon: "sigma" | "closing" | "snow" | "cph"; series?: Array<number | null>; trend?: number | null; trendNote?: string };
 
+const ICONS = { sigma: Fuel, closing: CheckCircle2, snow: Gauge, cph: Droplets };
 
-function Spark({ data }: { data: Array<number | null> }) {
+function Spark({ data, color }: { data: Array<number | null>; color: string }) {
   const pts = data.map((v, i) => ({ i, v })).filter((p) => p.v !== null) as Array<{ i: number; v: number }>;
   if (pts.length < 2) return null;
   return (
-    <div aria-hidden style={{ width: 96, height: 26, marginTop: 6 }}>
+    <div aria-hidden style={{ position: "absolute", right: 8, bottom: 6, width: 120, height: 46, opacity: 0.9 }}>
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={pts} margin={{ top: 2, right: 0, bottom: 2, left: 0 }}>
-          <Line type="monotone" dataKey="v" stroke="#9AA6B8" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-        </LineChart>
+        <AreaChart data={pts} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+          <Area type="monotone" dataKey="v" stroke={color} fill={color} fillOpacity={0.15} strokeWidth={2} dot={false} isAnimationActive={false} />
+        </AreaChart>
       </ResponsiveContainer>
     </div>
   );
 }
 
-/** Bande de chiffres sobre : libellé, valeur, précision, tendance en texte simple, petite courbe grise. */
 export function KpiCards({ cards }: { cards: OverviewCard[] }) {
   return (
-    <div role="group" aria-label="Indicateurs de la période"><KpiRow>
-      {cards.map((c) => (
-        <div key={c.key} style={{ padding: "14px 18px 15px", minWidth: 0, background: "#FFFFFF" }}>
-          <div style={{ fontSize: 12.5, color: "#4B5768", lineHeight: 1.45 }}>{c.label}{c.help && <HelpTip text={c.help} label={c.label} />}</div>
-          <div style={{ marginTop: 3, lineHeight: 1.15 }}>
-            <span style={{ fontSize: 25, fontWeight: 600, color: "#0B1220", fontVariantNumeric: "tabular-nums", letterSpacing: "-.01em" }}>{c.value === null ? "—" : nf(c.value)}</span>
-            {c.value !== null && <span style={{ fontSize: 13, color: "#7D889B", marginLeft: 3 }}>L</span>}
+    <div role="group" aria-label="Indicateurs de la période" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+      {cards.map((c) => {
+        const Icon = ICONS[c.icon];
+        return (
+          <div key={c.key} style={{ ...card, position: "relative", overflow: "hidden", padding: "18px 18px", background: `linear-gradient(135deg, ${c.bg}, ${FT.card} 75%)`, display: "flex", gap: 14, minHeight: 118, alignItems: "flex-start" }}>
+            <div aria-hidden style={{ width: 56, height: 56, borderRadius: 999, background: "#fff", boxShadow: `0 0 0 6px ${c.bg}`, display: "grid", placeItems: "center", flexShrink: 0, margin: 6 }}>
+              <Icon size={26} color={c.color} />
+            </div>
+            <div style={{ minWidth: 0, display: "grid", alignContent: "start", gap: 2 }}>
+              <div style={{ fontSize: 14.5, color: FT.text, fontWeight: 600 }}>{c.label}{c.help && <HelpTip text={c.help} label={c.label} />}</div>
+              <div style={{ fontSize: 30, fontWeight: 800, color: FT.text, fontVariantNumeric: "tabular-nums", lineHeight: 1.15 }}>{c.value === null ? "—" : `${nf(c.value)} L`}</div>
+              <div style={{ fontSize: 11.5, color: FT.textMid }}>{c.sub}</div>
+              {c.trend !== undefined && (
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: c.trend === null ? FT.textSub : c.trend >= 0 ? FT.green : FT.red }}>
+                  {c.trend === null ? c.trendNote ?? "tendance indisponible" : `${c.trend >= 0 ? "↑ +" : "↓ "}${nf(c.trend, 1)} % vs période précédente`}
+                </div>
+              )}
+            </div>
+            {c.series && <Spark data={c.series} color={c.color} />}
           </div>
-          <div style={{ fontSize: 12, color: "#7D889B", marginTop: 3, lineHeight: 1.45 }}>
-            {c.sub}
-            {c.trend !== undefined && (
-              <> · {c.trend === null
-                ? (c.trendNote ?? "tendance indisponible")
-                : <span style={{ color: c.trend >= 0 ? "#006300" : "#D03B3B", fontWeight: 600 }}>{c.trend >= 0 ? "+" : "−"}{nf(Math.abs(c.trend), 1)} %</span>}
-                {c.trend !== null && " sur la période précédente"}</>
-            )}
-          </div>
-          {c.series && <Spark data={c.series} />}
-        </div>
-      ))}
-    </KpiRow></div>
+        );
+      })}
+    </div>
   );
 }
 

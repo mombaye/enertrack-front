@@ -1,7 +1,7 @@
 // Vue BI — Suivi Conso (Sénégal) : tendance, conso journalière, concentration, target, rendement,
 // carte de chaleur zone × mois, qualité capteur, classements. Chaque indicateur s'explique au clic.
 // Pilotée par la période du header. Export Excel = mêmes calculs, toutes les lignes.
-import { useCallback, useContext, useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Line, LineChart, ReferenceArea, ReferenceLine,
@@ -9,11 +9,9 @@ import {
 } from "recharts";
 import { downloadBiExport, getBiConso, getBiConsoSources, type BiConsoResponse, type BiConsoSourceKey } from "@/services/fuelTracking";
 import { monthLabel } from "../helpers";
-import { CONSO_TABLE_TITLE, ConsoSitesBi } from "./ConsoSitesBi";
 import { FT } from "../theme";
-import { Modal } from "../ui";
 import {
-  BI, BiKpi, ChartCard, FilterBar, FilterSelect, Grid, KpiRow, OpenSiteContext, SectionTitle, SiteCell, StateBox, TH, TopTable,
+  BI, BiKpi, ChartCard, FilterBar, FilterSelect, Grid, KpiRow, SectionTitle, SiteCell, TopTable,
   axisProps, fDec1, fL, fLabel, fNum, fPct, fRatio, fShort, fSignedPct, labelStyle, tooltipStyle,
 } from "./kit";
 
@@ -24,103 +22,20 @@ const QUALITY = [
   { key: "Autre / absent", label: "Sans relevé", color: BI.unknown },
 ] as const;
 
-// « Instrumentée Snowflake » est affichée sous le nom « Consommation Snowflake » : conso lue par le capteur de niveau de la cuve (VW_FUEL_REPORT).
 const SOURCES: Array<{ key: BiConsoSourceKey; label: string; color: string }> = [
   { key: "variation", label: "Variation de stock", color: BI.primary },
   { key: "closing", label: "Consommation Closing", color: BI.secondary },
-  { key: "instrumentee", label: "Consommation Snowflake", color: BI.light },
+  { key: "instrumentee", label: "Instrumentée Snowflake", color: BI.light },
   { key: "cph_complete", label: "CPH complète", color: BI.enoc },
 ];
 
-const monthIndex = (m: string) => Number(m.slice(0, 4)) * 12 + Number(m.slice(5, 7));
-
-/** Période des 4 mesures : le mois choisi, sinon la période du header si ≤ 3 mois, sinon son dernier mois
- * (même règle que le tableau par site : le calcul CPH et les bilans de stock se font sur une période courte). */
-function sourcesPeriod(p: { from_month?: string; to_month?: string; month?: string }): { from_month?: string; to_month?: string; month?: string; lastMonthOnly: boolean } {
-  if (p.month || !p.from_month || !p.to_month) return { ...p, lastMonthOnly: false };
-  if (monthIndex(p.to_month) - monthIndex(p.from_month) + 1 <= 3) return { ...p, lastMonthOnly: false };
-  return { month: p.to_month, lastMonthOnly: true };
-}
-
-/** Sous-titre de chaque mesure, repris de l'ancienne version (sites pris en compte et précisions utiles). */
-function sourceSub(key: BiConsoSourceKey, sites: number | null | undefined, total: number | null | undefined, valeurs: Array<{ label: string; valeur: number | string | null }> = []): string {
-  const v = (start: string) => valeurs.find((x) => x.label.startsWith(start))?.valeur;
-  const n = fNum(sites);
-  if (key === "variation") {
-    const neg = Number(v("Variations négatives") ?? 0);
-    return `${n} / ${fNum(total)} sites calculables${neg > 0 ? ` · ${fNum(neg)} négative(s)` : ""}`;
-  }
-  if (key === "closing") return `${n} sites · référence de contrôle`;
-  if (key === "instrumentee") return `${n} sites couverts · mesure du capteur de cuve`;
-  const partielle = v("Sites en CPH partielle");
-  return `${n} sites complets${partielle != null ? ` · ${fNum(Number(partielle))} en CPH partielle (non comptés)` : ""}`;
-}
-
-/** Fenêtre du KPI « Consommation Snowflake » : uniquement la liste des sites pris en compte (ceux du nombre affiché). */
-function SnowflakeSitesModal({ params, value, onClose }: {
-  params: { from_month?: string; to_month?: string; month?: string; zone?: string; typology?: string }; value: string; onClose: () => void;
-}) {
-  const openSite = useContext(OpenSiteContext);
-  const [text, setText] = useState("");
-  const q = useQuery({
-    queryKey: ["fuel-bi-conso-sources-liste", params.from_month, params.to_month, params.month, params.zone, params.typology],
-    queryFn: () => getBiConsoSources({ ...params, liste: "instrumentee" }),
-    staleTime: 5 * 60_000, retry: false,
-  });
-  const all = q.data?.liste_sites ?? [];
-  const t = text.trim().toLowerCase();
-  const rows = t ? all.filter((r) => r.site_id.toLowerCase().includes(t) || (r.site_name ?? "").toLowerCase().includes(t)) : all;
-  const th: CSSProperties = { ...TH, position: "sticky", top: 0 };
-  const td: CSSProperties = { padding: "7px 10px", borderBottom: "1px solid #F0F2F6", fontSize: 12.5, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
-  return (
-    <Modal title="Consommation Snowflake : sites pris en compte" onClose={onClose} maxWidth={640}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 26, fontWeight: 700, color: FT.navy, fontVariantNumeric: "tabular-nums" }}>{q.data ? fNum(all.length) : "…"}</span>
-        <span style={{ fontSize: 13, color: FT.textMid }}>sites · {value} L au total</span>
-        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Chercher un site" aria-label="Chercher un site dans la liste"
-          style={{ marginLeft: "auto", height: 32, border: "1px solid #E6EAF0", borderRadius: 8, padding: "0 10px", fontSize: 12.5, width: 180, fontFamily: "inherit" }} />
-      </div>
-      <div style={{ marginTop: 12, maxHeight: "60vh", overflow: "auto", border: "1px solid #E6EAF0", borderRadius: 10 }}>
-        {q.isLoading ? <StateBox height={160} text="Chargement…" />
-          : q.isError ? <StateBox height={120} tone="red" text="Liste indisponible (erreur de chargement)." />
-          : !rows.length ? <StateBox height={100} text={t ? "Aucun site ne correspond." : "Aucun site sur cette période."} />
-          : (
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead><tr>
-                <th style={{ ...th, textAlign: "left" }}>Site</th><th style={{ ...th, textAlign: "left" }}>Région</th>
-                <th style={{ ...th, textAlign: "right" }}>Conso Snowflake</th><th style={{ ...th, textAlign: "right" }}>Jours mesurés</th>
-              </tr></thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.site_id}>
-                    <td style={td}>
-                      {openSite ? <button type="button" onClick={() => { onClose(); openSite(r.site_id); }} style={{ all: "unset", cursor: "pointer", fontWeight: 700, color: "#1A56C4" }}>{r.site_id}</button>
-                        : <b style={{ fontWeight: 700 }}>{r.site_id}</b>} <span style={{ color: FT.textSub }}>{r.site_name ?? ""}</span>
-                    </td>
-                    <td style={td}>{r.zone ?? "—"}</td>
-                    <td style={{ ...td, textAlign: "right" }}>{fL(r.conso_l)}</td>
-                    <td style={{ ...td, textAlign: "right" }}>{fNum(r.jours_mesure)} / {fNum(r.jours)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-      </div>
-    </Modal>
-  );
-}
-
 /** Les 4 mesures de la consommation, chacune sur son propre périmètre de sites : jamais additionnées. */
-export function ConsoSources({ params, enabled, kpis, children, compact = false }: {
-  params: { from_month?: string; to_month?: string; month?: string; zone?: string; typology?: string; site?: string }; enabled: boolean; kpis?: ReactNode; children?: ReactNode;
-  /** Sans la note ni le graphique « côte à côte » (Dashboard). */
-  compact?: boolean;
+function ConsoSources({ params, enabled, single }: {
+  params: { from_month?: string; to_month?: string; month?: string; zone?: string }; enabled: boolean; single: boolean;
 }) {
-  const { lastMonthOnly, ...period } = sourcesPeriod(params);
-  const qp = { from_month: period.from_month, to_month: period.to_month, month: period.month, zone: params.zone, typology: params.typology, site: params.site };
   const q = useQuery({
-    queryKey: ["fuel-bi-conso-sources", qp.from_month, qp.to_month, qp.month, qp.zone, qp.typology, qp.site],
-    queryFn: () => getBiConsoSources(qp),
+    queryKey: ["fuel-bi-conso-sources", params.from_month, params.to_month, params.month, params.zone],
+    queryFn: () => getBiConsoSources(params),
     enabled,
     staleTime: 5 * 60_000,
     retry: false,
@@ -132,31 +47,24 @@ export function ConsoSources({ params, enabled, kpis, children, compact = false 
   const value = (key: BiConsoSourceKey) => (q.isLoading ? "…" : q.isError || !ok ? "—" : fNum(s.kpis[key]?.total_l));
   return (
     <>
+      <SectionTitle sub={ok ? `Sites du fichier Closing · ${fmtDate(s.debut)} → ${fmtDate(s.fin)} · chaque mesure sur ses propres sites, jamais additionnées` : "Mêmes chiffres que l'onglet Consommations"}>
+        Les 4 mesures de la consommation
+      </SectionTitle>
       {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 12.5 }}>Mesures indisponibles pour le moment (calcul CPH ou bilans de stock en échec). Les autres indicateurs restent valables.</div>}
       {s && !s.disponible && (
         <div style={{ fontSize: 12.5, color: FT.textMid, background: FT.slateL, borderRadius: 4, padding: "8px 12px" }}>
-          Non calculé : {s.motif}
+          Non calculé : {s.motif}{!single ? " Utilisez le filtre « Mois »." : ""}
         </div>
       )}
       <KpiRow>
         {SOURCES.map((c) => (
-          <BiKpi key={c.key} popup={c.key === "instrumentee" && ok && !params.site ? (close) => <SnowflakeSitesModal params={qp} value={value(c.key)} onClose={close} /> : undefined} label={lastMonthOnly && qp.month ? `${c.label} · ${monthLabel(qp.month)}` : c.label}
-            detail={CONSO_TABLE_TITLE} detailLabel="Voir par site" value={value(c.key)} unit="L"
-            sub={ok ? sourceSub(c.key, s.kpis[c.key]?.sites, s.sites, s.explain[c.key]?.valeurs) : undefined}
+          <BiKpi key={c.key} label={c.label} value={value(c.key)} unit="L"
+            sub={ok ? `${fNum(s.kpis[c.key]?.sites)} / ${fNum(s.sites)} sites` : undefined}
             alert={c.key === "variation" && ok && (s.explain.variation?.valeurs.find((v) => v.label.startsWith("Variations négatives"))?.valeur ?? 0) as number > 0 ? "warn" : null}
-            explain={ok && s.explain[c.key] ? { ...s.explain[c.key]!, titre: c.label }
-              : s && !s.disponible ? { titre: c.label, formule: `Non calculé : ${s.motif}`, valeurs: [], sources: [], perimetre: [], exclusions: [], mise_a_jour: null, note: null } : null} />
+            explain={ok ? s.explain[c.key] : null} />
         ))}
-        {kpis}
       </KpiRow>
-      {!compact && <div style={{ fontSize: 11.5, color: FT.textSub, marginTop: -4 }}>
-        Cliquez sur un chiffre pour voir comment il est calculé.
-        {ok ? (params.site ? ` Site ${params.site}, du ${fmtDate(s.debut)} au ${fmtDate(s.fin)}.`
-          : ` Les 4 mesures : sites du fichier Closing, du ${fmtDate(s.debut)} au ${fmtDate(s.fin)}, chacune sur ses propres sites, jamais additionnées. Elles suivent les filtres et le site cherché.`) : ""}
-        {ok && lastMonthOnly ? " Sur une période de plus de 3 mois, elles portent sur le dernier mois ; le filtre « Mois » permet d'en choisir un autre." : ""}
-      </div>}
-      {children}
-      {!compact && ok && chart.some((c) => c.total_l != null) && (
+      {ok && chart.some((c) => c.total_l != null) && (
         <ChartCard title="Les 4 mesures côte à côte"
           info="Chaque barre est un total indépendant, calculé sur les sites où la mesure existe (nombre de sites à droite). Un écart important entre deux mesures se contrôle site par site dans l'onglet Consommations."
           height={170}>
@@ -181,19 +89,6 @@ export function ConsoSources({ params, enabled, kpis, children, compact = false 
       )}
     </>
   );
-}
-
-/** Période exacte du tableau par site : le mois choisi, sinon la période du header si ≤ 3 mois, sinon son dernier mois.
- * Fin bornée à hier (aucune donnée du jour en cours). */
-function tablePeriod(fromMonth: string, toMonth: string, month: string): { debut: string; fin: string; label: string; month: string; multiMonth: boolean } {
-  const idx = (m: string) => Number(m.slice(0, 4)) * 12 + Number(m.slice(5, 7)) - 1;
-  const a = month || (idx(toMonth) - idx(fromMonth) < 3 ? fromMonth : toMonth);
-  const b = month || toMonth;
-  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const last = new Date(Number(b.slice(0, 4)), Number(b.slice(5, 7)), 0);
-  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-  const label = a === b ? monthLabel(a) : `${monthLabel(a)} → ${monthLabel(b)}`;
-  return { debut: `${a}-01`, fin: iso(last > yesterday ? yesterday : last), label: a !== fromMonth && !month ? `${label} (3 mois au plus)` : label, month: b, multiMonth: a !== b };
 }
 
 const dayLabel = (iso: string) => new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
@@ -241,19 +136,10 @@ function ZoneMonthMatrix({ data }: { data: NonNullable<BiConsoResponse["zone_mon
   );
 }
 
-export function ConsoBi({ fromMonth, toMonth, zone, siteText }: {
-  fromMonth: string | null; toMonth: string | null;
-  /** Région choisie dans le bandeau de filtres du module. */
-  zone: string;
-  /** Site choisi dans la recherche du bandeau : KPIs et tableau suivent. */
-  siteText: string;
-}) {
+export function ConsoBi({ fromMonth, toMonth }: { fromMonth: string | null; toMonth: string | null }) {
+  const [zone, setZone] = useState("");
   const [typology, setTypology] = useState("");
   const [month, setMonth] = useState("");
-  const [siteQ, setSiteQ] = useState("");
-  const [oneSite, setOneSite] = useState<string | null>(null);
-  useEffect(() => { const t = setTimeout(() => setSiteQ(siteText.trim()), 300); return () => clearTimeout(t); }, [siteText]);
-  const onSingleSite = useCallback((id: string | null) => setOneSite(id), []);
   // Le mois choisi doit rester dans la période du header ; sinon on revient à « toute la période ».
   const effMonth = month && fromMonth && toMonth && month >= fromMonth && month <= toMonth ? month : "";
   const params = { from_month: fromMonth ?? undefined, to_month: toMonth ?? undefined, month: effMonth || undefined, zone, typology };
@@ -285,26 +171,38 @@ export function ConsoBi({ fromMonth, toMonth, zone, siteText }: {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <FilterBar title="Suivi Conso"
-        note={siteText ? `Site : ${siteText}` : !d?.months?.length ? "Sénégal" : single ? `Sénégal · ${monthLabel(d.months[0])} uniquement` : `Sénégal · ${monthLabel(d.months[0])} → ${monthLabel(d.months[d.months.length - 1])}`}
+      <FilterBar
+        note={!d?.months?.length ? "Sénégal" : single ? `Sénégal · ${monthLabel(d.months[0])} uniquement` : `Sénégal · ${monthLabel(d.months[0])} → ${monthLabel(d.months[d.months.length - 1])}`}
         onExport={() => downloadBiExport("conso", params, effMonth ? `suivi_conso_${effMonth}.xlsx` : `suivi_conso_${d?.from_month ?? fromMonth}_${d?.to_month ?? toMonth}.xlsx`)}
       >
         <FilterSelect label="Mois" value={effMonth} options={monthOptions} onChange={setMonth} allLabel="Toute la période" format={monthLabel} />
+        <FilterSelect label="Zone" value={zone} options={d?.filters.zones ?? []} onChange={setZone} allLabel="Toutes" />
         <FilterSelect label="Typologie" value={typology} options={d?.filters.typologies ?? []} onChange={setTypology} allLabel="Toutes" />
       </FilterBar>
 
       {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 12.5 }}>Chargement impossible. Les tableaux détaillés plus bas restent consultables.</div>}
 
-      {/* Une seule rangée de KPIs (les 4 mesures) et un seul tableau par site : mêmes filtres, même période.
-          Dès qu'un seul site correspond à la recherche, les KPIs passent sur ce site. */}
-      <ConsoSources params={{ from_month: params.from_month, to_month: params.to_month, month: params.month, zone: zone || undefined,
-        typology: typology || undefined, site: siteQ ? oneSite ?? undefined : undefined }}
-        enabled={!!fromMonth && !!toMonth}>
-        {siteQ && !oneSite && (
-          <div style={{ fontSize: 12, color: FT.textMid, marginTop: -4 }}>Les KPIs passent sur le site dès qu'un seul site correspond à la recherche.</div>
-        )}
-        {fromMonth && toMonth && <ConsoSitesBi period={tablePeriod(fromMonth, toMonth, effMonth)} zone={zone} typology={typology} site={siteQ} onSingleSite={onSingleSite} />}
-      </ConsoSources>
+      <KpiRow>
+        <BiKpi label="Conso mesurée" value={fNum(k?.conso_mesuree_l)} unit="L" delta={delta(d?.deltas?.conso_mesuree_l)} upIsGood={false}
+          sub={vsPrev} explain={x?.conso_mesuree_l} />
+        <BiKpi label="Moyenne par site et par jour" value={fDec1(k?.l_site_jour)} unit="L" delta={delta(d?.deltas?.l_site_jour)} upIsGood={false}
+          sub={vsPrev} explain={x?.l_site_jour} />
+        <BiKpi label="Rendement GE" value={fRatio(k?.l_kwh)} unit="L/kWh" delta={delta(d?.deltas?.l_kwh)} upIsGood={false}
+          alert={k?.l_kwh == null ? null : k.l_kwh > refHi + 0.05 ? "bad" : k.l_kwh > refHi ? "warn" : null}
+          sub={`norme ${fRatio(refLo)} – ${fRatio(refHi)}`} explain={x?.l_kwh} />
+        <BiKpi label="Écart au target" value={fSignedPct(k?.ecart_target_pct)}
+          alert={k?.ecart_target_pct == null ? null : k.ecart_target_pct > tol ? "bad" : null}
+          sub={k ? `${fNum(k.nb_sites_au_dessus_target)} sites au-dessus sur ${fNum(k.nb_sites_target)}` : undefined}
+          explain={x?.ecart_target_pct} />
+        <BiKpi label="Livré ENOC" value={fNum(k?.enoc_ajoutee_l)} unit="L" delta={delta(d?.deltas?.enoc_ajoutee_l)} upIsGood={false}
+          sub={k?.nb_ravitaillements != null ? `${fNum(k.nb_ravitaillements)} demandes` : undefined} explain={x?.enoc_ajoutee_l} />
+        <BiKpi label="Sites mesurés" value={fPct(k?.couverture_pct)} delta={delta(d?.deltas?.couverture_pts)} deltaUnit="pts"
+          sub={k ? `${fNum(k.nb_sites_mesure)} / ${fNum(k.nb_sites)} sites GE` : undefined} explain={x?.couverture_pct} />
+      </KpiRow>
+      <div style={{ fontSize: 11.5, color: FT.textSub, marginTop: -4 }}>Cliquez sur un chiffre pour voir comment il est calculé.</div>
+
+      <ConsoSources params={{ from_month: params.from_month, to_month: params.to_month, month: params.month, zone: zone || undefined }}
+        enabled={!!fromMonth && !!toMonth} single={single} />
 
       {!single && <ChartCard title="Consommé et livré par mois"
         info="Barres : conso mesurée par capteur. Ligne : litres livrés ENOC. Les deux ne sont jamais additionnés ; un écart durable se contrôle site par site."

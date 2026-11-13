@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { BarChart3, Calculator, Calendar, Droplets, Fuel, Gauge, LayoutGrid, RefreshCw, Warehouse, Bell } from "lucide-react";
+import { BarChart3, Calculator, Calendar, Droplets, Fuel, Gauge, LayoutGrid, RefreshCw, Warehouse } from "lucide-react";
 
 import {
   getFuelCommandeEstimation,
@@ -22,47 +22,35 @@ import {
   getFuelConsommation,
   getFuelConsommationDashboard,
   getFuelStock,
-  getSiteTable,
   type FuelSourceStatus,
 } from "@/services/fuelTracking";
 
 import { FT } from "./theme";
 import { GLOBAL_STYLES } from "./ui";
-import { SHELL_CSS } from "./shellStyles";
+import { ConsommationSheet } from "./sheets/ConsommationSheet";
 import { ConsoBi } from "./bi/ConsoBi";
 import { CphBi } from "./bi/CphBi";
 import { StockBi } from "./bi/StockBi";
-import { RavitaillementBi } from "./bi/RavitaillementBi";
-import { SitesTableBi } from "./bi/SitesTableBi";
 import { CommandeBi, EstimationBi } from "./bi/CommandeBi";
-import { DetailSection, OpenSiteContext, SectionTitle } from "./bi/kit";
+import { DetailSection, OpenSiteContext } from "./bi/kit";
 import { SiteBi } from "./bi/SiteBi";
 import { SiteSearch } from "./bi/SiteSearch";
 import { StockSheet } from "./sheets/StockSheet";
 import { CommandeSheet } from "./sheets/CommandeSheet";
 import { EstimationSheet } from "./sheets/EstimationSheet";
 import { ControleCphSheet } from "./sheets/ControleCphSheet";
-import { ConfigurationSheet } from "./sheets/ConfigurationSheet";
-import { DashboardBi } from "./bi/DashboardBi";
-import { AlertesBi, useAlertes } from "./bi/AlertesBi";
-import { RemonteesBi } from "./bi/RemonteesBi";
 
-export type MainTab = "DASHBOARD" | "ALERTES" | "REMONTEES" | "CONSOMMATION" | "CPH" | "STOCK" | "RAVITAILLEMENT" | "COMMANDE" | "ESTIMATION" | "CONFIGURATION";
+export type MainTab = "CONSOMMATION" | "CPH" | "STOCK" | "COMMANDE" | "ESTIMATION";
 
+// L'ancienne rubrique Dashboard est fusionnée dans Suivi Conso (vue BI) : son adresse y mène désormais.
 export const FUEL_TAB_SLUGS: Array<{ tab: MainTab; slug: string }> = [
-  { tab: "DASHBOARD", slug: "dashboard" },
   { tab: "CONSOMMATION", slug: "consommations" },
   { tab: "CPH", slug: "controle-cph" },
   { tab: "STOCK", slug: "stock" },
-  { tab: "RAVITAILLEMENT", slug: "ravitaillement" },
-  { tab: "ALERTES", slug: "alertes" },
-  { tab: "REMONTEES", slug: "remontees-terrain" },
   { tab: "COMMANDE", slug: "commandes" },
   { tab: "ESTIMATION", slug: "estimation-commande" },
-  { tab: "CONFIGURATION", slug: "configuration" },
 ];
-// « donnees-par-site » : ancienne rubrique, son contenu est maintenant dans Suivi Conso et Suivi Stock.
-const TAB_BY_SLUG: Record<string, MainTab> = { ...Object.fromEntries(FUEL_TAB_SLUGS.map((x) => [x.slug, x.tab])), "donnees-par-site": "CONSOMMATION" };
+const TAB_BY_SLUG: Record<string, MainTab> = { ...Object.fromEntries(FUEL_TAB_SLUGS.map((x) => [x.slug, x.tab])), dashboard: "CONSOMMATION" };
 const SLUG_BY_TAB = Object.fromEntries(FUEL_TAB_SLUGS.map((x) => [x.tab, x.slug])) as Record<MainTab, string>;
 
 /** Mois calendaire précédent le mois courant réel (pas lié aux données),
@@ -116,14 +104,10 @@ export default function FuelTrackingPage() {
   // L'onglet actif vient de l'adresse (sous-rubriques de la barre latérale : /modules/suivi-carburant/<onglet>).
   const { tab: tabSlug } = useParams();
   const navigate = useNavigate();
-  const activeTab: MainTab = TAB_BY_SLUG[tabSlug ?? ""] ?? "DASHBOARD";
+  const activeTab: MainTab = TAB_BY_SLUG[tabSlug ?? ""] ?? "CONSOMMATION";
   // Fiche site : ?site=<id> dans l'adresse (lien partageable, bouton Retour du navigateur).
   const [searchParams, setSearchParams] = useSearchParams();
   const siteId = searchParams.get("site");
-  // Suivi Conso : choisir un site dans la recherche filtre la page (KPIs et tableau) au lieu d'ouvrir la fiche du site.
-  const [consoSite, setConsoSite] = useState("");
-  // Région (zone) : filtre global du bandeau, appliqué à Suivi Conso, Suivi Stock, Ravitaillement et Contrôle CPH.
-  const [zone, setZone] = useState("");
   const openSite = (id: string) => { setSearchParams((p) => { const n = new URLSearchParams(p); n.set("site", id); return n; }); window.scrollTo({ top: 0 }); };
   const closeSite = () => setSearchParams((p) => { const n = new URLSearchParams(p); n.delete("site"); return n; });
   const setActiveTab = (t: MainTab) => {
@@ -210,14 +194,6 @@ export default function FuelTrackingPage() {
     staleTime: 60_000,
   });
 
-  // Liste des régions et nombre de sites GE du mois (bandeau de filtres).
-  const zonesQ = useQuery({
-    queryKey: ["fuel-zones", toMonth, zone],
-    queryFn: () => getSiteTable({ vue: "conso", month: toMonth ?? undefined, zone: zone || undefined, page_size: "10" }),
-    enabled: !!toMonth,
-    staleTime: 5 * 60_000,
-  });
-
   const estimationQ = useQuery({
     queryKey: ["fuel-commande-estimation"],
     queryFn: () => getFuelCommandeEstimation(),
@@ -263,72 +239,72 @@ export default function FuelTrackingPage() {
   const snowflakeLastDataLabel = formatDataDateOnly(sources?.snowflake?.last_data_date);
   const enocLastDataLabel = formatDataDateTime(sources?.enoc?.last_data_date);
 
-  // Barre d'onglets de la maquette ; Commande et Estimation sont gardées en fin de barre (fonctions existantes).
-  const TABS: Array<{ tab: MainTab; label: string }> = [
-    { tab: "DASHBOARD", label: "Dashboard" }, { tab: "CONSOMMATION", label: "Suivi Conso" }, { tab: "STOCK", label: "Suivi Stock" }, { tab: "RAVITAILLEMENT", label: "Ravitaillement" },
-    { tab: "CPH", label: "Contrôle CPH" }, { tab: "ALERTES", label: "Alertes" }, { tab: "REMONTEES", label: "Remontées terrain" }, { tab: "CONFIGURATION", label: "Configuration" }, { tab: "COMMANDE", label: "Commande" }, { tab: "ESTIMATION", label: "Estimation" },
-  ];
-  // Compteur de la cloche : alertes critiques du mois et de la région (même requête que la page Alertes).
-  const alertesQ = useAlertes(toMonth, zone);
-  const nbCrit = (alertesQ.data?.alertes ?? []).filter((a) => a.sev === "crit").length;
-  const srcFail = [sources?.snowflake, sources?.enoc].filter((x) => x && !x.connected).length;
-  const showPeriod = !!siteId || (activeTab !== "COMMANDE" && activeTab !== "ESTIMATION" && activeTab !== "CONFIGURATION" && activeTab !== "REMONTEES");
-  const showZone = !siteId && ["DASHBOARD", "ALERTES", "CONSOMMATION", "STOCK", "RAVITAILLEMENT", "CPH"].includes(activeTab);
-
   return (
     <>
       <style>{GLOBAL_STYLES}</style>
-      <style>{SHELL_CSS}</style>
 
-      <div className="fuelbook ftm" style={{ display: "flex", flexDirection: "column", background: "#fff", margin: -20 }}>
-        <header ref={headerRef} className="ftm-top">
-          <div className="ftm-row1">
-            <div className="ftm-logo" aria-hidden>C</div>
-            <h1>Suivi Carburant · Sénégal</h1>
-            <span className="ftm-live" title={[sources?.snowflake?.error && `Snowflake : ${sources.snowflake.error}`, sources?.enoc?.error && `ENOC : ${sources.enoc.error}`].filter(Boolean).join("\n") || "Date de la donnée la plus récente de chaque source"}>
-              <span className="ftm-pulse" data-state={srcFail ? "warn" : "ok"} aria-hidden />
-              Snowflake : {snowflakeLastDataLabel} · ENOC : {enocLastDataLabel}{srcFail ? ` · ${srcFail} source${srcFail > 1 ? "s" : ""} en échec` : ""}
-            </span>
-            <button type="button" className="ftm-bell" onClick={() => { if (siteId) closeSite(); setActiveTab("ALERTES"); }}
-              aria-label={`Voir les alertes${nbCrit ? ` : ${nbCrit} critiques` : ""}`}>
-              <Bell size={15} aria-hidden /> Alertes {alertesQ.data && <span className="ftm-badge" title="Alertes critiques">{nbCrit.toLocaleString("fr-FR")}</span>}
-            </button>
-            <button type="button" className="ftm-icon" onClick={() => { consommationQ.refetch(); qc.invalidateQueries(); }} title="Rafraîchir toutes les données" aria-label="Rafraîchir">
-              <RefreshCw size={15} className={consommationQ.isFetching ? "ft-spin" : ""} aria-hidden />
-            </button>
+      <div className="fuelbook" style={{ display: "flex", flexDirection: "column", gap: 14, background: FT.pageBg, margin: -20, padding: 20 }}>
+        <div
+          ref={headerRef}
+          className="ft-fade"
+          style={{ position: "sticky", top: 0, zIndex: 10, background: "#fff", border: `1px solid ${FT.border}`, borderRadius: FT.radius, boxShadow: FT.shadow, padding: "10px 16px" }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+              <div style={{ width: 30, height: 30, borderRadius: 9, background: FT.blueL, display: "grid", placeItems: "center", color: FT.gold, flexShrink: 0 }}>
+                <BarChart3 size={15} aria-hidden />
+              </div>
+              <h1 style={{ margin: 0, color: "#0f172a", fontSize: 18, lineHeight: 1.2, fontWeight: 900, letterSpacing: "-.02em", whiteSpace: "nowrap" }}>Suivi Carburant</h1>
+              <SourceBadge label="Snowflake" status={consommationQ.data?.sources?.snowflake} />
+              <SourceBadge label="ENOC" status={consommationQ.data?.sources?.enoc} />
+            </div>
+
+            <div style={{ display: "flex", gap: 14, fontSize: 11.5, color: FT.textSub, flexWrap: "wrap" }}>
+              <span><strong style={{ color: FT.text }}>Snowflake</strong> : {snowflakeLastDataLabel}</span>
+              <span><strong style={{ color: FT.text }}>ENOC</strong> : {enocLastDataLabel}</span>
+            </div>
+
+            <div style={{ flex: 1 }} />
+
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <SiteSearch onSelect={openSite} />
+              {(siteId || (activeTab !== "COMMANDE" && activeTab !== "ESTIMATION")) && (
+                <div title="Mois des indicateurs mensuels (tendance du Dashboard, couverture GE)" style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "5px 10px" }}>
+                  <Calendar size={14} color={FT.textSub} aria-hidden />
+                  <input
+                    aria-label="Mois de début"
+                    type="month"
+                    value={fromMonth ?? ""}
+                    max={toMonth ?? undefined}
+                    onChange={(e) => setFromMonth(e.target.value)}
+                    style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, color: FT.text, fontWeight: 700 }}
+                  />
+                  <span style={{ color: FT.textSub, fontSize: 12 }}>à</span>
+                  <input
+                    aria-label="Mois de fin"
+                    type="month"
+                    value={toMonth ?? ""}
+                    min={fromMonth ?? undefined}
+                    max={currentCalendarMonth()}
+                    onChange={(e) => setToMonth(e.target.value)}
+                    style={{ border: "none", outline: "none", background: "transparent", fontSize: 12.5, color: FT.text, fontWeight: 700 }}
+                  />
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => { consommationQ.refetch(); qc.invalidateQueries(); }}
+                title="Rafraîchir toutes les données"
+                aria-label="Rafraîchir"
+                style={{ width: 31, height: 31, borderRadius: 9, border: `1px solid ${FT.border}`, background: FT.slateL, display: "grid", placeItems: "center", cursor: "pointer", color: FT.textMid, flexShrink: 0 }}
+              >
+                <RefreshCw size={14} className={consommationQ.isFetching ? "ft-spin" : ""} aria-hidden />
+              </button>
+            </div>
           </div>
-          <nav className="ftm-tabs" aria-label="Pages du suivi carburant">
-            {TABS.map((t) => (
-              <button key={t.tab} type="button" aria-current={!siteId && activeTab === t.tab ? "page" : undefined}
-                onClick={() => { if (siteId) closeSite(); setActiveTab(t.tab); }}>{t.label}
-                {t.tab === "ALERTES" && nbCrit > 0 && <span className="ftm-cnt" aria-label={`${nbCrit} critiques`}>{nbCrit.toLocaleString("fr-FR")}</span>}</button>
-            ))}
-          </nav>
-        </header>
 
-        <div className="ftm-slicers" role="group" aria-label="Filtres appliqués aux pages">
-          <SiteSearch onSelect={(id) => (!siteId && activeTab === "CONSOMMATION" ? setConsoSite(id) : openSite(id))} />
-          {showPeriod && <>
-            <label className="ftm-sel"><span>Du</span>
-              <input type="month" aria-label="Mois de début" value={fromMonth ?? ""} max={toMonth ?? undefined} onChange={(e) => setFromMonth(e.target.value)} />
-            </label>
-            <label className="ftm-sel"><span>Au</span>
-              <input type="month" aria-label="Mois de fin" value={toMonth ?? ""} min={fromMonth ?? undefined} max={currentCalendarMonth()} onChange={(e) => setToMonth(e.target.value)} />
-            </label>
-          </>}
-          {showZone && (
-            <label className="ftm-sel"><span>Région</span>
-              <select value={zone} className={zone ? "on" : ""} onChange={(e) => setZone(e.target.value)}>
-                <option value="">Toutes les régions</option>
-                {(zonesQ.data?.filters.zones ?? []).map((z) => <option key={z} value={z}>{z}</option>)}
-              </select>
-            </label>
-          )}
-          {showZone && zonesQ.data && <span className="ftm-count">{zonesQ.data.total.toLocaleString("fr-FR")} sites GE</span>}
-          {(zone || consoSite) && <button type="button" className="ftm-clear" onClick={() => { setZone(""); setConsoSite(""); }}>Réinitialiser</button>}
         </div>
 
-        <div className="ftm-main">
         {siteId && (
           <div className="ft-fade" key={siteId}>
             <SiteBi siteId={siteId} fromMonth={fromMonth} toMonth={toMonth} onClose={closeSite} />
@@ -336,34 +312,22 @@ export default function FuelTrackingPage() {
         )}
 
         <OpenSiteContext.Provider value={openSite}>
-        {!siteId && activeTab === "DASHBOARD" && (
-          <div className="ft-fade">
-            <DashboardBi toMonth={toMonth} zone={zone} onTab={setActiveTab} />
-          </div>
-        )}
-
-        {!siteId && activeTab === "ALERTES" && (
-          <div className="ft-fade">
-            <AlertesBi toMonth={toMonth} zone={zone} />
-          </div>
-        )}
-
-        {!siteId && activeTab === "REMONTEES" && (
-          <div className="ft-fade">
-            <RemonteesBi />
-          </div>
-        )}
-
         {!siteId && activeTab === "CONSOMMATION" && (
           <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {/* KPIs, tableau unique par site et graphiques : tout est dans ConsoBi (mêmes filtres). */}
-            <ConsoBi fromMonth={fromMonth} toMonth={toMonth} zone={zone} siteText={consoSite} />
+            <ConsoBi fromMonth={fromMonth} toMonth={toMonth} />
+            <DetailSection title="Détail par site, couverture GE et comparaison des consommations">
+              <ConsommationSheet
+                data={consommationQ.data}
+                loading={consommationQ.isLoading}
+                stickyTop={headerHeight}
+              />
+            </DetailSection>
           </div>
         )}
 
         {!siteId && activeTab === "CPH" && (
           <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <CphBi fromMonth={fromMonth} toMonth={toMonth} zone={zone} />
+            <CphBi fromMonth={fromMonth} toMonth={toMonth} />
             <DetailSection title="Contrôle CPH détaillé (tableau par site, diagnostics, référentiel)">
               <ControleCphSheet />
             </DetailSection>
@@ -372,8 +336,7 @@ export default function FuelTrackingPage() {
 
         {!siteId && activeTab === "STOCK" && (
           <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <StockBi toMonth={toMonth} zone={zone} />
-            <SitesTableBi vue="stock" toMonth={toMonth} zone={zone} />
+            <StockBi toMonth={toMonth} />
             <DetailSection title="Stock détaillé (registre, relevés, bilans, imports)">
             <StockSheet
               data={stockQ.data}
@@ -393,12 +356,6 @@ export default function FuelTrackingPage() {
               stickyTop={headerHeight}
             />
             </DetailSection>
-          </div>
-        )}
-
-        {!siteId && activeTab === "RAVITAILLEMENT" && (
-          <div className="ft-fade">
-            <RavitaillementBi toMonth={toMonth} zone={zone} />
           </div>
         )}
 
@@ -432,14 +389,7 @@ export default function FuelTrackingPage() {
             />
           </div>
         )}
-
-        {!siteId && activeTab === "CONFIGURATION" && (
-          <div className="ft-fade">
-            <ConfigurationSheet />
-          </div>
-        )}
         </OpenSiteContext.Provider>
-        </div>
       </div>
     </>
   );

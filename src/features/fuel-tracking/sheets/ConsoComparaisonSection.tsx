@@ -8,7 +8,6 @@ import {
   type ConsoFilters, type ConsoFraicheur, type ConsoRow, type ConsoStatutBilan, type ConsoTargetStatut,
 } from "@/services/fuelTracking";
 import { Modal, Skeleton } from "../ui";
-import { DEBUT_SUIVI } from "../helpers";
 import { FT, type Tone } from "../theme";
 import { HelpTip } from "./cphBadges";
 import { CoverageKpis } from "./cphDiagnostics";
@@ -112,10 +111,10 @@ function buildColsDef(A: Record<string, string>): Col[] {
     { k: "tgst", group: "Comparaisons", label: "Statut target", left: true, render: (r) => <Pill label={TARGET_META[r.target.statut].label} tone={TARGET_META[r.target.statut].tone} /> },
     { k: "tge", group: "Comparaisons", label: "Écart variation vs target (L)", help: A.ecart_target, render: (r) => gap(r.target.ecart_l, r.target.ecart_pct, r.target.pct_na, "l") },
     { k: "tgp", group: "Comparaisons", label: "Écart variation vs target (%)", render: (r) => gap(r.target.ecart_l, r.target.ecart_pct, r.target.pct_na, "pct") },
-    { k: "in", group: "Comparaisons", label: "Consommation Snowflake (L)", help: A.instrumentee, render: (r) => num(r.instrumentee.conso_l) },
-    { k: "inc", group: "Comparaisons", label: "Couverture capteur (%)", render: (r) => (r.instrumentee.couverture_pct === null ? dash : <span title={`${r.instrumentee.jours_mesure} / ${r.instrumentee.jours} jours`}>{nf(r.instrumentee.couverture_pct, 0)} %</span>) },
-    { k: "ine", group: "Comparaisons", label: "Écart variation vs capteur (L)", help: A.ecart_instrumentee, render: (r) => gap(r.instrumentee.ecart_l, r.instrumentee.ecart_pct, r.instrumentee.pct_na, "l") },
-    { k: "inp", group: "Comparaisons", label: "Écart variation vs capteur (%)", render: (r) => gap(r.instrumentee.ecart_l, r.instrumentee.ecart_pct, r.instrumentee.pct_na, "pct") },
+    { k: "in", group: "Comparaisons", label: "Consommation instrumentée Snowflake (L)", help: A.instrumentee, render: (r) => num(r.instrumentee.conso_l) },
+    { k: "inc", group: "Comparaisons", label: "Couverture instrumentée (%)", render: (r) => (r.instrumentee.couverture_pct === null ? dash : <span title={`${r.instrumentee.jours_mesure} / ${r.instrumentee.jours} jours`}>{nf(r.instrumentee.couverture_pct, 0)} %</span>) },
+    { k: "ine", group: "Comparaisons", label: "Écart variation vs instrumentée (L)", help: A.ecart_instrumentee, render: (r) => gap(r.instrumentee.ecart_l, r.instrumentee.ecart_pct, r.instrumentee.pct_na, "l") },
+    { k: "inp", group: "Comparaisons", label: "Écart variation vs instrumentée (%)", render: (r) => gap(r.instrumentee.ecart_l, r.instrumentee.ecart_pct, r.instrumentee.pct_na, "pct") },
     { k: "cc", group: "Comparaisons", label: "CPH complète (L)", help: A.cph_complete, render: (r) => num(r.cph.complete_l) },
     { k: "cp", group: "Comparaisons", label: "CPH partielle (L)", help: A.cph_partielle, render: (r) => (r.cph.partielle_l === null ? dash : <span style={{ color: FT.orange }} title="Partielle : ne couvre pas toute la période">{nf(r.cph.partielle_l)}</span>) },
     { k: "ccv", group: "Comparaisons", label: "Couverture CPH (%)", render: (r) => (r.cph.couverture_pct === null ? dash : `${nf(r.cph.couverture_pct, 0)} %`) },
@@ -142,7 +141,7 @@ function buildColsDef(A: Record<string, string>): Col[] {
 
 // Blocs absents ou incomplets dans une réponse du serveur : valeurs vides (jamais de plantage de l'écran, jamais de 0 inventé).
 const EMPTY_GAP = { ecart_l: null, ecart_pct: null, pct_na: null };
-export function safeRow(r: ConsoRow): ConsoRow {
+function safeRow(r: ConsoRow): ConsoRow {
   const x = r as Partial<ConsoRow>;
   return {
     ...r,
@@ -169,9 +168,9 @@ function DataQualityNotice({ f }: { f: ConsoFraicheur | undefined }) {
   if (!f || (!f.perime && !f.periode_incomplete && !f.synchro_en_echec)) return null;
   const fr = (d: string) => d.split("-").reverse().join("/");
   const lines: string[] = [];
-  if (f.snowflake_derniere_date === null) lines.push("Aucune donnée Snowflake synchronisée : consommation Snowflake et CPH indisponibles.");
+  if (f.snowflake_derniere_date === null) lines.push("Aucune donnée Snowflake synchronisée : consommation instrumentée et CPH indisponibles.");
   else if (f.perime) lines.push(`Données Snowflake à jour jusqu'au ${fr(f.snowflake_derniere_date)} (${f.age_jours} j de retard, seuil ${f.seuil_jours} j).`);
-  if (f.periode_incomplete && f.snowflake_derniere_date) lines.push(`${f.jours_non_couverts} jour(s) de la période ne sont pas couverts : la conso capteur et la CPH ne portent que sur les jours disponibles (la variation de stock n'est pas concernée).`);
+  if (f.periode_incomplete && f.snowflake_derniere_date) lines.push(`${f.jours_non_couverts} jour(s) de la période ne sont pas couverts : l'instrumentée et la CPH ne portent que sur les jours disponibles (la variation de stock n'est pas concernée).`);
   if (f.synchro_en_echec) lines.push(`Dernière synchronisation Snowflake en échec${f.erreur_synchro ? ` : ${f.erreur_synchro}` : ""}.`);
   return (
     <div role="status" style={{ padding: "9px 14px", borderRadius: FT.radius, background: FT.orangeL, border: "1px solid rgba(217,119,6,.3)", color: FT.text, fontSize: 12.5, display: "grid", gap: 2 }}>
@@ -195,9 +194,7 @@ function KpiStrip({ cells }: { cells: Array<{ tone: Tone; label: string; value: 
   );
 }
 
-/** `scope` : mode « tableau seul » piloté par la vue BI (période et zone du header, Sénégal) —
- * seuls le tableau des suivis, la vue détaillée paginée et le détail d'un site sont affichés. */
-export function ConsoComparaisonSection({ extra, scope }: { extra?: ReactNode; scope?: { debut: string; fin: string; zone?: string; label?: string } }) {
+export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
   const [debut, setDebut] = useState<string>("");
   const [fin, setFin] = useState<string>("");
   const [f, setF] = useState<ConsoFilters>({});
@@ -210,12 +207,10 @@ export function ConsoComparaisonSection({ extra, scope }: { extra?: ReactNode; s
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const params: ConsoFilters = scope
-    ? { ...f, zone: scope.zone || undefined, perimetre: "senegal", date_debut: scope.debut, date_fin: scope.fin, page, page_size: 50 }
-    : { ...f, site: site || undefined, date_debut: debut || undefined, date_fin: fin || undefined, page, page_size: 50 };
-  const periods = useQuery({ queryKey: ["conso-periods"], queryFn: getConsommationsPeriodes, staleTime: 60_000, enabled: !scope });
+  const params: ConsoFilters = { ...f, site: site || undefined, date_debut: debut || undefined, date_fin: fin || undefined, page, page_size: 50 };
+  const periods = useQuery({ queryKey: ["conso-periods"], queryFn: getConsommationsPeriodes, staleTime: 60_000 });
   const q = useQuery({ queryKey: ["consommations", params], queryFn: () => getConsommations(params), placeholderData: keepPreviousData });
-  const evo = useQuery({ queryKey: ["conso-evolution"], queryFn: getConsoEvolution, staleTime: 60_000, enabled: !scope });
+  const evo = useQuery({ queryKey: ["conso-evolution"], queryFn: getConsoEvolution, staleTime: 60_000 });
   const d = q.data;
   const per = d?.periode ?? null;
   const A = d?.aide ?? {};
@@ -284,7 +279,6 @@ export function ConsoComparaisonSection({ extra, scope }: { extra?: ReactNode; s
 
   return (
     <section aria-label="Suivis Consommations" style={{ display: "grid", gap: 14 }}>
-      {!scope && <>
       <SectionTitle title="Suivis Consommations" subtitle="Analyse et suivi de la consommation de carburant par période et site"
         right={per && (
           <label style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: 12, border: FT.borderCrisp, background: FT.card, boxShadow: FT.shadow, fontWeight: 800, fontSize: 13 }}>
@@ -370,15 +364,12 @@ export function ConsoComparaisonSection({ extra, scope }: { extra?: ReactNode; s
         )}
       </div>
 
-      </>}
-
       {d?.detail && !per && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.orangeL, color: FT.orange, fontWeight: 700, fontSize: 13 }}>{d.detail}</div>}
       {per && noBilan && (
         <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.orangeL, color: FT.text, fontSize: 13 }}>
-          Aucun bilan de stock enregistré pour cette période exacte ({per.libelle}).{scope ? " Les variations de stock sont non calculables ; les autres colonnes restent affichées." : " Choisissez une période de la liste « Périodes avec bilan »."}
+          Aucun bilan de stock enregistré pour cette période exacte ({per.libelle}). Choisissez une période de la liste « Périodes avec bilan ».
         </div>
       )}
-      {!scope && <>
       <details style={{ border: FT.borderCrisp, borderRadius: 14, background: alertCount > 0 ? FT.orangeL : FT.card, padding: "8px 14px" }}>
         <summary style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 800, color: FT.text, display: "flex", alignItems: "center", gap: 8 }}>
           <AlertTriangle size={14} aria-hidden color={alertCount > 0 ? FT.orange : FT.textSub} /> Qualité des données et alertes{alertCount > 0 ? ` (${alertCount})` : " — aucune alerte bloquante"}
@@ -393,16 +384,12 @@ export function ConsoComparaisonSection({ extra, scope }: { extra?: ReactNode; s
           )}
         </div>
       </details>
-      </>}
       {q.isError && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.redL, color: FT.red, fontWeight: 700, fontSize: 13 }}>Impossible de charger les consommations (erreur serveur).</div>}
 
-      {!scope && <>
       {k && (() => {
         const ps = evo.data?.periodes ?? [];
         const i = per ? ps.findIndex((x) => x.fin === per.fin && x.debut === per.debut) : -1;
         const trendOf = (key: "variation_l" | "closing_l"): { trend: number | null; trendNote: string } => {
-          // Pas d'écart avec une période qui commence avant le début du suivi (septembre 2026).
-          if (i > 0 && ps[i - 1].debut < `${DEBUT_SUIVI}-01`) return { trend: null, trendNote: "début du suivi, pas de période précédente" };
           const cur = i >= 0 ? ps[i][key] : null, prev = i > 0 ? ps[i - 1][key] : null;
           if (cur === null || prev === null || prev === 0) return { trend: null, trendNote: "pas de période précédente comparable" };
           return { trend: ((cur - prev) / Math.abs(prev)) * 100, trendNote: "" };
@@ -412,7 +399,7 @@ export function ConsoComparaisonSection({ extra, scope }: { extra?: ReactNode; s
             sub: `${nf(k.variation.sites)} sites calculables${k.variation.negatives ? ` · ${nf(k.variation.negatives)} négative(s)` : ""}`, ...trendOf("variation_l") },
           { key: "clo", label: "Consommation Closing", help: A.closing, value: k.closing.total_l, icon: "closing", color: "#16A34A", bg: "#E6F7EC", series: ps.map((x) => x.closing_l),
             sub: `${nf(k.closing.sites)} sites · référence de contrôle`, ...trendOf("closing_l") },
-          { key: "ins", label: "Consommation Snowflake", help: A.instrumentee, value: k.instrumentee.total_l, icon: "snow", color: "#EA7A0C", bg: "#FFF1E0", sub: `${nf(k.instrumentee.sites)} sites couverts · mesure capteur` },
+          { key: "ins", label: "Instrumentée Snowflake", help: A.instrumentee, value: k.instrumentee.total_l, icon: "snow", color: "#EA7A0C", bg: "#FFF1E0", sub: `${nf(k.instrumentee.sites)} sites couverts · mesure capteur` },
           { key: "cph", label: "CPH complète", help: A.cph_complete, value: k.cph_complete.total_l, icon: "cph", color: "#7C3AED", bg: "#F1EAFE",
             sub: `${nf(k.cph_complete.sites)} sites complets · partielle ${k.cph_partielle.total_l === null ? "—" : `${nf(k.cph_partielle.total_l)} L`} (${nf(k.cph_partielle.sites)} sites)` },
         ];
@@ -442,7 +429,7 @@ export function ConsoComparaisonSection({ extra, scope }: { extra?: ReactNode; s
             sub: `${nf(k.variation.sites)} sites calculables · ${nf(k.bilans.prets)} prêts · ${nf(k.bilans.avec_reserve)} avec réserve${k.variation.negatives ? ` · ${nf(k.variation.negatives)} négative(s)` : ""}` },
           { tone: "blue", label: "Consommation réelle certifiée (L)", help: A.certifiee, value: k.certifiee.total_l === null ? "—" : `${nf(k.certifiee.total_l)} L`, sub: `${nf(k.bilans.certifies)} bilan(s) certifié(s) par le Fuel Manager` },
           { tone: "slate", label: "Consommation Closing (L)", help: A.closing, value: k.closing.total_l === null ? "—" : `${nf(k.closing.total_l)} L`, sub: `${nf(k.closing.sites)} sites · référence de contrôle` },
-          { tone: "cyan", label: "Consommation Snowflake (L)", help: A.instrumentee, value: k.instrumentee.total_l === null ? "—" : `${nf(k.instrumentee.total_l)} L`, sub: `${nf(k.instrumentee.sites)} sites couverts · mesure capteur` },
+          { tone: "cyan", label: "Instrumentée Snowflake (L)", help: A.instrumentee, value: k.instrumentee.total_l === null ? "—" : `${nf(k.instrumentee.total_l)} L`, sub: `${nf(k.instrumentee.sites)} sites couverts · mesure capteur` },
           { tone: "violet", label: "CPH complète (L)", help: A.cph_complete, value: k.cph_complete.total_l === null ? "—" : `${nf(k.cph_complete.total_l)} L`,
             sub: `${nf(k.cph_complete.sites)} sites complets · partielle ${k.cph_partielle.total_l === null ? "—" : `${nf(k.cph_partielle.total_l)} L`} (${nf(k.cph_partielle.sites)} sites)` },
           { tone: "orange", label: "Target fuel période (L)", help: A.target, value: k.target.total_periode_l === null ? "—" : `${nf(k.target.total_periode_l)} L`,
@@ -455,7 +442,7 @@ export function ConsoComparaisonSection({ extra, scope }: { extra?: ReactNode; s
               <div><b>Bilans</b> : {nf(k.bilans.prets)} prêts · {nf(k.bilans.avec_reserve)} avec réserve · {nf(k.bilans.variation_calculee)} variation à contrôler · {nf(k.bilans.non_calculables)} non calculables · {nf(k.bilans.certifies)} certifiés.</div>
               <div><b>Couvertures</b> : CPH complète {nf(k.couverture_cph_pct, 0)} % · target {nf(k.target.couverture_pct, 0)} %.</div>
               <div title={k.ponctions.note}><b>Ponctions (périmètre affiché)</b> : entrantes {nf(k.ponctions.entrantes_l)} L · sortantes {nf(k.ponctions.sortantes_l)} L · écart {signed(k.ponctions.ecart_perimetre_l)} L (contrepartie hors périmètre ; impact global ENOC = 0 L).</div>
-              <div><b>Alertes</b> : {nf(k.alertes.stock_identique_suspect)} stock(s) identique(s) suspect(s) · {nf(k.alertes.instrumentee_ecart_extreme)} conso capteur à investiguer · {nf(k.alertes.cph_ecart_extreme + k.alertes.cph_nulle_variation_positive)} CPH à investiguer · {nf(k.alertes.closing_non_independant)} écart(s) Closing non indépendant(s).</div>
+              <div><b>Alertes</b> : {nf(k.alertes.stock_identique_suspect)} stock(s) identique(s) suspect(s) · {nf(k.alertes.instrumentee_ecart_extreme)} instrumentée à investiguer · {nf(k.alertes.cph_ecart_extreme + k.alertes.cph_nulle_variation_positive)} CPH à investiguer · {nf(k.alertes.closing_non_independant)} écart(s) Closing non indépendant(s).</div>
             </div>
           )}
           <div>
@@ -465,12 +452,10 @@ export function ConsoComparaisonSection({ extra, scope }: { extra?: ReactNode; s
           {extra}
         </div>
       </details>
-      </>}
 
       <section aria-label="Derniers suivis" style={{ border: FT.borderCrisp, background: FT.card, borderRadius: 16, boxShadow: FT.shadow, overflow: "hidden" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", gap: 8, flexWrap: "wrap" }}>
-          <h3 style={{ margin: 0, fontSize: 17, display: "flex", alignItems: "center", gap: 8 }}><List size={18} color={FT.blue} aria-hidden /> {full ? "Tous les résultats — vue détaillée" : "Derniers suivis"}
-            {scope && per && <span style={{ fontSize: 12.5, fontWeight: 500, color: FT.textMid }}>· {scope.label ?? per.libelle}</span>}</h3>
+          <h3 style={{ margin: 0, fontSize: 17, display: "flex", alignItems: "center", gap: 8 }}><List size={18} color={FT.blue} aria-hidden /> {full ? "Tous les résultats — vue détaillée" : "Derniers suivis"}</h3>
           <button type="button" onClick={() => setFull((v) => !v)} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, padding: "8px 14px", borderRadius: 10, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}>
             {full ? "← Vue simplifiée" : "Voir tous les résultats →"}
           </button>
@@ -613,7 +598,7 @@ function DetailHub({ row: r, periode, A, onClose, onPick }: { row: ConsoRow; per
       )}
       {line("Target fuel période (L)", r.target.periode_l === null ? "—" : `${nf(r.target.periode_l)} L · ${TARGET_META[r.target.statut].label}`, A.target)}
       {line("Écart variation vs target", g(r.target.ecart_l, r.target.ecart_pct, r.target.pct_na), A.ecart_target)}
-      {line("Consommation Snowflake (L)", r.instrumentee.conso_l === null ? "—" : `${nf(r.instrumentee.conso_l)} L`, A.instrumentee)}
+      {line("Consommation instrumentée Snowflake (L)", r.instrumentee.conso_l === null ? "—" : `${nf(r.instrumentee.conso_l)} L`, A.instrumentee)}
       {line("CPH complète (L)", r.cph.complete_l === null ? "—" : `${nf(r.cph.complete_l)} L`, A.cph_complete)}
       {line("CPH partielle (L)", r.cph.partielle_l === null ? "—" : `${nf(r.cph.partielle_l)} L (partielle)`, A.cph_partielle)}
       {s.reserves.length > 0 && <div style={{ marginTop: 8, fontSize: 12.5 }}><strong>Réserves :</strong><ul style={{ margin: "4px 0 0 18px" }}>{s.reserves.map((x) => <li key={x}>{x}</li>)}</ul></div>}

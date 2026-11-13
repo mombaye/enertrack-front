@@ -12,7 +12,6 @@ import {
   TrendingDown,
   LogOut,
   LayoutDashboard, CreditCard, MapPin, FileText, FileX, Leaf, Cpu, Coins, Repeat, FileCheck, FileSearch,
-
 } from "lucide-react";
 import camusatLogo from "@/assets/images/camusat-logo.png";
 import { useAuth } from "@/auth/AuthContext";
@@ -44,8 +43,12 @@ const LINKS: LinkItem[] = [
   { to: "/modules/estimation", icon: <Calculator />,   label: "Estimation", section: "CONSO & ESTIMATION", end: true },
 
   { to: "/modules/prediction", icon: <BrainCircuit />, label: "Prédiction IA", section: "CONSO & ESTIMATION", end: true },
-  // ── SUIVI CARBURANT — une seule entrée : les pages du module sont dans ses onglets ─────────────────────
-  { to: "/modules/suivi-carburant",                     icon: <Fuel />,            label: "Suivi Carburant",       section: "SUIVI CARBURANT" },
+  // ── SUIVI CARBURANT — sous-rubriques (le contenu s'affiche à droite) ─────────────────────────────────
+  { to: "/modules/suivi-carburant/consommations",       icon: <Fuel />,            label: "Suivi Conso",           section: "SUIVI CARBURANT" },
+  { to: "/modules/suivi-carburant/controle-cph",        icon: <Cpu />,             label: "Contrôle CPH",          section: "SUIVI CARBURANT" },
+  { to: "/modules/suivi-carburant/stock",               icon: <ClipboardList />,   label: "Suivi Stock",           section: "SUIVI CARBURANT" },
+  { to: "/modules/suivi-carburant/commandes",           icon: <Receipt />,         label: "Commande",              section: "SUIVI CARBURANT" },
+  { to: "/modules/suivi-carburant/estimation-commande", icon: <Calculator />,      label: "Estimation",            section: "SUIVI CARBURANT" },
 
   // ── PILOTAGE GRID — les 11 parties du fichier, le contenu s'affiche à droite ────────────────────────
   { to: "/pilotage-grid/synthese",               icon: <LayoutDashboard />, label: "Synthèse",                section: "PILOTAGE GRID" },
