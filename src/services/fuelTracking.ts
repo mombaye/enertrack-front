@@ -2310,6 +2310,8 @@ export type BiStockResponse = {
   distribution_remplissage: Array<{ label: string; nb_sites: number; niveau: "critique" | "alerte" | "moyen" | "bon" | "inconnu" }>;
   distribution_autonomie: Array<{ label: string; nb_sites: number }>;
   distribution_age_releve: Array<{ label: string; nb_sites: number }>;
+  /** Origine du stock retenu par site (absent sur un ancien backend). */
+  distribution_source?: Array<{ label: string; nb_sites: number }>;
   by_zone: Array<{ label: string; nb_sites: number; stock_l: number | null; remplissage_pct: number | null; nb_critique: number; nb_autonomie_moins_3j: number }>;
   top_critique: BiStockSite[]; top_autonomie_faible: BiStockSite[]; top_stock: BiStockSite[];
 };
@@ -2346,6 +2348,13 @@ export type BiCphResponse = {
   top_conso_theorique: Array<BiSiteRef & { conso_theorique_l: number | null; runtime_h: number | null; cph_l_h: number | null }>;
   top_ecart_mesure: Array<BiSiteRef & { conso_theorique_l: number | null; conso_mesuree_l: number | null; ecart_l: number | null; ecart_pct: number | null }>;
   top_runtime: Array<BiSiteRef & { runtime_h: number | null; charge_pct: number | null }>;
+  /** Tous les sites GE de la période (déjà renvoyés par l'API). */
+  sites?: Array<BiSiteRef & {
+    configuration: string | null; ge_kva: number | null; statut_cph: string | null; motif: string | null;
+    runtime_h: number | null; charge_pct: number | null; cph_l_h: number | null;
+    conso_theorique_l: number | null; conso_partielle_l: number | null; conso_mesuree_l: number | null;
+    ecart_l: number | null; ecart_pct: number | null;
+  }>;
 };
 export async function getBiCph(params: { start: string; end: string; zone?: string }) {
   const { data } = await api.get<BiCphResponse>(`${BASE}/bi/cph/`, { params: cleanParams(params) });

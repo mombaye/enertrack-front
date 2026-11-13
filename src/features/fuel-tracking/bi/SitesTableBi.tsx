@@ -8,7 +8,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { downloadBiExport, getSiteTable, type SiteTableAlerte, type SiteTableRow } from "@/services/fuelTracking";
 import { Card } from "../ui";
 import { FT } from "../theme";
-import { BiKpi, FilterBar, FilterSelect, KpiRow, SiteCell, StateBox, blocId, fDays, fDec1, fL, fNum, fPct, fRatio, fSignedPct } from "./kit";
+import { BiKpi, CARD, DataBar, FilterBar, FilterSelect, KpiRow, Pill, SiteCell, StateBox, TH, blocId, fDays, fDec1, fL, fNum, fPct, fRatio, fSignedPct, type PillTone } from "./kit";
 import { monthLabel } from "../helpers";
 
 const TITLES = { conso: "Consommation par site", stock: "Stock par site" } as const;
@@ -17,12 +17,15 @@ const PAGE_SIZE = 50;
 type Group = "ge" | "conso" | "comp" | "stock" | "liv";
 const GROUPS: Record<Vue, Array<[Group, string]>> = {
   conso: [["conso", "Conso"], ["ge", "Activité GE"], ["comp", "Comparaisons"]],
-  stock: [["stock", "Stock"], ["liv", "Livraisons"]],
+  stock: [["stock", "Stock"]],
 };
 type Col = { key: string; label: string; group: Group | "site"; sort?: string; render: (r: SiteTableRow) => ReactNode; title?: string };
 
 const muted = (t: ReactNode) => <span style={{ color: FT.textSub }}>{t}</span>;
 const signed = (v: number | null, bad: number) => v == null ? "—" : <span style={{ color: Math.abs(v) > bad ? FT.red : FT.text, fontWeight: Math.abs(v) > bad ? 600 : 400 }}>{fSignedPct(v)}</span>;
+const LEFT = new Set(["region", "remp", "origine", "terrain"]);
+const autoTone = (j: number): PillTone => (j < 7 ? "crit" : j < 15 ? "warn" : "good");
+const fillColor = (p: number) => (p < 20 ? "#D03B3B" : p < 40 ? "#FAB219" : "#0CA30C");
 const fDate = (iso: string | null) => (iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }) : "—");
 
 export function SitesTableBi({ toMonth, vue, zone }: { toMonth: string | null; vue: Vue; zone: string }) {
@@ -56,7 +59,7 @@ export function SitesTableBi({ toMonth, vue, zone }: { toMonth: string | null; v
       <span style={{ display: "block", maxWidth: 230 }}>
         <SiteCell id={r.site_id} name={r.site_name} />
         <span style={{ display: "block", fontSize: 11, color: FT.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {[r.zone, r.configuration, r.energie, r.ge_kva != null ? `${fDec1(r.ge_kva)} kVA` : null].filter(Boolean).join(" · ") || "—"}
+          {[vue === "stock" ? null : r.zone, r.configuration, r.energie, r.ge_kva != null ? `${fDec1(r.ge_kva)} kVA` : null].filter(Boolean).join(" · ") || "—"}
         </span>
       </span>) },
     { key: "mes", label: "Conso mesurée", group: "conso", sort: "conso_mesuree_l", render: (r) => r.conso_mesuree_l == null ? "—" : <><b style={{ fontWeight: 600 }}>{fL(r.conso_mesuree_l)}</b><br />{muted(`${fDec1(r.l_jour)} L/j · ${r.jours_mesures ?? 0} j`)}</> },
@@ -68,10 +71,20 @@ export function SitesTableBi({ toMonth, vue, zone }: { toMonth: string | null; v
     { key: "charge", label: "Charge", group: "ge", sort: "charge_pct", render: (r) => r.charge_pct == null ? "—" : <><span style={{ color: s && r.charge_pct < s.sous_charge_pct ? "#9A6200" : FT.text }}>{fPct(r.charge_pct)}</span><br />{muted(r.ge_prod_kwh != null ? `${fNum(r.ge_prod_kwh)} kWh` : "")}</> },
     { key: "evo", label: "vs mois préc.", group: "comp", sort: "evolution_pct", title: "Évolution de la conso mesurée par jour", render: (r) => r.evolution_pct == null ? "—" : <>{fSignedPct(r.evolution_pct)}<br />{muted(fL(r.conso_prec_l))}</> },
     { key: "tgt", label: "vs target", group: "comp", sort: "ecart_target_pct", render: (r) => r.ecart_target_pct == null ? "—" : <>{signed(r.ecart_target_pct, s?.tolerance_target_pct ?? 10)}<br />{muted(fL(r.target_l))}</> },
-    { key: "stock", label: "Stock", group: "stock", sort: "stock_l", render: (r) => r.stock_l == null ? "—" : <>{fL(r.stock_l)}{r.stock_estime && <span style={{ marginLeft: 4, fontSize: 10.5, color: "#9A6200" }}>estimé</span>}<br />{muted(`${r.source_stock ?? ""} · ${fDate(r.date_stock)}${r.remplissage_pct != null ? ` · ${fPct(r.remplissage_pct)}` : ""}`)}</> },
-    { key: "ljs", label: "Conso / jour", group: "stock", sort: "l_jour", title: "Conso mesurée moyenne par jour du mois", render: (r) => r.l_jour == null ? "—" : `${fDec1(r.l_jour)} L/j` },
-    { key: "auto", label: "Autonomie", group: "stock", sort: "autonomie_j", render: (r) => r.autonomie_j == null ? "—" : <span style={{ color: r.autonomie_j < 3 ? FT.red : FT.text, fontWeight: r.autonomie_j < 3 ? 600 : 400 }}>{fDays(r.autonomie_j)}</span> },
-    { key: "enoc", label: "Livré ENOC", group: "liv", sort: "enoc_livre_l", render: (r) => r.enoc_livre_l == null ? "—" : <>{fL(r.enoc_livre_l)}<br />{muted(`${r.nb_livraisons} livraison${r.nb_livraisons > 1 ? "s" : ""}`)}</> },
+    // Vue stock : colonnes de la maquette « Stock par site ».
+    { key: "region", label: "Région", group: "stock", sort: "zone", render: (r) => r.zone ?? muted("—") },
+    { key: "cuve", label: "Cuve", group: "stock", sort: "capacite_l", render: (r) => r.capacite_l ? fNum(r.capacite_l) : muted("inconnue") },
+    { key: "stock", label: "Stock", group: "stock", sort: "stock_l", render: (r) => r.stock_l == null ? muted("—") : <b style={{ fontWeight: 800 }}>{fL(r.stock_l)}</b> },
+    { key: "remp", label: "Remplissage", group: "stock", sort: "remplissage_pct", render: (r) => r.remplissage_pct == null ? muted("—")
+      : <DataBar pct={r.remplissage_pct} color={fillColor(r.remplissage_pct)} label={fPct(r.remplissage_pct)} /> },
+    { key: "releve", label: "Relevé", group: "stock", sort: "date_stock", title: "Date du stock retenu (relevé le plus récent, toutes sources)", render: (r) => fDate(r.date_stock) },
+    { key: "origine", label: "Origine", group: "stock", render: (r) => r.stock_estime ? <Pill tone="warn">Estimé</Pill> : r.source_stock ?? muted("—") },
+    { key: "terrain", label: "Dernier relevé terrain", group: "stock", title: "Pas encore de source en production : sera alimenté par les Remontées terrain.",
+      render: () => <span style={{ color: FT.textSub, fontStyle: "italic" }}>non disponible</span> },
+    { key: "ljs", label: "L / jour", group: "stock", sort: "l_jour", title: "Conso mesurée moyenne par jour du mois", render: (r) => r.l_jour == null ? muted("—") : fDec1(r.l_jour) },
+    { key: "auto", label: "Autonomie", group: "stock", sort: "autonomie_j", render: (r) => r.autonomie_j == null ? muted("—")
+      : <Pill tone={autoTone(r.autonomie_j)}>{r.autonomie_j > 365 ? "> 1 an" : fDays(r.autonomie_j)}</Pill> },
+    { key: "enoc", label: "Livré", group: "stock", sort: "enoc_livre_l", title: "Livré ENOC sur le mois", render: (r) => r.enoc_livre_l == null ? muted("—") : <>{fNum(r.enoc_livre_l)}<br />{muted(`${r.nb_livraisons} livraison${r.nb_livraisons > 1 ? "s" : ""}`)}</> },
     { key: "al", label: "Alertes", group: "site", sort: "nb_alertes", render: (r) => r.alertes.length === 0 ? muted("—") : (
       <span style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
         {r.alertes.map((a) => <span key={a} style={{ fontSize: 10.5, padding: "1px 6px", borderRadius: 4, background: "#FDECEC", color: "#A42B2B", whiteSpace: "nowrap" }}>{alertLabels?.[a] ?? a}</span>)}
@@ -85,8 +98,8 @@ export function SitesTableBi({ toMonth, vue, zone }: { toMonth: string | null; v
     setPage(1);
   };
   const reset = <T,>(set: (v: T) => void) => (v: T) => { set(v); setPage(1); };
-  const th: CSSProperties = { textAlign: "left", padding: "8px 10px", fontSize: 11.5, fontWeight: 600, color: FT.textMid, borderBottom: `1px solid #E4E9F0`, whiteSpace: "nowrap", background: "#F7F9FC", position: "sticky", top: 0, zIndex: 1 };
-  const td: CSSProperties = { padding: "7px 10px", fontSize: 12.5, borderBottom: `1px solid #EEF1F5`, verticalAlign: "top", fontVariantNumeric: "tabular-nums", lineHeight: 1.4 };
+  const th: CSSProperties = { ...TH, textAlign: "left", position: "sticky", top: 0, zIndex: 1 };
+  const td: CSSProperties = { padding: "7px 10px", fontSize: 12.5, borderBottom: `1px solid #F0F2F6`, verticalAlign: "middle", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", lineHeight: 1.4 };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -96,10 +109,10 @@ export function SitesTableBi({ toMonth, vue, zone }: { toMonth: string | null; v
       >
         <FilterSelect label="Alerte" value={alerte} options={Object.keys(alertLabels ?? {})} onChange={reset(setAlerte)} allLabel="Toutes"
           format={(o) => alertLabels?.[o as SiteTableAlerte] ?? o} />
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: FT.textMid }}>
-          Site
+        <label style={{ display: "grid", gap: 2 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: "#7D889B", textTransform: "uppercase", letterSpacing: ".05em" }}>Site</span>
           <input value={text} onChange={(e) => setText(e.target.value)} placeholder="identifiant ou nom" aria-label="Filtrer les sites"
-            style={{ border: "1px solid #CBD3DF", borderRadius: 4, padding: "5px 8px", fontSize: 12.5, width: 150 }} />
+            style={{ height: 34, border: "1px solid #E6EAF0", borderRadius: 8, padding: "0 8px", fontSize: 13, width: 170, fontFamily: "inherit" }} />
         </label>
       </FilterBar>
 
@@ -120,9 +133,9 @@ export function SitesTableBi({ toMonth, vue, zone }: { toMonth: string | null; v
         </KpiRow>
       )}
 
-      <Card id={blocId(TITLE)} style={{ padding: 0, borderRadius: 6, minWidth: 0 }}>
+      <Card id={blocId(TITLE)} style={{ ...CARD, padding: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", flexWrap: "wrap", borderBottom: "1px solid #E4E9F0" }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: FT.text }}>{TITLE}</div>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: "#0B1220" }}>{TITLE}</div>
           <div style={{ fontSize: 12, color: FT.textSub }}>{d ? `${fNum(d.total)} sites · trié par ${cols.find((c) => c.sort === sort)?.label.toLowerCase() ?? sort}` : ""}</div>
           <div role="group" aria-label="Colonnes affichées" style={{ marginLeft: "auto", display: "flex", gap: 4, flexWrap: "wrap" }}>
             {groups.length > 1 && groups.map(([g, label]) => {
@@ -146,7 +159,7 @@ export function SitesTableBi({ toMonth, vue, zone }: { toMonth: string | null; v
                   <tr>
                     {shown.map((c, i) => (
                       <th key={c.key} scope="col" title={c.title} aria-sort={c.sort === sort ? (desc ? "descending" : "ascending") : undefined}
-                        style={{ ...th, ...(i === 0 ? { left: 0, zIndex: 2 } : null), textAlign: c.group === "site" ? "left" : "right" }}>
+                        style={{ ...th, ...(i === 0 ? { left: 0, zIndex: 2 } : null), textAlign: c.group === "site" || LEFT.has(c.key) ? "left" : "right" }}>
                         {c.sort ? (
                           <button type="button" onClick={() => sortBy(c.sort)} style={{ all: "unset", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
                             {c.label}{c.sort === sort && (desc ? <ChevronDown size={12} aria-hidden /> : <ChevronUp size={12} aria-hidden />)}
@@ -158,9 +171,9 @@ export function SitesTableBi({ toMonth, vue, zone }: { toMonth: string | null; v
                 </thead>
                 <tbody>
                   {d.rows.map((row, ri) => (
-                    <tr key={row.site_id} style={{ background: ri % 2 ? "#FAFBFD" : "#fff" }}>
+                    <tr key={row.site_id} style={{ background: "#fff" }}>
                       {shown.map((c, i) => (
-                        <td key={c.key} style={{ ...td, textAlign: c.group === "site" ? "left" : "right", ...(i === 0 ? { position: "sticky", left: 0, background: ri % 2 ? "#FAFBFD" : "#fff", zIndex: 0 } : null), ...(c.key === "al" ? { minWidth: 150 } : null) }}>
+                        <td key={c.key} style={{ ...td, textAlign: c.group === "site" || LEFT.has(c.key) ? "left" : "right", ...(i === 0 ? { position: "sticky", left: 0, background: "#fff", boxShadow: "1px 0 0 #E6EAF0", zIndex: 0 } : null), ...(c.key === "al" ? { minWidth: 150 } : null) }}>
                           {c.render(row)}
                         </td>
                       ))}

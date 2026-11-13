@@ -231,8 +231,37 @@ export function ExplainModal({ x, value, unit, onClose, detail, detailLabel }: {
   );
 }
 
+/** Pastille de statut de la maquette : couleur + texte, jamais la couleur seule. */
+export type PillTone = "good" | "warn" | "crit" | "mute";
+const PILL: Record<PillTone, [string, string]> = { good: ["#E3F5E3", "#006300"], warn: ["#FEF4DD", "#8A5A00"], crit: ["#FDECEC", "#D03B3B"], mute: ["#F6F8FB", "#7D889B"] };
+export function Pill({ tone, children, title }: { tone: PillTone; children: ReactNode; title?: string }) {
+  const [bg, fg] = PILL[tone];
+  return (
+    <span title={title} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 8px", borderRadius: 999, fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap", background: bg, color: fg }}>
+      {tone !== "mute" && <span aria-hidden style={{ width: 7, height: 7, borderRadius: "50%", background: "currentColor" }} />}
+      {children}
+    </span>
+  );
+}
+/** Barre de donnée de la maquette (piste grise + remplissage) suivie de la valeur. */
+export function DataBar({ pct, color, label, width = 80 }: { pct: number; color: string; label: ReactNode; width?: number }) {
+  return (
+    <span style={{ display: "inline-grid", gridTemplateColumns: `${width}px auto`, gap: 8, alignItems: "center" }}>
+      <span style={{ height: 8, background: "#F0F2F6", borderRadius: 4, overflow: "hidden", display: "block" }}>
+        <i style={{ display: "block", height: "100%", width: `${Math.max(0, Math.min(100, pct))}%`, background: color, borderRadius: 4 }} />
+      </span>
+      <span style={{ fontVariantNumeric: "tabular-nums" }}>{label}</span>
+    </span>
+  );
+}
+
+/** Carte de la maquette : rayon 14, bordure claire, ombre douce. */
+export const CARD: CSSProperties = { padding: "14px 16px 16px", minWidth: 0, borderRadius: 14, border: "1px solid #E6EAF0", boxShadow: "0 1px 2px rgba(11,31,77,.04), 0 8px 24px -16px rgba(11,31,77,.22)" };
+/** En-tête de tableau de la maquette : capitales 11 px sur fond --plane. */
+export const TH: CSSProperties = { padding: "8px 10px", fontSize: 11, fontWeight: 700, color: "#4B5768", textTransform: "uppercase", letterSpacing: ".03em", background: "#F6F8FB", borderBottom: "1px solid #E6EAF0", whiteSpace: "nowrap" };
+
 export function Grid({ min = 380, children }: { min?: number; children: ReactNode }) {
-  return <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(min(${min}px, 100%), 1fr))`, gap: 12 }}>{children}</div>;
+  return <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(min(${min}px, 100%), 1fr))`, gap: 16 }}>{children}</div>;
 }
 
 /** Petit « i » dont le survol donne la méthode de calcul (au lieu d'un sous-titre explicatif permanent). */
@@ -245,16 +274,17 @@ export function InfoTip({ text }: { text: string }) {
 }
 
 /** Carte de graphique : titre court + méthode en infobulle + états chargement / erreur / vide. */
-export function ChartCard({ title, info, legend, loading, error, empty, height = 250, children, action }: {
-  title: string; info?: string; legend?: Array<{ label: string; color: string; dashed?: boolean }>;
+export function ChartCard({ title, info, sub, legend, loading, error, empty, height = 250, children, action }: {
+  title: string; info?: string; sub?: ReactNode; legend?: Array<{ label: string; color: string; dashed?: boolean }>;
   loading?: boolean; error?: boolean; empty?: boolean; height?: number; children: ReactNode; action?: ReactNode;
 }) {
   return (
-    <Card id={blocId(title)} style={{ padding: "14px 16px", minWidth: 0, borderRadius: 6 }}>
+    <Card id={blocId(title)} style={CARD}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: FT.text, display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: "#0B1220", display: "inline-flex", alignItems: "center", gap: 6 }}>
           {title}{info && <InfoTip text={info} />}
         </div>
+        {sub && <span style={{ fontSize: 12, color: "#7D889B", marginRight: "auto" }}>{sub}</span>}
         {action}
       </div>
       {legend && legend.length > 0 && (
@@ -292,16 +322,19 @@ export type TopColumn<T> = { label: string; render: (row: T) => ReactNode; align
  * Tableau classé (Top N). `barColumn` reçoit une barre de données en fond de cellule, comme dans Power BI,
  * proportionnelle à `barValue` (échelle `barMax`, sinon le maximum du tableau).
  */
-export function TopTable<T>({ title, info, rows, columns, barValue, barMax, barColor = BI.light, barColumn = 1, loading, error, onRowClick }: {
-  title: string; info?: string; rows: T[] | undefined; columns: TopColumn<T>[];
+export function TopTable<T>({ title, info, sub, rows, columns, barValue, barMax, barColor = BI.light, barColumn = 1, loading, error, onRowClick }: {
+  title: string; info?: string; sub?: ReactNode; rows: T[] | undefined; columns: TopColumn<T>[];
   barValue?: (row: T) => number | null; barMax?: number; barColor?: string | ((row: T) => string); barColumn?: number;
   loading?: boolean; error?: boolean; onRowClick?: (row: T) => void;
 }) {
   const max = barMax ?? Math.max(1, ...(rows ?? []).map((r) => Math.abs(barValue?.(r) ?? 0)));
   return (
-    <Card id={blocId(title)} style={{ padding: "14px 16px", minWidth: 0, borderRadius: 6 }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: FT.text, display: "inline-flex", alignItems: "center", gap: 6 }}>
-        {title}{info && <InfoTip text={info} />}
+    <Card id={blocId(title)} style={CARD}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: "#0B1220", display: "inline-flex", alignItems: "center", gap: 6 }}>
+          {title}{info && <InfoTip text={info} />}
+        </div>
+        {sub && <span style={{ fontSize: 12, color: "#7D889B" }}>{sub}</span>}
       </div>
       <div style={{ marginTop: 8, overflowX: "auto" }}>
         {loading ? <Skeleton h={260} />
@@ -319,7 +352,7 @@ export function TopTable<T>({ title, info, rows, columns, barValue, barMax, barC
                   const pct = bv == null ? 0 : Math.max(0, Math.min(100, (Math.abs(bv) / max) * 100));
                   return (
                     <tr key={i} onClick={onRowClick ? () => onRowClick(r) : undefined}
-                      style={{ cursor: onRowClick ? "pointer" : undefined, background: i % 2 ? "#FAFBFD" : undefined }}>
+                      style={{ cursor: onRowClick ? "pointer" : undefined }}>
                       {columns.map((c, ci) => (
                         <td key={c.label} style={{
                           ...td(c.align ?? "left"),
@@ -340,12 +373,9 @@ export function TopTable<T>({ title, info, rows, columns, barValue, barMax, barC
   );
 }
 
-const th = (align: "left" | "right", width?: string): CSSProperties => ({
-  textAlign: align, padding: "6px 8px", fontSize: 11.5, fontWeight: 600, color: FT.textMid,
-  borderBottom: `2px solid ${FT.navy}`, width, whiteSpace: "nowrap",
-});
+const th = (align: "left" | "right", width?: string): CSSProperties => ({ ...TH, textAlign: align, width });
 const td = (align: "left" | "right"): CSSProperties => ({
-  textAlign: align, padding: "6px 8px", borderBottom: `1px solid #EEF1F5`, color: FT.text,
+  textAlign: align, padding: "8px 10px", borderBottom: `1px solid #F0F2F6`, color: FT.text,
   fontVariantNumeric: "tabular-nums", verticalAlign: "middle", whiteSpace: align === "right" ? "nowrap" : undefined,
 });
 
@@ -375,8 +405,8 @@ export function ExportButton({ onExport, label = "Exporter Excel" }: { onExport:
       <button type="button" disabled={busy}
         onClick={async () => { setBusy(true); setErr(false); try { await onExport(); } catch { setErr(true); } finally { setBusy(false); } }}
         style={{
-          display: "inline-flex", alignItems: "center", gap: 6, border: `1px solid ${FT.navy}`, background: busy ? FT.slateL : FT.card,
-          color: FT.navy, borderRadius: 4, padding: "5px 11px", fontSize: 12.5, fontWeight: 600, cursor: busy ? "wait" : "pointer",
+          display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid #E6EAF0", background: busy ? "#F6F8FB" : "#fff",
+          color: "#0B1220", borderRadius: 8, padding: "6px 11px", fontSize: 12.5, fontWeight: 600, cursor: busy ? "wait" : "pointer", whiteSpace: "nowrap",
         }}>
         <Download size={14} aria-hidden />{busy ? "Préparation…" : label}
       </button>
@@ -388,11 +418,13 @@ export function ExportButton({ onExport, label = "Exporter Excel" }: { onExport:
 /** Ligne de titre d'une page (comme la maquette) : titre, filtres propres à la page, note, export. */
 export function FilterBar({ children, note, onExport, title }: { children?: ReactNode; note?: ReactNode; onExport?: () => Promise<void>; title?: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", padding: "2px 0" }}>
-      {title && <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, letterSpacing: "-.015em", color: "#0B1220", marginRight: 6 }}>{title}</h2>}
-      {children}
-      {note && <span style={{ fontSize: 12, color: FT.textMid }}>{note}</span>}
-      {onExport && <span style={{ marginLeft: "auto" }}><ExportButton onExport={onExport} /></span>}
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+        {title && <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, letterSpacing: "-.015em", color: "#0B1220" }}>{title}</h2>}
+        {note && <span style={{ fontSize: 12, color: "#7D889B" }}>{note}</span>}
+        {onExport && <span style={{ marginLeft: "auto", alignSelf: "center" }}><ExportButton onExport={onExport} /></span>}
+      </div>
+      {children && <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>{children}</div>}
     </div>
   );
 }
@@ -401,12 +433,12 @@ export function FilterSelect({ label, value, options, onChange, allLabel = "Tous
   label: string; value: string; options: string[]; onChange: (v: string) => void; allLabel?: string; format?: (o: string) => string;
 }) {
   return (
-    <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: FT.textMid }}>
-      {label}
+    <label style={{ display: "grid", gap: 2, minWidth: 130 }}>
+      <span style={{ fontSize: 10.5, fontWeight: 700, color: "#7D889B", textTransform: "uppercase", letterSpacing: ".05em" }}>{label}</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        style={{ border: `1px solid #CBD3DF`, background: FT.card, borderRadius: 4, padding: "5px 8px", fontSize: 12.5, color: FT.text, minWidth: 110 }}
+        style={{ height: 34, border: `1px solid ${value ? "#1A56C4" : "#E6EAF0"}`, background: value ? "#EAF1FD" : "#fff", borderRadius: 8, padding: "0 8px", fontSize: 13, fontWeight: 600, color: value ? "#1A56C4" : "#0B1220", fontFamily: "inherit" }}
       >
         <option value="">{allLabel}</option>
         {options.map((o) => <option key={o} value={o}>{format ? format(o) : o}</option>)}
@@ -417,9 +449,9 @@ export function FilterSelect({ label, value, options, onChange, allLabel = "Tous
 
 export function SectionTitle({ children, sub, action }: { children: ReactNode; sub?: ReactNode; action?: ReactNode }) {
   return (
-    <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginTop: 8, borderBottom: `1px solid #E4E9F0`, paddingBottom: 6 }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: FT.navy }}>{children}</div>
-      {sub && <div style={{ fontSize: 12, color: FT.textSub }}>{sub}</div>}
+    <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginTop: 6, flexWrap: "wrap" }}>
+      <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, letterSpacing: "-.01em", color: "#0B1220" }}>{children}</h3>
+      {sub && <div style={{ fontSize: 12, color: "#7D889B" }}>{sub}</div>}
       {action && <div style={{ marginLeft: "auto", alignSelf: "center" }}>{action}</div>}
     </div>
   );
@@ -430,7 +462,7 @@ export function SectionTitle({ children, sub, action }: { children: ReactNode; s
 export function DetailSection({ title, children, defaultOpen = false }: { title: string; children: ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <section style={{ background: FT.card, border: FT.borderCrisp, borderRadius: 6 }}>
+    <section style={{ background: "#fff", border: "1px solid #E6EAF0", borderRadius: 14 }}>
       <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)}
         style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "11px 16px", background: "transparent", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, color: FT.navy, textAlign: "left" }}>
         <ChevronDown size={16} aria-hidden style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform .15s" }} />

@@ -1,17 +1,20 @@
 // Vue BI — Suivi Stock : état actuel des cuves, autonomie, fraîcheur des relevés, répartition, classements.
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { downloadBiExport, getBiStock, getStockEvolution, type StockEvolutionMonth } from "@/services/fuelTracking";
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { downloadBiExport, getBiConso, getBiStock, getStockEvolution, type StockEvolutionMonth } from "@/services/fuelTracking";
 import { monthLabel } from "../helpers";
 import { FT } from "../theme";
 import {
-  BI, BiKpi, ChartCard, FilterBar, FilterSelect, Grid, KpiRow, SectionTitle, SiteCell, TopTable,
+  BI, BiKpi, ChartCard, DetailSection, FilterBar, Grid, KpiRow, SectionTitle, SiteCell, TopTable,
   axisProps, fDays, fDec1, fL, fNum, fPct, fShort, labelStyle, tooltipStyle,
 } from "./kit";
 
 const LEVEL_COLOR = { critique: BI.bad, alerte: BI.warn, moyen: BI.light, bon: BI.primary, inconnu: BI.unknown } as const;
-const AUTONOMY_COLOR = [BI.bad, BI.warn, BI.light, BI.secondary, BI.primary];
+// Tranches d'autonomie : mêmes couleurs que la maquette (< 3 j, 3–7, 7–15, 15–30, > 30 j).
+const AUTONOMY_COLOR = ["#D03B3B", "#EC835A", "#FAB219", "#1baf7a", "#2a78d6"];
+// Origine du stock final : couleurs catégorielles de la maquette, gris pour « Aucun relevé ».
+const SOURCE_COLOR = ["#2a78d6", "#1baf7a", "#eda100", "#e87ba4", "#eb6834", "#008300"];
 const AGE_COLOR = [BI.primary, BI.secondary, BI.light, BI.warn, BI.bad, BI.unknown];
 
 export function StockBi({ toMonth, zone }: { toMonth: string | null; zone: string }) {
@@ -28,6 +31,14 @@ export function StockBi({ toMonth, zone }: { toMonth: string | null; zone: strin
     staleTime: 5 * 60_000,
     placeholderData: (prev) => prev,
   });
+  // Livré du mois : même calcul que Suivi Conso (ENOC, mois de fin de période, même zone).
+  const liv = useQuery({
+    queryKey: ["fuel-bi-stock-livre", zone, toMonth],
+    queryFn: () => getBiConso({ from_month: toMonth!, to_month: toMonth!, month: toMonth!, zone }),
+    enabled: !!toMonth,
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  });
   const [evMode, setEvMode] = useState<"litres" | "pct">("litres");
   const evKey = evMode === "litres" ? "stock_l" : "remplissage_pct";
   const d = q.data;
@@ -36,11 +47,16 @@ export function StockBi({ toMonth, zone }: { toMonth: string | null; zone: strin
   const loading = q.isLoading;
   const fillColor = (pct: number | null) => (pct == null ? BI.unknown : pct < 15 ? BI.bad : pct < 40 ? BI.warn : BI.secondary);
   const today = new Date().toISOString().slice(0, 10);
+  const auto = d?.distribution_autonomie ?? [];
+  const sous7 = d ? (auto[0]?.nb_sites ?? 0) + (auto[1]?.nb_sites ?? 0) : undefined;
+  const lk = liv.data?.kpis;
+  const sources = (d?.distribution_source ?? []).filter((b) => b.nb_sites > 0);
+  const srcColor = (label: string, i: number) => (label === "Aucun relevé" ? "#A9B1BE" : SOURCE_COLOR[i % SOURCE_COLOR.length]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <FilterBar title="Suivi Stock"
-        note={k ? `Sénégal · dernier relevé ${k.derniere_mesure ? new Date(k.derniere_mesure).toLocaleDateString("fr-FR") : "—"} · autonomie calculée sur ${monthLabel(k.mois_reference_autonomie)}` : undefined}
+        note={k ? `stock au dernier relevé · autonomie = stock ÷ conso moyenne par jour · dernier relevé ${k.derniere_mesure ? new Date(k.derniere_mesure).toLocaleDateString("fr-FR") : "—"} · autonomie calculée sur ${monthLabel(k.mois_reference_autonomie)}` : undefined}
         onExport={() => downloadBiExport("stock", params, `suivi_stock_${today}.xlsx`)}
       >
       </FilterBar>
@@ -48,14 +64,13 @@ export function StockBi({ toMonth, zone }: { toMonth: string | null; zone: strin
       {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 12.5 }}>Chargement impossible. Les onglets détaillés plus bas restent consultables.</div>}
 
       <KpiRow>
-        <BiKpi label="Stock en cuve" detail={"Plus gros stocks"} value={fNum(k?.stock_total_l)} unit="L"
-          sub={k?.remplissage_pct != null ? `${fPct(k.remplissage_pct)} de la capacité` : undefined} explain={x?.stock_total_l} />
-        <BiKpi label="Cuves sous 15 %" detail={"Cuves les plus basses"} detailLabel="Voir les cuves les plus basses" value={fNum(k?.nb_critique)} explain={x?.nb_critique} alert={k?.nb_critique ? "bad" : null}
-          sub={k ? `${fNum(k.nb_alerte)} autres entre 15 et 40 %` : undefined} />
-        <BiKpi label="Autonomie < 3 jours" detail={"Autonomie la plus courte"} detailLabel="Voir les sites à ravitailler" value={fNum(k?.nb_autonomie_moins_3j)} alert={k?.nb_autonomie_moins_3j ? "bad" : null} sub="sites à ravitailler en premier" explain={x?.nb_autonomie_moins_3j} />
-        <BiKpi label="Autonomie médiane" detail={"Autonomie restante"} detailLabel="Voir la répartition" value={fDec1(k?.autonomie_mediane_j)} unit="jours" explain={x?.autonomie_mediane_j} sub="sites à la conso mesurée connue" />
-        <BiKpi label="Stock connu" detail={"Ancienneté du dernier relevé"} detailLabel="Voir l'ancienneté des relevés" value={fPct(k?.stock_connu_pct)} explain={x?.stock_connu_pct} sub={k ? `${fNum(k.nb_stock_connu)} / ${fNum(k.nb_sites)} sites GE` : undefined} />
-        <BiKpi label="Relevés de plus de 7 jours" detail={"Ancienneté du dernier relevé"} detailLabel="Voir l'ancienneté des relevés" value={fNum(k?.nb_releves_anciens)} explain={x?.nb_releves_anciens} alert={k?.nb_releves_anciens ? "warn" : null} sub="stock à confirmer sur place" />
+        <BiKpi label="Stock sur sites" detail={"Plus gros stocks"} value={fNum(k?.stock_total_l)} unit="L" explain={x?.stock_total_l}
+          sub={k ? `au dernier relevé connu par site · ${fNum(k.nb_stock_connu)} / ${fNum(k.nb_sites)} sites` : undefined} />
+        <BiKpi label="Autonomie < 7 jours" detail={"Autonomie des sites"} detailLabel="Voir la répartition" value={fNum(sous7)} unit="sites"
+          alert={sous7 ? "bad" : null} sub={k ? `dont ${fNum(k.nb_autonomie_moins_3j)} sous 3 jours` : undefined} />
+        <BiKpi label={`Livré en ${toMonth ? monthLabel(toMonth).split(" ")[0].toLowerCase() : "—"}`} value={liv.isError ? "—" : fNum(lk?.enoc_ajoutee_l)} unit="L"
+          sub={liv.isError ? "non disponible (erreur de chargement)" : lk ? `${fNum(lk.nb_ravitaillements)} livraisons ENOC` : undefined} />
+        <BiKpi label="Ponctions du mois" value="—" sub="non disponible : aucune source de ponctions en production" />
       </KpiRow>
 
       <ChartCard title="Évolution du stock" info="Stock de fin de mois : dernier relevé valide daté dans le mois (capteur, relevé terrain / gardiennage / ENOC, Synthèse). Un site sans relevé dans le mois n'est pas compté. Le remplissage reste comparable quand le nombre de sites relevés change."
@@ -87,6 +102,39 @@ export function StockBi({ toMonth, zone }: { toMonth: string | null; zone: strin
         </ResponsiveContainer>
       </ChartCard>
 
+      <Grid min={480}>
+        <ChartCard title="Autonomie des sites" info="Stock actuel ÷ conso mesurée moyenne par jour. Sites sans conso mesurée exclus."
+          loading={loading} error={q.isError} empty={!d?.distribution_autonomie?.some((b) => b.nb_sites > 0)}>
+          <ResponsiveContainer>
+            <BarChart data={d?.distribution_autonomie ?? []} margin={{ top: 16, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke={BI.grid} vertical={false} />
+              <XAxis dataKey="label" {...axisProps} interval={0} />
+              <YAxis {...axisProps} allowDecimals={false} width={40} />
+              <Tooltip contentStyle={tooltipStyle} formatter={(v) => `${fNum(v as number)} sites`} />
+              <Bar dataKey="nb_sites" maxBarSize={44}>
+                {(d?.distribution_autonomie ?? []).map((_, i) => <Cell key={i} fill={AUTONOMY_COLOR[i]} />)}
+                <LabelList dataKey="nb_sites" position="top" style={labelStyle} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+        <ChartCard title="Origine du stock final" info="Source du stock retenu par site (relevé le plus récent, toutes sources). « Estimation » : stock estimé faute de relevé."
+          legend={sources.map((b, i) => ({ label: `${b.label} · ${fNum(b.nb_sites)}`, color: srcColor(b.label, i) }))}
+          loading={loading} error={q.isError} empty={!sources.length}>
+          <ResponsiveContainer>
+            <PieChart>
+              <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => [`${fNum(v as number)} sites`, n as string]} />
+              <Pie data={sources} dataKey="nb_sites" nameKey="label" innerRadius="58%" outerRadius="88%" stroke="#fff" strokeWidth={2} isAnimationActive={false}>
+                {sources.map((b, i) => <Cell key={b.label} fill={srcColor(b.label, i)} />)}
+              </Pie>
+              <text x="50%" y="48%" textAnchor="middle" dominantBaseline="middle" style={{ fontSize: 22, fontWeight: 700, fill: "#0B1220" }}>{fNum(d?.kpis.nb_sites)}</text>
+              <text x="50%" y="58%" textAnchor="middle" dominantBaseline="middle" style={{ fontSize: 11, fill: "#7D889B" }}>sites</text>
+            </PieChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      </Grid>
+
+      <DetailSection title="Autres analyses du stock (remplissage, ancienneté des relevés, zones, classements)">
       <Grid min={320}>
         <ChartCard title="Remplissage des cuves" info="Nombre de sites GE par tranche de remplissage. « Inconnu » : aucun relevé exploitable."
           loading={loading} error={q.isError} empty={!d?.distribution_remplissage?.some((b) => b.nb_sites > 0)}>
@@ -98,21 +146,6 @@ export function StockBi({ toMonth, zone }: { toMonth: string | null; zone: strin
               <Tooltip contentStyle={tooltipStyle} formatter={(v) => `${fNum(v as number)} sites`} />
               <Bar dataKey="nb_sites" maxBarSize={44}>
                 {(d?.distribution_remplissage ?? []).map((b, i) => <Cell key={i} fill={LEVEL_COLOR[b.niveau]} />)}
-                <LabelList dataKey="nb_sites" position="top" style={labelStyle} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-        <ChartCard title="Autonomie restante" info="Stock actuel ÷ conso mesurée moyenne par jour. Sites sans conso mesurée exclus."
-          loading={loading} error={q.isError} empty={!d?.distribution_autonomie?.some((b) => b.nb_sites > 0)}>
-          <ResponsiveContainer>
-            <BarChart data={d?.distribution_autonomie ?? []} margin={{ top: 16, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke={BI.grid} vertical={false} />
-              <XAxis dataKey="label" {...axisProps} interval={0} />
-              <YAxis {...axisProps} allowDecimals={false} width={40} />
-              <Tooltip contentStyle={tooltipStyle} formatter={(v) => `${fNum(v as number)} sites`} />
-              <Bar dataKey="nb_sites" maxBarSize={44}>
-                {(d?.distribution_autonomie ?? []).map((_, i) => <Cell key={i} fill={AUTONOMY_COLOR[i]} />)}
                 <LabelList dataKey="nb_sites" position="top" style={labelStyle} />
               </Bar>
             </BarChart>
@@ -134,7 +167,6 @@ export function StockBi({ toMonth, zone }: { toMonth: string | null; zone: strin
           </ResponsiveContainer>
         </ChartCard>
       </Grid>
-
       <ChartCard title="Situation par zone" info="Stock capteur et nombre de sites en alerte (cuve sous 15 % ou autonomie sous 3 jours), par zone."
         legend={[{ label: "Cuves sous 15 %", color: BI.bad }, { label: "Autonomie < 3 j", color: BI.warn }]}
         loading={loading} error={q.isError} empty={!d?.by_zone?.length}>
@@ -177,6 +209,7 @@ export function StockBi({ toMonth, zone }: { toMonth: string | null; zone: strin
             { label: "Capacité", align: "right", render: (r) => fL(r.capacite_l) },
           ]} />
       </Grid>
+      </DetailSection>
     </div>
   );
 }

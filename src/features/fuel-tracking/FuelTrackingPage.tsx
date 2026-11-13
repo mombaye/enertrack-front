@@ -342,7 +342,6 @@ export default function FuelTrackingPage() {
         {!siteId && activeTab === "STOCK" && (
           <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <StockBi toMonth={toMonth} zone={zone} />
-            <SectionTitle sub="stock retenu (relevé le plus récent, toutes sources) · autonomie · livraisons">Détail par site</SectionTitle>
             <SitesTableBi vue="stock" toMonth={toMonth} zone={zone} />
             <DetailSection title="Stock détaillé (registre, relevés, bilans, imports)">
             <StockSheet

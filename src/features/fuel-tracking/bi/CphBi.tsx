@@ -2,16 +2,19 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis,
+  Bar, BarChart, CartesianGrid, Cell, LabelList, Pie, PieChart, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis,
 } from "recharts";
 import { downloadBiExport, getBiCph } from "@/services/fuelTracking";
 import { monthLabel } from "../helpers";
 import { FT } from "../theme";
 import {
-  BI, BiKpi, ChartCard, FilterBar, FilterSelect, Grid, KpiRow, SectionTitle, SiteCell, TopTable,
+  BI, BiKpi, ChartCard, DetailSection, FilterBar, FilterSelect, Grid, KpiRow, Pill, SectionTitle, SiteCell, TopTable,
   axisProps, fDec1, fL, fNum, fPct, fRatio, fShort, fSignedPct, labelStyle, tooltipStyle,
 } from "./kit";
 
+/** Seuil « gros écart » mesuré / CPH : même valeur que l'alerte « Écart CPH > 20 % » du tableau par site. */
+const GROS_ECART_PCT = 20;
+const TABLE_MAX = 100;
 const STATUT_LABEL: Record<string, string> = { COMPLET: "Complet", PARTIEL: "Partiel", NON_CALCULE: "Non calculé" };
 const MOTIF_LABEL: Record<string, string> = {
   GE_NON_CONFIRME_SNOWFLAKE: "GE non confirmé (Snowflake)", RUNTIME_INDISPONIBLE: "Heures de marche indisponibles",
@@ -65,12 +68,24 @@ export function CphBi({ fromMonth, toMonth, zone }: { fromMonth: string | null; 
   const x = d?.explain;
   const byCountry = (d?.by_zone ?? []).map((c) => ({ ...c, partiel: c.nb_sites - c.nb_cph_complet }));
   const statuts = ["COMPLET", "PARTIEL", "NON_CALCULE"].map((s) => ({ label: STATUT_LABEL[s], nb_sites: d?.statuts_cph?.find((x) => x.label === s)?.nb_sites ?? 0 }));
+  const all = d?.sites ?? [];
+  const theo = all.filter((s) => s.conso_theorique_l != null);
+  const both = theo.filter((s) => s.conso_mesuree_l != null);
+  const gros = (s: { ecart_pct: number | null }) => s.ecart_pct != null && Math.abs(s.ecart_pct) > GROS_ECART_PCT;
+  const sansHeures = d?.sites ? all.filter((s) => s.runtime_h == null).length : undefined;
+  const ecartComparable = k?.conso_mesuree_comparable_l != null && k.conso_theorique_comparable_l != null ? k.conso_mesuree_comparable_l - k.conso_theorique_comparable_l : null;
+  const mx0 = Math.max(100, ...both.map((s) => Math.max(s.conso_mesuree_l!, s.conso_theorique_l!))) * 1.05;
+  const step = 10 ** Math.floor(Math.log10(mx0)) / 2;
+  const mx = Math.ceil(mx0 / step) * step;
+  const pts = (g: boolean) => both.filter((s) => gros(s) === g).map((s) => ({ x: s.conso_theorique_l, y: s.conso_mesuree_l, id: s.site_id }));
+  const cov = d ? [{ label: "CPH complet", nb: k?.nb_cph_complet ?? 0, color: "#2a78d6" }, { label: "CPH non complet", nb: (k?.nb_sites_ge ?? 0) - (k?.nb_cph_complet ?? 0), color: "#A9B1BE" }].filter((c) => c.nb > 0) : [];
+  const table = [...theo].sort((a, b) => Math.abs(b.ecart_l ?? 0) - Math.abs(a.ecart_l ?? 0));
   const motifs = (d?.motifs_non_calcule ?? []).map((m) => ({ ...m, name: motif(m.label) }));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <FilterBar title="Contrôle CPH"
-        note={p ? `Sénégal · ${p.label}${effMonth ? "" : " (3 mois au plus)"}${d?.periode?.incomplete ? ` · données Snowflake jusqu'au ${d.periode.donnees_jusqu_au ?? "—"}` : ""}` : undefined}
+        note={p ? `conso théorique = heures GE × litres par heure, comparée aux relevés · ${p.label}${effMonth ? "" : " (3 mois au plus)"}${d?.periode?.incomplete ? ` · données Snowflake jusqu'au ${d.periode.donnees_jusqu_au ?? "—"}` : ""}` : undefined}
         onExport={p ? () => downloadBiExport("cph", { start: p.start, end: p.end, zone }, `controle_cph_${p.start}_${p.end}.xlsx`) : undefined}
       >
         <FilterSelect label="Mois" value={effMonth} options={monthOptions} onChange={setMonth} allLabel="3 derniers mois" format={monthLabel} />
@@ -78,6 +93,68 @@ export function CphBi({ fromMonth, toMonth, zone }: { fromMonth: string | null; 
 
       {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 12.5 }}>Calcul CPH indisponible (calcul ou Snowflake en erreur). Le contrôle détaillé plus bas reste consultable.</div>}
 
+      <KpiRow>
+        <BiKpi label="Conso théorique" detail="Contrôle par site" detailLabel="Voir par site" value={fNum(k?.conso_theorique_l)} unit="L" explain={x?.conso_theorique_l}
+          sub={k ? `${fNum(k.nb_cph_complet)} sites au CPH complet` : undefined} />
+        <BiKpi label="Conso relevée (mêmes sites)" detail="Théorique vs relevée" detailLabel="Voir le graphique" value={fNum(k?.conso_mesuree_comparable_l)} unit="L" explain={x?.ecart_global_pct}
+          sub={k ? (ecartComparable == null ? "aucun site ayant les deux" : `écart ${ecartComparable > 0 ? "+" : ""}${fNum(ecartComparable)} L · ${fNum(k.nb_sites_comparables)} sites`) : undefined} />
+        <BiKpi label="Gros écarts" detail="Contrôle par site" detailLabel="Voir les sites" value={d?.sites ? fNum(both.filter(gros).length) : "—"} unit="sites"
+          alert={both.some(gros) ? "warn" : null} sub={`écart relevée / théorique > ${GROS_ECART_PCT} % : heures ou type de GE à vérifier`} />
+        <BiKpi label="Sans heures GE" value={fNum(sansHeures)} unit="sites" sub="pas de contrôle possible" />
+      </KpiRow>
+
+      <div style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fit, minmax(min(420px, 100%), 1fr))" }}>
+        <ChartCard title="Théorique vs relevée" sub="loin de la diagonale = à vérifier" height={320}
+          legend={[{ label: "Écart normal", color: "#2a78d6" }, { label: `Gros écart (> ${GROS_ECART_PCT} %)`, color: "#D03B3B" }]}
+          loading={loading} error={q.isError} empty={!both.length}>
+          <ResponsiveContainer>
+            <ScatterChart margin={{ top: 8, right: 16, left: 4, bottom: 16 }}>
+              <CartesianGrid stroke={BI.grid} />
+              <XAxis type="number" dataKey="x" name="Théorique" domain={[0, mx]} {...axisProps} tickFormatter={(v: number) => fNum(Math.round(v))} label={{ value: "Théorique (L)", position: "insideBottom", offset: -8, fontSize: 11, fill: "#7D889B" }} />
+              <YAxis type="number" dataKey="y" name="Relevée" domain={[0, mx]} {...axisProps} width={56} tickFormatter={(v: number) => fNum(Math.round(v))} label={{ value: "Relevée (L)", angle: -90, position: "insideLeft", fontSize: 11, fill: "#7D889B" }} />
+              <ZAxis range={[40, 40]} />
+              <ReferenceLine segment={[{ x: 0, y: 0 }, { x: mx, y: mx }]} stroke="#9AA4B2" strokeDasharray="5 4" ifOverflow="extendDomain" />
+              <Tooltip contentStyle={tooltipStyle} cursor={{ strokeDasharray: "3 3" }}
+                content={({ payload }) => {
+                  const pt = payload?.[0]?.payload as { x: number; y: number; id: string } | undefined;
+                  return pt ? <div style={{ ...tooltipStyle, background: "#fff", padding: "6px 9px" }}>{pt.id} · théorique {fL(pt.x)} · relevée {fL(pt.y)}</div> : null;
+                }} />
+              <Scatter name="Écart normal" data={pts(false)} fill="#2a78d6" stroke="#fff" strokeWidth={1.5} isAnimationActive={false} />
+              <Scatter name="Gros écart" data={pts(true)} fill="#D03B3B" stroke="#fff" strokeWidth={1.5} shape="triangle" isAnimationActive={false} />
+            </ScatterChart>
+          </ResponsiveContainer>
+        </ChartCard>
+        <ChartCard title="Couverture CPH" height={200}
+          legend={cov.map((c) => ({ label: `${c.label} · ${fNum(c.nb)}`, color: c.color }))}
+          loading={loading} error={q.isError} empty={!cov.length}>
+          <ResponsiveContainer>
+            <PieChart>
+              <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => [`${fNum(v as number)} sites`, n as string]} />
+              <Pie data={cov} dataKey="nb" nameKey="label" innerRadius="62%" outerRadius="90%" stroke="#fff" strokeWidth={2} isAnimationActive={false}>
+                {cov.map((c) => <Cell key={c.label} fill={c.color} />)}
+              </Pie>
+              <text x="50%" y="46%" textAnchor="middle" dominantBaseline="middle" style={{ fontSize: 20, fontWeight: 700, fill: "#0B1220" }}>{fPct(k?.couverture_cph_pct)}</text>
+              <text x="50%" y="58%" textAnchor="middle" dominantBaseline="middle" style={{ fontSize: 11, fill: "#7D889B" }}>couverts</text>
+            </PieChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      </div>
+
+      <TopTable title="Contrôle par site" rows={d?.sites ? table.slice(0, TABLE_MAX) : undefined} loading={loading} error={q.isError}
+        sub={d?.sites ? `${fNum(table.length)} sites au CPH complet · triés par écart${table.length > TABLE_MAX ? ` · ${TABLE_MAX} premiers affichés, liste intégrale dans l'export Excel` : ""}` : undefined}
+        columns={[
+          { label: "Site", render: (r) => <SiteCell id={r.site_id} name={r.site_name} /> },
+          { label: "kVA", align: "right", render: (r) => fDec1(r.ge_kva) },
+          { label: "Heures GE", align: "right", render: (r) => fDec1(r.runtime_h) },
+          { label: "L / heure", align: "right", render: (r) => fDec1(r.cph_l_h) },
+          { label: "Théorique", align: "right", render: (r) => <b style={{ fontWeight: 700 }}>{fL(r.conso_theorique_l)}</b> },
+          { label: "Relevée", align: "right", render: (r) => fL(r.conso_mesuree_l) },
+          { label: "Écart", align: "right", render: (r) => r.ecart_l == null ? "—" : `${r.ecart_l > 0 ? "+" : ""}${fNum(r.ecart_l)}` },
+          { label: "Contrôle", render: (r) => r.ecart_pct == null ? <Pill tone="mute">Pas de relevé</Pill> : gros(r) ? <Pill tone="crit">Gros écart</Pill> : <Pill tone="good">Cohérent</Pill> },
+          { label: "Compteur terrain", align: "right", render: () => <span title="Pas encore de source en production : sera alimenté par les Remontées terrain." style={{ color: FT.textSub, fontStyle: "italic" }}>non disponible</span> },
+        ]} />
+
+      <DetailSection title="Autres analyses CPH (indicateurs, statuts, motifs, zones, charge, classements)">
       <KpiRow>
         <BiKpi label="Sites au CPH complet" detail={"Motifs de non-calcul"} detailLabel="Voir pourquoi certains sites ne sont pas calculés" value={fPct(k?.couverture_cph_pct)} explain={x?.couverture_cph_pct} sub={k ? `${fNum(k.nb_cph_complet)} / ${fNum(k.nb_sites_ge)} sites GE` : undefined} />
         <BiKpi label="Conso estimée CPH" detail={"Plus forte conso estimée"} value={fNum(k?.conso_theorique_l)} unit="L" explain={x?.conso_theorique_l} sub="CPH × heures de marche, sites complets" />
@@ -170,6 +247,7 @@ export function CphBi({ fromMonth, toMonth, zone }: { fromMonth: string | null; 
             { label: "Charge", align: "right", width: "64px", render: (r) => fPct(r.charge_pct) },
           ]} />
       </Grid>
+      </DetailSection>
     </div>
   );
 }

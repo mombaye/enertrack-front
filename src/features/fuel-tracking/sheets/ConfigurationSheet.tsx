@@ -4,9 +4,9 @@
 // archivés et traités par la même chaîne que le répertoire partagé : contrôle anti-doublon, lignes rejetées
 // visibles, aucune valeur inventée.
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileUp, Lock, LogOut, ShieldCheck, Upload } from "lucide-react";
+import { FileUp, Lock, LogOut, Upload } from "lucide-react";
 import {
   fetchConfigFiles,
   fetchConfigUploadState,
@@ -16,8 +16,9 @@ import {
   type ConfigUploadType,
 } from "@/services/fuelTracking";
 import { FT } from "../theme";
-import { Card, Pill, SheetTitle } from "../ui";
-import { IMPORT_SOURCE_LABEL, StatusPill, tdStyle, thStyle } from "./stockRegistryUi";
+import { Card, Pill } from "../ui";
+import { CARD, TH } from "../bi/kit";
+import { IMPORT_SOURCE_LABEL, StatusPill, tdStyle } from "./stockRegistryUi";
 
 const STORAGE_KEY = "fuel-config-token";
 const TYPES: ConfigUploadType[] = ["CLOSING", "TARGET_FUEL", "SCSS", "LOLIFORCE", "TERRAIN_MENSUEL", "TANK_MODELS", "HISTORICAL_REFUELING"];
@@ -89,7 +90,7 @@ function CodeGate({ onGranted }: { onGranted: (s: Stored) => void }) {
   };
 
   return (
-    <Card style={{ maxWidth: 420, margin: "40px auto", textAlign: "center" }}>
+    <Card style={{ ...CARD, maxWidth: 420, margin: "40px auto", textAlign: "center" }}>
       <div style={{ width: 46, height: 46, borderRadius: 13, background: FT.blueL, color: FT.navy, display: "grid", placeItems: "center", margin: "0 auto 12px" }}>
         <Lock size={20} aria-hidden />
       </div>
@@ -124,7 +125,7 @@ function CodeGate({ onGranted }: { onGranted: (s: Stored) => void }) {
   );
 }
 
-function UploadZone({ token, busyElsewhere, onSent, onExpired }: { token: string; busyElsewhere: boolean; onSent: (s: ConfigUploadState) => void; onExpired: () => void }) {
+function UploadZone({ token, busyElsewhere, onSent, onExpired, headerRight }: { token: string; busyElsewhere: boolean; onSent: (s: ConfigUploadState) => void; onExpired: () => void; headerRight?: ReactNode }) {
   const [file, setFile] = useState<File | null>(null);
   const [type, setType] = useState<ConfigUploadType | "">("");
   const [busy, setBusy] = useState(false);
@@ -157,8 +158,11 @@ function UploadZone({ token, busyElsewhere, onSent, onExpired }: { token: string
   };
 
   return (
-    <Card>
-      <div style={{ fontSize: 13.5, fontWeight: 900, color: FT.text, marginBottom: 10 }}>Ajouter un fichier</div>
+    <Card style={CARD}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: "#0B1220" }}>Ajouter un fichier</div>
+        {headerRight}
+      </div>
       <div
         role="button"
         tabIndex={0}
@@ -294,36 +298,41 @@ export function ConfigurationSheet() {
   const stockage = filesQ.data?.stockage;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <Card>
-        <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: 240 }}>
-            <SheetTitle icon={<ShieldCheck size={17} />} title="Configuration" subtitle="Fichiers sources du module : Closing initial, mises à jour mensuelles, relevés gardiennage, target fuel, modèles de cuves." />
-          </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            {stockage && (
-              <Pill tone={stockage === "VOLUME_PLATEFORME" ? "blue" : "green"} label={stockage === "VOLUME_PLATEFORME" ? "Stockage : plateforme" : "Stockage : répertoire partagé"} />
-            )}
-            <button type="button" onClick={lock} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 9, border: `1px solid ${FT.border}`, background: FT.slateL, color: FT.textMid, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>
-              <LogOut size={13} aria-hidden /> Verrouiller
-            </button>
-          </div>
-        </div>
-        <p style={{ margin: "10px 0 0", fontSize: 12, color: FT.textMid }}>
-          Chaque fichier est archivé tel quel puis contrôlé ligne par ligne. Un fichier déjà reçu n'est pas réimporté. Les lignes non conformes restent visibles dans Suivi Stock → Imports, rien n'est complété ni inventé.
-        </p>
-      </Card>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, letterSpacing: "-.015em", color: "#0B1220" }}>Configuration</h2>
+        <span style={{ fontSize: 12, color: "#7D889B" }}>fichiers sources du module, accès protégé par code</span>
+      </div>
 
       <UploadZone
         token={access.token}
         onExpired={lock}
         busyElsewhere={last?.etat === "EN_COURS"}
         onSent={(st) => { setLast(st); qc.invalidateQueries({ queryKey: ["fuel-config-files"] }); }}
+        headerRight={<>
+          {stockage && (
+            <Pill tone={stockage === "VOLUME_PLATEFORME" ? "blue" : "green"} label={stockage === "VOLUME_PLATEFORME" ? "Stockage : plateforme" : "Stockage : répertoire partagé"} />
+          )}
+          <button type="button" onClick={lock} style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px", borderRadius: 8, border: "1px solid #E6EAF0", background: "#fff", color: "#0B1220", fontWeight: 600, fontSize: 12.5, cursor: "pointer" }}>
+            <LogOut size={13} aria-hidden /> Verrouiller
+          </button>
+        </>}
       />
 
       {last && <ResultCard s={last} />}
 
-      <Card padded={false}>
-        <div style={{ padding: "14px 16px 8px", fontSize: 13.5, fontWeight: 900, color: FT.text }}>Derniers fichiers reçus</div>
+      <Card style={CARD}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: "#0B1220", marginBottom: 10 }}>Ce que fait l'application à l'envoi</div>
+        <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 6, fontSize: 13, color: "#4B5768" }}>
+          <li>Le fichier est archivé tel quel sur le stockage indiqué ci-dessus.</li>
+          <li>Contrôle ligne par ligne en arrière-plan : on peut quitter la page pendant le traitement.</li>
+          <li>Même fichier envoyé deux fois : reconnu par son empreinte, rien n'est réimporté.</li>
+          <li>Lignes acceptées, à valider et rejetées comptées ; les rejetées restent consultables avec leur motif dans Suivi Stock → Imports.</li>
+          <li>Stock, bilans et alertes recalculés par les tâches automatiques. Rien n'est complété ni inventé.</li>
+        </ol>
+      </Card>
+
+      <Card padded={false} style={{ ...CARD, padding: 0 }}>
+        <div style={{ padding: "14px 16px 10px", fontSize: 13.5, fontWeight: 700, color: "#0B1220" }}>Derniers fichiers reçus</div>
         {filesQ.isLoading && <div style={{ padding: 16, fontSize: 12.5, color: FT.textSub }}>Chargement…</div>}
         {filesQ.isError && <div role="alert" style={{ padding: 16, fontSize: 12.5, color: FT.red }}>Liste indisponible : {apiError(filesQ.error).detail}</div>}
         {filesQ.data && filesQ.data.data.length === 0 && <div style={{ padding: 16, fontSize: 12.5, color: FT.textSub }}>Aucun fichier reçu pour l'instant.</div>}
@@ -332,14 +341,15 @@ export function ConfigurationSheet() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
               <thead>
                 <tr>
-                  <th style={thStyle}>Reçu le</th>
-                  <th style={thStyle}>Fichier</th>
-                  <th style={thStyle}>Type</th>
-                  <th style={thStyle}>Origine</th>
-                  <th style={thStyle}>Statut</th>
-                  <th style={{ ...thStyle, textAlign: "right" }}>Lignes</th>
-                  <th style={{ ...thStyle, textAlign: "right" }}>Rejetées</th>
-                  <th style={thStyle}>Par</th>
+                  <th style={{ ...TH, textAlign: "left" }}>Reçu le</th>
+                  <th style={{ ...TH, textAlign: "left" }}>Fichier</th>
+                  <th style={{ ...TH, textAlign: "left" }}>Type</th>
+                  <th style={{ ...TH, textAlign: "left" }}>Origine</th>
+                  <th style={{ ...TH, textAlign: "left" }}>Statut</th>
+                  <th style={{ ...TH, textAlign: "right" }}>Lignes</th>
+                  <th style={{ ...TH, textAlign: "right" }}>À valider</th>
+                  <th style={{ ...TH, textAlign: "right" }}>Rejetées</th>
+                  <th style={{ ...TH, textAlign: "left" }}>Par</th>
                 </tr>
               </thead>
               <tbody>
@@ -351,6 +361,7 @@ export function ConfigurationSheet() {
                     <td style={tdStyle}>{b.origin === "UPLOAD" ? "Configuration" : b.origin === "FOLDER" ? "Répertoire" : b.origin}</td>
                     <td style={tdStyle}><StatusPill status={b.status} />{b.duplicate_of != null && <span style={{ marginLeft: 6, fontSize: 11, color: FT.textSub }}>doublon</span>}</td>
                     <td style={{ ...tdStyle, textAlign: "right" }}>{b.rows_total}</td>
+                    <td style={{ ...tdStyle, textAlign: "right" }}>{b.rows_pending}</td>
                     <td style={{ ...tdStyle, textAlign: "right", color: b.rows_rejected ? FT.red : undefined }}>{b.rows_rejected}</td>
                     <td style={tdStyle}>{b.received_by ?? "—"}</td>
                   </tr>

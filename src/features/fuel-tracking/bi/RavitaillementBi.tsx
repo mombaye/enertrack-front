@@ -3,13 +3,13 @@
 // toujours affichée à côté du stock relevé et de sa date. Quantité non calculable = « — » avec le motif, jamais 0.
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { downloadBiExport, getRavitaillement, type RavitaillementRow } from "@/services/fuelTracking";
 import { monthLabel } from "../helpers";
 import { FT } from "../theme";
 import {
-  BI, BiKpi, ChartCard, FilterBar, FilterSelect, Grid, KpiRow, SectionTitle, SiteCell, TopTable,
-  axisProps, fDays, fL, fNum, labelStyle, tooltipStyle,
+  BI, BiKpi, ChartCard, FilterBar, FilterSelect, Grid, KpiRow, Pill, SiteCell, TopTable,
+  axisProps, fDec1, fL, fNum, labelStyle, tooltipStyle,
 } from "./kit";
 
 const PLAN_MAX = 100;
@@ -49,12 +49,13 @@ export function RavitaillementBi({ toMonth, zone }: { toMonth: string | null; zo
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <FilterBar title="Plan de ravitaillement"
-        note={p ? `Sénégal · conso de ${monthLabel(p.mois_reference)} · stock du jour estimé depuis le dernier relevé` : undefined}
+        note={p ? `quels sites livrer, avant quelle date, et combien · conso de ${monthLabel(p.mois_reference)}` : "quels sites livrer, avant quelle date, et combien"}
         onExport={() => downloadBiExport("ravitaillement", params, `plan_ravitaillement_${today}.xlsx`)}
       >
         <FilterSelect label="Horizon" value={horizon} options={["3", "14", "30"]} onChange={setHorizon} allLabel="7 jours" format={(o) => `${o} jours`} />
-        <FilterSelect label="Marge" value={securite} options={["0", "1", "3", "5"]} onChange={setSecurite} allLabel="2 jours" format={(o) => `${o} jour${+o > 1 ? "s" : ""}`} />
-        <FilterSelect label="Remplir à" value={cible} options={["80", "100"]} onChange={setCible} allLabel="90 %" format={(o) => `${o} %`} />
+        <FilterSelect label="Marge avant rupture" value={securite} options={["0", "1", "3", "5"]} onChange={setSecurite} allLabel="2 jours" format={(o) => `${o} jour${+o > 1 ? "s" : ""}`} />
+        <FilterSelect label="Remplir la cuve à" value={cible} options={["80", "100"]} onChange={setCible} allLabel="90 %" format={(o) => `${o} %`} />
+        <span style={{ fontSize: 12, color: "#7D889B", flex: "1 1 260px", alignSelf: "center" }}>Stock du jour estimé : stock relevé − conso par jour × jours depuis le relevé. Quantité arrondie aux 50 L supérieurs.</span>
       </FilterBar>
 
       {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 12.5 }}>Chargement impossible. Réessayez avec le bouton Rafraîchir.</div>}
@@ -62,7 +63,7 @@ export function RavitaillementBi({ toMonth, zone }: { toMonth: string | null; zo
       <KpiRow>
         <BiKpi label="Sites à livrer" detail="Plan de livraison" detailLabel="Voir le plan" value={fNum(k?.nb_sites)} explain={x?.nb_sites}
           sub={p && k ? `sous ${p.horizon} jours · ${fNum(k.nb_au_dela)} sites au-delà` : undefined} />
-        <BiKpi label="À livrer aujourd'hui ou demain" detail="Plan de livraison" detailLabel="Voir les urgences" value={fNum(k?.nb_urgent)}
+        <BiKpi label="À livrer d'ici demain" detail="Plan de livraison" detailLabel="Voir les urgences" value={fNum(k?.nb_urgent)}
           explain={x?.nb_urgent} alert={k?.nb_urgent ? "bad" : null} sub="en tête du plan" />
         <BiKpi label="Litres à livrer" detail="Livraisons par jour" detailLabel="Voir par jour" value={fNum(k?.quantite_l)} unit="L" explain={x?.quantite_l}
           sub={k?.nb_sans_quantite ? `${fNum(k.nb_sans_quantite)} sites sans quantité (cuve inconnue)` : p ? `pour remplir à ${p.cible} %` : undefined} />
@@ -70,8 +71,8 @@ export function RavitaillementBi({ toMonth, zone }: { toMonth: string | null; zo
           alert={k?.nb_hors_plan ? "warn" : null} sub={k ? `rupture non calculable, sur ${fNum(k.nb_sites_ge)} sites GE` : undefined} />
       </KpiRow>
 
-      <Grid min={340}>
-        <ChartCard title="Livraisons par jour" info="Nombre de sites à livrer au plus tard ce jour-là. Le premier jour regroupe les sites déjà sous la marge de sécurité."
+      <Grid min={480}>
+        <ChartCard title="Livraisons par jour" sub="sites à livrer au plus tard ce jour-là" info="Nombre de sites à livrer au plus tard ce jour-là. Le premier jour regroupe les sites déjà sous la marge de sécurité."
           loading={loading} error={q.isError} empty={!d?.by_day?.some((b) => b.nb_sites > 0)}>
           <ResponsiveContainer>
             <BarChart data={d?.by_day ?? []} margin={{ top: 16, right: 8, left: 0, bottom: 0 }}>
@@ -80,55 +81,55 @@ export function RavitaillementBi({ toMonth, zone }: { toMonth: string | null; zo
               <YAxis {...axisProps} allowDecimals={false} width={36} />
               <Tooltip contentStyle={tooltipStyle} labelFormatter={(v) => fDate(v as string)}
                 formatter={(v, _n, item) => [`${fNum(v as number)} sites · ${fL((item.payload as { quantite_l: number }).quantite_l)}`, "À livrer"]} />
-              <Bar dataKey="nb_sites" fill={BI.primary} maxBarSize={40}>
+              <Bar dataKey="nb_sites" maxBarSize={40} radius={[4, 4, 0, 0]}>
+                {(d?.by_day ?? []).map((b, i) => <Cell key={b.date} fill={i <= 1 ? "#D03B3B" : "#2a78d6"} />)}
                 <LabelList dataKey="nb_sites" position="top" style={labelStyle} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
-        <TopTable title="Par zone" info="Sites du plan et litres à livrer, par zone." rows={d?.by_zone} loading={loading} error={q.isError}
+        <TopTable title="Par région" sub="sites et litres du plan" info="Sites du plan et litres à livrer, par région." rows={d?.by_zone} loading={loading} error={q.isError}
           barValue={(r) => r.quantite_l} barColumn={3}
           columns={[
-            { label: "Zone", render: (r) => r.zone },
+            { label: "Région", render: (r) => r.zone },
             { label: "Sites", align: "right", render: (r) => fNum(r.nb_sites) },
-            { label: "Urgents", align: "right", render: (r) => <span style={{ color: r.nb_urgent ? FT.red : FT.text, fontWeight: r.nb_urgent ? 700 : 400 }}>{fNum(r.nb_urgent)}</span> },
+            { label: "D'ici demain", align: "right", render: (r) => <span style={{ color: r.nb_urgent ? FT.red : FT.text, fontWeight: r.nb_urgent ? 700 : 400 }}>{fNum(r.nb_urgent)}</span> },
             { label: "Litres", align: "right", render: (r) => fL(r.quantite_l) },
           ]} />
       </Grid>
 
-      <SectionTitle sub={d ? (d.plan.length > PLAN_MAX ? `${PLAN_MAX} premiers sur ${fNum(d.plan.length)} · liste intégrale dans l'export Excel` : "classé par date limite de livraison") : undefined}>
-        Plan de livraison
-      </SectionTitle>
       <TopTable title="Plan de livraison" rows={d?.plan.slice(0, PLAN_MAX)} loading={loading} error={q.isError}
+        sub={d ? `${fNum(d.plan.length)} sites · classés par date limite de livraison${d.plan.length > PLAN_MAX ? ` · ${PLAN_MAX} premiers affichés, liste intégrale dans l'export Excel` : ""}` : undefined}
         info="Stock estimé = stock relevé − conso par jour × jours écoulés depuis le relevé. Relevé de plus de 7 jours : à confirmer avant de livrer."
-        barValue={(r) => r.quantite_l} barColumn={5}
         columns={[
           { label: "À livrer avant", render: (r) => <Priority r={r} today={today} /> },
           { label: "Site", render: (r) => <SiteCell id={r.site_id} name={r.site_name} /> },
-          { label: "Zone", render: (r) => r.zone ?? "—" },
+          { label: "Région", render: (r) => r.zone ?? "—" },
           {
-            label: "Stock estimé", align: "right", render: (r) => (
-              <span title={`Relevé : ${fL(r.stock_releve_l)} le ${fDate(r.date_releve)}`}>
-                {fL(r.stock_estime_l)}
-                <span style={{ display: "block", fontSize: 11, color: r.releve_ancien ? "#9A6200" : FT.textSub }}>
-                  {r.source_stock ? `${r.source_stock}${r.stock_source_estime ? " (estimé)" : ""} · ` : ""}{r.releve_ancien ? `${r.date_releve ? fDate(r.date_releve) : "sans date"} · à confirmer` : fDate(r.date_releve)}
-                </span>
+            label: "Stock relevé", align: "right", render: (r) => (
+              <span style={{ whiteSpace: "nowrap" }} title={r.source_stock ? `Source : ${r.source_stock}` : undefined}>
+                {fL(r.stock_releve_l)} <span style={{ fontSize: 11, color: FT.textSub }}>{r.date_releve ? fDate(r.date_releve) : "sans date"}</span>
+                {r.stock_source_estime && <> <Pill tone="warn">Estimé</Pill></>}
+                {r.releve_ancien && <> <Pill tone="warn">à confirmer</Pill></>}
               </span>
             ),
           },
-          { label: "Rupture estimée", align: "right", render: (r) => <span>{fDate(r.date_rupture)}<span style={{ display: "block", fontSize: 11, color: FT.textSub }}>{fDays(r.jours_avant_rupture)} · {fL(r.conso_jour_l)}/j</span></span> },
+          { label: "Stock estimé", align: "right", render: (r) => <b style={{ fontWeight: 800 }}>{fNum(r.stock_estime_l)}</b> },
+          { label: "L / jour", align: "right", render: (r) => fDec1(r.conso_jour_l) },
+          { label: "Rupture estimée", align: "right", render: (r) => <span style={{ whiteSpace: "nowrap" }}>{fDate(r.date_rupture)} <span style={{ fontSize: 11, color: FT.textSub }}>{fDec1(r.jours_avant_rupture)} j</span></span> },
+          { label: "Cuve", align: "right", render: (r) => r.capacite_l ? fNum(r.capacite_l) : <span style={{ color: FT.textSub }}>inconnue</span> },
           {
             label: "Quantité", align: "right", render: (r) => r.quantite_l != null
-              ? <span style={{ fontWeight: 600 }}>{fL(r.quantite_l)}</span>
-              : <span title={r.quantite_motif ?? undefined} style={{ color: FT.textSub }}>— <span style={{ fontSize: 11 }}>{r.quantite_motif}</span></span>,
+              ? <b style={{ fontWeight: 800 }}>{fL(r.quantite_l)}</b>
+              : <span title={r.quantite_motif ?? undefined} style={{ color: FT.textSub }}>— {r.quantite_motif}</span>,
           },
         ]} />
 
-      <TopTable title="Sites hors plan" info="Sites GE dont la date de rupture ne peut pas être calculée : à vérifier sur place."
+      <TopTable title="Sites hors plan" sub={d ? `${fNum(d.hors_plan.length)} sites · à vérifier sur place` : undefined} info="Sites GE dont la date de rupture ne peut pas être calculée : à vérifier sur place."
         rows={d?.hors_plan.slice(0, PLAN_MAX)} loading={loading} error={q.isError}
         columns={[
           { label: "Site", render: (r) => <SiteCell id={r.site_id} name={r.site_name} /> },
-          { label: "Zone", render: (r) => r.zone ?? "—" },
+          { label: "Région", render: (r) => r.zone ?? "—" },
           { label: "Motif", render: (r) => <span style={{ color: FT.textMid }}>{r.motif}</span> },
         ]} />
     </div>
