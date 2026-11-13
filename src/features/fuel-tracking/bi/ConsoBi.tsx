@@ -1,7 +1,7 @@
 // Vue BI — Suivi Conso (Sénégal) : tendance, conso journalière, concentration, target, rendement,
 // carte de chaleur zone × mois, qualité capteur, classements. Chaque indicateur s'explique au clic.
 // Pilotée par la période du header. Export Excel = mêmes calculs, toutes les lignes.
-import { useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Line, LineChart, ReferenceArea, ReferenceLine,
@@ -9,7 +9,7 @@ import {
 } from "recharts";
 import { downloadBiExport, getBiConso, getBiConsoSources, type BiConsoResponse, type BiConsoSourceKey } from "@/services/fuelTracking";
 import { monthLabel } from "../helpers";
-import { ConsoComparaisonSection } from "../sheets/ConsoComparaisonSection";
+import { CONSO_TABLE_TITLE, ConsoSitesBi } from "./ConsoSitesBi";
 import { FT } from "../theme";
 import {
   BI, BiKpi, ChartCard, FilterBar, FilterSelect, Grid, KpiRow, SectionTitle, SiteCell, TopTable,
@@ -57,12 +57,12 @@ function sourceSub(key: BiConsoSourceKey, sites: number | null | undefined, tota
 
 /** Les 4 mesures de la consommation, chacune sur son propre périmètre de sites : jamais additionnées. */
 function ConsoSources({ params, enabled, kpis, children }: {
-  params: { from_month?: string; to_month?: string; month?: string; zone?: string }; enabled: boolean; kpis?: ReactNode; children?: ReactNode;
+  params: { from_month?: string; to_month?: string; month?: string; zone?: string; typology?: string; site?: string }; enabled: boolean; kpis?: ReactNode; children?: ReactNode;
 }) {
   const { lastMonthOnly, ...period } = sourcesPeriod(params);
-  const qp = { ...period, zone: params.zone };
+  const qp = { from_month: period.from_month, to_month: period.to_month, month: period.month, zone: params.zone, typology: params.typology, site: params.site };
   const q = useQuery({
-    queryKey: ["fuel-bi-conso-sources", qp.from_month, qp.to_month, qp.month, qp.zone],
+    queryKey: ["fuel-bi-conso-sources", qp.from_month, qp.to_month, qp.month, qp.zone, qp.typology, qp.site],
     queryFn: () => getBiConsoSources(qp),
     enabled,
     staleTime: 5 * 60_000,
@@ -84,17 +84,18 @@ function ConsoSources({ params, enabled, kpis, children }: {
       <KpiRow>
         {SOURCES.map((c) => (
           <BiKpi key={c.key} label={lastMonthOnly && qp.month ? `${c.label} · ${monthLabel(qp.month)}` : c.label}
-            detail={"Les 4 mesures côte à côte"} detailLabel="Comparer les 4 mesures" value={value(c.key)} unit="L"
+            detail={CONSO_TABLE_TITLE} detailLabel="Voir par site" value={value(c.key)} unit="L"
             sub={ok ? sourceSub(c.key, s.kpis[c.key]?.sites, s.sites, s.explain[c.key]?.valeurs) : undefined}
             alert={c.key === "variation" && ok && (s.explain.variation?.valeurs.find((v) => v.label.startsWith("Variations négatives"))?.valeur ?? 0) as number > 0 ? "warn" : null}
-            explain={ok ? { ...s.explain[c.key], titre: c.label }
+            explain={ok && s.explain[c.key] ? { ...s.explain[c.key]!, titre: c.label }
               : s && !s.disponible ? { titre: c.label, formule: `Non calculé : ${s.motif}`, valeurs: [], sources: [], perimetre: [], exclusions: [], mise_a_jour: null, note: null } : null} />
         ))}
         {kpis}
       </KpiRow>
       <div style={{ fontSize: 11.5, color: FT.textSub, marginTop: -4 }}>
         Cliquez sur un chiffre pour voir comment il est calculé.
-        {ok ? ` Les 4 mesures : sites du fichier Closing, du ${fmtDate(s.debut)} au ${fmtDate(s.fin)}, chacune sur ses propres sites, jamais additionnées.` : ""}
+        {ok ? (params.site ? ` Site ${params.site}, du ${fmtDate(s.debut)} au ${fmtDate(s.fin)}.`
+          : ` Les 4 mesures : sites du fichier Closing, du ${fmtDate(s.debut)} au ${fmtDate(s.fin)}, chacune sur ses propres sites, jamais additionnées. Elles suivent les filtres et le site cherché.`) : ""}
         {ok && lastMonthOnly ? " Sur une période de plus de 3 mois, elles portent sur le dernier mois ; le filtre « Mois » permet d'en choisir un autre." : ""}
       </div>
       {children}
@@ -127,7 +128,7 @@ function ConsoSources({ params, enabled, kpis, children }: {
 
 /** Période exacte du tableau par site : le mois choisi, sinon la période du header si ≤ 3 mois, sinon son dernier mois.
  * Fin bornée à hier (aucune donnée du jour en cours). */
-function tablePeriod(fromMonth: string, toMonth: string, month: string): { debut: string; fin: string; label: string } {
+function tablePeriod(fromMonth: string, toMonth: string, month: string): { debut: string; fin: string; label: string; month: string; multiMonth: boolean } {
   const idx = (m: string) => Number(m.slice(0, 4)) * 12 + Number(m.slice(5, 7)) - 1;
   const a = month || (idx(toMonth) - idx(fromMonth) < 3 ? fromMonth : toMonth);
   const b = month || toMonth;
@@ -135,7 +136,7 @@ function tablePeriod(fromMonth: string, toMonth: string, month: string): { debut
   const last = new Date(Number(b.slice(0, 4)), Number(b.slice(5, 7)), 0);
   const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
   const label = a === b ? monthLabel(a) : `${monthLabel(a)} → ${monthLabel(b)}`;
-  return { debut: `${a}-01`, fin: iso(last > yesterday ? yesterday : last), label: a !== fromMonth && !month ? `${label} (3 mois au plus)` : label };
+  return { debut: `${a}-01`, fin: iso(last > yesterday ? yesterday : last), label: a !== fromMonth && !month ? `${label} (3 mois au plus)` : label, month: b, multiMonth: a !== b };
 }
 
 const dayLabel = (iso: string) => new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
@@ -187,6 +188,11 @@ export function ConsoBi({ fromMonth, toMonth }: { fromMonth: string | null; toMo
   const [zone, setZone] = useState("");
   const [typology, setTypology] = useState("");
   const [month, setMonth] = useState("");
+  const [siteText, setSiteText] = useState("");
+  const [siteQ, setSiteQ] = useState("");
+  const [oneSite, setOneSite] = useState<string | null>(null);
+  useEffect(() => { const t = setTimeout(() => setSiteQ(siteText.trim()), 300); return () => clearTimeout(t); }, [siteText]);
+  const onSingleSite = useCallback((id: string | null) => setOneSite(id), []);
   // Le mois choisi doit rester dans la période du header ; sinon on revient à « toute la période ».
   const effMonth = month && fromMonth && toMonth && month >= fromMonth && month <= toMonth ? month : "";
   const params = { from_month: fromMonth ?? undefined, to_month: toMonth ?? undefined, month: effMonth || undefined, zone, typology };
@@ -225,19 +231,24 @@ export function ConsoBi({ fromMonth, toMonth }: { fromMonth: string | null; toMo
         <FilterSelect label="Mois" value={effMonth} options={monthOptions} onChange={setMonth} allLabel="Toute la période" format={monthLabel} />
         <FilterSelect label="Zone" value={zone} options={d?.filters.zones ?? []} onChange={setZone} allLabel="Toutes" />
         <FilterSelect label="Typologie" value={typology} options={d?.filters.typologies ?? []} onChange={setTypology} allLabel="Toutes" />
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: FT.textMid }}>
+          Site
+          <input value={siteText} onChange={(e) => setSiteText(e.target.value)} placeholder="identifiant ou nom" aria-label="Chercher un site"
+            style={{ border: "1px solid #CBD3DF", borderRadius: 4, padding: "5px 8px", fontSize: 12.5, width: 150 }} />
+        </label>
       </FilterBar>
 
       {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 12.5 }}>Chargement impossible. Les tableaux détaillés plus bas restent consultables.</div>}
 
-      <ConsoSources params={{ from_month: params.from_month, to_month: params.to_month, month: params.month, zone: zone || undefined }}
-        enabled={!!fromMonth && !!toMonth}
-        kpis={<>
-          <BiKpi label="Conso mesurée" detail={"Plus gros consommateurs"} value={fNum(k?.conso_mesuree_l)} unit="L" delta={delta(d?.deltas?.conso_mesuree_l)} upIsGood={false}
-            sub={vsPrev || (k ? `${fNum(k.nb_sites_mesure)} sites mesurés` : undefined)} explain={x?.conso_mesuree_l} />
-          <BiKpi label="Moyenne par site et par jour" detail={"Moyenne L / site / jour, par zone et par mois"} detailLabel="Voir par zone et par mois" value={fDec1(k?.l_site_jour)} unit="L" delta={delta(d?.deltas?.l_site_jour)} upIsGood={false}
-            sub={vsPrev || undefined} explain={x?.l_site_jour} />
-        </>}>
-        {fromMonth && toMonth && <ConsoComparaisonSection scope={{ ...tablePeriod(fromMonth, toMonth, effMonth), zone: zone || undefined }} />}
+      {/* Une seule rangée de KPIs (les 4 mesures) et un seul tableau par site : mêmes filtres, même période.
+          Dès qu'un seul site correspond à la recherche, les KPIs passent sur ce site. */}
+      <ConsoSources params={{ from_month: params.from_month, to_month: params.to_month, month: params.month, zone: zone || undefined,
+        typology: typology || undefined, site: siteQ ? oneSite ?? undefined : undefined }}
+        enabled={!!fromMonth && !!toMonth}>
+        {siteQ && !oneSite && (
+          <div style={{ fontSize: 12, color: FT.textMid, marginTop: -4 }}>Les KPIs passent sur le site dès qu'un seul site correspond à la recherche.</div>
+        )}
+        {fromMonth && toMonth && <ConsoSitesBi period={tablePeriod(fromMonth, toMonth, effMonth)} zone={zone} typology={typology} site={siteQ} onSingleSite={onSingleSite} />}
       </ConsoSources>
 
       {!single && <ChartCard title="Consommé et livré par mois"

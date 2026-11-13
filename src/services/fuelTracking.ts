@@ -2139,6 +2139,8 @@ export type ConsoFilters = {
   date_debut?: string; date_fin?: string; pays?: string; zone?: string; site?: string; typologie?: string; typologie_energie?: string;
   statut_bilan?: string; statut_certification?: string; source_stock?: string; source_runtime?: string; source_puissance?: string; source_target?: string;
   qualite?: string; correspondance?: string; tri?: string; page?: number; page_size?: number;
+  /** Typologie au sens des graphiques de Suivi Conso (fichier, sinon Snowflake). */
+  typology?: string;
   /** "senegal" : uniquement les sites du Sénégal (pays vide inclus), même règle que les vues BI. */
   perimetre?: string;
 };
@@ -2285,7 +2287,7 @@ export type BiSiteMeasures = {
   modele_ge: string | null; puissance_nominale_kva: number | null;
   correspondance: { base_closing: boolean; utilise: boolean; motif: string | null };
 };
-export async function getBiConsoSources(params: { from_month?: string; to_month?: string; month?: string; zone?: string; site?: string }) {
+export async function getBiConsoSources(params: { from_month?: string; to_month?: string; month?: string; zone?: string; site?: string; typology?: string }) {
   const { data } = await api.get<BiConsoSourcesResponse>(`${BASE}/bi/conso/sources/`, { params: cleanParams(params) });
   return data;
 }
@@ -2388,7 +2390,7 @@ export type SiteTableRow = BiSiteRef & {
   remplissage_pct: number | null; autonomie_j: number | null; age_releve_j: number | null;
   enoc_livre_l: number | null; nb_livraisons: number; alertes: SiteTableAlerte[]; nb_alertes: number;
 };
-export type SiteTableParams = { month?: string; zone?: string; q?: string; alerte?: string; sort?: string; desc?: string; page?: string; page_size?: string };
+export type SiteTableParams = { vue?: string; sites?: string; month?: string; zone?: string; q?: string; alerte?: string; sort?: string; desc?: string; page?: string; page_size?: string };
 export type SiteTableResponse = {
   month: string | null; periode?: { start: string; end: string; nb_jours: number }; cph_disponible?: boolean;
   kpis: null | {

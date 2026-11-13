@@ -142,7 +142,7 @@ function buildColsDef(A: Record<string, string>): Col[] {
 
 // Blocs absents ou incomplets dans une réponse du serveur : valeurs vides (jamais de plantage de l'écran, jamais de 0 inventé).
 const EMPTY_GAP = { ecart_l: null, ecart_pct: null, pct_na: null };
-function safeRow(r: ConsoRow): ConsoRow {
+export function safeRow(r: ConsoRow): ConsoRow {
   const x = r as Partial<ConsoRow>;
   return {
     ...r,

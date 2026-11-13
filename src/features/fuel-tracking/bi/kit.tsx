@@ -93,8 +93,9 @@ export function KpiRow({ children }: { children: ReactNode }) {
       display: "grid", gap: 1, ["--n" as string]: cols,
       background: KPI.line, border: `1px solid ${KPI.line}`, borderRadius: KPI.radius, overflow: "hidden",
     } as CSSProperties} data-kpis={n}>
+      {/* La balise style est le 1er enfant : une case seule en fin de ligne est donc un enfant de rang pair. */}
       <style>{`.bi-kpirow{grid-template-columns:repeat(var(--n),minmax(0,1fr))}`
-        + `@media (max-width:900px){.bi-kpirow{grid-template-columns:repeat(2,minmax(0,1fr))}.bi-kpirow>:last-child:nth-child(odd){grid-column:1/-1}}`
+        + `@media (max-width:900px){.bi-kpirow{grid-template-columns:repeat(2,minmax(0,1fr))}.bi-kpirow>:last-child:nth-child(even){grid-column:1/-1}}`
         + `@media (max-width:520px){.bi-kpirow{grid-template-columns:1fr}}`
         + `.bi-kpi:hover{background:#F6F8FB !important}.bi-kpi:focus-visible{outline:2px solid #1A56C4;outline-offset:-2px}`}</style>
       {children}

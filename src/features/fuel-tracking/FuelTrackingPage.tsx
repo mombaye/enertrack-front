@@ -319,9 +319,8 @@ export default function FuelTrackingPage() {
         <OpenSiteContext.Provider value={openSite}>
         {!siteId && activeTab === "CONSOMMATION" && (
           <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {/* KPIs, tableau unique par site et graphiques : tout est dans ConsoBi (mêmes filtres). */}
             <ConsoBi fromMonth={fromMonth} toMonth={toMonth} />
-            <SectionTitle sub="un mois · conso mesurée et conso estimée (CPH) séparées · activité GE · comparaisons">Détail par site</SectionTitle>
-            <SitesTableBi vue="conso" toMonth={toMonth} />
           </div>
         )}
 
