@@ -30,5 +30,9 @@ export const SHELL_CSS = `
 .ftm-sel select.on { border-color:var(--accent); background:var(--accent-soft); color:var(--accent); }
 .ftm-count { font-size:12px; color:var(--fg-3); align-self:center; white-space:nowrap; }
 .ftm-clear { border:none; background:none; color:var(--accent); font-weight:700; font-size:12px; cursor:pointer; white-space:nowrap; align-self:center; padding:0; }
+.ftm-bar { position:sticky; top:0; z-index:20; background:var(--plane); border-bottom:1px solid var(--line); padding:10px 16px; display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; }
+.ftm-bar h1 { margin:0 8px 0 0; font-size:18px; font-weight:800; letter-spacing:-.01em; white-space:nowrap; align-self:center; }
+.ftm-right { margin-left:auto; display:flex; align-items:center; gap:8px; align-self:center; flex-wrap:wrap; }
+.ftm-right .ftm-bell, .ftm-right .ftm-icon { margin-left:0; }
 .ftm-main { padding:18px 16px 48px; display:flex; flex-direction:column; gap:16px; }
 `;

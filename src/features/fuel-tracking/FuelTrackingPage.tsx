@@ -263,7 +263,7 @@ export default function FuelTrackingPage() {
   const snowflakeLastDataLabel = formatDataDateOnly(sources?.snowflake?.last_data_date);
   const enocLastDataLabel = formatDataDateTime(sources?.enoc?.last_data_date);
 
-  // Barre d'onglets de la maquette ; Commande et Estimation sont gardées en fin de barre (fonctions existantes).
+  // Titre de chaque page (mêmes libellés que la sidebar).
   const TABS: Array<{ tab: MainTab; label: string }> = [
     { tab: "DASHBOARD", label: "Dashboard" }, { tab: "CONSOMMATION", label: "Suivi Conso" }, { tab: "STOCK", label: "Suivi Stock" }, { tab: "RAVITAILLEMENT", label: "Ravitaillement" },
     { tab: "CPH", label: "Contrôle CPH" }, { tab: "ALERTES", label: "Alertes" }, { tab: "REMONTEES", label: "Remontées terrain" }, { tab: "CONFIGURATION", label: "Configuration" }, { tab: "COMMANDE", label: "Commande" }, { tab: "ESTIMATION", label: "Estimation" },
@@ -281,32 +281,10 @@ export default function FuelTrackingPage() {
       <style>{SHELL_CSS}</style>
 
       <div className="fuelbook ftm" style={{ display: "flex", flexDirection: "column", background: "#fff", margin: -20 }}>
-        <header ref={headerRef} className="ftm-top">
-          <div className="ftm-row1">
-            <div className="ftm-logo" aria-hidden>C</div>
-            <h1>Suivi Carburant · Sénégal</h1>
-            <span className="ftm-live" title={[sources?.snowflake?.error && `Snowflake : ${sources.snowflake.error}`, sources?.enoc?.error && `ENOC : ${sources.enoc.error}`].filter(Boolean).join("\n") || "Date de la donnée la plus récente de chaque source"}>
-              <span className="ftm-pulse" data-state={srcFail ? "warn" : "ok"} aria-hidden />
-              Snowflake : {snowflakeLastDataLabel} · ENOC : {enocLastDataLabel}{srcFail ? ` · ${srcFail} source${srcFail > 1 ? "s" : ""} en échec` : ""}
-            </span>
-            <button type="button" className="ftm-bell" onClick={() => { if (siteId) closeSite(); setActiveTab("ALERTES"); }}
-              aria-label={`Voir les alertes${nbCrit ? ` : ${nbCrit} critiques` : ""}`}>
-              <Bell size={15} aria-hidden /> Alertes {alertesQ.data && <span className="ftm-badge" title="Alertes critiques">{nbCrit.toLocaleString("fr-FR")}</span>}
-            </button>
-            <button type="button" className="ftm-icon" onClick={() => { consommationQ.refetch(); qc.invalidateQueries(); }} title="Rafraîchir toutes les données" aria-label="Rafraîchir">
-              <RefreshCw size={15} className={consommationQ.isFetching ? "ft-spin" : ""} aria-hidden />
-            </button>
-          </div>
-          <nav className="ftm-tabs" aria-label="Pages du suivi carburant">
-            {TABS.map((t) => (
-              <button key={t.tab} type="button" aria-current={!siteId && activeTab === t.tab ? "page" : undefined}
-                onClick={() => { if (siteId) closeSite(); setActiveTab(t.tab); }}>{t.label}
-                {t.tab === "ALERTES" && nbCrit > 0 && <span className="ftm-cnt" aria-label={`${nbCrit} critiques`}>{nbCrit.toLocaleString("fr-FR")}</span>}</button>
-            ))}
-          </nav>
-        </header>
-
-        <div className="ftm-slicers" role="group" aria-label="Filtres appliqués aux pages">
+        {/* Une seule ligne : la navigation entre pages se fait par la sidebar. */}
+        <header ref={headerRef} className="ftm-bar" role="group" aria-label="Filtres appliqués à la page">
+          {/* Titre seulement pour les pages qui n'en ont pas déjà un (évite le doublon). */}
+          {!siteId && (activeTab === "COMMANDE" || activeTab === "ESTIMATION") && <h1>{TABS.find((t) => t.tab === activeTab)?.label}</h1>}
           <SiteSearch onSelect={(id) => (!siteId && activeTab === "CONSOMMATION" ? setConsoSite(id) : openSite(id))} />
           {showPeriod && <>
             <label className="ftm-sel"><span>Du</span>
@@ -326,7 +304,20 @@ export default function FuelTrackingPage() {
           )}
           {showZone && zonesQ.data && <span className="ftm-count">{zonesQ.data.total.toLocaleString("fr-FR")} sites GE</span>}
           {(zone || consoSite) && <button type="button" className="ftm-clear" onClick={() => { setZone(""); setConsoSite(""); }}>Réinitialiser</button>}
-        </div>
+          <div className="ftm-right">
+            <span className="ftm-live" title={[sources?.snowflake?.error && `Snowflake : ${sources.snowflake.error}`, sources?.enoc?.error && `ENOC : ${sources.enoc.error}`].filter(Boolean).join("\n") || "Date de la donnée la plus récente de chaque source"}>
+              <span className="ftm-pulse" data-state={srcFail ? "warn" : "ok"} aria-hidden />
+              Snowflake : {snowflakeLastDataLabel} · ENOC : {enocLastDataLabel}{srcFail ? ` · ${srcFail} source${srcFail > 1 ? "s" : ""} en échec` : ""}
+            </span>
+            <button type="button" className="ftm-bell" onClick={() => { if (siteId) closeSite(); setActiveTab("ALERTES"); }}
+              aria-label={`Voir les alertes${nbCrit ? ` : ${nbCrit} critiques` : ""}`} title="Alertes critiques">
+              <Bell size={15} aria-hidden /> {alertesQ.data && <span className="ftm-badge">{nbCrit.toLocaleString("fr-FR")}</span>}
+            </button>
+            <button type="button" className="ftm-icon" onClick={() => { consommationQ.refetch(); qc.invalidateQueries(); }} title="Rafraîchir toutes les données" aria-label="Rafraîchir">
+              <RefreshCw size={15} className={consommationQ.isFetching ? "ft-spin" : ""} aria-hidden />
+            </button>
+          </div>
+        </header>
 
         <div className="ftm-main">
         {siteId && (
