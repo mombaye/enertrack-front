@@ -45,8 +45,9 @@ import { ControleCphSheet } from "./sheets/ControleCphSheet";
 import { ConfigurationSheet } from "./sheets/ConfigurationSheet";
 import { DashboardBi } from "./bi/DashboardBi";
 import { AlertesBi, useAlertes } from "./bi/AlertesBi";
+import { RemonteesBi } from "./bi/RemonteesBi";
 
-export type MainTab = "DASHBOARD" | "ALERTES" | "CONSOMMATION" | "CPH" | "STOCK" | "RAVITAILLEMENT" | "COMMANDE" | "ESTIMATION" | "CONFIGURATION";
+export type MainTab = "DASHBOARD" | "ALERTES" | "REMONTEES" | "CONSOMMATION" | "CPH" | "STOCK" | "RAVITAILLEMENT" | "COMMANDE" | "ESTIMATION" | "CONFIGURATION";
 
 export const FUEL_TAB_SLUGS: Array<{ tab: MainTab; slug: string }> = [
   { tab: "DASHBOARD", slug: "dashboard" },
@@ -55,6 +56,7 @@ export const FUEL_TAB_SLUGS: Array<{ tab: MainTab; slug: string }> = [
   { tab: "STOCK", slug: "stock" },
   { tab: "RAVITAILLEMENT", slug: "ravitaillement" },
   { tab: "ALERTES", slug: "alertes" },
+  { tab: "REMONTEES", slug: "remontees-terrain" },
   { tab: "COMMANDE", slug: "commandes" },
   { tab: "ESTIMATION", slug: "estimation-commande" },
   { tab: "CONFIGURATION", slug: "configuration" },
@@ -264,13 +266,13 @@ export default function FuelTrackingPage() {
   // Barre d'onglets de la maquette ; Commande et Estimation sont gardées en fin de barre (fonctions existantes).
   const TABS: Array<{ tab: MainTab; label: string }> = [
     { tab: "DASHBOARD", label: "Dashboard" }, { tab: "CONSOMMATION", label: "Suivi Conso" }, { tab: "STOCK", label: "Suivi Stock" }, { tab: "RAVITAILLEMENT", label: "Ravitaillement" },
-    { tab: "CPH", label: "Contrôle CPH" }, { tab: "ALERTES", label: "Alertes" }, { tab: "CONFIGURATION", label: "Configuration" }, { tab: "COMMANDE", label: "Commande" }, { tab: "ESTIMATION", label: "Estimation" },
+    { tab: "CPH", label: "Contrôle CPH" }, { tab: "ALERTES", label: "Alertes" }, { tab: "REMONTEES", label: "Remontées terrain" }, { tab: "CONFIGURATION", label: "Configuration" }, { tab: "COMMANDE", label: "Commande" }, { tab: "ESTIMATION", label: "Estimation" },
   ];
   // Compteur de la cloche : alertes critiques du mois et de la région (même requête que la page Alertes).
   const alertesQ = useAlertes(toMonth, zone);
   const nbCrit = (alertesQ.data?.alertes ?? []).filter((a) => a.sev === "crit").length;
   const srcFail = [sources?.snowflake, sources?.enoc].filter((x) => x && !x.connected).length;
-  const showPeriod = !!siteId || (activeTab !== "COMMANDE" && activeTab !== "ESTIMATION" && activeTab !== "CONFIGURATION");
+  const showPeriod = !!siteId || (activeTab !== "COMMANDE" && activeTab !== "ESTIMATION" && activeTab !== "CONFIGURATION" && activeTab !== "REMONTEES");
   const showZone = !siteId && ["DASHBOARD", "ALERTES", "CONSOMMATION", "STOCK", "RAVITAILLEMENT", "CPH"].includes(activeTab);
 
   return (
@@ -343,6 +345,12 @@ export default function FuelTrackingPage() {
         {!siteId && activeTab === "ALERTES" && (
           <div className="ft-fade">
             <AlertesBi toMonth={toMonth} zone={zone} />
+          </div>
+        )}
+
+        {!siteId && activeTab === "REMONTEES" && (
+          <div className="ft-fade">
+            <RemonteesBi />
           </div>
         )}
 

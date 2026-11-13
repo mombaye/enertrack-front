@@ -12,7 +12,7 @@ import {
   TrendingDown,
   LogOut,
   LayoutDashboard, CreditCard, MapPin, FileText, FileX, Leaf, Cpu, Coins, Repeat, FileCheck, FileSearch,
-  Bell,
+  Bell, FileUp,
 } from "lucide-react";
 import camusatLogo from "@/assets/images/camusat-logo.png";
 import { useAuth } from "@/auth/AuthContext";
@@ -51,6 +51,7 @@ const LINKS: LinkItem[] = [
   { to: "/modules/suivi-carburant/stock",               icon: <ClipboardList />,   label: "Suivi Stock",           section: "SUIVI CARBURANT" },
   { to: "/modules/suivi-carburant/ravitaillement",      icon: <Truck />,           label: "Ravitaillement",        section: "SUIVI CARBURANT" },
   { to: "/modules/suivi-carburant/alertes",             icon: <Bell />,            label: "Alertes",               section: "SUIVI CARBURANT" },
+  { to: "/modules/suivi-carburant/remontees-terrain",   icon: <FileUp />,          label: "Remontées terrain",     section: "SUIVI CARBURANT" },
   { to: "/modules/suivi-carburant/commandes",           icon: <Receipt />,         label: "Commande",              section: "SUIVI CARBURANT" },
   { to: "/modules/suivi-carburant/estimation-commande", icon: <Calculator />,      label: "Estimation",            section: "SUIVI CARBURANT" },
   { to: "/modules/suivi-carburant/configuration",       icon: <Settings2 />,       label: "Configuration",         section: "SUIVI CARBURANT" },
