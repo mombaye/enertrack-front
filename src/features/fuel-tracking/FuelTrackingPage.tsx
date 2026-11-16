@@ -33,8 +33,9 @@ import { StockSheet } from "./sheets/StockSheet";
 import { CommandeSheet } from "./sheets/CommandeSheet";
 import { EstimationSheet } from "./sheets/EstimationSheet";
 import { ControleCphSheet } from "./sheets/ControleCphSheet";
+import { ConfigurationSheet } from "./sheets/ConfigurationSheet";
 
-export type MainTab = "DASHBOARD" | "CONSOMMATION" | "CPH" | "STOCK" | "COMMANDE" | "ESTIMATION";
+export type MainTab = "DASHBOARD" | "CONSOMMATION" | "CPH" | "STOCK" | "COMMANDE" | "ESTIMATION" | "CONFIGURATION";
 
 export const FUEL_TAB_SLUGS: Array<{ tab: MainTab; slug: string }> = [
   { tab: "DASHBOARD", slug: "dashboard" },
@@ -43,6 +44,7 @@ export const FUEL_TAB_SLUGS: Array<{ tab: MainTab; slug: string }> = [
   { tab: "STOCK", slug: "stock" },
   { tab: "COMMANDE", slug: "commandes" },
   { tab: "ESTIMATION", slug: "estimation-commande" },
+  { tab: "CONFIGURATION", slug: "configuration" },
 ];
 const TAB_BY_SLUG: Record<string, MainTab> = Object.fromEntries(FUEL_TAB_SLUGS.map((x) => [x.slug, x.tab]));
 const SLUG_BY_TAB = Object.fromEntries(FUEL_TAB_SLUGS.map((x) => [x.tab, x.slug])) as Record<MainTab, string>;
@@ -379,6 +381,12 @@ export default function FuelTrackingPage() {
               onSearchChange={setEstimationSearch}
               stickyTop={headerHeight}
             />
+          </div>
+        )}
+
+        {activeTab === "CONFIGURATION" && (
+          <div className="ft-fade">
+            <ConfigurationSheet />
           </div>
         )}
       </div>

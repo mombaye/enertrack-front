@@ -2194,3 +2194,35 @@ export async function getConsoEvolution() {
   const { data } = await api.get<ConsoEvolution>(`${BASE}/consommations/evolution/`);
   return data;
 }
+
+// ── Rubrique Configuration : fichier de clôture (Closing) ─────────────────────────────────────────────
+// Envoi du Closing mensuel (même fichier que celui déposé dans le partage) ; traitement en arrière-plan côté serveur
+// (import + recalcul des bilans des mois couverts). GET = derniers lots Closing + fichiers en attente.
+
+export type ClosingUploadBatch = StockImportBatch & {
+  source_libelle?: string;
+  stocks_importes: number | null;
+  sites_inconnus: number | null;
+  formule_incoherente: number | null;
+};
+
+export type ClosingUploadStatus = {
+  lots: ClosingUploadBatch[];
+  en_attente: Array<{ file_name: string; file_size: number; deposited_at: string }>;
+  peut_envoyer: boolean;
+};
+
+export async function getClosingUploads() {
+  const { data } = await api.get<ClosingUploadStatus>(`${BASE}/configuration/closing/`);
+  return data;
+}
+
+export async function uploadClosingFile(file: File) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const { data } = await api.post<{ fichier: string; message: string }>(`${BASE}/configuration/closing/`, fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+    timeout: 10 * 60 * 1000, // fichier d'environ 30 Mo : l'envoi seul peut prendre plusieurs minutes
+  });
+  return data;
+}
