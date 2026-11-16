@@ -13,7 +13,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { BarChart3, Calculator, Calendar, Droplets, Fuel, Gauge, LayoutGrid, RefreshCw, Warehouse } from "lucide-react";
 
 import {
@@ -28,29 +28,23 @@ import {
 import { FT } from "./theme";
 import { GLOBAL_STYLES } from "./ui";
 import { ConsommationSheet } from "./sheets/ConsommationSheet";
-import { ConsoBi } from "./bi/ConsoBi";
-import { CphBi } from "./bi/CphBi";
-import { StockBi } from "./bi/StockBi";
-import { CommandeBi, EstimationBi } from "./bi/CommandeBi";
-import { DetailSection, OpenSiteContext } from "./bi/kit";
-import { SiteBi } from "./bi/SiteBi";
-import { SiteSearch } from "./bi/SiteSearch";
+import { DashboardSheet } from "./sheets/DashboardSheet";
 import { StockSheet } from "./sheets/StockSheet";
 import { CommandeSheet } from "./sheets/CommandeSheet";
 import { EstimationSheet } from "./sheets/EstimationSheet";
 import { ControleCphSheet } from "./sheets/ControleCphSheet";
 
-export type MainTab = "CONSOMMATION" | "CPH" | "STOCK" | "COMMANDE" | "ESTIMATION";
+export type MainTab = "DASHBOARD" | "CONSOMMATION" | "CPH" | "STOCK" | "COMMANDE" | "ESTIMATION";
 
-// L'ancienne rubrique Dashboard est fusionnée dans Suivi Conso (vue BI) : son adresse y mène désormais.
 export const FUEL_TAB_SLUGS: Array<{ tab: MainTab; slug: string }> = [
+  { tab: "DASHBOARD", slug: "dashboard" },
   { tab: "CONSOMMATION", slug: "consommations" },
   { tab: "CPH", slug: "controle-cph" },
   { tab: "STOCK", slug: "stock" },
   { tab: "COMMANDE", slug: "commandes" },
   { tab: "ESTIMATION", slug: "estimation-commande" },
 ];
-const TAB_BY_SLUG: Record<string, MainTab> = { ...Object.fromEntries(FUEL_TAB_SLUGS.map((x) => [x.slug, x.tab])), dashboard: "CONSOMMATION" };
+const TAB_BY_SLUG: Record<string, MainTab> = Object.fromEntries(FUEL_TAB_SLUGS.map((x) => [x.slug, x.tab]));
 const SLUG_BY_TAB = Object.fromEntries(FUEL_TAB_SLUGS.map((x) => [x.tab, x.slug])) as Record<MainTab, string>;
 
 /** Mois calendaire précédent le mois courant réel (pas lié aux données),
@@ -104,12 +98,7 @@ export default function FuelTrackingPage() {
   // L'onglet actif vient de l'adresse (sous-rubriques de la barre latérale : /modules/suivi-carburant/<onglet>).
   const { tab: tabSlug } = useParams();
   const navigate = useNavigate();
-  const activeTab: MainTab = TAB_BY_SLUG[tabSlug ?? ""] ?? "CONSOMMATION";
-  // Fiche site : ?site=<id> dans l'adresse (lien partageable, bouton Retour du navigateur).
-  const [searchParams, setSearchParams] = useSearchParams();
-  const siteId = searchParams.get("site");
-  const openSite = (id: string) => { setSearchParams((p) => { const n = new URLSearchParams(p); n.set("site", id); return n; }); window.scrollTo({ top: 0 }); };
-  const closeSite = () => setSearchParams((p) => { const n = new URLSearchParams(p); n.delete("site"); return n; });
+  const activeTab: MainTab = TAB_BY_SLUG[tabSlug ?? ""] ?? "DASHBOARD";
   const setActiveTab = (t: MainTab) => {
     navigate(`/modules/suivi-carburant/${SLUG_BY_TAB[t]}`);
     window.scrollTo({ top: 0 });
@@ -179,7 +168,9 @@ export default function FuelTrackingPage() {
       limit: 50,
       has_genset: stockGeFilter === "all" ? undefined : stockGeFilter,
     }),
-    enabled: activeTab === "STOCK",
+    // Aussi actif sur DASHBOARD : la section Stock du Dashboard réutilise
+    // cette même requête (pas de duplication d'appel réseau).
+    enabled: activeTab === "STOCK" || activeTab === "DASHBOARD",
     staleTime: 60_000,
   });
 
@@ -190,14 +181,18 @@ export default function FuelTrackingPage() {
       page: commandePage,
       limit: 50,
     }),
-    enabled: activeTab === "COMMANDE",
+    // Aussi actif sur DASHBOARD : la section Commandes du Dashboard
+    // réutilise cette même requête (pas de duplication d'appel réseau).
+    enabled: activeTab === "COMMANDE" || activeTab === "DASHBOARD",
     staleTime: 60_000,
   });
 
   const estimationQ = useQuery({
     queryKey: ["fuel-commande-estimation"],
     queryFn: () => getFuelCommandeEstimation(),
-    enabled: activeTab === "ESTIMATION",
+    // Aussi actif sur DASHBOARD : la section Estimation du Dashboard
+    // réutilise cette même requête (pas de duplication d'appel réseau).
+    enabled: activeTab === "ESTIMATION" || activeTab === "DASHBOARD",
     staleTime: 60_000,
   });
 
@@ -267,8 +262,7 @@ export default function FuelTrackingPage() {
             <div style={{ flex: 1 }} />
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <SiteSearch onSelect={openSite} />
-              {(siteId || (activeTab !== "COMMANDE" && activeTab !== "ESTIMATION")) && (
+              {(activeTab === "DASHBOARD" || activeTab === "CONSOMMATION") && (
                 <div title="Mois des indicateurs mensuels (tendance du Dashboard, couverture GE)" style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "5px 10px" }}>
                   <Calendar size={14} color={FT.textSub} aria-hidden />
                   <input
@@ -305,39 +299,40 @@ export default function FuelTrackingPage() {
 
         </div>
 
-        {siteId && (
-          <div className="ft-fade" key={siteId}>
-            <SiteBi siteId={siteId} fromMonth={fromMonth} toMonth={toMonth} onClose={closeSite} />
+        {activeTab === "DASHBOARD" && (
+          <div className="ft-fade">
+            <DashboardSheet
+              data={dashboardQ.data}
+              loading={dashboardQ.isLoading}
+              stockData={stockQ.data}
+              stockLoading={stockQ.isLoading}
+              commandeData={commandeQ.data}
+              commandeLoading={commandeQ.isLoading}
+              estimationData={estimationQ.data}
+              estimationLoading={estimationQ.isLoading}
+              onNavigateTab={setActiveTab}
+            />
           </div>
         )}
 
-        <OpenSiteContext.Provider value={openSite}>
-        {!siteId && activeTab === "CONSOMMATION" && (
-          <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <ConsoBi fromMonth={fromMonth} toMonth={toMonth} />
-            <DetailSection title="Détail par site, couverture GE et comparaison des consommations">
-              <ConsommationSheet
-                data={consommationQ.data}
-                loading={consommationQ.isLoading}
-                stickyTop={headerHeight}
-              />
-            </DetailSection>
+        {activeTab === "CONSOMMATION" && (
+          <div className="ft-fade">
+            <ConsommationSheet
+              data={consommationQ.data}
+              loading={consommationQ.isLoading}
+              stickyTop={headerHeight}
+            />
           </div>
         )}
 
-        {!siteId && activeTab === "CPH" && (
-          <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <CphBi fromMonth={fromMonth} toMonth={toMonth} />
-            <DetailSection title="Contrôle CPH détaillé (tableau par site, diagnostics, référentiel)">
-              <ControleCphSheet />
-            </DetailSection>
+        {activeTab === "CPH" && (
+          <div className="ft-fade">
+            <ControleCphSheet />
           </div>
         )}
 
-        {!siteId && activeTab === "STOCK" && (
-          <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <StockBi toMonth={toMonth} />
-            <DetailSection title="Stock détaillé (registre, relevés, bilans, imports)">
+        {activeTab === "STOCK" && (
+          <div className="ft-fade">
             <StockSheet
               data={stockQ.data}
               loading={stockQ.isLoading}
@@ -355,14 +350,12 @@ export default function FuelTrackingPage() {
               onPageChange={setStockPage}
               stickyTop={headerHeight}
             />
-            </DetailSection>
           </div>
         )}
 
-        {!siteId && activeTab === "COMMANDE" && (
-          <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {activeTab === "COMMANDE" && (
+          <div className="ft-fade">
             <CommandeSheet
-              overview={<CommandeBi data={commandeQ.data} loading={commandeQ.isLoading} error={commandeQ.isError} />}
               data={commandeQ.data}
               loading={commandeQ.isLoading}
               search={commandeSearch}
@@ -377,10 +370,9 @@ export default function FuelTrackingPage() {
           </div>
         )}
 
-        {!siteId && activeTab === "ESTIMATION" && (
-          <div className="ft-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {activeTab === "ESTIMATION" && (
+          <div className="ft-fade">
             <EstimationSheet
-              overview={<EstimationBi data={estimationQ.data} loading={estimationQ.isLoading} error={estimationQ.isError} />}
               data={estimationQ.data}
               loading={estimationQ.isLoading}
               search={estimationSearch}
@@ -389,7 +381,6 @@ export default function FuelTrackingPage() {
             />
           </div>
         )}
-        </OpenSiteContext.Provider>
       </div>
     </>
   );

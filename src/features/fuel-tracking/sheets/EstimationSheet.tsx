@@ -9,7 +9,7 @@
 // (moyenne pondérée récente en L/jour, plafond capacité de cuve, niveau de
 // confiance par site).
 
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useState, type CSSProperties } from "react";
 import { AlertTriangle, Calculator, Fuel, Search, TrendingUp, Warehouse } from "lucide-react";
 import type { FuelCommandeConfiance, FuelCommandeEstimationResponse } from "@/services/fuelTracking";
 import { Card, EmptyState, KpiCard, Pill, Skeleton } from "../ui";
@@ -67,9 +67,7 @@ export function EstimationSheet({
   search,
   onSearchChange,
   stickyTop = 0,
-  overview,
 }: {
-  overview?: ReactNode;
   data: FuelCommandeEstimationResponse | undefined;
   loading: boolean;
   search: string;
@@ -119,7 +117,6 @@ export function EstimationSheet({
         </div>
       </div>
 
-      {overview}
       <Card padded={false} style={{ padding: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
