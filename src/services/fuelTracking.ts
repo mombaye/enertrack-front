@@ -2075,7 +2075,7 @@ export type ConsoRow = {
     initial_l: number | null; source_initial: string | null; entrees_l: number | null; carte_total_l: number | null; truck_l: number | null; livraisons_externes_l: number | null;
     ponctions_entrantes_l: number | null; ponctions_sortantes_l: number | null; rajouts_l: number | null; retraits_l: number | null; vols_l: number | null; vidanges_l: number | null;
     final_l: number | null; source_final: string | null; date_initial?: string | null; date_final?: string | null; jours?: number | null; conso_moyenne_jour_l?: number | null; variation_l: number | null; statut: ConsoStatutBilan; statut_moteur: string | null; cause: string | null;
-    score: number | null; reserves: string[]; alertes: string[]; alertes_comparaison: string[]; bilan_id: number | null; motif: string | null; action: string;
+    score: number | null; reserves: string[]; alertes: string[]; alertes_comparaison: string[]; bilan_id: number | null; motif: string | null; action: string; raison_non_calcul?: string | null;
   };
   closing: { conso_l: number | null; controle_independant: boolean | null; explication?: ConsoGapExplication } & ConsoGap;
   correspondance?: { base_closing: boolean; utilise: boolean; motif: string | null };

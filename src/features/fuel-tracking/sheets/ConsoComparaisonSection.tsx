@@ -73,6 +73,8 @@ function buildColsDef(A: Record<string, string>): Col[] {
     { k: "name", group: "Identification", label: "Nom du site", left: true, render: (r) => r.site_name ?? "—" },
     { k: "statut", group: "Identification", label: "Statut bilan", left: true, help: "NON_CALCULABLE · VARIATION_CALCULEE (calculée mais anomalie, ex. négative) · ESTIMATION_AVEC_RESERVE · PRET_A_CERTIFIER · REFERENCE_CLOSING (mois de référence : ligne du fichier Closing telle quelle) · CONSOMMATION_REELLE_CERTIFIEE (validée par le Fuel Manager).",
       render: (r) => <Pill label={STATUT_META[r.stock.statut].label} tone={STATUT_META[r.stock.statut].tone} /> },
+    { k: "raison", group: "Identification", label: "Pourquoi non calculé", left: true, min: 280,
+      render: (r) => (r.stock.raison_non_calcul ? <span style={{ color: r.stock.statut === "VARIATION_CALCULEE" ? "#B42323" : FT.text }}>{r.stock.raison_non_calcul}</span> : "—") },
     { k: "pays", group: "Identification", label: "Pays", left: true, render: (r) => r.country ?? "—" },
     { k: "zone", group: "Identification", label: "Zone", left: true, render: (r) => r.zone ?? "—" },
     { k: "typo", group: "Identification", label: "Typologie site", left: true, render: (r) => r.typologie ?? "—" },
@@ -467,7 +469,7 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
             <table aria-label="Derniers suivis par site" style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
               <thead>
                 <tr style={{ background: "#F3F6FB", textAlign: "left", color: FT.textMid, fontSize: 12.5 }}>
-                  {["Site ID", "Nom du site", "Statut bilan", "Pays", "Zone", "Typologie site", "Typologie énergie", "Modèle GE", "Puissance (KVA)", "Source puissance", "Date"].map((h, i, all) => (
+                  {["Site ID", "Nom du site", "Statut bilan", "Pourquoi non calculé", "Pays", "Zone", "Typologie site", "Typologie énergie", "Modèle GE", "Puissance (KVA)", "Source puissance", "Date"].map((h, i, all) => (
                     <th key={h || "act"} scope="col" style={{ padding: "11px 8px", fontWeight: 700, whiteSpace: "nowrap", borderRadius: i === 0 ? "10px 0 0 10px" : i === all.length - 1 ? "0 10px 10px 0" : 0 }}>{h}</th>
                   ))}
                 </tr>
@@ -483,6 +485,7 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
                       <td style={{ padding: "12px 8px", whiteSpace: "nowrap" }}>
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 999, fontSize: 12, fontWeight: 700, background: st.bg, color: st.fg }}><Ico size={13} aria-hidden /> {st.label}</span>
                       </td>
+                      <td style={{ padding: "12px 8px", minWidth: 260, maxWidth: 420, fontSize: 12, color: r.stock.statut === "VARIATION_CALCULEE" ? "#B42323" : FT.text }}>{r.stock.raison_non_calcul ?? "—"}</td>
                       <td style={{ padding: "12px 8px" }}>{r.country ?? "—"}</td>
                       <td style={{ padding: "12px 8px" }}>{r.zone ?? "—"}</td>
                       <td style={{ padding: "12px 8px", whiteSpace: "nowrap" }}>{r.typologie ?? "—"}</td>
@@ -494,7 +497,7 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
                     </tr>
                   );
                 })}
-                {d && d.rows.length === 0 && <tr><td colSpan={11} style={{ padding: 24, color: FT.textMid }}>Aucun site ne correspond aux filtres pour cette période.</td></tr>}
+                {d && d.rows.length === 0 && <tr><td colSpan={12} style={{ padding: 24, color: FT.textMid }}>Aucun site ne correspond aux filtres pour cette période.</td></tr>}
               </tbody>
             </table>
             <div style={{ padding: "8px 12px 2px", fontSize: 12, color: FT.textMid }}>{Math.min(5, d?.rows.length ?? 0)} sites affichés sur {nf(d?.total ?? 0)} — Cliquez sur un identifiant de site pour son détail ; « Voir tous les résultats » pour le tableau complet (variation, Closing, écarts, CPH, target, certification).</div>
@@ -581,6 +584,7 @@ function DetailHub({ row: r, periode, A, onClose, onPick }: { row: ConsoRow; per
       <div style={{ fontSize: 12, color: FT.textMid, marginBottom: 8 }}>Période : {periode} (identique pour toutes les mesures)</div>
       {line("Variation de stock (L)", s.variation_l === null ? "— (non calculable)" : `${nf(s.variation_l)} L`, A.variation)}
       {line("Statut du bilan", STATUT_META[s.statut].label)}
+      {s.raison_non_calcul && <div role="note" style={{ margin: "6px 0", padding: 8, borderRadius: 8, background: s.statut === "VARIATION_CALCULEE" ? FT.redL : FT.orangeL, fontSize: 12.5 }}><strong>Pourquoi non calculé : </strong>{s.raison_non_calcul}</div>}
       {line("Consommation réelle certifiée (L)", r.certification.valeur_l === null ? "— (non certifiée)" : `${nf(r.certification.valeur_l)} L`, A.certifiee)}
       {line("Consommation Closing (L)", r.closing.conso_l === null ? "—" : `${nf(r.closing.conso_l)} L`, A.closing)}
       {line("Écart variation vs Closing", g(r.closing.ecart_l, r.closing.ecart_pct, r.closing.pct_na), A.ecart_closing)}
