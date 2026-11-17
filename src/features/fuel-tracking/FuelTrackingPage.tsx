@@ -34,8 +34,9 @@ import { CommandeSheet } from "./sheets/CommandeSheet";
 import { EstimationSheet } from "./sheets/EstimationSheet";
 import { ControleCphSheet } from "./sheets/ControleCphSheet";
 import { ConfigurationSheet } from "./sheets/ConfigurationSheet";
+import { DocumentationSheet } from "./sheets/DocumentationSheet";
 
-export type MainTab = "DASHBOARD" | "CONSOMMATION" | "CPH" | "STOCK" | "COMMANDE" | "ESTIMATION" | "CONFIGURATION";
+export type MainTab = "DASHBOARD" | "CONSOMMATION" | "CPH" | "STOCK" | "COMMANDE" | "ESTIMATION" | "CONFIGURATION" | "DOCUMENTATION";
 
 export const FUEL_TAB_SLUGS: Array<{ tab: MainTab; slug: string }> = [
   { tab: "DASHBOARD", slug: "dashboard" },
@@ -45,6 +46,7 @@ export const FUEL_TAB_SLUGS: Array<{ tab: MainTab; slug: string }> = [
   { tab: "COMMANDE", slug: "commandes" },
   { tab: "ESTIMATION", slug: "estimation-commande" },
   { tab: "CONFIGURATION", slug: "configuration" },
+  { tab: "DOCUMENTATION", slug: "documentation" },
 ];
 const TAB_BY_SLUG: Record<string, MainTab> = Object.fromEntries(FUEL_TAB_SLUGS.map((x) => [x.slug, x.tab]));
 const SLUG_BY_TAB = Object.fromEntries(FUEL_TAB_SLUGS.map((x) => [x.tab, x.slug])) as Record<MainTab, string>;
@@ -387,6 +389,12 @@ export default function FuelTrackingPage() {
         {activeTab === "CONFIGURATION" && (
           <div className="ft-fade">
             <ConfigurationSheet />
+          </div>
+        )}
+
+        {activeTab === "DOCUMENTATION" && (
+          <div className="ft-fade">
+            <DocumentationSheet />
           </div>
         )}
       </div>

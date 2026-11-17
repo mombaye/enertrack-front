@@ -11,7 +11,7 @@ import {
   ClipboardList,
   TrendingDown,
   LogOut,
-  LayoutDashboard, CreditCard, MapPin, FileText, FileX, Leaf, Cpu, Coins, Repeat, FileCheck, FileSearch,
+  LayoutDashboard, BookOpen, CreditCard, MapPin, FileText, FileX, Leaf, Cpu, Coins, Repeat, FileCheck, FileSearch,
 } from "lucide-react";
 import camusatLogo from "@/assets/images/camusat-logo.png";
 import { useAuth } from "@/auth/AuthContext";
@@ -51,6 +51,7 @@ const LINKS: LinkItem[] = [
   { to: "/modules/suivi-carburant/commandes",           icon: <Receipt />,         label: "Commandes",             section: "SUIVI CARBURANT" },
   { to: "/modules/suivi-carburant/estimation-commande", icon: <Calculator />,      label: "Estimation commande",   section: "SUIVI CARBURANT" },
   { to: "/modules/suivi-carburant/configuration",       icon: <Settings2 />,       label: "Configuration",         section: "SUIVI CARBURANT" },
+  { to: "/modules/suivi-carburant/documentation",       icon: <BookOpen />,        label: "Documentations",        section: "SUIVI CARBURANT" },
 
   // ── PILOTAGE GRID — les 11 parties du fichier, le contenu s'affiche à droite ────────────────────────
   { to: "/pilotage-grid/synthese",               icon: <LayoutDashboard />, label: "Synthèse",                section: "PILOTAGE GRID" },

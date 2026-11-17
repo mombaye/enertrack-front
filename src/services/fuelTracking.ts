@@ -2114,7 +2114,14 @@ export type ConsoFraicheur = {
   synchro_en_echec: boolean; erreur_synchro: string | null; jours_non_couverts: number; periode_incomplete: boolean;
 };
 
+export type ClosingKpiValue = { libelle: string; valeur: number | null };
+export type ClosingKpis = {
+  mois: string; source: "FICHIER_CLOSING" | "CALCUL_ENERTRACK"; fichier: string | null; note: string;
+  kpis: Record<string, ClosingKpiValue>;
+};
+
 export type ConsoResponse = {
+  kpis_closing?: ClosingKpis | null;
   detail?: string;
   fraicheur?: ConsoFraicheur;
   periode: {
@@ -2178,14 +2185,14 @@ export type DataHealth = {
   };
   /** Couverture du stock final du dernier mois complet dans la source convenue (fichier de clôture, puis ENOC). */
   stock_final?: { mois: string; source: string; fenetre: [string, string]; sites_base: number; sites_exploitables: number;
-    sites_avec_reserve: number; sites_sans_releve: number; sans_releve: string[] } | null;
+    sites_avec_reserve: number; sites_sans_releve: number; sans_releve: string[]; sites_sans_ge_exclus?: number } | null;
   couverture: { sites_base_closing: number; sites_releve_gardien_recent: number; seuil_jours: number; sites_releve_en_retard: number; sites_sans_releve_gardien: number; sites_enoc_hors_base_closing: number | null };
   releves_en_retard: Array<{ site_id: string; dernier_releve: string; jours: number }>;
   sites_sans_releve: string[];
 };
 
-export async function getDataHealth() {
-  const { data } = await api.get<DataHealth>(`${BASE}/consommations/sante/`);
+export async function getDataHealth(mois?: string) {
+  const { data } = await api.get<DataHealth>(`${BASE}/consommations/sante/`, { params: mois ? { mois } : undefined });
   return data;
 }
 

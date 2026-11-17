@@ -5,8 +5,8 @@ import { FT } from "../theme";
 
 const day = (v: string | null | undefined) => (v ? new Date(v).toLocaleDateString("fr-FR") : "aucune donnée");
 
-export function DataHealthPanel() {
-  const q = useQuery({ queryKey: ["conso-sante"], queryFn: getDataHealth, staleTime: 60_000 });
+export function DataHealthPanel({ mois }: { mois?: string }) {
+  const q = useQuery({ queryKey: ["conso-sante", mois ?? ""], queryFn: () => getDataHealth(mois), staleTime: 60_000 });
   if (q.isLoading) return <div aria-busy="true" style={{ fontSize: 12.5, color: FT.textMid }}>Chargement de la santé des données…</div>;
   if (q.isError || !q.data) return <div role="alert" style={{ fontSize: 12.5, color: FT.red }}>Santé des données indisponible (erreur serveur).</div>;
   const h = q.data, c = h.couverture, s = h.sources;
@@ -19,11 +19,11 @@ export function DataHealthPanel() {
   if (f) {
     // Règles MVP : le stock final vient du fichier de clôture (sept./oct. 2026) puis d'ENOC — plus des relevés de gardiennage.
     const [y, m] = f.mois.split("-").map(Number);
-    const mois = new Date(y, m - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+    const moisLabel = new Date(y, m - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
     return (
       <details style={{ border: FT.borderCrisp, background: FT.card, borderRadius: FT.radius, padding: "8px 12px" }}>
         <summary style={{ cursor: "pointer", fontWeight: 800, fontSize: 13 }}>
-          Santé des données — stock final de {mois} : {f.sites_sans_releve} site(s) sans relevé dans la source convenue
+          Santé des données — stock final de {moisLabel} : {f.sites_sans_releve} site(s) sans relevé dans la source convenue
         </summary>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "10px 0" }}>
           {cell("Source du stock final", f.source)}
@@ -35,6 +35,7 @@ export function DataHealthPanel() {
           {cell("Stock final exploitable", String(f.sites_exploitables))}
           {cell("Avec réserve (4-14 j)", String(f.sites_avec_reserve), f.sites_avec_reserve > 0)}
           {cell("Sans relevé", String(f.sites_sans_releve), f.sites_sans_releve > 0)}
+          {(f.sites_sans_ge_exclus ?? 0) > 0 && cell("Sites sans GE exclus (Output)", String(f.sites_sans_ge_exclus))}
         </div>
         <div style={{ fontSize: 12, color: FT.textMid }}>Relevés pris en compte du {day(f.fenetre[0])} au {day(f.fenetre[1])}.</div>
         {f.sans_releve.length > 0 && (

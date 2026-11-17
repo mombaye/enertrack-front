@@ -14,6 +14,7 @@ import { CoverageKpis } from "./cphDiagnostics";
 import { BalanceDetailModal } from "./StockPeriodBalance";
 import { EvolutionChart, KpiCards, SectionTitle, StatusDonut, type OverviewCard } from "./ConsoOverview";
 import { DataHealthPanel } from "./DataHealthPanel";
+import { ClosingKpiPanel } from "./ClosingKpiPanel";
 import { SiteDetailModal } from "./ControleCphSheet";
 
 const nf = (v: number | null | undefined, d = 0) => (v === null || v === undefined ? "—" : v.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d }));
@@ -378,7 +379,7 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
         </summary>
         <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
           <DataQualityNotice f={d?.fraicheur} />
-          <DataHealthPanel />
+          <DataHealthPanel mois={per?.debut ? per.debut.slice(0, 7) : undefined} />
           {(d?.kpis.sans_correspondance?.sites ?? 0) > 0 && (
             <div role="note" style={{ padding: 10, borderRadius: FT.radius, background: FT.orangeL, fontSize: 12.5 }}>
               {d!.kpis.sans_correspondance!.sites} site(s) absent(s) du fichier Closing : affichés dans le tableau mais exclus des totaux et indicateurs (filtre « Base Closing »).
@@ -386,6 +387,7 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
           )}
         </div>
       </details>
+      <ClosingKpiPanel data={d?.kpis_closing} />
       {q.isError && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.redL, color: FT.red, fontWeight: 700, fontSize: 13 }}>Impossible de charger les consommations (erreur serveur).</div>}
 
       {k && (() => {
