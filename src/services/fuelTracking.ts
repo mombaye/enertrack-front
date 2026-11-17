@@ -2200,7 +2200,7 @@ export async function getConsoEvolution() {
 // (import + recalcul des bilans des mois couverts). GET = derniers lots Closing + fichiers en attente.
 
 /** Étape d'un import (API) : IMPORT → RECALCUL → TERMINE ; ECHEC ; DOUBLON ; IMPORTE (dépôt direct, recalcul de nuit). */
-export type ClosingUploadStep = "IMPORT" | "RECALCUL" | "TERMINE" | "ECHEC" | "DOUBLON" | "IMPORTE";
+export type ClosingUploadStep = "IMPORT" | "RECALCUL" | "TERMINE" | "ECHEC" | "DOUBLON" | "IMPORTE" | "RETRAIT_RECALCUL" | "RETIRE";
 
 export type ClosingRecalcMonth = { debut: string; fin: string; sites: number; calculables: number };
 
@@ -2217,6 +2217,10 @@ export type ClosingRecalc = {
 export type ClosingUploadBatch = StockImportBatch & {
   source_libelle?: string;
   format?: string;
+  /** Mois couvert par le fichier, déclaré à l'import (AAAA-MM). */
+  mois?: string | null;
+  controle_mois?: { mois: string; stocks_finaux: number; mois_majoritaire_des_dates: string | null; avertissement?: string } | null;
+  annulation?: { par: string; le: string; motif: string; stocks_supprimes: number; mois_a_recalculer: string[] } | null;
   etape?: ClosingUploadStep;
   recalcul_bilans?: ClosingRecalc | null;
   stocks_importes: number | null;
@@ -2235,9 +2239,10 @@ export async function getClosingUploads() {
   return data;
 }
 
-export async function uploadClosingFile(file: File, onProgress?: (pct: number) => void) {
+export async function uploadClosingFile(file: File, mois: string, onProgress?: (pct: number) => void) {
   const fd = new FormData();
   fd.append("file", file);
+  fd.append("mois", mois);
   const { data } = await api.post<{ fichier: string; message: string }>(`${BASE}/configuration/closing/`, fd, {
     headers: { "Content-Type": "multipart/form-data" },
     onUploadProgress: (e) => {
@@ -2245,5 +2250,13 @@ export async function uploadClosingFile(file: File, onProgress?: (pct: number) =
     },
     timeout: 10 * 60 * 1000, // fichier d'environ 30 Mo : l'envoi seul peut prendre plusieurs minutes
   });
+  return data;
+}
+
+/** Retire un fichier de clôture importé : ses stocks sont supprimés, le lot reste tracé, les bilans sont recalculés. */
+export async function withdrawClosingFile(id: number, motif: string) {
+  const { data } = await api.delete<{ stocks_supprimes: number; mois: string[]; avertissement?: string }>(
+    `${BASE}/configuration/closing/${id}/`, { data: { motif } },
+  );
   return data;
 }

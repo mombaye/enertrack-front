@@ -6,9 +6,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Circle, FileUp, Loader2, Settings2, XCircle } from "lucide-react";
-import { getClosingUploads, uploadClosingFile, type ClosingUploadBatch, type ClosingUploadStatus } from "@/services/fuelTracking";
-import { Card, EmptyState, SheetTitle, Skeleton } from "../ui";
+import { CheckCircle2, Circle, FileUp, Loader2, Settings2, Trash2, XCircle } from "lucide-react";
+import { getClosingUploads, uploadClosingFile, withdrawClosingFile, type ClosingUploadBatch, type ClosingUploadStatus } from "@/services/fuelTracking";
+import { Card, EmptyState, Modal, SheetTitle, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { actionBtn, Dash, fmtDateTime, StatusPill, tdStyle, thStyle } from "./stockRegistryUi";
 
@@ -26,6 +26,18 @@ function monthLabel(iso: string) {
   return `${MONTHS.at(m - 1) ?? m} ${y}`;
 }
 
+/** Mois calendaire précédent (AAAA-MM) : valeur proposée par défaut, le fichier de clôture couvre le mois écoulé. */
+function previousMonth() {
+  const d = new Date();
+  const p = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+  return `${p.getFullYear()}-${String(p.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function currentMonth() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function elapsed(fromIso: string | null | undefined, now: number) {
   if (!fromIso) return null;
   const s = Math.max(0, Math.round((now - new Date(fromIso).getTime()) / 1000));
@@ -39,7 +51,7 @@ function errorMessage(e: unknown) {
   return r?.data?.detail ?? "Envoi impossible : vérifier la connexion puis réessayer.";
 }
 
-const ACTIVE_STEPS = new Set(["IMPORT", "RECALCUL"]);
+const ACTIVE_STEPS = new Set(["IMPORT", "RECALCUL", "RETRAIT_RECALCUL"]);
 
 /** Étape courante (index dans STEPS) et état d'un import suivi. */
 function stepOf(uploadPct: number | null, fileName: string | null, data: ClosingUploadStatus | undefined) {
@@ -116,6 +128,10 @@ function ImportProgress({ fileName, uploadPct, data, now, onClose }: {
             {lot.stocks_importes !== null && lot.stocks_importes !== undefined ? ` — ${lot.stocks_importes} stocks importés` : ""}
             {lot.sites_inconnus ? `, ${lot.sites_inconnus} sites inconnus (absents de Gestion des sites)` : ""}.
           </div>
+          {lot.mois && <div>Mois déclaré : <strong>{monthLabel(lot.mois)}</strong></div>}
+          {lot.controle_mois?.avertissement && (
+            <div role="alert" style={{ color: FT.orange }}>{lot.controle_mois.avertissement}</div>
+          )}
           {recalc?.mois && recalc.mois.length > 0 && (
             <div>
               Bilans recalculés :{" "}
@@ -137,6 +153,10 @@ export function ConfigurationSheet() {
   const [uploadPct, setUploadPct] = useState<number | null>(null);
   const [tracked, setTracked] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [mois, setMois] = useState(previousMonth);
+  const [toWithdraw, setToWithdraw] = useState<ClosingUploadBatch | null>(null);
+  const [motif, setMotif] = useState("");
+  const [withdrawInfo, setWithdrawInfo] = useState<string | null>(null);
 
   const q = useQuery({
     queryKey: ["fuel-configuration-closing"],
@@ -166,7 +186,7 @@ export function ConfigurationSheet() {
   }, [active]);
 
   const send = useMutation({
-    mutationFn: (f: File) => uploadClosingFile(f, setUploadPct),
+    mutationFn: (f: File) => uploadClosingFile(f, mois, setUploadPct),
     onMutate: () => {
       setUploadPct(0);
       setTracked(null);
@@ -183,6 +203,21 @@ export function ConfigurationSheet() {
     onError: () => {
       setInfo(null);
       setUploadPct(null);
+    },
+  });
+
+  const withdraw = useMutation({
+    mutationFn: ({ id, reason }: { id: number; reason: string }) => withdrawClosingFile(id, reason),
+    onSuccess: (res) => {
+      setWithdrawInfo(
+        `Fichier retiré : ${res.stocks_supprimes} stock(s) supprimé(s)` +
+          (res.mois.length ? `, bilans de ${res.mois.map(monthLabel).join(" et ")} en cours de recalcul.` : ".") +
+          (res.avertissement ? ` ${res.avertissement}` : ""),
+      );
+      setToWithdraw(null);
+      setMotif("");
+      qc.invalidateQueries({ queryKey: ["fuel-configuration-closing"] });
+      qc.invalidateQueries({ queryKey: ["stock-imports"] });
     },
   });
 
@@ -235,10 +270,21 @@ export function ConfigurationSheet() {
           </label>
 
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <label htmlFor="closing-month" style={{ fontSize: 13, color: FT.text, fontWeight: 600 }}>Mois couvert par le fichier</label>
+            <input
+              id="closing-month"
+              type="month"
+              value={mois}
+              max={currentMonth()}
+              required
+              disabled={!canSend || send.isPending}
+              onChange={(e) => setMois(e.target.value)}
+              style={{ padding: "6px 10px", borderRadius: FT.radiusSm, border: `1px solid ${FT.borderStrong}`, fontSize: 13, color: FT.text }}
+            />
             <button
               type="button"
-              style={{ ...actionBtn, opacity: !file || !canSend || send.isPending ? 0.55 : 1 }}
-              disabled={!file || !canSend || send.isPending}
+              style={{ ...actionBtn, opacity: !file || !mois || !canSend || send.isPending ? 0.55 : 1 }}
+              disabled={!file || !mois || !canSend || send.isPending}
               onClick={() => file && send.mutate(file)}
             >
               {send.isPending ? "Envoi en cours…" : "Importer le fichier"}
@@ -265,6 +311,7 @@ export function ConfigurationSheet() {
         <SheetTitle icon={<FileUp size={17} />} title="Fichiers reçus" subtitle="Les 10 derniers fichiers de clôture importés et leur résultat." />
         {q.isLoading && <Skeleton h={140} />}
         {q.isError && <div role="alert" style={{ color: FT.red, fontSize: 13, marginTop: 12 }}>Liste indisponible.</div>}
+        {withdrawInfo && <div role="status" style={{ color: FT.green, fontSize: 13, marginTop: 12 }}>{withdrawInfo}</div>}
 
         {pending.length > 0 && (
           <div style={{ marginTop: 12, fontSize: 13, color: FT.orange }}>
@@ -283,12 +330,14 @@ export function ConfigurationSheet() {
                 <tr>
                   <th style={thStyle}>Fichier</th>
                   <th style={thStyle}>Format</th>
+                  <th style={thStyle}>Mois</th>
                   <th style={thStyle}>Reçu le</th>
                   <th style={thStyle}>Étape</th>
                   <th style={thStyle}>Stocks importés</th>
                   <th style={thStyle}>Sites inconnus</th>
                   <th style={thStyle}>Bilans recalculés</th>
                   <th style={thStyle}>Message</th>
+                  {canSend && <th style={thStyle}><span className="sr-only">Actions</span></th>}
                 </tr>
               </thead>
               <tbody>
@@ -296,6 +345,12 @@ export function ConfigurationSheet() {
                   <tr key={b.id}>
                     <td style={{ ...tdStyle, textAlign: "left", maxWidth: 260, wordBreak: "break-word" }}>{b.file_name.replace(/^\d{8}_\d{6}_/, "")}</td>
                     <td style={tdStyle}>{b.format ?? "Closing"}</td>
+                    <td style={tdStyle}>
+                      {b.mois ? monthLabel(b.mois) : <Dash reason="Fichier déposé sans mois déclaré (dépôt direct dans le partage)." />}
+                      {b.controle_mois?.avertissement && (
+                        <span title={b.controle_mois.avertissement} aria-label={b.controle_mois.avertissement} style={{ color: FT.orange, marginLeft: 4, cursor: "help" }}>⚠</span>
+                      )}
+                    </td>
                     <td style={tdStyle}>{fmtDateTime(b.received_at, true) ?? <Dash />}</td>
                     <td style={tdStyle}><StatusPill status={b.etape ?? b.status} map={STEP_LABEL} /></td>
                     <td style={tdStyle}>{b.stocks_importes ?? <Dash reason="Pas encore traité ou aucun stock lu." />}</td>
@@ -306,6 +361,20 @@ export function ConfigurationSheet() {
                         : <Dash reason={b.etape === "IMPORTE" ? "Recalcul au calcul automatique de nuit." : undefined} />}
                     </td>
                     <td style={{ ...tdStyle, textAlign: "left", color: FT.textMid }}>{b.recalcul_bilans?.motif ?? b.status_message ?? <Dash />}</td>
+                    {canSend && (
+                      <td style={tdStyle}>
+                        {!b.annulation && !ACTIVE_STEPS.has(b.etape ?? "") && b.etape !== "DOUBLON" && (
+                          <button
+                            type="button"
+                            onClick={() => { setToWithdraw(b); setMotif(""); withdraw.reset(); }}
+                            aria-label={`Retirer le fichier ${b.file_name.replace(/^\d{8}_\d{6}_/, "")}`}
+                            style={{ ...actionBtn, padding: "4px 10px", fontSize: 12, color: FT.red, display: "inline-flex", alignItems: "center", gap: 6 }}
+                          >
+                            <Trash2 size={14} aria-hidden /> Retirer
+                          </button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -313,6 +382,42 @@ export function ConfigurationSheet() {
           </div>
         )}
       </Card>
+
+      {toWithdraw && (
+        <Modal title="Retirer ce fichier ?" onClose={() => setToWithdraw(null)} maxWidth={520}>
+          <div style={{ display: "grid", gap: 12, fontSize: 13, color: FT.text }}>
+            <div>
+              <strong>{toWithdraw.file_name.replace(/^\d{8}_\d{6}_/, "")}</strong>
+              {toWithdraw.mois ? ` — ${monthLabel(toWithdraw.mois)}` : ""}
+            </div>
+            <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.6, color: FT.textMid }}>
+              <li>Les <strong>{toWithdraw.stocks_importes ?? 0} stock(s)</strong> importés par ce fichier seront supprimés, ainsi que ses targets.</li>
+              <li>Les bilans des mois concernés seront recalculés ; un bilan certifié qui change passera « à recertifier ».</li>
+              <li>Le fichier reste archivé et la trace du retrait est conservée (qui, quand, motif). Il pourra être réimporté.</li>
+            </ul>
+            <label htmlFor="withdraw-motif" style={{ fontWeight: 600 }}>Motif (facultatif)</label>
+            <input
+              id="withdraw-motif"
+              value={motif}
+              onChange={(e) => setMotif(e.target.value)}
+              placeholder="ex. mauvais mois, fichier remplacé par une nouvelle version"
+              style={{ padding: "8px 10px", borderRadius: FT.radiusSm, border: `1px solid ${FT.borderStrong}`, fontSize: 13 }}
+            />
+            {withdraw.isError && <div role="alert" style={{ color: FT.red }}>{errorMessage(withdraw.error)}</div>}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button type="button" onClick={() => setToWithdraw(null)} style={{ ...actionBtn }}>Annuler</button>
+              <button
+                type="button"
+                disabled={withdraw.isPending}
+                onClick={() => withdraw.mutate({ id: toWithdraw.id, reason: motif })}
+                style={{ ...actionBtn, background: FT.red, color: "#fff", borderColor: FT.red, opacity: withdraw.isPending ? 0.6 : 1 }}
+              >
+                {withdraw.isPending ? "Retrait…" : "Retirer le fichier"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -324,4 +429,6 @@ const STEP_LABEL: Record<string, { label: string; tone: "green" | "orange" | "re
   IMPORTE: { label: "Importé", tone: "green" },
   DOUBLON: { label: "Déjà reçu", tone: "slate" },
   ECHEC: { label: "Échec", tone: "red" },
+  RETRAIT_RECALCUL: { label: "Retiré — recalcul en cours", tone: "orange" },
+  RETIRE: { label: "Retiré", tone: "slate" },
 };
