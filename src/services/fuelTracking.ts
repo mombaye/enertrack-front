@@ -2199,8 +2199,26 @@ export async function getConsoEvolution() {
 // Envoi du Closing mensuel (même fichier que celui déposé dans le partage) ; traitement en arrière-plan côté serveur
 // (import + recalcul des bilans des mois couverts). GET = derniers lots Closing + fichiers en attente.
 
+/** Étape d'un import (API) : IMPORT → RECALCUL → TERMINE ; ECHEC ; DOUBLON ; IMPORTE (dépôt direct, recalcul de nuit). */
+export type ClosingUploadStep = "IMPORT" | "RECALCUL" | "TERMINE" | "ECHEC" | "DOUBLON" | "IMPORTE";
+
+export type ClosingRecalcMonth = { debut: string; fin: string; sites: number; calculables: number };
+
+export type ClosingRecalc = {
+  statut: "EN_COURS" | "TERMINE" | "ECHEC" | "NON_LANCE";
+  debut?: string;
+  fin?: string;
+  mois_total?: number;
+  mois_faits?: number;
+  mois?: ClosingRecalcMonth[];
+  motif?: string;
+};
+
 export type ClosingUploadBatch = StockImportBatch & {
   source_libelle?: string;
+  format?: string;
+  etape?: ClosingUploadStep;
+  recalcul_bilans?: ClosingRecalc | null;
   stocks_importes: number | null;
   sites_inconnus: number | null;
   formule_incoherente: number | null;
@@ -2217,11 +2235,14 @@ export async function getClosingUploads() {
   return data;
 }
 
-export async function uploadClosingFile(file: File) {
+export async function uploadClosingFile(file: File, onProgress?: (pct: number) => void) {
   const fd = new FormData();
   fd.append("file", file);
   const { data } = await api.post<{ fichier: string; message: string }>(`${BASE}/configuration/closing/`, fd, {
     headers: { "Content-Type": "multipart/form-data" },
+    onUploadProgress: (e) => {
+      if (onProgress && e.total) onProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)));
+    },
     timeout: 10 * 60 * 1000, // fichier d'environ 30 Mo : l'envoi seul peut prendre plusieurs minutes
   });
   return data;
