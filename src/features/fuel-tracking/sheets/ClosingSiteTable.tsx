@@ -12,7 +12,7 @@ const num = (v: number | null | undefined, d = 0) => {
 const day = (v: string | null | undefined) => (v ? v.split("-").reverse().join("/") : "—");
 const sum = (...xs: Array<number | null | undefined>) => (xs.every((x) => x === null || x === undefined) ? null : xs.reduce<number>((t, x) => t + (x ?? 0), 0));
 
-type Col = { h: string; w: number; left?: boolean; render: (r: ConsoRow) => React.ReactNode; tone?: string };
+type Col = { h: string; w: number; left?: boolean; render: (r: ConsoRow) => React.ReactNode };
 
 const STATUT: Record<string, { label: string; fg: string; bg: string }> = {
   REFERENCE_CLOSING: { label: "Fichier Closing", fg: "#1D4ED8", bg: "#E5EEFF" },
@@ -28,13 +28,13 @@ const COLS: Col[] = [
   { h: "Nom du site", w: 170, left: true, render: (r) => r.site_name ?? "—" },
   { h: "Date de Relevé Initiale", w: 92, render: (r) => day(r.stock.date_initial) },
   { h: "Qtité laissée à la date du relevé (initiale)", w: 104, render: (r) => num(r.stock.initial_l) },
-  { h: "Total Livraison", w: 92, tone: "#E2EFDA", render: (r) => num(sum(r.stock.livraisons_externes_l, r.stock.carte_total_l)) },
+  { h: "Total Livraison", w: 92, render: (r) => num(sum(r.stock.livraisons_externes_l, r.stock.carte_total_l)) },
   { h: "Qté Rajoutée ou Retirée de la cuve", w: 100, render: (r) => num(sum(r.stock.rajouts_l, r.stock.ponctions_entrantes_l, r.stock.retraits_l === null ? null : -(r.stock.retraits_l ?? 0), r.stock.ponctions_sortantes_l === null ? null : -(r.stock.ponctions_sortantes_l ?? 0))) },
-  { h: "Qté Volée", w: 80, tone: "#FCE4D6", render: (r) => num(r.stock.vols_l) },
-  { h: "Qté vidangée / Fuite / Écart", w: 92, tone: "#FCE4D6", render: (r) => num(r.stock.vidanges_l) },
+  { h: "Qté Volée", w: 80, render: (r) => num(r.stock.vols_l) },
+  { h: "Qté vidangée / Fuite / Écart", w: 92, render: (r) => num(r.stock.vidanges_l) },
   { h: "Date de Relevé Finale", w: 92, render: (r) => day(r.stock.date_final) },
   { h: "Qtité laissée à la date du relevé (finale)", w: 104, render: (r) => num(r.stock.final_l) },
-  { h: "Qtité cons considérée (L)", w: 104, tone: "#FFF2CC", render: (r) => <b>{num(r.stock.variation_l)}</b> },
+  { h: "Qtité cons considérée (L)", w: 104, render: (r) => <b>{num(r.stock.variation_l)}</b> },
   { h: "Nbre Jour cons", w: 70, render: (r) => num(r.stock.jours) },
   { h: "Conso Moyenne [L/jr]", w: 84, render: (r) => num(r.stock.conso_moyenne_jour_l, 2) },
   { h: "Conso théorique considérée [L] (CPH)", w: 110, render: (r) => num(r.cph.complete_l ?? r.cph.partielle_l) },
@@ -63,7 +63,7 @@ export function ClosingSiteTable({ rows, onDetail }: { rows: ConsoRow[]; onDetai
             return (
               <tr key={r.site_id} style={{ background: bg, opacity: out ? 0.6 : 1 }} title={out ? r.correspondance?.motif ?? "" : r.stock.motif ?? ""}>
                 {COLS.map((c, i) => (
-                  <td key={c.h} style={{ ...td, background: c.tone && !out ? c.tone : bg, ...(c.left ? { textAlign: "left", maxWidth: c.w, overflow: "hidden", textOverflow: "ellipsis" } : {}), ...sticky(i) }}>
+                  <td key={c.h} style={{ ...td, background: bg, ...(c.left ? { textAlign: "left", maxWidth: c.w, overflow: "hidden", textOverflow: "ellipsis" } : {}), ...sticky(i) }}>
                     {i === 0 ? (
                       <button type="button" onClick={() => onDetail(r)} aria-label={`Voir le détail du site ${r.site_id}`}
                         style={{ border: "none", background: "none", padding: 0, fontWeight: 800, fontSize: 12, color: NAVY, cursor: "pointer", textDecoration: "underline dotted" }}>{r.site_id}</button>

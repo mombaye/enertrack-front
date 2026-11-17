@@ -2116,7 +2116,7 @@ export type ConsoFraicheur = {
 
 export type ClosingKpiValue = { libelle: string; valeur: number | null };
 export type ClosingKpis = {
-  mois: string; source: "FICHIER_CLOSING" | "CALCUL_ENERTRACK"; fichier: string | null; note: string;
+  mois: string; debut?: string; fin?: string; source: "FICHIER_CLOSING" | "CALCUL_ENERTRACK"; fichier: string | null; note?: string;
   kpis: Record<string, ClosingKpiValue>;
 };
 

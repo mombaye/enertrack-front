@@ -40,16 +40,21 @@ export function ClosingKpiPanel({ data }: { data: ClosingKpis | null | undefined
   const k = data.kpis;
   const fromFile = data.source === "FICHIER_CLOSING";
   const [y, m] = data.mois.split("-").map(Number);
-  const mois = new Date(y, m - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" }).toUpperCase();
+  const first = new Date(y, m - 1, 1), lastDay = new Date(y, m, 0).getDate();
+  const full = !data.debut || (data.debut.endsWith("-01") && data.fin === `${data.mois}-${String(lastDay).padStart(2, "0")}`);
+  const fr = (v: string) => v.split("-").reverse().join("/");
+  const mois = full ? first.toLocaleDateString("fr-FR", { month: "long", year: "numeric" }).toUpperCase() : `DU ${fr(data.debut!)} AU ${fr(data.fin!)}`;
   const dots: CSSProperties = { backgroundColor: NAVY, backgroundImage: "radial-gradient(rgba(255,255,255,.07) 1px, transparent 1px)", backgroundSize: "6px 6px" };
   const proj = k.projection_mois_suivant_l;
   return (
     <section aria-label="KPI de synthèse du mois (format fichier Closing)" style={{ ...dots, borderRadius: 12, padding: 16, color: "#fff" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", borderBottom: "2px solid #fff", paddingBottom: 8, marginBottom: 12 }}>
         <div style={{ fontSize: 18, fontWeight: 800 }}>Synthèse conso fuel — {mois} · SENEGAL</div>
-        <span title={data.note} style={{ background: fromFile ? "#E5EEFF" : "#E7F9F1", color: fromFile ? "#1D4ED8" : "#0F7A50", borderRadius: 999, padding: "3px 10px", fontSize: 12, fontWeight: 800 }}>
-          {fromFile ? `Valeurs du fichier Closing${data.fichier ? ` · ${data.fichier}` : ""}` : "Calculé par EnerTrack (formules du fichier Closing)"}
-        </span>
+        {fromFile && (
+          <span title={data.fichier ?? undefined} style={{ background: "#E5EEFF", color: "#1D4ED8", borderRadius: 999, padding: "3px 10px", fontSize: 12, fontWeight: 800 }}>
+            Données de référence
+          </span>
+        )}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "4px 24px" }}>
         <div>{LEFT.map((x) => <Pair key={x} k={x} kpis={k} />)}</div>
@@ -81,9 +86,7 @@ export function ClosingKpiPanel({ data }: { data: ClosingKpis | null | undefined
           </div>
         )}
       </div>
-      <div style={{ fontSize: 11.5, color: "rgba(255,255,255,.75)", marginTop: 10 }}>
-        {data.note} « n.d. » = donnée non disponible (jamais remplacée par 0).
-      </div>
+      <div style={{ fontSize: 11, color: "rgba(255,255,255,.7)", marginTop: 8 }}>« n.d. » = donnée non disponible (jamais remplacée par 0).</div>
     </section>
   );
 }

@@ -35,6 +35,7 @@ import { EstimationSheet } from "./sheets/EstimationSheet";
 import { ControleCphSheet } from "./sheets/ControleCphSheet";
 import { ConfigurationSheet } from "./sheets/ConfigurationSheet";
 import { DocumentationSheet } from "./sheets/DocumentationSheet";
+import { ConsoPeriodPicker, type ConsoPeriod } from "./sheets/ConsoPeriodPicker";
 
 export type MainTab = "DASHBOARD" | "CONSOMMATION" | "CPH" | "STOCK" | "COMMANDE" | "ESTIMATION" | "CONFIGURATION" | "DOCUMENTATION";
 
@@ -101,6 +102,7 @@ export default function FuelTrackingPage() {
   const qc = useQueryClient();
   // L'onglet actif vient de l'adresse (sous-rubriques de la barre latérale : /modules/suivi-carburant/<onglet>).
   const { tab: tabSlug } = useParams();
+  const [consoPeriod, setConsoPeriod] = useState<ConsoPeriod>({ debut: "", fin: "" });   // période unique de Suivis Consommations
   const navigate = useNavigate();
   const activeTab: MainTab = TAB_BY_SLUG[tabSlug ?? ""] ?? "DASHBOARD";
   const setActiveTab = (t: MainTab) => {
@@ -266,7 +268,8 @@ export default function FuelTrackingPage() {
             <div style={{ flex: 1 }} />
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              {(activeTab === "DASHBOARD" || activeTab === "CONSOMMATION") && (
+              {activeTab === "CONSOMMATION" && <ConsoPeriodPicker value={consoPeriod} onChange={setConsoPeriod} />}
+              {activeTab === "DASHBOARD" && (
                 <div title="Mois des indicateurs mensuels (tendance du Dashboard, couverture GE)" style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "5px 10px" }}>
                   <Calendar size={14} color={FT.textSub} aria-hidden />
                   <input
@@ -322,6 +325,7 @@ export default function FuelTrackingPage() {
         {activeTab === "CONSOMMATION" && (
           <div className="ft-fade">
             <ConsommationSheet
+              period={consoPeriod}
               data={consommationQ.data}
               loading={consommationQ.isLoading}
               stickyTop={headerHeight}
