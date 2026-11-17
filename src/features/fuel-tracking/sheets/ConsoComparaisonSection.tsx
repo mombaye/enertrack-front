@@ -2,19 +2,19 @@
 // Cinq mesures distinctes : variation de stock · Closing · instrumentée Snowflake · CPH (complète / partielle) · consommation réelle certifiée (vide avant validation).
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, Download, Eye, Layers, List, MapPin, RefreshCw, Tag, XCircle } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, Download, Layers, MapPin, RefreshCw, Tag, XCircle } from "lucide-react";
 import {
-  downloadConsoExport, getConsoEvolution, getConsommations, getConsommationsPeriodes,
+  downloadConsoExport, getConsommations, getConsommationsPeriodes,
   type ConsoFilters, type ConsoFraicheur, type ConsoRow, type ConsoStatutBilan, type ConsoTargetStatut,
 } from "@/services/fuelTracking";
 import { Modal, Skeleton } from "../ui";
 import { FT, type Tone } from "../theme";
 import { HelpTip } from "./cphBadges";
-import { CoverageKpis } from "./cphDiagnostics";
 import { BalanceDetailModal } from "./StockPeriodBalance";
-import { EvolutionChart, KpiCards, SectionTitle, StatusDonut, type OverviewCard } from "./ConsoOverview";
+import { SectionTitle } from "./ConsoOverview";
 import { DataHealthPanel } from "./DataHealthPanel";
 import { ClosingKpiPanel } from "./ClosingKpiPanel";
+import { ClosingSiteTable } from "./ClosingSiteTable";
 import { SiteDetailModal } from "./ControleCphSheet";
 
 const nf = (v: number | null | undefined, d = 0) => (v === null || v === undefined ? "—" : v.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d }));
@@ -205,7 +205,6 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<{ row: ConsoRow; tab: "hub" | "stock" | "cph" } | null>(null);
   const [more, setMore] = useState(false);
-  const [full, setFull] = useState(false);
   const [adv, setAdv] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -213,12 +212,10 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
   const params: ConsoFilters = { ...f, site: site || undefined, date_debut: debut || undefined, date_fin: fin || undefined, page, page_size: 50 };
   const periods = useQuery({ queryKey: ["conso-periods"], queryFn: getConsommationsPeriodes, staleTime: 60_000 });
   const q = useQuery({ queryKey: ["consommations", params], queryFn: () => getConsommations(params), placeholderData: keepPreviousData });
-  const evo = useQuery({ queryKey: ["conso-evolution"], queryFn: getConsoEvolution, staleTime: 60_000 });
   const d = q.data;
   const per = d?.periode ?? null;
   const A = d?.aide ?? {};
   const set = (k: keyof ConsoFilters, v: string) => { setF((o) => ({ ...o, [k]: v || undefined })); setPage(1); };
-  const cols = buildColsDef(A);
 
   const exportCsv = async (kind: "controle_complet" | "anomalies_fuel" | "priorites_donnees" | "rapport_imports") => {
     setBusy(kind); setMsg(null);
@@ -256,9 +253,6 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
   const k = d?.kpis;
   const totalPages = d ? Math.max(1, Math.ceil(d.total / d.page_size)) : 1;
   const noBilan = !per || !per.bilan_disponible;
-  const groups: Array<{ name: string; n: number }> = [];
-  cols.forEach((c) => { const last = groups[groups.length - 1]; if (last && last.name === c.group) last.n += 1; else groups.push({ name: c.group, n: 1 }); });
-  const stickyStyle = (i: number, z = 3): CSSProperties => (i < 3 ? { position: "sticky", left: STICKY[i], zIndex: z } : {});
 
   const MOIS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
   const fr = (v: string) => new Date(`${v}T00:00:00`).toLocaleDateString("fr-FR");
@@ -316,7 +310,7 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
             <select aria-label="Typologie site" value={f.typologie ?? ""} onChange={(e) => set("typologie", e.target.value)} style={control}>
               <option value="">Tous</option>{(d?.facettes.typologies ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
             </select></label>
-          <button type="button" onClick={() => { void q.refetch(); void evo.refetch(); }} disabled={q.isFetching}
+          <button type="button" onClick={() => { void q.refetch(); }} disabled={q.isFetching}
             style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 14, fontWeight: 800, padding: "11px 20px", borderRadius: 12, border: "none", background: "#1D5FE0", color: "#fff", cursor: "pointer", boxShadow: "0 6px 14px rgba(29,95,224,.28)" }}>
             <RefreshCw size={15} aria-hidden /> {q.isFetching ? "Actualisation…" : "Actualiser"}
           </button>
@@ -380,6 +374,7 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
         <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
           <DataQualityNotice f={d?.fraicheur} />
           <DataHealthPanel mois={per?.debut ? per.debut.slice(0, 7) : undefined} />
+          {extra}
           {(d?.kpis.sans_correspondance?.sites ?? 0) > 0 && (
             <div role="note" style={{ padding: 10, borderRadius: FT.radius, background: FT.orangeL, fontSize: 12.5 }}>
               {d!.kpis.sans_correspondance!.sites} site(s) absent(s) du fichier Closing : affichés dans le tableau mais exclus des totaux et indicateurs (filtre « Base Closing »).
@@ -390,174 +385,18 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
       <ClosingKpiPanel data={d?.kpis_closing} />
       {q.isError && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.redL, color: FT.red, fontWeight: 700, fontSize: 13 }}>Impossible de charger les consommations (erreur serveur).</div>}
 
-      {k && (() => {
-        const ps = evo.data?.periodes ?? [];
-        const i = per ? ps.findIndex((x) => x.fin === per.fin && x.debut === per.debut) : -1;
-        const trendOf = (key: "variation_l" | "closing_l"): { trend: number | null; trendNote: string } => {
-          const cur = i >= 0 ? ps[i][key] : null, prev = i > 0 ? ps[i - 1][key] : null;
-          if (cur === null || prev === null || prev === 0) return { trend: null, trendNote: "pas de période précédente comparable" };
-          return { trend: ((cur - prev) / Math.abs(prev)) * 100, trendNote: "" };
-        };
-        const cards: OverviewCard[] = [
-          { key: "var", label: "Variation de stock", help: A.variation, value: k.variation.total_l, icon: "sigma", color: "#2563EB", bg: "#E8F0FE", series: ps.map((x) => x.variation_l),
-            sub: `${nf(k.variation.sites)} sites calculables${k.variation.negatives ? ` · ${nf(k.variation.negatives)} négative(s)` : ""}`, ...trendOf("variation_l") },
-          { key: "clo", label: "Consommation Closing", help: A.closing, value: k.closing.total_l, icon: "closing", color: "#16A34A", bg: "#E6F7EC", series: ps.map((x) => x.closing_l),
-            sub: `${nf(k.closing.sites)} sites · référence de contrôle`, ...trendOf("closing_l") },
-          { key: "ins", label: "Instrumentée Snowflake", help: A.instrumentee, value: k.instrumentee.total_l, icon: "snow", color: "#EA7A0C", bg: "#FFF1E0", sub: `${nf(k.instrumentee.sites)} sites couverts · mesure capteur` },
-          { key: "cph", label: "CPH complète", help: A.cph_complete, value: k.cph_complete.total_l, icon: "cph", color: "#7C3AED", bg: "#F1EAFE",
-            sub: `${nf(k.cph_complete.sites)} sites complets · partielle ${k.cph_partielle.total_l === null ? "—" : `${nf(k.cph_partielle.total_l)} L`} (${nf(k.cph_partielle.sites)} sites)` },
-        ];
-        const b = k.bilans;
-        const donut = [
-          { label: "Prêt à certifier", n: b.prets, color: "#16A34A" }, { label: "Avec réserve", n: b.avec_reserve, color: "#EA7A0C" },
-          { label: "Variation à contrôler", n: b.variation_calculee, color: "#DC2626" }, { label: "Non calculable", n: b.non_calculables, color: "#94A3B8" },
-          { label: "Certifié", n: b.certifies, color: "#2563EB" },
-        ];
-        return (
-          <>
-            <KpiCards cards={cards} />
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-              <div style={{ flex: "2 1 460px", minWidth: 0 }}><EvolutionChart evo={evo.data} loading={evo.isLoading} error={evo.isError} /></div>
-              <div style={{ flex: "1 1 340px", minWidth: 0 }}><StatusDonut items={donut} total={donut.reduce((t, x) => t + x.n, 0)} /></div>
-            </div>
-          </>
-        );
-      })()}
 
-      <details style={{ border: FT.borderCrisp, borderRadius: FT.radius, background: FT.card, padding: "9px 14px" }}>
-        <summary style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 800, color: FT.text }}>Tous les indicateurs (certifiée, target) · bilans · qualité du calcul CPH{extra ? " et couverture GE officielle" : ""}</summary>
-        <div style={{ marginTop: 10, display: "grid", gap: 12 }}>
-          {k && (
-        <KpiStrip cells={[
-          { tone: "green", label: "Variation de stock (L)", help: A.variation, value: k.variation.total_l === null ? "—" : `${nf(k.variation.total_l)} L`,
-            sub: `${nf(k.variation.sites)} sites calculables · ${nf(k.bilans.prets)} prêts · ${nf(k.bilans.avec_reserve)} avec réserve${k.variation.negatives ? ` · ${nf(k.variation.negatives)} négative(s)` : ""}` },
-          { tone: "blue", label: "Consommation réelle certifiée (L)", help: A.certifiee, value: k.certifiee.total_l === null ? "—" : `${nf(k.certifiee.total_l)} L`, sub: `${nf(k.bilans.certifies)} bilan(s) certifié(s) par le Fuel Manager` },
-          { tone: "slate", label: "Consommation Closing (L)", help: A.closing, value: k.closing.total_l === null ? "—" : `${nf(k.closing.total_l)} L`, sub: `${nf(k.closing.sites)} sites · référence de contrôle` },
-          { tone: "cyan", label: "Instrumentée Snowflake (L)", help: A.instrumentee, value: k.instrumentee.total_l === null ? "—" : `${nf(k.instrumentee.total_l)} L`, sub: `${nf(k.instrumentee.sites)} sites couverts · mesure capteur` },
-          { tone: "violet", label: "CPH complète (L)", help: A.cph_complete, value: k.cph_complete.total_l === null ? "—" : `${nf(k.cph_complete.total_l)} L`,
-            sub: `${nf(k.cph_complete.sites)} sites complets · partielle ${k.cph_partielle.total_l === null ? "—" : `${nf(k.cph_partielle.total_l)} L`} (${nf(k.cph_partielle.sites)} sites)` },
-          { tone: "orange", label: "Target fuel période (L)", help: A.target, value: k.target.total_periode_l === null ? "—" : `${nf(k.target.total_periode_l)} L`,
-            sub: `${nf(k.target.sites_avec_target)} sites avec target (${nf(k.target.couverture_pct, 0)} %) · écart variation vs target ${k.target.ecart_global_l === null ? "—" : `${signed(k.target.ecart_global_l)} L`}${k.target.ecart_global_pct === null ? "" : ` (${signed(k.target.ecart_global_pct, 1)} %)`}` },
-        ]} />
-          )}
-          {k && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 10, fontSize: 12.5, color: FT.text }}>
-              <div><b>Target</b> : moyen/site couvert {nf(k.target.target_moyen_site_l)} L · variation moyenne/site couvert {nf(k.target.variation_moyenne_site_l)} L · {nf(k.target.sites_sans_target)} site(s) sans target · {nf(k.target.a_confirmer)} à confirmer.</div>
-              <div><b>Bilans</b> : {nf(k.bilans.prets)} prêts · {nf(k.bilans.avec_reserve)} avec réserve · {nf(k.bilans.variation_calculee)} variation à contrôler · {nf(k.bilans.non_calculables)} non calculables · {nf(k.bilans.certifies)} certifiés.</div>
-              <div><b>Couvertures</b> : CPH complète {nf(k.couverture_cph_pct, 0)} % · target {nf(k.target.couverture_pct, 0)} %.</div>
-              <div title={k.ponctions.note}><b>Ponctions (périmètre affiché)</b> : entrantes {nf(k.ponctions.entrantes_l)} L · sortantes {nf(k.ponctions.sortantes_l)} L · écart {signed(k.ponctions.ecart_perimetre_l)} L (contrepartie hors périmètre ; impact global ENOC = 0 L).</div>
-              <div><b>Alertes</b> : {nf(k.alertes.stock_identique_suspect)} stock(s) identique(s) suspect(s) · {nf(k.alertes.instrumentee_ecart_extreme)} instrumentée à investiguer · {nf(k.alertes.cph_ecart_extreme + k.alertes.cph_nulle_variation_positive)} CPH à investiguer · {nf(k.alertes.closing_non_independant)} écart(s) Closing non indépendant(s).</div>
-            </div>
-          )}
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: FT.textSub, textTransform: "uppercase", marginBottom: 6 }}>Qualité du calcul CPH</div>
-            <CoverageKpis items={d?.qualite_cph} />
-          </div>
-          {extra}
-        </div>
-      </details>
 
-      <section aria-label="Derniers suivis" style={{ border: FT.borderCrisp, background: FT.card, borderRadius: 16, boxShadow: FT.shadow, overflow: "hidden" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", gap: 8, flexWrap: "wrap" }}>
-          <h3 style={{ margin: 0, fontSize: 17, display: "flex", alignItems: "center", gap: 8 }}><List size={18} color={FT.blue} aria-hidden /> {full ? "Tous les résultats — vue détaillée" : "Derniers suivis"}</h3>
-          <button type="button" onClick={() => setFull((v) => !v)} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, padding: "8px 14px", borderRadius: 10, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}>
-            {full ? "← Vue simplifiée" : "Voir tous les résultats →"}
-          </button>
-        </div>
-        {!full && (
-          <div style={{ overflow: "auto", padding: "0 10px 10px" }}>
-            <table aria-label="Derniers suivis par site" style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: "#F3F6FB", textAlign: "left", color: FT.textMid, fontSize: 12.5 }}>
-                  {["Site ID", "Nom du site", "Statut bilan", "Pays", "Zone", "Typologie site", "Typologie énergie", "Modèle GE", "Puissance (KVA)", "Source puissance", "Date"].map((h, i, all) => (
-                    <th key={h || "act"} scope="col" style={{ padding: "11px 8px", fontWeight: 700, whiteSpace: "nowrap", borderRadius: i === 0 ? "10px 0 0 10px" : i === all.length - 1 ? "0 10px 10px 0" : 0 }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(d?.rows ?? []).slice(0, 5).map(safeRow).map((r) => {
-                  const st = STATUT_PILL[r.stock.statut];
-                  const Ico = st.icon;
-                  return (
-                    <tr key={r.site_id} style={{ borderTop: `1px solid ${FT.border}` }}>
-                      <td style={{ padding: "12px 8px", whiteSpace: "nowrap" }}><button type="button" onClick={() => setDetail({ row: r, tab: "hub" })} aria-label={`Voir le détail du site ${r.site_id}`} title="Voir le détail" style={{ border: "none", background: "none", padding: 0, fontWeight: 800, fontSize: 13, color: FT.text, cursor: "pointer", textDecoration: "underline dotted" }}>{r.site_id}</button></td>
-                      <td style={{ padding: "12px 8px", minWidth: 120 }}>{r.site_name ?? "—"}{r.correspondance && !r.correspondance.utilise && <span title={r.correspondance.motif ?? ""} aria-label="hors Closing" style={{ marginLeft: 6, fontSize: 10, color: FT.orange, fontWeight: 800, whiteSpace: "nowrap" }}>⚠ hors Closing</span>}</td>
-                      <td style={{ padding: "12px 8px", whiteSpace: "nowrap" }}>
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 999, fontSize: 12, fontWeight: 700, background: st.bg, color: st.fg }}><Ico size={13} aria-hidden /> {st.label}</span>
-                      </td>
-                      <td style={{ padding: "12px 8px" }}>{r.country ?? "—"}</td>
-                      <td style={{ padding: "12px 8px" }}>{r.zone ?? "—"}</td>
-                      <td style={{ padding: "12px 8px", whiteSpace: "nowrap" }}>{r.typologie ?? "—"}</td>
-                      <td style={{ padding: "12px 8px", minWidth: 110 }}>{r.typologie_energie ?? "—"}</td>
-                      <td style={{ padding: "12px 8px", whiteSpace: "nowrap" }}>{r.modele_ge ?? "—"}</td>
-                      <td style={{ padding: "12px 8px", ...mono }}>{r.puissance_nominale_kva === null || r.puissance_nominale_kva === undefined ? "—" : nf(r.puissance_nominale_kva)}</td>
-                      <td style={{ padding: "12px 8px" }}>{r.source_puissance ?? "—"}</td>
-                      <td style={{ padding: "12px 8px", whiteSpace: "nowrap", ...mono }}>{r.periode?.fin ? fr(r.periode.fin) : "—"}</td>
-                    </tr>
-                  );
-                })}
-                {d && d.rows.length === 0 && <tr><td colSpan={11} style={{ padding: 24, color: FT.textMid }}>Aucun site ne correspond aux filtres pour cette période.</td></tr>}
-              </tbody>
-            </table>
-            <div style={{ padding: "8px 12px 2px", fontSize: 12, color: FT.textMid }}>{Math.min(5, d?.rows.length ?? 0)} sites affichés sur {nf(d?.total ?? 0)} — Cliquez sur un identifiant de site pour son détail ; « Voir tous les résultats » pour le tableau complet (variation, Closing, écarts, CPH, target, certification).</div>
-          </div>
-        )}
-      </section>
-
-      {full && (
-      <div style={{ border: FT.borderCrisp, background: FT.card, borderRadius: FT.radius, boxShadow: FT.shadow, overflow: "hidden" }}>
-        <div style={{ overflow: "auto", maxHeight: "70vh" }} tabIndex={0} aria-label="Tableau des consommations par site">
-          <table style={{ borderCollapse: "separate", borderSpacing: 0, width: "max-content", minWidth: "100%" }}>
-            <thead>
-              <tr>
-                {groups.map((g, i) => (
-                  <th key={g.name} colSpan={g.n} scope="colgroup" style={{ ...thGroup, background: GROUP_BG[g.name], ...(i === 0 ? { position: "sticky", left: 0, zIndex: 5, textAlign: "left" } : {}) }}>{g.name}</th>
-                ))}
-                <th style={{ ...thGroup, background: FT.navy }} />
-              </tr>
-              <tr>
-                {cols.map((c, i) => (
-                  <th key={c.k} scope="col" style={{ ...th, ...(c.left ? { textAlign: "left" } : {}), ...stickyStyle(i, 4) }}>
-                    {c.label}{c.help && <HelpTip text={c.help} label={c.label} />}
-                  </th>
-                ))}
-                <th style={th}><span className="sr-only">Détail</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              {(d?.rows ?? []).map(safeRow).map((r, idx) => {
-                const bg = idx % 2 ? "#F8FAFD" : FT.card;
-                return (
-                  <tr key={r.site_id} style={{ background: bg }}>
-                    {cols.map((c, i) => (
-                      <td key={c.k} title={c.k === "motif" ? r.stock.motif ?? "" : c.k === "action" ? r.stock.action : undefined}
-                        style={{ ...td, background: bg, ...(c.left ? { textAlign: "left" } : {}), ...(i === 0 ? { minWidth: W1 } : i === 1 ? { minWidth: W2, maxWidth: W2, overflow: "hidden", textOverflow: "ellipsis" } : {}), ...(i === 2 ? { boxShadow: "2px 0 0 rgba(15,23,42,.06)" } : {}), ...stickyStyle(i, 1), ...(c.min ? { minWidth: c.min, maxWidth: c.min } : {}) }}>
-                        {c.min ? <div style={{ ...clamp2, fontSize: 11.5 }}>{c.render(r)}</div> : c.render(r)}
-                      </td>
-                    ))}
-                    <td style={{ ...td, background: bg }}>
-                      <button type="button" onClick={() => setDetail({ row: r, tab: "hub" })} aria-label={`Voir le détail du site ${r.site_id}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 800, padding: "5px 9px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}>
-                        <Eye size={12} aria-hidden /> Voir le détail
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {d && d.rows.length === 0 && (
-                <tr><td colSpan={cols.length + 1} style={{ ...td, textAlign: "left", padding: 24, color: FT.textMid }}>Aucun site ne correspond aux filtres pour cette période.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", fontSize: 12, color: FT.textMid }}>
-          <span>{nf(d?.total ?? 0)} site(s) · page {page} / {totalPages}</span>
+      <section aria-label="Synthèse conso fuel par site" style={{ display: "grid", gap: 8 }}>
+        <ClosingSiteTable rows={(d?.rows ?? []).map(safeRow)} onDetail={(r) => setDetail({ row: r, tab: "hub" })} />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: FT.textMid, flexWrap: "wrap", gap: 8 }}>
+          <span>{nf(d?.total ?? 0)} site(s) · page {page} / {totalPages} · cliquez sur un ID de site pour le détail du bilan</span>
           <span style={{ display: "inline-flex", gap: 6 }}>
             <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} style={{ padding: "5px 10px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: page <= 1 ? "not-allowed" : "pointer" }}>Précédent</button>
             <button type="button" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} style={{ padding: "5px 10px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: page >= totalPages ? "not-allowed" : "pointer" }}>Suivant</button>
           </span>
         </div>
-      </div>
-      )}
+      </section>
 
       {detail && per && detail.tab === "hub" && <DetailHub row={detail.row} periode={per.libelle} A={A} onClose={() => setDetail(null)} onPick={(tab) => setDetail({ row: detail.row, tab })} />}
       {detail && per && detail.tab === "stock" && detail.row.stock.bilan_id !== null && (
