@@ -2185,7 +2185,7 @@ export type DataHealth = {
   };
   /** Couverture du stock final du dernier mois complet dans la source convenue (fichier de clôture, puis ENOC). */
   stock_final?: { mois: string; source: string; fenetre: [string, string]; sites_base: number; sites_exploitables: number;
-    sites_avec_reserve: number; sites_sans_releve: number; sans_releve: string[]; sites_sans_ge_exclus?: number } | null;
+    sites_avec_reserve: number; sites_sans_releve: number; sans_releve: string[]; sites_sans_ge_exclus?: number; lignes_sans_carburant_exclues?: number } | null;
   couverture: { sites_base_closing: number; sites_releve_gardien_recent: number; seuil_jours: number; sites_releve_en_retard: number; sites_sans_releve_gardien: number; sites_enoc_hors_base_closing: number | null };
   releves_en_retard: Array<{ site_id: string; dernier_releve: string; jours: number }>;
   sites_sans_releve: string[];

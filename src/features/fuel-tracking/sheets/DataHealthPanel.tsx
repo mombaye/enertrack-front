@@ -33,9 +33,10 @@ export function DataHealthPanel({ mois }: { mois?: string }) {
           {cell("Target fuel", s.target_fuel ? day(s.target_fuel.recu_le) : "non importé", !s.target_fuel)}
           {cell("Sites base Closing", String(f.sites_base))}
           {cell("Stock final exploitable", String(f.sites_exploitables))}
-          {cell("Avec réserve (4-14 j)", String(f.sites_avec_reserve), f.sites_avec_reserve > 0)}
+          {cell("Avec réserve", String(f.sites_avec_reserve), f.sites_avec_reserve > 0)}
           {cell("Sans relevé", String(f.sites_sans_releve), f.sites_sans_releve > 0)}
           {(f.sites_sans_ge_exclus ?? 0) > 0 && cell("Sites sans GE exclus (Output)", String(f.sites_sans_ge_exclus))}
+          {(f.lignes_sans_carburant_exclues ?? 0) > 0 && cell("Lignes du Closing sans carburant (exclues)", String(f.lignes_sans_carburant_exclues))}
         </div>
         <div style={{ fontSize: 12, color: FT.textMid }}>Relevés pris en compte du {day(f.fenetre[0])} au {day(f.fenetre[1])}.</div>
         {f.sans_releve.length > 0 && (
