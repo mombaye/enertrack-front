@@ -12,7 +12,6 @@ import { type FuelConsommationResponse, type FuelGeDetectionFilter } from "@/ser
 import { KpiCard, Modal, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { ConsoComparaisonSection } from "./ConsoComparaisonSection";
-import type { ConsoPeriod } from "./ConsoPeriodPicker";
 import { HorsReferentielBanner } from "./cphDiagnostics";
 import { fmt, monthLabel } from "../helpers";
 
@@ -289,12 +288,10 @@ function GeDetectionPanel({
 }
 
 export function ConsommationSheet({
-  period,
   data,
   loading,
   stickyTop = 0,
 }: {
-  period: ConsoPeriod;
   data: FuelConsommationResponse | undefined;
   loading: boolean;
   stickyTop?: number;
@@ -306,7 +303,54 @@ export function ConsommationSheet({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
-      <ConsoComparaisonSection period={period} extra={<HorsReferentielBanner count={data?.sites_hors_referentiel} />} />
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <button
+          type="button"
+          onClick={() => setShowDetectionModal(true)}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`,
+            background: FT.card, color: FT.text, cursor: "pointer", fontSize: 12.5, fontWeight: 800,
+            borderRadius: 10, padding: "9px 14px", boxShadow: FT.shadow,
+          }}
+        >
+          <PieChartIcon size={14} color={FT.blue} aria-hidden /> Voir informations Détection GE
+        </button>
+      </div>
+
+      {showDetectionModal && (
+        <Modal title="Détection GE — Snowflake / ENOC seuls" onClose={() => setShowDetectionModal(false)} maxWidth={900}>
+          <GeDetectionPanel detection={data?.ge_detection} activeDetection={activeDetection} onDetectionChange={setActiveDetection} />
+        </Modal>
+      )}
+
+      <HorsReferentielBanner count={data?.sites_hors_referentiel} />
+      {/* Indicateurs mensuels Stan — référence opérateur (fichier Stan, mois sélectionné).
+          Ces KPIs sont calculés sur le mois complet, pas sur la plage exacte du tableau ci-dessous.
+          Ils servent de dénominateur officiel Ops ; ne pas les confondre avec les mesures
+          de la plage sélectionnée affichées dans le tableau de comparaison. */}
+      {data?.kpis && (
+        <details style={{ border: `1px solid ${FT.border}`, borderRadius: FT.radius, padding: "2px 0" }}>
+          <summary style={{
+            cursor: "pointer", padding: "9px 14px", fontSize: 12.5, fontWeight: 800,
+            color: FT.textMid, listStyle: "none", display: "flex", alignItems: "center", gap: 8,
+          }}>
+            <Gauge size={13} color={FT.blue} aria-hidden />
+            Indicateurs de référence mensuelle (fichier Stan) · mois {data.month_year ?? "—"}
+            <span style={{ marginLeft: "auto", fontSize: 11, color: FT.textSub, fontWeight: 600 }}>
+              ▸ cliquer pour afficher
+            </span>
+          </summary>
+          <div style={{ padding: "0 14px 14px" }}>
+            <div style={{ fontSize: 11, color: FT.textSub, marginBottom: 10 }}>
+              Ces indicateurs concernent le <strong>mois complet</strong> {data.month_year ?? "—"}.
+              Le tableau ci-dessous couvre la <strong>plage de dates exacte sélectionnée</strong>.
+            </div>
+            <ConsommationKpis data={data} stickyTop={0} />
+          </div>
+        </details>
+      )}
+
+      <ConsoComparaisonSection />
     </div>
   );
 }

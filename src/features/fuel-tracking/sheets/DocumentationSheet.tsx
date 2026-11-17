@@ -59,8 +59,8 @@ function FlowOverview() {
   return (
     <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "stretch" }}>
       <Column label="1 · Sources d'entrée" tone="violet">
-        <Node tone="violet" icon={<FileSpreadsheet />} title="Fichier Closing (mensuel)" lines={["Stocks initial / final par site", "Totaux livraisons, rajouts, retraits, vols, vidanges", "Consommation considérée", "Onglet GENSET DB (abaque CPH)"]} />
-        <Node tone="violet" icon={<FileSpreadsheet />} title="Fichier Output App Fuel (Ops)" lines={["Stock initial (col. O) et final (AM / AQ / AR)", "Totaux de mouvements du mois", "Source du stock : technicien, gardien, estimation Energy Desk"]} />
+        <Node tone="violet" icon={<FileSpreadsheet />} title="Fichier Closing (mensuel)" lines={["Stocks initial / final par site (SEULES données reprises)", "Consommation Ops : affichée pour contrôle", "Onglet GENSET DB (abaque CPH)"]} />
+        <Node tone="violet" icon={<FileSpreadsheet />} title="Fichier Output App Fuel (Ops)" lines={["Stock initial (col. O) et final (AM / AQ / AR) : SEULES données reprises", "Source du stock : technicien, gardien, estimation Energy Desk", "Totaux de mouvements du fichier : non utilisés"]} />
         <Node tone="cyan" icon={<Truck />} title="ENOC (MongoDB, lecture seule)" lines={["Livraisons, ponctions, rajouts, retraits", "Niveaux avant / après ravitaillement", "Relevés terrain et gardiennage"]} />
         <Node tone="cyan" icon={<Database />} title="Snowflake (lecture seule)" lines={["Temps de marche GE, puissance", "Conso instrumentée (capteurs)", "Capacité des cuves"]} />
       </Column>
@@ -83,12 +83,12 @@ function FlowOverview() {
 
 type Cell = { text: string; src: string; tone: Tone };
 const MONTHS: Array<{ mois: string; mode: string; tone: Tone; ini: Cell; mv: Cell; fin: Cell; result: string }> = [
-  { mois: "Septembre 2026", mode: "Mois de RÉFÉRENCE", tone: "violet",
-    ini: { text: "Ligne du Closing", src: "Closing sept.", tone: "violet" }, mv: { text: "Totaux du Closing", src: "Closing sept.", tone: "violet" },
-    fin: { text: "Ligne du Closing", src: "Closing sept.", tone: "violet" }, result: "Affiché TEL QUEL (aucun recalcul) · statut « Référence Closing »" },
-  { mois: "Octobre 2026", mode: "Mois CALCULÉ (fichiers)", tone: "blue",
-    ini: { text: "Stock initial du fichier", src: "Closing / Output col. O", tone: "violet" }, mv: { text: "Totaux du fichier (font foi)", src: "Output App Fuel", tone: "violet" },
-    fin: { text: "Stock retenu (≤ 6 j après fin de mois)", src: "Output col. AM / AQ / AR", tone: "violet" }, result: "Calculé par EnerTrack · avec réserve si estimation ou relevé après la borne" },
+  { mois: "Septembre 2026", mode: "Mois CALCULÉ (stocks du fichier)", tone: "blue",
+    ini: { text: "Stock initial de la ligne du Closing", src: "Closing sept.", tone: "violet" }, mv: { text: "Mouvements qualifiés", src: "ENOC", tone: "cyan" },
+    fin: { text: "Stock final de la ligne du Closing", src: "Closing sept.", tone: "violet" }, result: "Calculé par EnerTrack · conso du Closing affichée pour contrôle" },
+  { mois: "Octobre 2026", mode: "Mois CALCULÉ (stocks du fichier)", tone: "blue",
+    ini: { text: "Stock initial du fichier", src: "Closing / Output col. O", tone: "violet" }, mv: { text: "Mouvements qualifiés", src: "ENOC", tone: "cyan" },
+    fin: { text: "Stock retenu par Ops (relevé dans le mois)", src: "Output col. AM / AQ / AR", tone: "violet" }, result: "Calculé par EnerTrack · avec réserve si estimation ou relevé ancien" },
   { mois: "Novembre 2026 et suivants", mode: "Mois CALCULÉ (application)", tone: "green",
     ini: { text: "Stock final du mois précédent", src: "EnerTrack", tone: "green" }, mv: { text: "Mouvements qualifiés", src: "ENOC", tone: "cyan" },
     fin: { text: "Relevé le plus récent", src: "ENOC terrain / gardiennage / ravitaillement", tone: "cyan" }, result: "Calculé par EnerTrack · chaînage mois après mois" },
@@ -162,7 +162,6 @@ function Formula() {
 }
 
 const STATUS: Array<{ label: string; tone: Tone; text: string }> = [
-  { label: "Référence Closing", tone: "blue", text: "Mois de référence : ligne du Closing affichée telle quelle." },
   { label: "Prêt à certifier", tone: "green", text: "Score ≥ 80, aucun point de réserve : le Fuel Manager peut certifier." },
   { label: "Estimation avec réserve", tone: "orange", text: "Score 50–79, stock estimé ou relevé hors borne : à lire avec prudence." },
   { label: "Variation calculée (à contrôler)", tone: "red", text: "Variation négative : anomalie visible, jamais certifiable." },
