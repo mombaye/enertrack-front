@@ -15,6 +15,34 @@ export function DataHealthPanel() {
       <div style={{ fontSize: 11, color: FT.textMid }}>{label}</div><div style={{ fontWeight: 800, fontSize: 13 }}>{value}</div>
     </div>
   );
+  const f = h.stock_final;
+  if (f) {
+    // Règles MVP : le stock final vient du fichier de clôture (sept./oct. 2026) puis d'ENOC — plus des relevés de gardiennage.
+    const [y, m] = f.mois.split("-").map(Number);
+    const mois = new Date(y, m - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+    return (
+      <details style={{ border: FT.borderCrisp, background: FT.card, borderRadius: FT.radius, padding: "8px 12px" }}>
+        <summary style={{ cursor: "pointer", fontWeight: 800, fontSize: 13 }}>
+          Santé des données — stock final de {mois} : {f.sites_sans_releve} site(s) sans relevé dans la source convenue
+        </summary>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "10px 0" }}>
+          {cell("Source du stock final", f.source)}
+          {cell("Fichier de clôture", s.closing ? `${s.closing.fichier} · ${day(s.closing.recu_le)}` : "non importé", !s.closing)}
+          {cell("Mouvements ENOC (dernier)", day(s.enoc.dernier_mouvement))}
+          {cell("Snowflake (dernière journée)", day(s.snowflake.derniere_journee), (s.snowflake.age_jours ?? 99) > 3)}
+          {cell("Target fuel", s.target_fuel ? day(s.target_fuel.recu_le) : "non importé", !s.target_fuel)}
+          {cell("Sites base Closing", String(f.sites_base))}
+          {cell("Stock final exploitable", String(f.sites_exploitables))}
+          {cell("Avec réserve (4-14 j)", String(f.sites_avec_reserve), f.sites_avec_reserve > 0)}
+          {cell("Sans relevé", String(f.sites_sans_releve), f.sites_sans_releve > 0)}
+        </div>
+        <div style={{ fontSize: 12, color: FT.textMid }}>Relevés pris en compte du {day(f.fenetre[0])} au {day(f.fenetre[1])}.</div>
+        {f.sans_releve.length > 0 && (
+          <div style={{ fontSize: 12.5, marginTop: 4 }}><strong>Sans stock final :</strong> {f.sans_releve.join(" · ")}</div>
+        )}
+      </details>
+    );
+  }
   return (
     <details style={{ border: FT.borderCrisp, background: FT.card, borderRadius: FT.radius, padding: "8px 12px" }}>
       <summary style={{ cursor: "pointer", fontWeight: 800, fontSize: 13 }}>

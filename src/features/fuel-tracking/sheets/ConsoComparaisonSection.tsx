@@ -26,10 +26,12 @@ const STATUT_META: Record<ConsoStatutBilan, { label: string; tone: Tone }> = {
   VARIATION_CALCULEE: { label: "Variation calculée", tone: "red" },
   ESTIMATION_AVEC_RESERVE: { label: "Estimation avec réserve", tone: "orange" },
   PRET_A_CERTIFIER: { label: "Prêt à certifier", tone: "green" },
+  REFERENCE_CLOSING: { label: "Référence Closing", tone: "blue" },
   CONSOMMATION_REELLE_CERTIFIEE: { label: "Réelle certifiée", tone: "blue" },
 };
 const STATUT_PILL: Record<ConsoStatutBilan, { label: string; bg: string; fg: string; icon: typeof CheckCircle2 }> = {
   PRET_A_CERTIFIER: { label: "Bilan OK", bg: "#E4F7EC", fg: "#12805C", icon: CheckCircle2 },
+  REFERENCE_CLOSING: { label: "Fichier Closing", bg: "#E5EEFF", fg: "#1D4ED8", icon: CheckCircle2 },
   CONSOMMATION_REELLE_CERTIFIEE: { label: "Certifié", bg: "#E5EEFF", fg: "#1D4ED8", icon: CheckCircle2 },
   ESTIMATION_AVEC_RESERVE: { label: "Avec réserve", bg: "#FFF1DD", fg: "#C2660A", icon: AlertTriangle },
   VARIATION_CALCULEE: { label: "À contrôler", bg: "#FDE8E8", fg: "#B42323", icon: XCircle },
@@ -69,7 +71,7 @@ function buildColsDef(A: Record<string, string>): Col[] {
     // Identification (colonnes figées : Site ID, Nom du site, Statut bilan)
     { k: "site", group: "Identification", label: "Site ID", left: true, render: (r) => <b>{r.site_id}</b> },
     { k: "name", group: "Identification", label: "Nom du site", left: true, render: (r) => r.site_name ?? "—" },
-    { k: "statut", group: "Identification", label: "Statut bilan", left: true, help: "NON_CALCULABLE · VARIATION_CALCULEE (calculée mais anomalie, ex. négative) · ESTIMATION_AVEC_RESERVE · PRET_A_CERTIFIER · CONSOMMATION_REELLE_CERTIFIEE (validée par le Fuel Manager).",
+    { k: "statut", group: "Identification", label: "Statut bilan", left: true, help: "NON_CALCULABLE · VARIATION_CALCULEE (calculée mais anomalie, ex. négative) · ESTIMATION_AVEC_RESERVE · PRET_A_CERTIFIER · REFERENCE_CLOSING (mois de référence : ligne du fichier Closing telle quelle) · CONSOMMATION_REELLE_CERTIFIEE (validée par le Fuel Manager).",
       render: (r) => <Pill label={STATUT_META[r.stock.statut].label} tone={STATUT_META[r.stock.statut].tone} /> },
     { k: "pays", group: "Identification", label: "Pays", left: true, render: (r) => r.country ?? "—" },
     { k: "zone", group: "Identification", label: "Zone", left: true, render: (r) => r.zone ?? "—" },

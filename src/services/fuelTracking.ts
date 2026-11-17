@@ -2050,7 +2050,7 @@ export async function downloadStockReport(kind: string, params: { debut?: string
 }
 
 // ── Suivis Consommations : tableau unique, période unique, cinq mesures distinctes ──
-export type ConsoStatutBilan = "NON_CALCULABLE" | "VARIATION_CALCULEE" | "ESTIMATION_AVEC_RESERVE" | "PRET_A_CERTIFIER" | "CONSOMMATION_REELLE_CERTIFIEE";
+export type ConsoStatutBilan = "NON_CALCULABLE" | "VARIATION_CALCULEE" | "ESTIMATION_AVEC_RESERVE" | "PRET_A_CERTIFIER" | "REFERENCE_CLOSING" | "CONSOMMATION_REELLE_CERTIFIEE";
 export type ConsoTargetStatut = "SOUS_TARGET" | "DANS_TARGET" | "AU_DESSUS_TARGET" | "TARGET_HISTORIQUE_A_CONFIRMER" | "TARGET_INDISPONIBLE";
 
 export type ConsoGapExplication = {
@@ -2176,6 +2176,9 @@ export type DataHealth = {
     snowflake: { derniere_journee: string | null; age_jours: number | null };
     target_fuel: { fichier: string; recu_le: string } | null;
   };
+  /** Couverture du stock final du dernier mois complet dans la source convenue (fichier de clôture, puis ENOC). */
+  stock_final?: { mois: string; source: string; fenetre: [string, string]; sites_base: number; sites_exploitables: number;
+    sites_avec_reserve: number; sites_sans_releve: number; sans_releve: string[] } | null;
   couverture: { sites_base_closing: number; sites_releve_gardien_recent: number; seuil_jours: number; sites_releve_en_retard: number; sites_sans_releve_gardien: number; sites_enoc_hors_base_closing: number | null };
   releves_en_retard: Array<{ site_id: string; dernier_releve: string; jours: number }>;
   sites_sans_releve: string[];
