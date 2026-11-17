@@ -19,11 +19,7 @@ const fmt = (k: string, v: ClosingKpiValue | undefined) => {
 
 const LEFT: string[] = ["nb_sites_ge", "stock_initial_l", "appoint_initial_l", "commande_mois_suivant_l", "commande_non_livree_l", "livree_l", "autre_l"];
 const MIDDLE: string[] = ["conso_moyenne_jour_l", "stock_final_l", "appoint_final_l", "conso_releves_l", "perdue_l", "check_l", "nb_sites"];
-const RIGHT: Array<{ k: string; style?: "red" | "yellow" | "black" | "dim" }> = [
-  { k: "nb_jours" }, { k: "ecart_theorique_l", style: "red" }, { k: "vol_probable_l", style: "red" },
-  { k: "estimation_conso_mois_l", style: "yellow" }, { k: "estimation_conso_prec_l", style: "black" },
-  { k: "estimation_stock_fin_l" }, { k: "estimation_stock_fin_prec_l", style: "dim" }, { k: "estimation_livraison_l" },
-];
+// Données actuelles seulement : le bloc de droite du fichier (jours, écarts, estimations, projection) n'est pas affiché pour le moment.
 
 function Pair({ k, kpis }: { k: string; kpis: ClosingKpis["kpis"] }) {
   const v = kpis[k];
@@ -45,7 +41,6 @@ export function ClosingKpiPanel({ data }: { data: ClosingKpis | null | undefined
   const fr = (v: string) => v.split("-").reverse().join("/");
   const mois = full ? first.toLocaleDateString("fr-FR", { month: "long", year: "numeric" }).toUpperCase() : `DU ${fr(data.debut!)} AU ${fr(data.fin!)}`;
   const dots: CSSProperties = { backgroundColor: NAVY, backgroundImage: "radial-gradient(rgba(255,255,255,.07) 1px, transparent 1px)", backgroundSize: "6px 6px" };
-  const proj = k.projection_mois_suivant_l;
   return (
     <section aria-label="KPI de synthèse du mois (format fichier Closing)" style={{ ...dots, borderRadius: 12, padding: 16, color: "#fff" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", borderBottom: "2px solid #fff", paddingBottom: 8, marginBottom: 12 }}>
@@ -59,32 +54,6 @@ export function ClosingKpiPanel({ data }: { data: ClosingKpis | null | undefined
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "4px 24px" }}>
         <div>{LEFT.map((x) => <Pair key={x} k={x} kpis={k} />)}</div>
         <div>{MIDDLE.map((x) => <Pair key={x} k={x} kpis={k} />)}</div>
-      </div>
-      <div style={{ borderTop: "2px solid #fff", marginTop: 12, paddingTop: 10, display: "grid", gap: 4 }}>
-        {RIGHT.map(({ k: key, style }) => {
-          const v = k[key];
-          const row: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 140px", gap: 16, alignItems: "center", padding: "5px 10px", borderRadius: 4 };
-          const color = style === "red" ? "#FF3B3B" : style === "yellow" ? "#000" : style === "dim" ? "#C9A227" : style === "black" ? "#F5C518" : VAL;
-          const bg = style === "yellow" ? YELLOW : style === "black" ? "#000" : "transparent";
-          const lab = style === "red" ? "#FF3B3B" : style === "yellow" ? "#000" : style === "black" ? "#F5C518" : style === "dim" ? "#C9A227" : "#fff";
-          return (
-            <div key={key} style={{ ...row, background: bg }}>
-              <span style={{ textAlign: "right", fontSize: 14, color: lab, fontWeight: style === "yellow" ? 700 : 600 }}>{v?.libelle ?? key}</span>
-              <span style={{ textAlign: "right", fontSize: 18, fontWeight: 700, color, fontVariantNumeric: "tabular-nums" }}>{fmt(key, v)}</span>
-            </div>
-          );
-        })}
-        {proj && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 140px", gap: 16, alignItems: "center", padding: "7px 10px", borderRadius: 4, border: `2px dashed ${YELLOW}`, marginTop: 6 }}>
-            <span style={{ textAlign: "right", fontSize: 14, fontWeight: 700 }}>
-              {proj.libelle}
-              <span style={{ display: "block", fontSize: 11, fontWeight: 500, color: "rgba(255,255,255,.75)" }}>
-                Projection = Σ conso moyenne L/jour du mois par site × nb de jours du mois suivant (méthode du fichier Closing)
-              </span>
-            </span>
-            <span style={{ textAlign: "right", fontSize: 18, fontWeight: 800, color: YELLOW, fontVariantNumeric: "tabular-nums" }}>{fmt("projection_mois_suivant_l", proj)}</span>
-          </div>
-        )}
       </div>
       <div style={{ fontSize: 11, color: "rgba(255,255,255,.7)", marginTop: 8 }}>« n.d. » = donnée non disponible (jamais remplacée par 0).</div>
     </section>

@@ -201,6 +201,7 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
   const qc = useQueryClient();
   useEffect(() => { setPage(1); }, [debut, fin]);
   const [computing, setComputing] = useState<string | null>(null);
+  const [showQ, setShowQ] = useState(false);
   const [f, setF] = useState<ConsoFilters>({});
   const [site, setSite] = useState("");
   const [page, setPage] = useState(1);
@@ -259,6 +260,24 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
 
   return (
     <section aria-label="Suivis Consommations" style={{ display: "grid", gap: 14 }}>
+      {d?.detail && !per && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.orangeL, color: FT.orange, fontWeight: 700, fontSize: 13 }}>{d.detail}</div>}
+      {per && noBilan && (
+        <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.orangeL, color: FT.text, fontSize: 13 }}>
+          Aucun bilan de stock pour cette période ({per.libelle}) : les KPI et le tableau seront disponibles une fois le bilan calculé.{" "}
+          <button type="button" disabled={computing !== null} onClick={async () => {
+            setComputing("Calcul en cours…");
+            try {
+              const r = await computePeriodBalances(per.debut, per.fin);
+              setComputing(`${r.calculables}/${r.sites} site(s) calculable(s).`);
+              await qc.invalidateQueries({ queryKey: ["consommations"] }); await qc.invalidateQueries({ queryKey: ["conso-periods"] });
+            } catch { setComputing("Calcul impossible (droits Fuel Manager requis ou erreur serveur)."); }
+          }} style={{ marginLeft: 6, fontSize: 12.5, fontWeight: 800, padding: "5px 10px", borderRadius: 8, border: "none", background: FT.navy, color: "#fff", cursor: "pointer" }}>
+            Calculer le bilan de cette période
+          </button>
+          {computing && <span role="status" style={{ marginLeft: 8, fontSize: 12.5 }}>{computing}</span>}
+        </div>
+      )}
+      <ClosingKpiPanel data={d?.kpis_closing} />
       <div style={{ border: FT.borderCrisp, background: FT.card, borderRadius: 12, boxShadow: FT.shadow, padding: "8px 12px", display: "grid", gap: 8 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
           <label style={{ display: "flex", alignItems: "center", gap: 6, flex: "1 1 220px", border: `1px solid ${FT.border}`, borderRadius: 9, padding: "6px 10px" }}>
@@ -272,12 +291,30 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
               <option value="">Toutes typologies</option>{(d?.facettes.typologies ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
           </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${FT.border}`, borderRadius: 9, padding: "6px 10px" }}>
+            <CheckCircle2 size={14} color={FT.textSub} aria-hidden />
+            <select aria-label="Statut du bilan" value={f.statut_bilan ?? ""} onChange={(e) => set("statut_bilan", e.target.value)} style={{ border: "none", outline: "none", fontSize: 13, fontWeight: 600, background: "transparent" }}>
+              {(() => {
+                const cnt = d?.facettes.statuts_compte ?? {};
+                const total = Object.values(cnt).reduce((t, n) => t + n, 0);
+                return (
+                  <>
+                    <option value="">Tous les statuts ({nf(total)})</option>
+                    {(d?.facettes.statuts_bilan ?? []).filter((o) => (cnt[o] ?? 0) > 0 || f.statut_bilan === o).map((o) => (
+                      <option key={o} value={o}>{STATUT_PILL[o as ConsoStatutBilan]?.label ?? o} ({nf(cnt[o] ?? 0)})</option>
+                    ))}
+                  </>
+                );
+              })()}
+            </select>
+          </label>
           <button type="button" aria-expanded={adv} onClick={() => setAdv((v) => !v)} style={{ fontSize: 12.5, fontWeight: 700, background: "none", border: "none", color: FT.blue, cursor: "pointer" }}>
             {adv ? "Masquer filtres et exports ▲" : "Filtres et exports ▼"}
           </button>
-          <button type="button" onClick={() => { void q.refetch(); }} disabled={q.isFetching} title="Actualiser" aria-label="Actualiser"
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 800, padding: "7px 12px", borderRadius: 9, border: "none", background: "#1D5FE0", color: "#fff", cursor: "pointer" }}>
-            <RefreshCw size={14} aria-hidden className={q.isFetching ? "ft-spin" : ""} /> Actualiser
+          <button type="button" aria-expanded={showQ} onClick={() => setShowQ((v) => !v)}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, padding: "6px 10px", borderRadius: 9, cursor: "pointer",
+              border: `1px solid ${alertCount > 0 ? FT.orange : FT.border}`, background: alertCount > 0 ? FT.orangeL : FT.card, color: FT.text }}>
+            <AlertTriangle size={14} aria-hidden color={alertCount > 0 ? FT.orange : FT.textSub} /> Qualité des données{alertCount > 0 ? ` (${alertCount})` : ""}
           </button>
         </div>
         {adv && (
@@ -321,41 +358,20 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
         </div>
           </div>
         )}
-      </div>
-
-      {d?.detail && !per && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.orangeL, color: FT.orange, fontWeight: 700, fontSize: 13 }}>{d.detail}</div>}
-      {per && noBilan && (
-        <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.orangeL, color: FT.text, fontSize: 13 }}>
-          Aucun bilan de stock pour cette période ({per.libelle}) : les KPI et le tableau seront disponibles une fois le bilan calculé.{" "}
-          <button type="button" disabled={computing !== null} onClick={async () => {
-            setComputing("Calcul en cours…");
-            try {
-              const r = await computePeriodBalances(per.debut, per.fin);
-              setComputing(`${r.calculables}/${r.sites} site(s) calculable(s).`);
-              await qc.invalidateQueries({ queryKey: ["consommations"] }); await qc.invalidateQueries({ queryKey: ["conso-periods"] });
-            } catch { setComputing("Calcul impossible (droits Fuel Manager requis ou erreur serveur)."); }
-          }} style={{ marginLeft: 6, fontSize: 12.5, fontWeight: 800, padding: "5px 10px", borderRadius: 8, border: "none", background: FT.navy, color: "#fff", cursor: "pointer" }}>
-            Calculer le bilan de cette période
-          </button>
-          {computing && <span role="status" style={{ marginLeft: 8, fontSize: 12.5 }}>{computing}</span>}
-        </div>
-      )}
-      <ClosingKpiPanel data={d?.kpis_closing} />
-      <details style={{ border: FT.borderCrisp, borderRadius: 14, background: alertCount > 0 ? FT.orangeL : FT.card, padding: "8px 14px" }}>
-        <summary style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 800, color: FT.text, display: "flex", alignItems: "center", gap: 8 }}>
-          <AlertTriangle size={14} aria-hidden color={alertCount > 0 ? FT.orange : FT.textSub} /> Qualité des données et alertes{alertCount > 0 ? ` (${alertCount})` : " — aucune alerte bloquante"}
-        </summary>
-        <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+        {showQ && (
+        <div style={{ display: "grid", gap: 10, borderTop: `1px solid ${FT.border}`, paddingTop: 10 }}>
           <DataQualityNotice f={d?.fraicheur} />
           <DataHealthPanel mois={per?.debut ? per.debut.slice(0, 7) : undefined} />
           {extra}
           {(d?.kpis.sans_correspondance?.sites ?? 0) > 0 && (
             <div role="note" style={{ padding: 10, borderRadius: FT.radius, background: FT.orangeL, fontSize: 12.5 }}>
-              {d!.kpis.sans_correspondance!.sites} site(s) absent(s) du fichier Closing : affichés dans le tableau mais exclus des totaux et indicateurs (filtre « Base Closing »).
+              {d!.kpis.sans_correspondance!.sites} site(s) ont un bilan sur la période mais ne figurent pas dans le fichier de clôture (Closing / Output App Fuel) :
+              affichés dans le tableau avec la mention « Hors périmètre », exclus des totaux et des KPI. Ils deviennent comptés dès qu'ils apparaissent dans le fichier de clôture.
             </div>
           )}
         </div>
-      </details>
+        )}
+      </div>
       {q.isError && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.redL, color: FT.red, fontWeight: 700, fontSize: 13 }}>Impossible de charger les consommations (erreur serveur).</div>}
 
 

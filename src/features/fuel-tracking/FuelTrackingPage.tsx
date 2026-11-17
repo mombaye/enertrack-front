@@ -12,7 +12,7 @@
 //   - Commande    : à venir.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsFetching, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { BarChart3, Calculator, Calendar, Droplets, Fuel, Gauge, LayoutGrid, RefreshCw, Warehouse } from "lucide-react";
 
@@ -102,6 +102,7 @@ export default function FuelTrackingPage() {
   const qc = useQueryClient();
   // L'onglet actif vient de l'adresse (sous-rubriques de la barre latérale : /modules/suivi-carburant/<onglet>).
   const { tab: tabSlug } = useParams();
+  const consoFetching = useIsFetching({ queryKey: ["consommations"] }) > 0;
   const [consoPeriod, setConsoPeriod] = useState<ConsoPeriod>({ debut: "", fin: "" });   // période unique de Suivis Consommations
   const navigate = useNavigate();
   const activeTab: MainTab = TAB_BY_SLUG[tabSlug ?? ""] ?? "DASHBOARD";
@@ -269,6 +270,12 @@ export default function FuelTrackingPage() {
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               {activeTab === "CONSOMMATION" && <ConsoPeriodPicker value={consoPeriod} onChange={setConsoPeriod} />}
+              {activeTab === "CONSOMMATION" && (
+                <button type="button" onClick={() => { void qc.invalidateQueries({ queryKey: ["consommations"] }); void qc.invalidateQueries({ queryKey: ["conso-periods"] }); void qc.invalidateQueries({ queryKey: ["conso-sante"] }); }}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 800, padding: "7px 12px", borderRadius: 9, border: "none", background: "#1D5FE0", color: "#fff", cursor: "pointer" }}>
+                  <RefreshCw size={14} aria-hidden className={consoFetching ? "ft-spin" : ""} /> Actualiser
+                </button>
+              )}
               {activeTab === "DASHBOARD" && (
                 <div title="Mois des indicateurs mensuels (tendance du Dashboard, couverture GE)" style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`, background: FT.slateL, borderRadius: 9, padding: "5px 10px" }}>
                   <Calendar size={14} color={FT.textSub} aria-hidden />
@@ -292,7 +299,7 @@ export default function FuelTrackingPage() {
                   />
                 </div>
               )}
-              <button
+              {activeTab !== "CONSOMMATION" && <button
                 type="button"
                 onClick={() => { consommationQ.refetch(); qc.invalidateQueries(); }}
                 title="Rafraîchir toutes les données"
@@ -300,7 +307,7 @@ export default function FuelTrackingPage() {
                 style={{ width: 31, height: 31, borderRadius: 9, border: `1px solid ${FT.border}`, background: FT.slateL, display: "grid", placeItems: "center", cursor: "pointer", color: FT.textMid, flexShrink: 0 }}
               >
                 <RefreshCw size={14} className={consommationQ.isFetching ? "ft-spin" : ""} aria-hidden />
-              </button>
+              </button>}
             </div>
           </div>
 

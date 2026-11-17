@@ -2107,6 +2107,7 @@ export type ConsoKpis = {
   alertes: { stock_identique_suspect: number; instrumentee_ecart_extreme: number; cph_ecart_extreme: number; cph_nulle_variation_positive: number; closing_non_independant: number };
   couverture_cph_pct: number | null;
   sans_correspondance?: { sites: number; base_closing_sites: number; note: string };
+  sans_ge_exclus?: number;
 };
 
 export type ConsoFraicheur = {
@@ -2136,7 +2137,7 @@ export type ConsoResponse = {
   aide: Record<string, string>;
   qualite_cph: CphCouverture[];
   facettes: {
-    pays: string[]; zones: string[]; typologies: string[]; typologies_energie: string[]; statuts_bilan: string[]; sources_stock: string[];
+    pays: string[]; zones: string[]; typologies: string[]; typologies_energie: string[]; statuts_bilan: string[]; statuts_compte?: Record<string, number>; sources_stock: string[];
     sources_runtime: string[]; sources_puissance: string[]; sources_target: string[];
   };
   seuils: { couverture_instrumentee_min_pct: number; tolerance_target_pct: number; reference_minimale_l: number };
