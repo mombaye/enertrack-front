@@ -2061,7 +2061,7 @@ export type ConsoGapExplication = {
 export type ConsoGap = { ecart_l: number | null; ecart_pct: number | null; pct_na: string | null };
 
 export type ConsoRow = {
-  inventaire?: ConsoInventaire; stock_initial_sources?: ConsoStockInitialSources;
+  inventaire?: ConsoInventaire; stock_initial_sources?: ConsoStockInitialSources; ravitaillement?: ConsoRavitaillement;
   site_id: string;
   site_name: string | null;
   country: string | null;
@@ -2132,6 +2132,11 @@ export type ClosingKpis = {
 
 export type ConsoInventaire = { region: string | null; latitude: number | null; longitude: number | null; sla: string | null;
   indoor_outdoor: string | null; on_grid: string | null; typologie_cible: string | null; typologie_facturee: string | null };
+/** Bloc « DONNÉES DE RAVITAILLEMENT » : 4 totaux ENOC entre la date de relevé initiale et la date finale ; volé et fuite / écart
+ *  repris du fichier de clôture (sept., oct. 2026), ensuite fournis par le Fuel Manager. null = non disponible (jamais 0 par défaut). */
+export type ConsoRavitaillement = { eydon_l: number | null; carte_total_l: number | null; ajout_l: number | null; retrait_l: number | null;
+  vole_l: number | null; fuite_l: number | null; nb_mouvements_enoc: number | null; source_vol_fuite: string | null; debut: string | null; fin: string | null };
+
 export type ConsoStockInitialSources = { date: string | null; terrain_l: number | null; gardiennage_l: number | null; fms_l: number | null;
   retenue_l: number | null; source: string | null; compteur_gardiennage_h: number | null; compteur_fms_h: number | null;
   compteur_retenu_h: number | null; source_compteur: string | null };

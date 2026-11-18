@@ -1,5 +1,5 @@
 // src/features/fuel-tracking/sheets/OutputFormatTable.tsx
-// Tableau de Suivi Conso au format du fichier « Output App Fuel » : blocs INVENTAIRE et DONNÉES DE STOCK INITIAL.
+// Tableau de Suivi Conso au format du fichier « Output App Fuel » : blocs INVENTAIRE, DONNÉES DE STOCK INITIAL et DONNÉES DE RAVITAILLEMENT.
 // Toutes les valeurs du stock initial sont prises à la DATE EXACTE du relevé initial du fichier (aucune autre période).
 import type { CSSProperties, ReactNode } from "react";
 import type { ConsoRow } from "@/services/fuelTracking";
@@ -32,6 +32,25 @@ const STOCK_INITIAL: Col[] = [
   { h: "Relevé Compteur genset retenu", w: 105, render: (r) => <b>{num(r.stock_initial_sources?.compteur_retenu_h, 2)}</b> },
   { h: "Source de donnée index compteur", w: 150, left: true, render: (r) => txt(r.stock_initial_sources?.source_compteur) },
 ];
+// 4 totaux ENOC entre la date de relevé initiale et la date finale ; volé et fuite / écart : fichier de clôture (sept., oct.), puis Fuel Manager
+const periodeEnoc = (r: ConsoRow) => (r.ravitaillement?.debut && r.ravitaillement?.fin
+  ? `ENOC, du ${fr(r.ravitaillement.debut)} au ${fr(r.ravitaillement.fin)} (${r.ravitaillement.nb_mouvements_enoc ?? 0} mouvement(s))` : "Période du site inconnue : non calculé");
+const enoc = (v: (r: ConsoRow) => number | null | undefined) => (r: ConsoRow) => <span title={periodeEnoc(r)}>{num(v(r))}</span>;
+const volFuite = (v: (r: ConsoRow) => number | null | undefined) => (r: ConsoRow) => (
+  <span title={r.ravitaillement?.source_vol_fuite ?? "Ligne du fichier de clôture absente"}>
+    {v(r) === null || v(r) === undefined
+      ? <span style={{ color: "#94A0B4" }}>{r.ravitaillement?.source_vol_fuite?.startsWith("À fournir") ? "À fournir (FM)" : "n.d."}</span>
+      : num(v(r))}
+  </span>
+);
+const RAVITAILLEMENT: Col[] = [
+  { h: "Total Livraison Fuel EYDON", w: 105, render: enoc((r) => r.ravitaillement?.eydon_l) },
+  { h: "Total Livraison Fuel CARTE TOTAL", w: 105, render: enoc((r) => r.ravitaillement?.carte_total_l) },
+  { h: "Total Ajout", w: 90, render: enoc((r) => r.ravitaillement?.ajout_l) },
+  { h: "Total Retrait", w: 90, render: enoc((r) => r.ravitaillement?.retrait_l) },
+  { h: "Total QTE volée déclarée", w: 100, render: volFuite((r) => r.ravitaillement?.vole_l) },
+  { h: "Total QTE vidangée / Fuite / Ecart de Stock", w: 120, render: volFuite((r) => r.ravitaillement?.fuite_l) },
+];
 
 export function OutputFormatTable({ rows, onDetail }: { rows: ConsoRow[]; onDetail: (r: ConsoRow) => void }) {
   const th: CSSProperties = { background: NAVY, color: "#fff", fontSize: 11, fontWeight: 700, padding: "8px 6px", border: "1px solid #8EA9DB", textAlign: "center",
@@ -39,7 +58,7 @@ export function OutputFormatTable({ rows, onDetail }: { rows: ConsoRow[]; onDeta
   const group: CSSProperties = { background: "#fff", color: "#000", fontSize: 12.5, fontWeight: 800, padding: "6px", border: "2px solid #000", textAlign: "center",
     position: "sticky", top: 0, zIndex: 3, height: 30 };
   const td: CSSProperties = { fontSize: 12, padding: "5px 6px", border: "1px solid #D9E1F2", textAlign: "center", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
-  const all = [...INVENTAIRE, ...STOCK_INITIAL];
+  const all = [...INVENTAIRE, ...STOCK_INITIAL, ...RAVITAILLEMENT];
   return (
     <div style={{ overflow: "auto", maxHeight: "72vh" }} tabIndex={0} aria-label="Tableau des sites au format du fichier Output App Fuel">
       <table style={{ borderCollapse: "collapse", width: "max-content", minWidth: "100%" }}>
@@ -48,6 +67,7 @@ export function OutputFormatTable({ rows, onDetail }: { rows: ConsoRow[]; onDeta
             <th style={{ ...group, position: "sticky", left: 0, zIndex: 5 }} />
             <th colSpan={INVENTAIRE.length} style={group}>INVENTAIRE</th>
             <th colSpan={STOCK_INITIAL.length} style={group}>DONNEES DE STOCK INITIAL</th>
+            <th colSpan={RAVITAILLEMENT.length} style={group}>DONNEES DE RAVITAILLEMENT</th>
           </tr>
           <tr>
             <th style={{ ...th, minWidth: 95, position: "sticky", left: 0, zIndex: 4 }}>ID du site</th>
