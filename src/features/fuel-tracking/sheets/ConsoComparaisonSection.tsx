@@ -395,7 +395,10 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
                     {cols.map((c, i) => (
                       <td key={c.k} title={c.k === "motif" ? r.stock.motif ?? "" : c.k === "action" ? r.stock.action : undefined}
                         style={{ ...td, background: bg, ...(c.left ? { textAlign: "left" } : {}), ...(i === 0 ? { minWidth: W1 } : i === 1 ? { minWidth: W2, maxWidth: W2, overflow: "hidden", textOverflow: "ellipsis" } : {}), ...(i === 2 ? { boxShadow: "2px 0 0 rgba(15,23,42,.06)" } : {}), ...stickyStyle(i, 1), ...(c.min ? { minWidth: c.min, maxWidth: c.min } : {}) }}>
-                        {c.min ? <div style={{ ...clamp2, fontSize: 11.5 }}>{c.render(r)}</div> : c.render(r)}
+                        {c.k === "site" ? (
+                          <button type="button" onClick={() => setDetail({ row: r, tab: "hub" })} aria-label={`Voir le détail du site ${r.site_id}`} title="Voir le détail"
+                            style={{ border: "none", background: "none", padding: 0, fontWeight: 800, fontSize: 12.5, color: FT.navy, cursor: "pointer", textDecoration: "underline dotted" }}>{r.site_id}</button>
+                        ) : c.min ? <div style={{ ...clamp2, fontSize: 11.5 }}>{c.render(r)}</div> : c.render(r)}
                       </td>
                     ))}
                     <td style={{ ...td, background: bg }}>

@@ -13,7 +13,7 @@ import { KpiCard, Modal, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { ConsoComparaisonSection } from "./ConsoComparaisonSection";
 import type { ConsoPeriod } from "./ConsoPeriodPicker";
-import { HorsReferentielBanner } from "./cphDiagnostics";
+import { MissingSitesBanner } from "./MissingSitesBanner";
 import { fmt, monthLabel } from "../helpers";
 
 function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse | undefined; stickyTop: number }) {
@@ -306,27 +306,7 @@ export function ConsommationSheet({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <button
-          type="button"
-          onClick={() => setShowDetectionModal(true)}
-          style={{
-            display: "inline-flex", alignItems: "center", gap: 7, border: `1px solid ${FT.border}`,
-            background: FT.card, color: FT.text, cursor: "pointer", fontSize: 12.5, fontWeight: 800,
-            borderRadius: 10, padding: "9px 14px", boxShadow: FT.shadow,
-          }}
-        >
-          <PieChartIcon size={14} color={FT.blue} aria-hidden /> Voir informations Détection GE
-        </button>
-      </div>
-
-      {showDetectionModal && (
-        <Modal title="Détection GE — Snowflake / ENOC seuls" onClose={() => setShowDetectionModal(false)} maxWidth={900}>
-          <GeDetectionPanel detection={data?.ge_detection} activeDetection={activeDetection} onDetectionChange={setActiveDetection} />
-        </Modal>
-      )}
-
-      <HorsReferentielBanner count={data?.sites_hors_referentiel} />
+      <MissingSitesBanner />
       <ConsoComparaisonSection period={period} />
     </div>
   );
