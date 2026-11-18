@@ -1,6 +1,6 @@
 // « Suivis Consommations » — UN seul tableau, UNE période exacte (jours entiers 00:00:00 → 23:59:59), une ligne = un site.
 // Cinq mesures distinctes : variation de stock · Closing · instrumentée Snowflake · CPH (complète / partielle) · consommation réelle certifiée (vide avant validation).
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, Download, Eye, Layers, List, MapPin, RefreshCw, Tag, XCircle } from "lucide-react";
 import {
@@ -199,15 +199,14 @@ function KpiStrip({ cells }: { cells: Array<{ tone: Tone; label: string; value: 
   );
 }
 
-export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
-  const [debut, setDebut] = useState<string>("");
-  const [fin, setFin] = useState<string>("");
+export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; period?: { debut: string; fin: string } }) {
+  const debut = period?.debut ?? "", fin = period?.fin ?? "";
+  const [showQ, setShowQ] = useState(false);
   const [f, setF] = useState<ConsoFilters>({});
   const [site, setSite] = useState("");
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<{ row: ConsoRow; tab: "hub" | "stock" | "cph" } | null>(null);
   const [more, setMore] = useState(false);
-  const [full, setFull] = useState(false);
   const [adv, setAdv] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -215,6 +214,7 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
   const params: ConsoFilters = { ...f, site: site || undefined, date_debut: debut || undefined, date_fin: fin || undefined, page, page_size: 50 };
   const periods = useQuery({ queryKey: ["conso-periods"], queryFn: getConsommationsPeriodes, staleTime: 60_000 });
   const q = useQuery({ queryKey: ["consommations", params], queryFn: () => getConsommations(params), placeholderData: keepPreviousData });
+  useEffect(() => { setPage(1); }, [debut, fin]);
   const d = q.data;
   const per = d?.periode ?? null;
   const A = d?.aide ?? {};
@@ -261,70 +261,59 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
   cols.forEach((c) => { const last = groups[groups.length - 1]; if (last && last.name === c.group) last.n += 1; else groups.push({ name: c.group, n: 1 }); });
   const stickyStyle = (i: number, z = 3): CSSProperties => (i < 3 ? { position: "sticky", left: STICKY[i], zIndex: z } : {});
 
-  const MOIS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
-  const fr = (v: string) => new Date(`${v}T00:00:00`).toLocaleDateString("fr-FR");
-  const periodLabel = (a: string, b: string) => {
-    const da = new Date(`${a}T00:00:00`), db = new Date(`${b}T00:00:00`);
-    const lastDay = new Date(db.getFullYear(), db.getMonth() + 1, 0).getDate();
-    return da.getDate() === 1 && db.getDate() === lastDay && da.getMonth() === db.getMonth() && da.getFullYear() === db.getFullYear() ? `${MOIS[da.getMonth()]} ${da.getFullYear()}` : `${fr(a)} → ${fr(b)}`;
-  };
-  const monthRange = (offset: number): [string, string] => { const t = new Date(); const a = new Date(t.getFullYear(), t.getMonth() + offset, 1); const e = new Date(t.getFullYear(), t.getMonth() + offset + 1, 0); return [iso(a), iso(e)]; };
-  const pickPreset = (v: string) => {
-    setPage(1);
-    if (v === "defaut") { setDebut(""); setFin(""); return; }
-    const off = v === "mois_courant" ? 0 : v === "mois_precedent" ? -1 : v === "mois_m2" ? -2 : null;
-    if (off !== null) { const [a, b] = monthRange(off); setDebut(a); setFin(b); }
-  };
-  const fieldBox: CSSProperties = { display: "grid", gap: 4, minWidth: 0 };
-  const fieldLabel = (Icon: typeof CalendarDays, text: string) => <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: FT.textMid }}><Icon size={14} aria-hidden /> {text}</span>;
-  const control: CSSProperties = { fontSize: 13, fontWeight: 700, padding: "9px 10px", borderRadius: 10, border: `1px solid ${FT.border}`, background: FT.card, color: FT.text, minWidth: 0 };
-  const curA = per?.debut ?? "", curB = per?.fin ?? "";
   const alertCount = (d?.fraicheur && (d.fraicheur.perime || d.fraicheur.synchro_en_echec || d.fraicheur.periode_incomplete) ? 1 : 0) + ((d?.kpis.sans_correspondance?.sites ?? 0) > 0 ? 1 : 0);
+
+  const cnt = d?.facettes.statuts_compte ?? {};
+  const cntTotal = Object.values(cnt).reduce((t, n) => t + n, 0);
+  const box: CSSProperties = { display: "flex", alignItems: "center", gap: 6, border: `1px solid ${FT.border}`, borderRadius: 9, padding: "6px 10px", background: FT.card };
+  const selStyle: CSSProperties = { border: "none", outline: "none", fontSize: 13, fontWeight: 600, background: "transparent", color: FT.text };
 
   return (
     <section aria-label="Suivis Consommations" style={{ display: "grid", gap: 14 }}>
-      <SectionTitle title="Suivis Consommations" subtitle="Analyse et suivi de la consommation de carburant par période et site"
-        right={per && (
-          <label style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: 12, border: FT.borderCrisp, background: FT.card, boxShadow: FT.shadow, fontWeight: 800, fontSize: 13 }}>
-            <CalendarDays size={16} aria-hidden />
-            <select aria-label="Période affichée" value={`${curA}|${curB}`} onChange={(e) => { const [x, y] = e.target.value.split("|"); setDebut(x); setFin(y); setPage(1); }}
-              style={{ appearance: "none", border: "none", background: "transparent", fontWeight: 800, fontSize: 13, color: FT.text, paddingRight: 18, cursor: "pointer" }}>
-              {!(periods.data?.periodes ?? []).some((p) => p.debut === curA && p.fin === curB) && <option value={`${curA}|${curB}`}>{periodLabel(curA, curB)}</option>}
-              {(periods.data?.periodes ?? []).map((p) => <option key={`${p.debut}|${p.fin}`} value={`${p.debut}|${p.fin}`}>{periodLabel(p.debut, p.fin)}</option>)}
-            </select>
-            <ChevronDown size={14} aria-hidden style={{ position: "absolute", right: 12, pointerEvents: "none" }} />
-          </label>
-        )} />
-      <div style={{ border: FT.borderCrisp, background: FT.card, borderRadius: 16, boxShadow: FT.shadow, padding: "14px 16px", display: "grid", gap: 10 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(210px,1.3fr) minmax(170px,1.2fr) repeat(auto-fit, minmax(130px, 1fr))", gap: 12, alignItems: "end" }}>
-          <label style={fieldBox}>{fieldLabel(CalendarDays, "Période")}
-            <select aria-label="Période" value="cur" onChange={(e) => pickPreset(e.target.value)} style={control}>
-              <option value="cur">{per ? `${fr(per.debut)} → ${fr(per.fin)}` : "—"}</option>
-              <option value="defaut">Période par défaut</option><option value="mois_courant">Mois en cours</option><option value="mois_precedent">Mois précédent</option><option value="mois_m2">Il y a 2 mois</option>
-            </select></label>
-          <label style={fieldBox}>{fieldLabel(Layers, "Périodes avec bilan")}
-            <select aria-label="Périodes avec bilan" value="" onChange={(e) => { const p = periods.data?.periodes[Number(e.target.value)]; if (p) { setDebut(p.debut); setFin(p.fin); setPage(1); } }} style={control}>
-              <option value="">Choisir…</option>
-              {(periods.data?.periodes ?? []).map((p, i) => <option key={`${p.debut}-${p.fin}`} value={i}>{p.libelle} — {p.calculables}/{p.sites} calculables</option>)}
-            </select></label>
-          <label style={fieldBox}>{fieldLabel(CalendarDays, "Date début")}
-            <input type="date" aria-label="Date début" value={debut || per?.debut || ""} onChange={(e) => { setDebut(e.target.value); setPage(1); }} style={control} /></label>
-          <label style={fieldBox}>{fieldLabel(CalendarDays, "Date fin")}
-            <input type="date" aria-label="Date fin" value={fin || per?.fin || ""} onChange={(e) => { setFin(e.target.value); setPage(1); }} style={control} /></label>
-          <label style={fieldBox}>{fieldLabel(MapPin, "Site / Nom")}
-            <input aria-label="Site ou nom" value={site} onChange={(e) => { setSite(e.target.value); setPage(1); }} placeholder="ID ou nom" style={control} /></label>
-          <label style={fieldBox}>{fieldLabel(Tag, "Typologie site")}
-            <select aria-label="Typologie site" value={f.typologie ?? ""} onChange={(e) => set("typologie", e.target.value)} style={control}>
-              <option value="">Tous</option>{(d?.facettes.typologies ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
-            </select></label>
-          <button type="button" onClick={() => { void q.refetch(); }} disabled={q.isFetching}
-            style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 14, fontWeight: 800, padding: "11px 20px", borderRadius: 12, border: "none", background: "#1D5FE0", color: "#fff", cursor: "pointer", boxShadow: "0 6px 14px rgba(29,95,224,.28)" }}>
-            <RefreshCw size={15} aria-hidden /> {q.isFetching ? "Actualisation…" : "Actualiser"}
-          </button>
+      {d?.detail && !per && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.orangeL, color: FT.orange, fontWeight: 700, fontSize: 13 }}>{d.detail}</div>}
+      {per && noBilan && (
+        <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.orangeL, color: FT.text, fontSize: 13 }}>
+          Aucun bilan de stock enregistré pour cette période ({per.libelle}). Choisissez un mois dans le sélecteur de période de l'en-tête.
         </div>
-        <button type="button" aria-expanded={adv} onClick={() => setAdv((v) => !v)} style={{ justifySelf: "start", fontSize: 12, fontWeight: 800, background: "none", border: "none", color: FT.blue, cursor: "pointer", padding: 0 }}>
-          {adv ? "Masquer les filtres avancés et les exports ▲" : "Filtres avancés et exports ▼"}
-        </button>
+      )}
+      {q.isError && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.redL, color: FT.red, fontWeight: 700, fontSize: 13 }}>Impossible de charger les consommations (erreur serveur).</div>}
+
+      {/* 1. Synthèse du mois : mêmes KPI que l'en-tête du fichier Closing, tous calculés par EnerTrack, valeurs cliquables. */}
+      <KpiSynthese data={d?.kpis_closing} />
+
+      {/* 2. Tableau de tous les sites, avec ses filtres */}
+      <section aria-label="Sites" style={{ border: FT.borderCrisp, background: FT.card, borderRadius: 14, boxShadow: FT.shadow, overflow: "hidden" }}>
+        <div style={{ padding: "10px 12px", display: "grid", gap: 8, borderBottom: `1px solid ${FT.border}` }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+            <label style={{ ...box, flex: "1 1 240px" }}>
+              <MapPin size={14} color={FT.textSub} aria-hidden />
+              <input aria-label="Rechercher un site" value={site} onChange={(e) => { setSite(e.target.value); setPage(1); }} placeholder="Rechercher un site (ID ou nom)"
+                style={{ border: "none", outline: "none", fontSize: 13, width: "100%", background: "transparent" }} />
+            </label>
+            <label style={box}>
+              <CheckCircle2 size={14} color={FT.textSub} aria-hidden />
+              <select aria-label="Statut du bilan" value={f.statut_bilan ?? ""} onChange={(e) => set("statut_bilan", e.target.value)} style={selStyle}>
+                <option value="">Tous les statuts ({nf(cntTotal)})</option>
+                {(d?.facettes.statuts_bilan ?? []).filter((o) => (cnt[o] ?? 0) > 0 || f.statut_bilan === o).map((o) => (
+                  <option key={o} value={o}>{STATUT_PILL[o as ConsoStatutBilan]?.label ?? o} ({nf(cnt[o] ?? 0)})</option>
+                ))}
+              </select>
+            </label>
+            <label style={box}>
+              <Tag size={14} color={FT.textSub} aria-hidden />
+              <select aria-label="Typologie site" value={f.typologie ?? ""} onChange={(e) => set("typologie", e.target.value)} style={selStyle}>
+                <option value="">Toutes typologies</option>{(d?.facettes.typologies ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </label>
+            <button type="button" aria-expanded={adv} onClick={() => setAdv((v) => !v)} style={{ fontSize: 12.5, fontWeight: 700, background: "none", border: "none", color: FT.blue, cursor: "pointer" }}>
+              {adv ? "Masquer filtres et exports ▲" : "Filtres et exports ▼"}
+            </button>
+            <button type="button" aria-expanded={showQ} onClick={() => setShowQ((v) => !v)}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, padding: "6px 10px", borderRadius: 9, cursor: "pointer",
+                border: `1px solid ${alertCount > 0 ? FT.orange : FT.border}`, background: alertCount > 0 ? FT.orangeL : FT.card, color: FT.text }}>
+              <AlertTriangle size={14} aria-hidden color={alertCount > 0 ? FT.orange : FT.textSub} /> Qualité des données{alertCount > 0 ? ` (${alertCount})` : ""}
+            </button>
+          </div>
         {adv && (
           <div style={{ display: "grid", gap: 10, borderTop: `1px solid ${FT.border}`, paddingTop: 10 }}>
         <div role="group" aria-label="Vues rapides" style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
@@ -366,116 +355,20 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
         </div>
           </div>
         )}
-      </div>
-
-      {d?.detail && !per && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.orangeL, color: FT.orange, fontWeight: 700, fontSize: 13 }}>{d.detail}</div>}
-      {per && noBilan && (
-        <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.orangeL, color: FT.text, fontSize: 13 }}>
-          Aucun bilan de stock enregistré pour cette période exacte ({per.libelle}). Choisissez une période de la liste « Périodes avec bilan ».
-        </div>
-      )}
-      <details style={{ border: FT.borderCrisp, borderRadius: 14, background: alertCount > 0 ? FT.orangeL : FT.card, padding: "8px 14px" }}>
-        <summary style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 800, color: FT.text, display: "flex", alignItems: "center", gap: 8 }}>
-          <AlertTriangle size={14} aria-hidden color={alertCount > 0 ? FT.orange : FT.textSub} /> Qualité des données et alertes{alertCount > 0 ? ` (${alertCount})` : " — aucune alerte bloquante"}
-        </summary>
-        <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
-          <DataQualityNotice f={d?.fraicheur} />
-          <DataHealthPanel mois={per?.debut ? per.debut.slice(0, 7) : undefined} />
-          {(d?.kpis.sans_correspondance?.sites ?? 0) > 0 && (
-            <div role="note" style={{ padding: 10, borderRadius: FT.radius, background: FT.orangeL, fontSize: 12.5 }}>
-              {d!.kpis.sans_correspondance!.sites} site(s) absent(s) de l'inventaire Snowflake (hors périmètre de suivi) : affichés dans le tableau pour information, exclus des totaux et des indicateurs.
+          {showQ && (
+            <div style={{ display: "grid", gap: 10, borderTop: `1px solid ${FT.border}`, paddingTop: 10 }}>
+              <DataQualityNotice f={d?.fraicheur} />
+              <DataHealthPanel mois={per?.debut ? per.debut.slice(0, 7) : undefined} />
+              {extra}
+              {(d?.kpis.sans_correspondance?.sites ?? 0) > 0 && (
+                <div role="note" style={{ padding: 10, borderRadius: FT.radius, background: FT.orangeL, fontSize: 12.5 }}>
+                  {d!.kpis.sans_correspondance!.sites} site(s) hors périmètre de suivi (ni GE dans Snowflake, ni stock dans les fichiers) : affichés pour information, exclus des totaux et des indicateurs.
+                </div>
+              )}
             </div>
           )}
         </div>
-      </details>
-      {q.isError && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.redL, color: FT.red, fontWeight: 700, fontSize: 13 }}>Impossible de charger les consommations (erreur serveur).</div>}
-
-      {/* Synthèse du mois : mêmes KPI que l'en-tête du fichier Closing, tous calculés par EnerTrack, valeurs cliquables. */}
-      <KpiSynthese data={d?.kpis_closing} />
-
-      <details style={{ border: FT.borderCrisp, borderRadius: FT.radius, background: FT.card, padding: "9px 14px" }}>
-        <summary style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 800, color: FT.text }}>Tous les indicateurs (certifiée, target) · bilans · qualité du calcul CPH{extra ? " et couverture GE officielle" : ""}</summary>
-        <div style={{ marginTop: 10, display: "grid", gap: 12 }}>
-          {k && (
-        <KpiStrip cells={[
-          { tone: "green", label: "Variation de stock (L)", help: A.variation, value: k.variation.total_l === null ? "—" : `${nf(k.variation.total_l)} L`,
-            sub: `${nf(k.variation.sites)} sites calculables · ${nf(k.bilans.prets)} prêts · ${nf(k.bilans.avec_reserve)} avec réserve${k.variation.negatives ? ` · ${nf(k.variation.negatives)} négative(s)` : ""}` },
-          { tone: "blue", label: "Consommation réelle certifiée (L)", help: A.certifiee, value: k.certifiee.total_l === null ? "—" : `${nf(k.certifiee.total_l)} L`, sub: `${nf(k.bilans.certifies)} bilan(s) certifié(s) par le Fuel Manager` },
-          { tone: "slate", label: "Consommation Closing (L)", help: A.closing, value: k.closing.total_l === null ? "—" : `${nf(k.closing.total_l)} L`, sub: `${nf(k.closing.sites)} sites · référence de contrôle` },
-          { tone: "cyan", label: "Instrumentée Snowflake (L)", help: A.instrumentee, value: k.instrumentee.total_l === null ? "—" : `${nf(k.instrumentee.total_l)} L`, sub: `${nf(k.instrumentee.sites)} sites couverts · mesure capteur` },
-          { tone: "violet", label: "CPH complète (L)", help: A.cph_complete, value: k.cph_complete.total_l === null ? "—" : `${nf(k.cph_complete.total_l)} L`,
-            sub: `${nf(k.cph_complete.sites)} sites complets · partielle ${k.cph_partielle.total_l === null ? "—" : `${nf(k.cph_partielle.total_l)} L`} (${nf(k.cph_partielle.sites)} sites)` },
-          { tone: "orange", label: "Target fuel période (L)", help: A.target, value: k.target.total_periode_l === null ? "—" : `${nf(k.target.total_periode_l)} L`,
-            sub: `${nf(k.target.sites_avec_target)} sites avec target (${nf(k.target.couverture_pct, 0)} %) · écart variation vs target ${k.target.ecart_global_l === null ? "—" : `${signed(k.target.ecart_global_l)} L`}${k.target.ecart_global_pct === null ? "" : ` (${signed(k.target.ecart_global_pct, 1)} %)`}` },
-        ]} />
-          )}
-          {k && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 10, fontSize: 12.5, color: FT.text }}>
-              <div><b>Target</b> : moyen/site couvert {nf(k.target.target_moyen_site_l)} L · variation moyenne/site couvert {nf(k.target.variation_moyenne_site_l)} L · {nf(k.target.sites_sans_target)} site(s) sans target · {nf(k.target.a_confirmer)} à confirmer.</div>
-              <div><b>Bilans</b> : {nf(k.bilans.prets)} prêts · {nf(k.bilans.avec_reserve)} avec réserve · {nf(k.bilans.variation_calculee)} variation à contrôler · {nf(k.bilans.non_calculables)} non calculables · {nf(k.bilans.certifies)} certifiés.</div>
-              <div><b>Couvertures</b> : CPH complète {nf(k.couverture_cph_pct, 0)} % · target {nf(k.target.couverture_pct, 0)} %.</div>
-              <div title={k.ponctions.note}><b>Ponctions (périmètre affiché)</b> : entrantes {nf(k.ponctions.entrantes_l)} L · sortantes {nf(k.ponctions.sortantes_l)} L · écart {signed(k.ponctions.ecart_perimetre_l)} L (contrepartie hors périmètre ; impact global ENOC = 0 L).</div>
-              <div><b>Alertes</b> : {nf(k.alertes.stock_identique_suspect)} stock(s) identique(s) suspect(s) · {nf(k.alertes.instrumentee_ecart_extreme)} instrumentée à investiguer · {nf(k.alertes.cph_ecart_extreme + k.alertes.cph_nulle_variation_positive)} CPH à investiguer · {nf(k.alertes.closing_non_independant)} écart(s) Closing non indépendant(s).</div>
-            </div>
-          )}
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: FT.textSub, textTransform: "uppercase", marginBottom: 6 }}>Qualité du calcul CPH</div>
-            <CoverageKpis items={d?.qualite_cph} />
-          </div>
-          {extra}
-        </div>
-      </details>
-
-      <section aria-label="Derniers suivis" style={{ border: FT.borderCrisp, background: FT.card, borderRadius: 16, boxShadow: FT.shadow, overflow: "hidden" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", gap: 8, flexWrap: "wrap" }}>
-          <h3 style={{ margin: 0, fontSize: 17, display: "flex", alignItems: "center", gap: 8 }}><List size={18} color={FT.blue} aria-hidden /> {full ? "Tous les résultats — vue détaillée" : "Derniers suivis"}</h3>
-          <button type="button" onClick={() => setFull((v) => !v)} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, padding: "8px 14px", borderRadius: 10, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}>
-            {full ? "← Vue simplifiée" : "Voir tous les résultats →"}
-          </button>
-        </div>
-        {!full && (
-          <div style={{ overflow: "auto", padding: "0 10px 10px" }}>
-            <table aria-label="Derniers suivis par site" style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: "#F3F6FB", textAlign: "left", color: FT.textMid, fontSize: 12.5 }}>
-                  {["Site ID", "Nom du site", "Statut bilan", "Pourquoi non calculé", "Pays", "Zone", "Typologie site", "Typologie énergie", "Modèle GE", "Puissance (KVA)", "Source puissance", "Date"].map((h, i, all) => (
-                    <th key={h || "act"} scope="col" style={{ padding: "11px 8px", fontWeight: 700, whiteSpace: "nowrap", borderRadius: i === 0 ? "10px 0 0 10px" : i === all.length - 1 ? "0 10px 10px 0" : 0 }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(d?.rows ?? []).slice(0, 5).map(safeRow).map((r) => {
-                  const st = STATUT_PILL[r.stock.statut];
-                  const Ico = st.icon;
-                  return (
-                    <tr key={r.site_id} style={{ borderTop: `1px solid ${FT.border}` }}>
-                      <td style={{ padding: "12px 8px", whiteSpace: "nowrap" }}><button type="button" onClick={() => setDetail({ row: r, tab: "hub" })} aria-label={`Voir le détail du site ${r.site_id}`} title="Voir le détail" style={{ border: "none", background: "none", padding: 0, fontWeight: 800, fontSize: 13, color: FT.text, cursor: "pointer", textDecoration: "underline dotted" }}>{r.site_id}</button></td>
-                      <td style={{ padding: "12px 8px", minWidth: 120 }}>{r.site_name ?? "—"}{r.correspondance && !r.correspondance.utilise && <span title={r.correspondance.motif ?? ""} aria-label="hors Closing" style={{ marginLeft: 6, fontSize: 10, color: FT.orange, fontWeight: 800, whiteSpace: "nowrap" }}>⚠ hors Closing</span>}</td>
-                      <td style={{ padding: "12px 8px", whiteSpace: "nowrap" }}>
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 999, fontSize: 12, fontWeight: 700, background: st.bg, color: st.fg }}><Ico size={13} aria-hidden /> {st.label}</span>
-                      </td>
-                      <td style={{ padding: "12px 8px", minWidth: 260, maxWidth: 420, fontSize: 12, color: r.stock.statut === "VARIATION_CALCULEE" ? "#B42323" : FT.text }}>{r.stock.raison_non_calcul ?? "—"}</td>
-                      <td style={{ padding: "12px 8px" }}>{r.country ?? "—"}</td>
-                      <td style={{ padding: "12px 8px" }}>{r.zone ?? "—"}</td>
-                      <td style={{ padding: "12px 8px", whiteSpace: "nowrap" }}>{r.typologie ?? "—"}</td>
-                      <td style={{ padding: "12px 8px", minWidth: 110 }}>{r.typologie_energie ?? "—"}</td>
-                      <td style={{ padding: "12px 8px", whiteSpace: "nowrap" }}>{r.modele_ge ?? "—"}</td>
-                      <td style={{ padding: "12px 8px", ...mono }}>{r.puissance_nominale_kva === null || r.puissance_nominale_kva === undefined ? "—" : nf(r.puissance_nominale_kva)}</td>
-                      <td style={{ padding: "12px 8px" }}>{r.source_puissance ?? "—"}</td>
-                      <td style={{ padding: "12px 8px", whiteSpace: "nowrap", ...mono }}>{r.periode?.fin ? fr(r.periode.fin) : "—"}</td>
-                    </tr>
-                  );
-                })}
-                {d && d.rows.length === 0 && <tr><td colSpan={12} style={{ padding: 24, color: FT.textMid }}>Aucun site ne correspond aux filtres pour cette période.</td></tr>}
-              </tbody>
-            </table>
-            <div style={{ padding: "8px 12px 2px", fontSize: 12, color: FT.textMid }}>{Math.min(5, d?.rows.length ?? 0)} sites affichés sur {nf(d?.total ?? 0)} — Cliquez sur un identifiant de site pour son détail ; « Voir tous les résultats » pour le tableau complet (variation, Closing, écarts, CPH, target, certification).</div>
-          </div>
-        )}
-      </section>
-
-      {full && (
-      <div style={{ border: FT.borderCrisp, background: FT.card, borderRadius: FT.radius, boxShadow: FT.shadow, overflow: "hidden" }}>
+      <div>
         <div style={{ overflow: "auto", maxHeight: "70vh" }} tabIndex={0} aria-label="Tableau des consommations par site">
           <table style={{ borderCollapse: "separate", borderSpacing: 0, width: "max-content", minWidth: "100%" }}>
             <thead>
@@ -527,7 +420,7 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
           </span>
         </div>
       </div>
-      )}
+      </section>
 
       {detail && per && detail.tab === "hub" && <DetailHub row={detail.row} periode={per.libelle} A={A} onClose={() => setDetail(null)} onPick={(tab) => setDetail({ row: detail.row, tab })} />}
       {detail && per && detail.tab === "stock" && detail.row.stock.bilan_id !== null && (

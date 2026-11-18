@@ -12,6 +12,7 @@ import { type FuelConsommationResponse, type FuelGeDetectionFilter } from "@/ser
 import { KpiCard, Modal, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { ConsoComparaisonSection } from "./ConsoComparaisonSection";
+import type { ConsoPeriod } from "./ConsoPeriodPicker";
 import { HorsReferentielBanner } from "./cphDiagnostics";
 import { fmt, monthLabel } from "../helpers";
 
@@ -288,10 +289,12 @@ function GeDetectionPanel({
 }
 
 export function ConsommationSheet({
+  period,
   data,
   loading,
   stickyTop = 0,
 }: {
+  period: ConsoPeriod;
   data: FuelConsommationResponse | undefined;
   loading: boolean;
   stickyTop?: number;
@@ -324,7 +327,7 @@ export function ConsommationSheet({
       )}
 
       <HorsReferentielBanner count={data?.sites_hors_referentiel} />
-      <ConsoComparaisonSection />
+      <ConsoComparaisonSection period={period} />
     </div>
   );
 }
