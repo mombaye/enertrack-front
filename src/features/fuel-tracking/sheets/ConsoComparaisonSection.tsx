@@ -1,7 +1,7 @@
 // « Suivis Consommations » — UN seul tableau, UNE période exacte (jours entiers 00:00:00 → 23:59:59), une ligne = un site.
 // Cinq mesures distinctes : variation de stock · Closing · instrumentée Snowflake · CPH (complète / partielle) · consommation réelle certifiée (vide avant validation).
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, Download, Eye, Layers, List, MapPin, RefreshCw, Tag, XCircle } from "lucide-react";
 import {
   downloadConsoExport, getConsommations, getConsommationsPeriodes,
@@ -203,6 +203,10 @@ function KpiStrip({ cells }: { cells: Array<{ tone: Tone; label: string; value: 
   );
 }
 
+const pagerBtn = (disabled: boolean): CSSProperties => ({
+  padding: "5px 10px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1,
+});
+
 export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; period?: { debut: string; fin: string } }) {
   const debut = period?.debut ?? "", fin = period?.fin ?? "";
   const [showQ, setShowQ] = useState(false);
@@ -215,17 +219,28 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
     return () => clearTimeout(t);
   }, [siteInput]); // eslint-disable-line react-hooks/exhaustive-deps
   const [page, setPage] = useState(1);
+  // 50 par page par défaut ; « Tous » = toute la liste en une seule page (borne serveur : 1000)
+  const [pageSize, setPageSize] = useState(50);
+  const tableTop = useRef<HTMLDivElement>(null);
+  const qc = useQueryClient();
   const [detail, setDetail] = useState<{ row: ConsoRow; tab: "hub" | "stock" | "cph" } | null>(null);
   const [more, setMore] = useState(false);
   const [adv, setAdv] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const params: ConsoFilters = { ...f, site: site || undefined, date_debut: debut || undefined, date_fin: fin || undefined, page, page_size: 50 };
+  const params: ConsoFilters = { ...f, site: site || undefined, date_debut: debut || undefined, date_fin: fin || undefined, page, page_size: pageSize };
   const periods = useQuery({ queryKey: ["conso-periods"], queryFn: getConsommationsPeriodes, staleTime: 60_000 });
   const q = useQuery({ queryKey: ["consommations", params], queryFn: () => getConsommations(params), placeholderData: keepPreviousData });
   useEffect(() => { setPage(1); }, [debut, fin]);
   const d = q.data;
+  // Page suivante préchargée : le clic sur « Suivant » affiche ses sites sans attente.
+  const nextParams: ConsoFilters = { ...params, page: page + 1 };
+  const hasNext = !!d && page * pageSize < d.total;
+  useEffect(() => {
+    if (hasNext) void qc.prefetchQuery({ queryKey: ["consommations", nextParams], queryFn: () => getConsommations(nextParams), staleTime: 60_000 });
+  }, [hasNext, JSON.stringify(nextParams)]); // eslint-disable-line react-hooks/exhaustive-deps
+  const goPage = (n: number) => { setPage(n); tableTop.current?.scrollIntoView({ block: "nearest" }); };
   const per = d?.periode ?? null;
   const A = d?.aide ?? {};
   const set = (k: keyof ConsoFilters, v: string) => { setF((o) => ({ ...o, [k]: v || undefined })); setPage(1); };
@@ -265,7 +280,12 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
     </div>;
   }
   const k = d?.kpis;
-  const totalPages = d ? Math.max(1, Math.ceil(d.total / d.page_size)) : 1;
+  const totalPages = d ? Math.max(1, Math.ceil(d.total / pageSize)) : 1;
+  // Tant que la page demandée n'est pas arrivée, l'ancienne liste reste affichée : on le signale au lieu de la présenter comme la nouvelle page.
+  const pageLoading = q.isFetching && (q.isPlaceholderData || (d?.page ?? page) !== page);
+  const shownPage = d?.page ?? page;
+  const first = d && d.total ? (shownPage - 1) * pageSize + 1 : 0;
+  const last = d ? Math.min(d.total, (shownPage - 1) * pageSize + (d.rows?.length ?? 0)) : 0;
   const noBilan = !per || !per.bilan_disponible;
   const groups: Array<{ name: string; n: number }> = [];
   cols.forEach((c) => { const last = groups[groups.length - 1]; if (last && last.name === c.group) last.n += 1; else groups.push({ name: c.group, n: 1 }); });
@@ -389,16 +409,47 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
             </div>
           )}
         </div>
-      <div>
+      <div ref={tableTop}>
         {d?.avertissement_sources && <div role="note" style={{ padding: "6px 12px", fontSize: 12, background: FT.orangeL }}>{d.avertissement_sources}</div>}
-        <OutputFormatTable rows={(d?.rows ?? []).map(safeRow)} onDetail={(r) => setDetail({ row: r, tab: "hub" })} />
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", fontSize: 12, color: FT.textMid }}>
-          <span>{nf(d?.total ?? 0)} site(s) · page {page} / {totalPages}</span>
-          <span style={{ display: "inline-flex", gap: 6 }}>
-            <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} style={{ padding: "5px 10px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: page <= 1 ? "not-allowed" : "pointer" }}>Précédent</button>
-            <button type="button" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} style={{ padding: "5px 10px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: page >= totalPages ? "not-allowed" : "pointer" }}>Suivant</button>
-          </span>
+        {pageLoading && (
+          <div role="status" style={{ padding: "6px 12px", fontSize: 12, fontWeight: 700, background: FT.blueL, color: FT.text }}>
+            Chargement de la page {page}…
+          </div>
+        )}
+        <div style={{ opacity: pageLoading ? 0.45 : 1, transition: "opacity .15s", pointerEvents: pageLoading ? "none" : undefined }} aria-busy={pageLoading}>
+          <OutputFormatTable rows={(d?.rows ?? []).map(safeRow)} onDetail={(r) => setDetail({ row: r, tab: "hub" })} />
         </div>
+        <nav aria-label="Pagination des sites" style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between", alignItems: "center", padding: "8px 12px", fontSize: 12, color: FT.textMid }}>
+          <span>
+            {d && d.total > 0 ? <>Sites <strong>{nf(first)}–{nf(last)}</strong> sur <strong>{nf(d.total)}</strong></> : `${nf(d?.total ?? 0)} site(s)`}
+            {pageSize < 1000 && <> · page {shownPage} / {totalPages}</>}
+          </span>
+          <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+            <label style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+              Afficher
+              <select aria-label="Nombre de sites par page" value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); goPage(1); }}
+                style={{ fontSize: 12, padding: "4px 6px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, color: FT.text }}>
+                {[50, 100, 200].map((n) => <option key={n} value={n}>{n} par page</option>)}
+                <option value={1000}>Tous les sites</option>
+              </select>
+            </label>
+            {pageSize < 1000 && totalPages > 1 && (<>
+              {([["«", 1, "Première page"], ["Précédent", page - 1, "Page précédente"]] as const).map(([t, n, a]) => (
+                <button key={t} type="button" aria-label={a} disabled={page <= 1} onClick={() => goPage(n)} style={pagerBtn(page <= 1)}>{t}</button>
+              ))}
+              <label style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+                Page
+                <select aria-label="Aller à la page" value={page} onChange={(e) => goPage(Number(e.target.value))}
+                  style={{ fontSize: 12, padding: "4px 6px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, color: FT.text }}>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+              {([["Suivant", page + 1, "Page suivante"], ["»", totalPages, "Dernière page"]] as const).map(([t, n, a]) => (
+                <button key={t} type="button" aria-label={a} disabled={page >= totalPages} onClick={() => goPage(n)} style={pagerBtn(page >= totalPages)}>{t}</button>
+              ))}
+            </>)}
+          </span>
+        </nav>
       </div>
       </section>
 
