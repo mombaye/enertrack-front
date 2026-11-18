@@ -2200,16 +2200,6 @@ export type DataHealth = {
   sites_sans_releve: string[];
 };
 
-export type MissingSites = { total: number; sites: Array<{ site_id: string; nom: string | null; sources: string[] }> };
-export async function getMissingSites() {
-  const { data } = await api.get<MissingSites>(`${BASE}/sites-manquants/`);
-  return data;
-}
-export async function createMissingSites() {
-  const { data } = await api.post<{ crees: number; sites: string[]; note: string }>(`${BASE}/sites-manquants/`, {});
-  return data;
-}
-
 export async function getDataHealth(mois?: string) {
   const { data } = await api.get<DataHealth>(`${BASE}/consommations/sante/`, { params: mois ? { mois } : undefined });
   return data;

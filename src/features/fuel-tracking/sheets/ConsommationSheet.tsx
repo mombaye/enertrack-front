@@ -13,7 +13,6 @@ import { KpiCard, Modal, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { ConsoComparaisonSection } from "./ConsoComparaisonSection";
 import type { ConsoPeriod } from "./ConsoPeriodPicker";
-import { MissingSitesBanner } from "./MissingSitesBanner";
 import { fmt, monthLabel } from "../helpers";
 
 function ConsommationKpis({ data, stickyTop }: { data: FuelConsommationResponse | undefined; stickyTop: number }) {
@@ -306,7 +305,6 @@ export function ConsommationSheet({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
-      <MissingSitesBanner />
       <ConsoComparaisonSection period={period} />
     </div>
   );
