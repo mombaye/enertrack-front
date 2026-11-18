@@ -208,6 +208,12 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
   const [showQ, setShowQ] = useState(false);
   const [f, setF] = useState<ConsoFilters>({});
   const [site, setSite] = useState("");
+  const [siteInput, setSiteInput] = useState("");
+  // saisie libre : recherche lancée 300 ms après la dernière frappe (plus de calcul à chaque lettre)
+  useEffect(() => {
+    const t = setTimeout(() => { if (siteInput !== site) { setSite(siteInput); setPage(1); } }, 300);
+    return () => clearTimeout(t);
+  }, [siteInput]); // eslint-disable-line react-hooks/exhaustive-deps
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<{ row: ConsoRow; tab: "hub" | "stock" | "cph" } | null>(null);
   const [more, setMore] = useState(false);
@@ -291,8 +297,19 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
             <label style={{ ...box, flex: "1 1 240px" }}>
               <MapPin size={14} color={FT.textSub} aria-hidden />
-              <input aria-label="Rechercher un site" value={site} onChange={(e) => { setSite(e.target.value); setPage(1); }} placeholder="Rechercher un site (ID ou nom)"
+              <input aria-label="Rechercher un site" list="conso-sites" value={siteInput} placeholder="Rechercher un site (ID ou nom)"
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setSiteInput(v);
+                  // site choisi dans la liste de suggestions : affiché tout de suite
+                  if ((d?.facettes.sites ?? []).some((o) => o.id === v)) { setSite(v); setPage(1); }
+                }}
                 style={{ border: "none", outline: "none", fontSize: 13, width: "100%", background: "transparent" }} />
+              <datalist id="conso-sites">
+                {(d?.facettes.sites ?? []).map((o) => <option key={o.id} value={o.id}>{o.nom}</option>)}
+              </datalist>
+              {siteInput && <button type="button" aria-label="Effacer la recherche" onClick={() => { setSiteInput(""); setSite(""); setPage(1); }}
+                style={{ border: "none", background: "none", cursor: "pointer", color: FT.textSub, fontSize: 14 }}>×</button>}
             </label>
             <label style={box}>
               <CheckCircle2 size={14} color={FT.textSub} aria-hidden />
