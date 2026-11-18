@@ -300,7 +300,8 @@ export function ConsommationSheet({
 }) {
   const [showDetectionModal, setShowDetectionModal] = useState(false);
   const [activeDetection, setActiveDetection] = useState<FuelGeDetectionFilter | null>(null);
-  if (loading) return <Skeleton h={520} />;
+  // Suivis Consommations n'attend plus l'ancien endpoint mensuel (Stan / détection GE) : il s'affiche dès que ses propres données arrivent.
+  void loading;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
