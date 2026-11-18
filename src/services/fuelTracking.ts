@@ -2135,7 +2135,9 @@ export type ConsoInventaire = { region: string | null; latitude: number | null; 
 /** Bloc « DONNÉES DE RAVITAILLEMENT » : les 6 totaux viennent d'ENOC, sur la plage « Date de Relevé Initiale » → « Date de Relevé
  *  Finale » de la ligne du fichier du site (debut / fin). null = pas de dates de fichier pour ce site (jamais 0 par défaut). */
 export type ConsoRavitaillement = { eydon_l: number | null; carte_total_l: number | null; ajout_l: number | null; retrait_l: number | null;
-  vole_l: number | null; fuite_l: number | null; nb_mouvements_enoc: number | null; source: string | null; debut: string | null; fin: string | null };
+  vole_l: number | null; fuite_l: number | null; nb_mouvements_enoc: number | null; source: string | null; debut: string | null; fin: string | null;
+  /** « Date de Relevé Finale » lue telle quelle dans la ligne du fichier de clôture (contrôle) ; null si absente du fichier. */
+  date_finale_fichier?: string | null };
 
 export type ConsoStockInitialSources = { date: string | null; terrain_l: number | null; gardiennage_l: number | null; fms_l: number | null;
   retenue_l: number | null; source: string | null; compteur_gardiennage_h: number | null; compteur_fms_h: number | null;
