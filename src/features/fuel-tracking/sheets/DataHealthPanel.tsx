@@ -31,7 +31,7 @@ export function DataHealthPanel({ mois }: { mois?: string }) {
           {cell("Mouvements ENOC (dernier)", day(s.enoc.dernier_mouvement))}
           {cell("Snowflake (dernière journée)", day(s.snowflake.derniere_journee), (s.snowflake.age_jours ?? 99) > 3)}
           {cell("Target fuel", s.target_fuel ? day(s.target_fuel.recu_le) : "non importé", !s.target_fuel)}
-          {cell("Sites du périmètre (GE Snowflake)", String(f.sites_base))}
+          {cell("Sites du périmètre (GE Snowflake + stock fichiers)", String(f.sites_base))}
           {cell("Stock final exploitable", String(f.sites_exploitables))}
           {cell("Avec réserve", String(f.sites_avec_reserve), f.sites_avec_reserve > 0)}
           {cell("Sans relevé", String(f.sites_sans_releve), f.sites_sans_releve > 0)}

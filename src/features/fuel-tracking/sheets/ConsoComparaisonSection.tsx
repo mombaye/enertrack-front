@@ -380,10 +380,10 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
         </summary>
         <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
           <DataQualityNotice f={d?.fraicheur} />
-          <DataHealthPanel />
+          <DataHealthPanel mois={per?.debut ? per.debut.slice(0, 7) : undefined} />
           {(d?.kpis.sans_correspondance?.sites ?? 0) > 0 && (
             <div role="note" style={{ padding: 10, borderRadius: FT.radius, background: FT.orangeL, fontSize: 12.5 }}>
-              {d!.kpis.sans_correspondance!.sites} site(s) absent(s) du fichier Closing : affichés dans le tableau mais exclus des totaux et indicateurs (filtre « Base Closing »).
+              {d!.kpis.sans_correspondance!.sites} site(s) absent(s) de l'inventaire Snowflake (hors périmètre de suivi) : affichés dans le tableau pour information, exclus des totaux et des indicateurs.
             </div>
           )}
         </div>
