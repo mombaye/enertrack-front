@@ -32,24 +32,18 @@ const STOCK_INITIAL: Col[] = [
   { h: "Relevé Compteur genset retenu", w: 105, render: (r) => <b>{num(r.stock_initial_sources?.compteur_retenu_h, 2)}</b> },
   { h: "Source de donnée index compteur", w: 150, left: true, render: (r) => txt(r.stock_initial_sources?.source_compteur) },
 ];
-// 4 totaux ENOC entre la date de relevé initiale et la date finale ; volé et fuite / écart : fichier de clôture (sept., oct.), puis Fuel Manager
+// 6 totaux lus dans ENOC sur la plage de dates de la ligne du fichier du site (Date de Relevé Initiale → Date de Relevé Finale)
 const periodeEnoc = (r: ConsoRow) => (r.ravitaillement?.debut && r.ravitaillement?.fin
-  ? `ENOC, du ${fr(r.ravitaillement.debut)} au ${fr(r.ravitaillement.fin)} (${r.ravitaillement.nb_mouvements_enoc ?? 0} mouvement(s))` : "Période du site inconnue : non calculé");
+  ? `ENOC, du ${fr(r.ravitaillement.debut)} au ${fr(r.ravitaillement.fin)} (${r.ravitaillement.nb_mouvements_enoc ?? 0} mouvement(s) sur le site)`
+  : "Pas de dates de relevé dans le fichier pour ce site : non calculé");
 const enoc = (v: (r: ConsoRow) => number | null | undefined) => (r: ConsoRow) => <span title={periodeEnoc(r)}>{num(v(r))}</span>;
-const volFuite = (v: (r: ConsoRow) => number | null | undefined) => (r: ConsoRow) => (
-  <span title={r.ravitaillement?.source_vol_fuite ?? "Ligne du fichier de clôture absente"}>
-    {v(r) === null || v(r) === undefined
-      ? <span style={{ color: "#94A0B4" }}>{r.ravitaillement?.source_vol_fuite?.startsWith("À fournir") ? "À fournir (FM)" : "n.d."}</span>
-      : num(v(r))}
-  </span>
-);
 const RAVITAILLEMENT: Col[] = [
   { h: "Total Livraison Fuel EYDON", w: 105, render: enoc((r) => r.ravitaillement?.eydon_l) },
   { h: "Total Livraison Fuel CARTE TOTAL", w: 105, render: enoc((r) => r.ravitaillement?.carte_total_l) },
   { h: "Total Ajout", w: 90, render: enoc((r) => r.ravitaillement?.ajout_l) },
   { h: "Total Retrait", w: 90, render: enoc((r) => r.ravitaillement?.retrait_l) },
-  { h: "Total QTE volée déclarée", w: 100, render: volFuite((r) => r.ravitaillement?.vole_l) },
-  { h: "Total QTE vidangée / Fuite / Ecart de Stock", w: 120, render: volFuite((r) => r.ravitaillement?.fuite_l) },
+  { h: "Total QTE volée déclarée", w: 100, render: enoc((r) => r.ravitaillement?.vole_l) },
+  { h: "Total QTE vidangée / Fuite / Ecart de Stock", w: 120, render: enoc((r) => r.ravitaillement?.fuite_l) },
 ];
 
 export function OutputFormatTable({ rows, onDetail }: { rows: ConsoRow[]; onDetail: (r: ConsoRow) => void }) {
