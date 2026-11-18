@@ -2061,6 +2061,7 @@ export type ConsoGapExplication = {
 export type ConsoGap = { ecart_l: number | null; ecart_pct: number | null; pct_na: string | null };
 
 export type ConsoRow = {
+  inventaire?: ConsoInventaire; stock_initial_sources?: ConsoStockInitialSources;
   site_id: string;
   site_name: string | null;
   country: string | null;
@@ -2129,7 +2130,14 @@ export type ClosingKpis = {
   kpis: Record<string, ClosingKpiValue>;
 };
 
+export type ConsoInventaire = { region: string | null; latitude: number | null; longitude: number | null; sla: string | null;
+  indoor_outdoor: string | null; on_grid: string | null; typologie_cible: string | null; typologie_facturee: string | null };
+export type ConsoStockInitialSources = { date: string | null; terrain_l: number | null; gardiennage_l: number | null; fms_l: number | null;
+  retenue_l: number | null; source: string | null; compteur_gardiennage_h: number | null; compteur_fms_h: number | null;
+  compteur_retenu_h: number | null; source_compteur: string | null };
+
 export type ConsoResponse = {
+  avertissement_sources?: string | null;
   kpis_closing?: ClosingKpis | null;
   detail?: string;
   fraicheur?: ConsoFraicheur;

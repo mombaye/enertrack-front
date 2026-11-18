@@ -14,6 +14,7 @@ import { CoverageKpis } from "./cphDiagnostics";
 import { BalanceDetailModal } from "./StockPeriodBalance";
 import { SectionTitle } from "./ConsoOverview";
 import { KpiSynthese } from "./KpiSynthese";
+import { OutputFormatTable } from "./OutputFormatTable";
 import { DataHealthPanel } from "./DataHealthPanel";
 import { SiteDetailModal } from "./ControleCphSheet";
 
@@ -84,9 +85,12 @@ function buildColsDef(A: Record<string, string>): Col[] {
     { k: "kva", group: "Identification", label: "Puissance nominale GE (kVA)", render: (r) => num(r.puissance_nominale_kva, 0) },
     { k: "psrc", group: "Identification", label: "Source puissance GE", left: true, render: (r) => r.source_puissance ?? "—" },
     // Période
-    { k: "d1", group: "Période", label: "Date début", render: (r) => r.periode.debut.split("-").reverse().join("/") },
-    { k: "d2", group: "Période", label: "Date fin", render: (r) => r.periode.fin.split("-").reverse().join("/") },
-    { k: "nj", group: "Période", label: "Jours", render: (r) => r.periode.jours },
+    // Dates EXACTES des relevés de stock retenus (celles du fichier), jamais les bornes du mois : le bilan va du relevé initial au relevé final.
+    { k: "d1", group: "Période", label: "Date début", help: "Date du relevé de stock initial retenu (date du fichier de clôture), pas le 1er du mois.",
+      render: (r) => (r.stock.date_initial ? r.stock.date_initial.split("-").reverse().join("/") : "—") },
+    { k: "d2", group: "Période", label: "Date fin", help: "Date du relevé de stock final retenu (date du fichier de clôture), pas le dernier jour du mois.",
+      render: (r) => (r.stock.date_final ? r.stock.date_final.split("-").reverse().join("/") : "—") },
+    { k: "nj", group: "Période", label: "Jours", help: "Nombre de jours entre le relevé initial et le relevé final.", render: (r) => r.stock.jours ?? "—" },
     // Stock
     { k: "si", group: "Stock", label: "Stock initial (L)", render: (r) => num(r.stock.initial_l) },
     { k: "ssi", group: "Stock", label: "Source stock initial", left: true, render: (r) => r.stock.source_initial ?? "—" },
@@ -369,52 +373,8 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
           )}
         </div>
       <div>
-        <div style={{ overflow: "auto", maxHeight: "70vh" }} tabIndex={0} aria-label="Tableau des consommations par site">
-          <table style={{ borderCollapse: "separate", borderSpacing: 0, width: "max-content", minWidth: "100%" }}>
-            <thead>
-              <tr>
-                {groups.map((g, i) => (
-                  <th key={g.name} colSpan={g.n} scope="colgroup" style={{ ...thGroup, background: GROUP_BG[g.name], ...(i === 0 ? { position: "sticky", left: 0, zIndex: 5, textAlign: "left" } : {}) }}>{g.name}</th>
-                ))}
-                <th style={{ ...thGroup, background: FT.navy }} />
-              </tr>
-              <tr>
-                {cols.map((c, i) => (
-                  <th key={c.k} scope="col" style={{ ...th, ...(c.left ? { textAlign: "left" } : {}), ...stickyStyle(i, 4) }}>
-                    {c.label}{c.help && <HelpTip text={c.help} label={c.label} />}
-                  </th>
-                ))}
-                <th style={th}><span className="sr-only">Détail</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              {(d?.rows ?? []).map(safeRow).map((r, idx) => {
-                const bg = idx % 2 ? "#F8FAFD" : FT.card;
-                return (
-                  <tr key={r.site_id} style={{ background: bg }}>
-                    {cols.map((c, i) => (
-                      <td key={c.k} title={c.k === "motif" ? r.stock.motif ?? "" : c.k === "action" ? r.stock.action : undefined}
-                        style={{ ...td, background: bg, ...(c.left ? { textAlign: "left" } : {}), ...(i === 0 ? { minWidth: W1 } : i === 1 ? { minWidth: W2, maxWidth: W2, overflow: "hidden", textOverflow: "ellipsis" } : {}), ...(i === 2 ? { boxShadow: "2px 0 0 rgba(15,23,42,.06)" } : {}), ...stickyStyle(i, 1), ...(c.min ? { minWidth: c.min, maxWidth: c.min } : {}) }}>
-                        {c.k === "site" ? (
-                          <button type="button" onClick={() => setDetail({ row: r, tab: "hub" })} aria-label={`Voir le détail du site ${r.site_id}`} title="Voir le détail"
-                            style={{ border: "none", background: "none", padding: 0, fontWeight: 800, fontSize: 12.5, color: FT.navy, cursor: "pointer", textDecoration: "underline dotted" }}>{r.site_id}</button>
-                        ) : c.min ? <div style={{ ...clamp2, fontSize: 11.5 }}>{c.render(r)}</div> : c.render(r)}
-                      </td>
-                    ))}
-                    <td style={{ ...td, background: bg }}>
-                      <button type="button" onClick={() => setDetail({ row: r, tab: "hub" })} aria-label={`Voir le détail du site ${r.site_id}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 800, padding: "5px 9px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, cursor: "pointer" }}>
-                        <Eye size={12} aria-hidden /> Voir le détail
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {d && d.rows.length === 0 && (
-                <tr><td colSpan={cols.length + 1} style={{ ...td, textAlign: "left", padding: 24, color: FT.textMid }}>Aucun site ne correspond aux filtres pour cette période.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        {d?.avertissement_sources && <div role="note" style={{ padding: "6px 12px", fontSize: 12, background: FT.orangeL }}>{d.avertissement_sources}</div>}
+        <OutputFormatTable rows={(d?.rows ?? []).map(safeRow)} onDetail={(r) => setDetail({ row: r, tab: "hub" })} />
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", fontSize: 12, color: FT.textMid }}>
           <span>{nf(d?.total ?? 0)} site(s) · page {page} / {totalPages}</span>
           <span style={{ display: "inline-flex", gap: 6 }}>
