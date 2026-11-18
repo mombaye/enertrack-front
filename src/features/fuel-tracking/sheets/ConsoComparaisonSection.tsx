@@ -231,12 +231,24 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
 
   const params: ConsoFilters = { ...f, site: site || undefined, date_debut: debut || undefined, date_fin: fin || undefined, page, page_size: pageSize };
   const periods = useQuery({ queryKey: ["conso-periods"], queryFn: getConsommationsPeriodes, staleTime: 60_000 });
-  const q = useQuery({ queryKey: ["consommations", params], queryFn: () => getConsommations(params), placeholderData: keepPreviousData });
+  // Une seule nouvelle tentative (plus de relances en boucle) ; tant que des valeurs FMS / ENOC sont lues en tâche de fond,
+  // la page se relance seule toutes les 3 s (au plus 2 min) : les valeurs arrivent sans action ni écran bloqué.
+  const pendingSince = useRef<number | null>(null);
+  const q = useQuery({
+    queryKey: ["consommations", params], queryFn: () => getConsommations(params), placeholderData: keepPreviousData,
+    retry: 1, staleTime: 60_000,
+    refetchInterval: (query) => {
+      const n = query.state.data?.sources_en_attente ?? 0;
+      if (!n) { pendingSince.current = null; return false; }
+      pendingSince.current ??= Date.now();
+      return Date.now() - pendingSince.current < 120_000 ? 3000 : false;
+    },
+  });
   useEffect(() => { setPage(1); }, [debut, fin]);
   const d = q.data;
   // Page suivante préchargée : le clic sur « Suivant » affiche ses sites sans attente.
   const nextParams: ConsoFilters = { ...params, page: page + 1 };
-  const hasNext = !!d && page * pageSize < d.total;
+  const hasNext = !!d && page * pageSize < d.total && pageSize <= 100;   // pas de préchargement des grandes pages (charge serveur)
   useEffect(() => {
     if (hasNext) void qc.prefetchQuery({ queryKey: ["consommations", nextParams], queryFn: () => getConsommations(nextParams), staleTime: 60_000 });
   }, [hasNext, JSON.stringify(nextParams)]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -306,7 +318,13 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
           Aucun bilan de stock enregistré pour cette période ({per.libelle}). Choisissez un mois dans le sélecteur de période de l'en-tête.
         </div>
       )}
-      {q.isError && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.redL, color: FT.red, fontWeight: 700, fontSize: 13 }}>Impossible de charger les consommations (erreur serveur).</div>}
+      {q.isError && (
+        <div role="alert" style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", padding: 12, borderRadius: FT.radius, background: FT.redL, color: FT.red, fontWeight: 700, fontSize: 13 }}>
+          {d ? "Le serveur n'a pas répondu à temps : la dernière liste chargée reste affichée." : "Impossible de charger les consommations (erreur serveur)."}
+          <button type="button" onClick={() => void q.refetch()} style={{ padding: "4px 10px", borderRadius: 8, border: `1px solid ${FT.red}`, background: FT.card, color: FT.red, fontWeight: 700, cursor: "pointer" }}>Réessayer</button>
+          {pageSize > 50 && <button type="button" onClick={() => { setPageSize(50); goPage(1); }} style={{ padding: "4px 10px", borderRadius: 8, border: `1px solid ${FT.border}`, background: FT.card, color: FT.text, fontWeight: 700, cursor: "pointer" }}>Revenir à 50 par page</button>}
+        </div>
+      )}
 
       {/* 1. Synthèse du mois : mêmes KPI que l'en-tête du fichier Closing, tous calculés par EnerTrack, valeurs cliquables. */}
       <KpiSynthese data={d?.kpis_closing} />
@@ -411,9 +429,14 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
         </div>
       <div ref={tableTop}>
         {d?.avertissement_sources && <div role="note" style={{ padding: "6px 12px", fontSize: 12, background: FT.orangeL }}>{d.avertissement_sources}</div>}
+        {!pageLoading && (d?.sources_en_attente ?? 0) > 0 && (
+          <div role="status" style={{ padding: "6px 12px", fontSize: 12, fontWeight: 700, background: FT.blueL, color: FT.text }}>
+            Lecture des valeurs Fuel Sensor FMS et relevés de gardien ENOC pour {d!.sources_en_attente} site(s)… elles s'affichent automatiquement (cases « n.d. » en attendant).
+          </div>
+        )}
         {pageLoading && (
           <div role="status" style={{ padding: "6px 12px", fontSize: 12, fontWeight: 700, background: FT.blueL, color: FT.text }}>
-            Chargement de la page {page}…
+            Chargement {pageSize >= 1000 ? "de tous les sites" : `de la page ${page} (${pageSize} sites)`}…
           </div>
         )}
         <div style={{ opacity: pageLoading ? 0.45 : 1, transition: "opacity .15s", pointerEvents: pageLoading ? "none" : undefined }} aria-busy={pageLoading}>
