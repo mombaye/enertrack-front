@@ -4,7 +4,7 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, Download, Eye, Layers, List, MapPin, RefreshCw, Tag, XCircle } from "lucide-react";
 import {
-  downloadConsoExport, getConsoEvolution, getConsommations, getConsommationsPeriodes,
+  downloadConsoExport, getConsommations, getConsommationsPeriodes,
   type ConsoFilters, type ConsoFraicheur, type ConsoRow, type ConsoStatutBilan, type ConsoTargetStatut,
 } from "@/services/fuelTracking";
 import { Modal, Skeleton } from "../ui";
@@ -12,7 +12,8 @@ import { FT, type Tone } from "../theme";
 import { HelpTip } from "./cphBadges";
 import { CoverageKpis } from "./cphDiagnostics";
 import { BalanceDetailModal } from "./StockPeriodBalance";
-import { EvolutionChart, KpiCards, SectionTitle, StatusDonut, type OverviewCard } from "./ConsoOverview";
+import { SectionTitle } from "./ConsoOverview";
+import { KpiSynthese } from "./KpiSynthese";
 import { DataHealthPanel } from "./DataHealthPanel";
 import { SiteDetailModal } from "./ControleCphSheet";
 
@@ -214,7 +215,6 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
   const params: ConsoFilters = { ...f, site: site || undefined, date_debut: debut || undefined, date_fin: fin || undefined, page, page_size: 50 };
   const periods = useQuery({ queryKey: ["conso-periods"], queryFn: getConsommationsPeriodes, staleTime: 60_000 });
   const q = useQuery({ queryKey: ["consommations", params], queryFn: () => getConsommations(params), placeholderData: keepPreviousData });
-  const evo = useQuery({ queryKey: ["conso-evolution"], queryFn: getConsoEvolution, staleTime: 60_000 });
   const d = q.data;
   const per = d?.periode ?? null;
   const A = d?.aide ?? {};
@@ -317,7 +317,7 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
             <select aria-label="Typologie site" value={f.typologie ?? ""} onChange={(e) => set("typologie", e.target.value)} style={control}>
               <option value="">Tous</option>{(d?.facettes.typologies ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
             </select></label>
-          <button type="button" onClick={() => { void q.refetch(); void evo.refetch(); }} disabled={q.isFetching}
+          <button type="button" onClick={() => { void q.refetch(); }} disabled={q.isFetching}
             style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 14, fontWeight: 800, padding: "11px 20px", borderRadius: 12, border: "none", background: "#1D5FE0", color: "#fff", cursor: "pointer", boxShadow: "0 6px 14px rgba(29,95,224,.28)" }}>
             <RefreshCw size={15} aria-hidden /> {q.isFetching ? "Actualisation…" : "Actualiser"}
           </button>
@@ -390,39 +390,8 @@ export function ConsoComparaisonSection({ extra }: { extra?: ReactNode }) {
       </details>
       {q.isError && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.redL, color: FT.red, fontWeight: 700, fontSize: 13 }}>Impossible de charger les consommations (erreur serveur).</div>}
 
-      {k && (() => {
-        const ps = evo.data?.periodes ?? [];
-        const i = per ? ps.findIndex((x) => x.fin === per.fin && x.debut === per.debut) : -1;
-        const trendOf = (key: "variation_l" | "closing_l"): { trend: number | null; trendNote: string } => {
-          const cur = i >= 0 ? ps[i][key] : null, prev = i > 0 ? ps[i - 1][key] : null;
-          if (cur === null || prev === null || prev === 0) return { trend: null, trendNote: "pas de période précédente comparable" };
-          return { trend: ((cur - prev) / Math.abs(prev)) * 100, trendNote: "" };
-        };
-        const cards: OverviewCard[] = [
-          { key: "var", label: "Variation de stock", help: A.variation, value: k.variation.total_l, icon: "sigma", color: "#2563EB", bg: "#E8F0FE", series: ps.map((x) => x.variation_l),
-            sub: `${nf(k.variation.sites)} sites calculables${k.variation.negatives ? ` · ${nf(k.variation.negatives)} négative(s)` : ""}`, ...trendOf("variation_l") },
-          { key: "clo", label: "Consommation Closing", help: A.closing, value: k.closing.total_l, icon: "closing", color: "#16A34A", bg: "#E6F7EC", series: ps.map((x) => x.closing_l),
-            sub: `${nf(k.closing.sites)} sites · référence de contrôle`, ...trendOf("closing_l") },
-          { key: "ins", label: "Instrumentée Snowflake", help: A.instrumentee, value: k.instrumentee.total_l, icon: "snow", color: "#EA7A0C", bg: "#FFF1E0", sub: `${nf(k.instrumentee.sites)} sites couverts · mesure capteur` },
-          { key: "cph", label: "CPH complète", help: A.cph_complete, value: k.cph_complete.total_l, icon: "cph", color: "#7C3AED", bg: "#F1EAFE",
-            sub: `${nf(k.cph_complete.sites)} sites complets · partielle ${k.cph_partielle.total_l === null ? "—" : `${nf(k.cph_partielle.total_l)} L`} (${nf(k.cph_partielle.sites)} sites)` },
-        ];
-        const b = k.bilans;
-        const donut = [
-          { label: "Prêt à certifier", n: b.prets, color: "#16A34A" }, { label: "Avec réserve", n: b.avec_reserve, color: "#EA7A0C" },
-          { label: "Variation à contrôler", n: b.variation_calculee, color: "#DC2626" }, { label: "Non calculable", n: b.non_calculables, color: "#94A3B8" },
-          { label: "Certifié", n: b.certifies, color: "#2563EB" },
-        ];
-        return (
-          <>
-            <KpiCards cards={cards} />
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-              <div style={{ flex: "2 1 460px", minWidth: 0 }}><EvolutionChart evo={evo.data} loading={evo.isLoading} error={evo.isError} /></div>
-              <div style={{ flex: "1 1 340px", minWidth: 0 }}><StatusDonut items={donut} total={donut.reduce((t, x) => t + x.n, 0)} /></div>
-            </div>
-          </>
-        );
-      })()}
+      {/* Synthèse du mois : mêmes KPI que l'en-tête du fichier Closing, tous calculés par EnerTrack, valeurs cliquables. */}
+      <KpiSynthese data={d?.kpis_closing} />
 
       <details style={{ border: FT.borderCrisp, borderRadius: FT.radius, background: FT.card, padding: "9px 14px" }}>
         <summary style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 800, color: FT.text }}>Tous les indicateurs (certifiée, target) · bilans · qualité du calcul CPH{extra ? " et couverture GE officielle" : ""}</summary>

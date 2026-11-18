@@ -2108,6 +2108,13 @@ export type ConsoKpis = {
   couverture_cph_pct: number | null;
   sans_correspondance?: { sites: number; base_closing_sites: number; note: string };
   sans_ge_exclus?: number;
+  suivi?: {
+    couverture: { sites_calcules: number; sites: number; pct: number | null };
+    conso_moyenne_site_jour_l: number | null;
+    a_controler: { sites: number; litres_manquants: number };
+    ecart_ops: { sites: number; conso_enertrack_l: number; conso_ops_l: number; ecart_l: number | null; ecart_pct: number | null };
+    completude_enoc: { sites: number; livraisons_enoc_l: number; livraisons_attendues_l: number; pct: number | null };
+  };
 };
 
 export type ConsoFraicheur = {
@@ -2115,7 +2122,8 @@ export type ConsoFraicheur = {
   synchro_en_echec: boolean; erreur_synchro: string | null; jours_non_couverts: number; periode_incomplete: boolean;
 };
 
-export type ClosingKpiValue = { libelle: string; valeur: number | null };
+export type ClosingKpiDetail = { source: string; operation: string; perimetre: string; periode: [string, string]; composantes: Array<{ libelle: string; valeur: number | null }> };
+export type ClosingKpiValue = { libelle: string; valeur: number | null; detail?: ClosingKpiDetail };
 export type ClosingKpis = {
   mois: string; debut?: string; fin?: string; source: "FICHIER_CLOSING" | "CALCUL_ENERTRACK"; fichier: string | null; note?: string;
   kpis: Record<string, ClosingKpiValue>;

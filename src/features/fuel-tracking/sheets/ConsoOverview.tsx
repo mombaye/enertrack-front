@@ -2,7 +2,7 @@
 // Aucune valeur inventée : une série ou une tendance absente est affichée comme telle (« — », « pas de période précédente »).
 import type { CSSProperties, ReactNode } from "react";
 import { Area, AreaChart, CartesianGrid, Cell, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { BarChart3, CheckCircle2, Fuel, Gauge, PieChart as PieIcon, Droplets } from "lucide-react";
+import { AlertTriangle, BarChart3, CheckCircle2, Fuel, Gauge, PieChart as PieIcon, Droplets, Percent, Truck } from "lucide-react";
 import type { ConsoEvolution } from "@/services/fuelTracking";
 import { HelpTip } from "./cphBadges";
 import { FT } from "../theme";
@@ -10,9 +10,9 @@ import { FT } from "../theme";
 const nf = (v: number | null | undefined, d = 0) => (v === null || v === undefined ? "—" : v.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d }));
 const card: CSSProperties = { border: "1px solid #E6ECF5", background: FT.card, borderRadius: 16, boxShadow: "0 6px 18px rgba(15,23,42,.06)" };
 
-export type OverviewCard = { key: string; label: string; value: number | null; sub: string; help?: string; color: string; bg: string; icon: "sigma" | "closing" | "snow" | "cph"; series?: Array<number | null>; trend?: number | null; trendNote?: string };
+export type OverviewCard = { key: string; label: string; value: number | null; unit?: string; digits?: number; sub: string; help?: string; color: string; bg: string; icon: "sigma" | "closing" | "snow" | "cph" | "pct" | "alert" | "truck"; series?: Array<number | null>; trend?: number | null; trendNote?: string };
 
-const ICONS = { sigma: Fuel, closing: CheckCircle2, snow: Gauge, cph: Droplets };
+const ICONS = { sigma: Fuel, closing: CheckCircle2, snow: Gauge, cph: Droplets, pct: Percent, alert: AlertTriangle, truck: Truck };
 
 function Spark({ data, color }: { data: Array<number | null>; color: string }) {
   const pts = data.map((v, i) => ({ i, v })).filter((p) => p.v !== null) as Array<{ i: number; v: number }>;
@@ -40,7 +40,7 @@ export function KpiCards({ cards }: { cards: OverviewCard[] }) {
             </div>
             <div style={{ minWidth: 0, display: "grid", alignContent: "start", gap: 2 }}>
               <div style={{ fontSize: 14.5, color: FT.text, fontWeight: 600 }}>{c.label}{c.help && <HelpTip text={c.help} label={c.label} />}</div>
-              <div style={{ fontSize: 30, fontWeight: 800, color: FT.text, fontVariantNumeric: "tabular-nums", lineHeight: 1.15 }}>{c.value === null ? "—" : `${nf(c.value)} L`}</div>
+              <div style={{ fontSize: 30, fontWeight: 800, color: FT.text, fontVariantNumeric: "tabular-nums", lineHeight: 1.15 }}>{c.value === null ? "—" : `${nf(c.value, c.digits ?? 0)}${c.unit === undefined ? " L" : c.unit}`}</div>
               <div style={{ fontSize: 11.5, color: FT.textMid }}>{c.sub}</div>
               {c.trend !== undefined && (
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: c.trend === null ? FT.textSub : c.trend >= 0 ? FT.green : FT.red }}>
