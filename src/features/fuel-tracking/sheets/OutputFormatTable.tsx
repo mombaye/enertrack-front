@@ -15,9 +15,6 @@ type Col = { h: string; w: number; left?: boolean; render: (r: ConsoRow) => Reac
 const INVENTAIRE: Col[] = [
   { h: "Nom du site", w: 150, left: true, render: (r) => r.site_name ?? "—" },
   { h: "Région O&M", w: 110, render: (r) => txt(r.inventaire?.region) },
-  { h: "Latitude", w: 90, render: (r) => num(r.inventaire?.latitude, 6) },
-  { h: "Longitude", w: 90, render: (r) => num(r.inventaire?.longitude, 6) },
-  { h: "SLA class", w: 70, render: (r) => txt(r.inventaire?.sla) },
   { h: "Indoor / Outdoor", w: 90, render: (r) => txt(r.inventaire?.indoor_outdoor) },
   { h: "On GRID / Offgrid", w: 90, render: (r) => txt(r.inventaire?.on_grid) },
   { h: "Typologie Cible", w: 110, render: (r) => txt(r.inventaire?.typologie_cible) },
