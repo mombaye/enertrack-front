@@ -28,6 +28,7 @@ const STOCK_INITIAL: Col[] = [
   { h: "Qtité laissée à la date initiale (Fuel Sensor FMS)", w: 115, render: (r) => num(r.stock_initial_sources?.fms_l) },
   { h: "Qtité laissée retenue", w: 100, render: (r) => <b>{num(r.stock_initial_sources?.retenue_l)}</b> },
   { h: "Source de donnée de stock", w: 150, left: true, render: (r) => txt(r.stock_initial_sources?.source) },
+  { h: "Relevé Visuel Compteur genset (relevé de terrain)", w: 115, render: (r) => num(r.stock_initial_sources?.compteur_terrain_h, 2) },
   { h: "Relevé Visuel Compteur genset (Société de gardiennage)", w: 115, render: (r) => num(r.stock_initial_sources?.compteur_gardiennage_h, 2) },
   { h: "Relevé Visuel Compteur genset (Index Compteur FMS)", w: 115, render: (r) => num(r.stock_initial_sources?.compteur_fms_h, 2) },
   { h: "Relevé Compteur genset retenu", w: 105, render: (r) => <b>{num(r.stock_initial_sources?.compteur_retenu_h, 2)}</b> },

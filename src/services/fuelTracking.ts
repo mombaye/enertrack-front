@@ -2140,7 +2140,7 @@ export type ConsoRavitaillement = { eydon_l: number | null; carte_total_l: numbe
   date_finale_fichier?: string | null };
 
 export type ConsoStockInitialSources = { date: string | null; terrain_l: number | null; gardiennage_l: number | null; fms_l: number | null;
-  retenue_l: number | null; source: string | null; compteur_gardiennage_h: number | null; compteur_fms_h: number | null;
+  retenue_l: number | null; source: string | null; compteur_terrain_h?: number | null; compteur_gardiennage_h: number | null; compteur_fms_h: number | null;
   compteur_retenu_h: number | null; source_compteur: string | null };
 
 export type ConsoResponse = {
