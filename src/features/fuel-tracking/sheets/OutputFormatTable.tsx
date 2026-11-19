@@ -50,7 +50,7 @@ const STOCK_FINAL: Col[] = [
   { h: "Relevé Compteur genset retenu", w: 105, render: (r) => <b>{num(r.stock_final_sources?.compteur_retenu_h, 2)}</b> },
   { h: "Source de donnée index compteur", w: 150, left: true, render: (r) => txt(r.stock_final_sources?.source_compteur) },
 ];
-// Fabricant / type de GE : Snowflake (SITE_DG) d'abord, sinon ENOC (registre des GE) ; plusieurs GE séparés par « / »
+// Fabricant / type de GE : Snowflake (SITE_DG) uniquement ; plusieurs GE séparés par « / »
 const ESTIMATION_THEORIQUE: Col[] = [
   { h: "Fabriquant GE", w: 130, left: true, render: (r) => txt(r.estimation_theorique?.fabricant_ge) },
   { h: "Type de GE", w: 120, left: true, render: (r) => txt(r.estimation_theorique?.type_ge) },
