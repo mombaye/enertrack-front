@@ -36,6 +36,9 @@ const STOCK_INITIAL: Col[] = [
 ];
 // Bloc stock final : à la Date de Relevé Finale du fichier ; retenu = FMS, sinon Société de gardiennage, sinon relevé de terrain
 const STOCK_FINAL: Col[] = [
+  { h: "Date de Relevé Finale", w: 95, render: (r) => (r.ravitaillement?.date_finale_fichier
+    ? <span title="Date lue dans la ligne du fichier de clôture (Closing / Output App Fuel)">{fr(r.ravitaillement.date_finale_fichier)}</span>
+    : <span style={{ color: "#94A0B4" }} title="Absente du fichier de clôture">n.d.</span>) },
   { h: "Qtité laissée à la date finale (relevé de terrain)", w: 115, render: (r) => num(r.stock_final_sources?.terrain_l) },
   { h: "Qtité laissée à la date finale (Société de gardiennage)", w: 115, render: (r) => num(r.stock_final_sources?.gardiennage_l) },
   { h: "Qtité laissée à la date finale (Fuel Sensor FMS)", w: 115, render: (r) => num(r.stock_final_sources?.fms_l) },
@@ -59,9 +62,6 @@ const RAVITAILLEMENT: Col[] = [
   { h: "Total Retrait", w: 90, render: enoc((r) => r.ravitaillement?.retrait_l) },
   { h: "Total QTE volée déclarée", w: 100, render: enoc((r) => r.ravitaillement?.vole_l) },
   { h: "Total QTE vidangée / Fuite / Ecart de Stock", w: 120, render: enoc((r) => r.ravitaillement?.fuite_l) },
-  { h: "Date de Relevé Finale", w: 95, render: (r) => (r.ravitaillement?.date_finale_fichier
-    ? <span title="Date lue dans la ligne du fichier de clôture (Closing / Output App Fuel)">{fr(r.ravitaillement.date_finale_fichier)}</span>
-    : <span style={{ color: "#94A0B4" }} title="Absente du fichier de clôture">n.d.</span>) },
 ];
 
 export function OutputFormatTable({ rows, onDetail }: { rows: ConsoRow[]; onDetail: (r: ConsoRow) => void }) {
