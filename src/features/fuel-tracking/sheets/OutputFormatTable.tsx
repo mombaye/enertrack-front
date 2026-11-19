@@ -50,7 +50,7 @@ const STOCK_FINAL: Col[] = [
   { h: "Relevé Compteur genset retenu", w: 105, render: (r) => <b>{num(r.stock_final_sources?.compteur_retenu_h, 2)}</b> },
   { h: "Source de donnée index compteur", w: 150, left: true, render: (r) => txt(r.stock_final_sources?.source_compteur) },
 ];
-// Fabricant / type de GE, champ par champ : Snowflake (SITE_DG, puis son historique), sinon ENOC ; source affichée ; plusieurs GE séparés par « / »
+// Fabricant GE : Snowflake (SITE_DG, puis historique), sinon ENOC · Type de GE : ENOC, sinon Snowflake ; source affichée ; plusieurs GE séparés par « / »
 // Puissance PRP : GENSET DB du fichier de clôture (type de GE exact) ; plusieurs GE séparés par « / » ; raison au survol si absente
 const prp = (r: ConsoRow, v: number[] | null | undefined) => (v && v.length
   ? <span title={r.estimation_theorique?.prp_source ?? undefined}>{v.map((x) => x.toLocaleString("fr-FR", { maximumFractionDigits: 2 })).join(" / ")}</span>
