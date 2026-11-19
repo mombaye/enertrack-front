@@ -25,6 +25,7 @@ const UPLOAD_TYPES: Array<{ key: Exclude<ImportSourceType, "ENOC">; label: strin
   { key: "HISTORICAL_REFUELING", label: IMPORT_SOURCE_LABEL.HISTORICAL_REFUELING },
   { key: "TANK_MODELS", label: IMPORT_SOURCE_LABEL.TANK_MODELS },
   { key: "TARGET_FUEL", label: IMPORT_SOURCE_LABEL.TARGET_FUEL },
+  { key: "BASE_GE", label: IMPORT_SOURCE_LABEL.BASE_GE },
   { key: "TERRAIN_MENSUEL", label: IMPORT_SOURCE_LABEL.TERRAIN_MENSUEL },
 ];
 
