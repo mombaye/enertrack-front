@@ -50,6 +50,12 @@ const STOCK_FINAL: Col[] = [
   { h: "Relevé Compteur genset retenu", w: 105, render: (r) => <b>{num(r.stock_final_sources?.compteur_retenu_h, 2)}</b> },
   { h: "Source de donnée index compteur", w: 150, left: true, render: (r) => txt(r.stock_final_sources?.source_compteur) },
 ];
+// Fabricant / type de GE : Snowflake (SITE_DG) d'abord, sinon ENOC (registre des GE) ; plusieurs GE séparés par « / »
+const ESTIMATION_THEORIQUE: Col[] = [
+  { h: "Fabriquant GE", w: 130, left: true, render: (r) => txt(r.estimation_theorique?.fabricant_ge) },
+  { h: "Type de GE", w: 120, left: true, render: (r) => txt(r.estimation_theorique?.type_ge) },
+  { h: "Source de donnée GE", w: 170, left: true, render: (r) => txt(r.estimation_theorique?.source_ge) },
+];
 // 6 totaux lus dans ENOC sur la plage de dates de la ligne du fichier du site (Date de Relevé Initiale → Date de Relevé Finale)
 const periodeEnoc = (r: ConsoRow) => (r.ravitaillement?.debut && r.ravitaillement?.fin
   ? `ENOC, du ${fr(r.ravitaillement.debut)} au ${fr(r.ravitaillement.fin)} (${r.ravitaillement.nb_mouvements_enoc ?? 0} mouvement(s) sur le site)`
@@ -73,6 +79,7 @@ export function OutputFormatTable({ rows, onDetail }: { rows: ConsoRow[]; onDeta
   const groups: Array<{ name: string; cols: Col[] }> = [
     { name: "INVENTAIRE", cols: INVENTAIRE }, { name: "DONNEES DE STOCK INITIAL", cols: STOCK_INITIAL },
     { name: "DONNEES DE RAVITAILLEMENT", cols: RAVITAILLEMENT }, { name: "DONNEES DE STOCK FINAL", cols: STOCK_FINAL },
+    { name: "ESTIMATION CONSOMMATION FUEL THEORIQUE", cols: ESTIMATION_THEORIQUE },
   ];
   const all = groups.flatMap((g) => g.cols);
   // Colonne vide entre deux blocs : séparation visuelle nette (aucune donnée, ignorée par les lecteurs d'écran)
