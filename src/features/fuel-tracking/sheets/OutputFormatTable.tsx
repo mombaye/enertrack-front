@@ -51,10 +51,16 @@ const STOCK_FINAL: Col[] = [
   { h: "Source de donnée index compteur", w: 150, left: true, render: (r) => txt(r.stock_final_sources?.source_compteur) },
 ];
 // Fabricant / type de GE, champ par champ : Snowflake (SITE_DG, puis son historique), sinon ENOC ; source affichée ; plusieurs GE séparés par « / »
+// Puissance PRP : GENSET DB du fichier de clôture (type de GE exact) ; plusieurs GE séparés par « / » ; raison au survol si absente
+const prp = (r: ConsoRow, v: number[] | null | undefined) => (v && v.length
+  ? <span title={r.estimation_theorique?.prp_source ?? undefined}>{v.map((x) => x.toLocaleString("fr-FR", { maximumFractionDigits: 2 })).join(" / ")}</span>
+  : <span style={{ color: "#94A0B4" }} title={r.estimation_theorique?.prp_motif ?? "Type de GE inconnu"}>n.d.</span>);
 const ESTIMATION_THEORIQUE: Col[] = [
   { h: "Fabriquant GE", w: 130, left: true, render: (r) => txt(r.estimation_theorique?.fabricant_ge) },
   { h: "Type de GE", w: 120, left: true, render: (r) => txt(r.estimation_theorique?.type_ge) },
   { h: "Source de donnée GE", w: 170, left: true, render: (r) => txt(r.estimation_theorique?.source_ge) },
+  { h: "Puissance PRP (KVA)", w: 95, render: (r) => prp(r, r.estimation_theorique?.prp_kva) },
+  { h: "Puissance PRP (KW)", w: 95, render: (r) => prp(r, r.estimation_theorique?.prp_kw) },
 ];
 // 6 totaux lus dans ENOC sur la plage de dates de la ligne du fichier du site (Date de Relevé Initiale → Date de Relevé Finale)
 const periodeEnoc = (r: ConsoRow) => (r.ravitaillement?.debut && r.ravitaillement?.fin
