@@ -1,10 +1,11 @@
 // src/features/fuel-tracking/sheets/OutputFormatTable.tsx
 // Tableau de Suivi Conso au format du fichier « Output App Fuel » : blocs INVENTAIRE, DONNÉES DE STOCK INITIAL et DONNÉES DE RAVITAILLEMENT.
 // Toutes les valeurs du stock initial sont prises à la DATE EXACTE du relevé initial du fichier (aucune autre période).
-import type { CSSProperties, ReactNode } from "react";
+import { Fragment, type CSSProperties, type ReactNode } from "react";
 import type { ConsoRow } from "@/services/fuelTracking";
 
 const NAVY = "#1F3864";
+const GAP = 14;   // largeur (px) de l'espace entre deux blocs du tableau
 const fr = (v: string | null | undefined) => (v ? v.split("-").reverse().join("/") : "—");
 const num = (v: number | null | undefined, d = 0) => (v === null || v === undefined ? <span style={{ color: "#94A0B4" }}>n.d.</span>
   : v.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d }));
@@ -55,20 +56,35 @@ export function OutputFormatTable({ rows, onDetail }: { rows: ConsoRow[]; onDeta
   const group: CSSProperties = { background: "#fff", color: "#000", fontSize: 12.5, fontWeight: 800, padding: "6px", border: "2px solid #000", textAlign: "center",
     position: "sticky", top: 0, zIndex: 3, height: 30 };
   const td: CSSProperties = { fontSize: 12, padding: "5px 6px", border: "1px solid #D9E1F2", textAlign: "center", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
-  const all = [...INVENTAIRE, ...STOCK_INITIAL, ...RAVITAILLEMENT];
+  const groups: Array<{ name: string; cols: Col[] }> = [
+    { name: "INVENTAIRE", cols: INVENTAIRE }, { name: "DONNEES DE STOCK INITIAL", cols: STOCK_INITIAL },
+    { name: "DONNEES DE RAVITAILLEMENT", cols: RAVITAILLEMENT },
+  ];
+  const all = groups.flatMap((g) => g.cols);
+  // Colonne vide entre deux blocs : séparation visuelle nette (aucune donnée, ignorée par les lecteurs d'écran)
+  const gap: CSSProperties = { width: GAP, minWidth: GAP, maxWidth: GAP, padding: 0, border: "none", background: "#fff" };
+  const spacer = (k: string, sticky?: CSSProperties) => <td key={k} aria-hidden style={{ ...gap, ...sticky }} />;
   return (
     <div style={{ overflow: "auto", maxHeight: "72vh" }} tabIndex={0} aria-label="Tableau des sites au format du fichier Output App Fuel">
       <table style={{ borderCollapse: "collapse", width: "max-content", minWidth: "100%" }}>
         <thead>
           <tr>
             <th style={{ ...group, position: "sticky", left: 0, zIndex: 5 }} />
-            <th colSpan={INVENTAIRE.length} style={group}>INVENTAIRE</th>
-            <th colSpan={STOCK_INITIAL.length} style={group}>DONNEES DE STOCK INITIAL</th>
-            <th colSpan={RAVITAILLEMENT.length} style={group}>DONNEES DE RAVITAILLEMENT</th>
+            {groups.map((g) => (
+              <Fragment key={g.name}>
+                <th aria-hidden style={{ ...gap, position: "sticky", top: 0, zIndex: 3 }} />
+                <th colSpan={g.cols.length} style={group}>{g.name}</th>
+              </Fragment>
+            ))}
           </tr>
           <tr>
             <th style={{ ...th, minWidth: 95, position: "sticky", left: 0, zIndex: 4 }}>ID du site</th>
-            {all.map((c) => <th key={c.h} scope="col" style={{ ...th, minWidth: c.w, maxWidth: c.w }}>{c.h}</th>)}
+            {groups.map((g) => (
+              <Fragment key={g.name}>
+                <th aria-hidden style={{ ...gap, position: "sticky", top: 30, zIndex: 2 }} />
+                {g.cols.map((c) => <th key={c.h} scope="col" style={{ ...th, minWidth: c.w, maxWidth: c.w }}>{c.h}</th>)}
+              </Fragment>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -80,11 +96,16 @@ export function OutputFormatTable({ rows, onDetail }: { rows: ConsoRow[]; onDeta
                   <button type="button" onClick={() => onDetail(r)} aria-label={`Voir le détail du site ${r.site_id}`} title="Voir le détail"
                     style={{ border: "none", background: "none", padding: 0, fontWeight: 800, fontSize: 12, color: NAVY, cursor: "pointer", textDecoration: "underline dotted" }}>{r.site_id}</button>
                 </td>
-                {all.map((c) => <td key={c.h} style={{ ...td, ...(c.left ? { textAlign: "left" } : {}) }}>{c.render(r)}</td>)}
+                {groups.map((g) => (
+                  <Fragment key={g.name}>
+                    {spacer(`gap-${g.name}`)}
+                    {g.cols.map((c) => <td key={c.h} style={{ ...td, ...(c.left ? { textAlign: "left" } : {}) }}>{c.render(r)}</td>)}
+                  </Fragment>
+                ))}
               </tr>
             );
           })}
-          {rows.length === 0 && <tr><td colSpan={all.length + 1} style={{ ...td, textAlign: "left", padding: 20 }}>Aucun site ne correspond aux filtres pour cette période.</td></tr>}
+          {rows.length === 0 && <tr><td colSpan={all.length + groups.length + 1} style={{ ...td, textAlign: "left", padding: 20 }}>Aucun site ne correspond aux filtres pour cette période.</td></tr>}
         </tbody>
       </table>
     </div>
