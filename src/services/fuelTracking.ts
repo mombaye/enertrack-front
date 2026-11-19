@@ -2061,7 +2061,9 @@ export type ConsoGapExplication = {
 export type ConsoGap = { ecart_l: number | null; ecart_pct: number | null; pct_na: string | null };
 
 export type ConsoRow = {
-  inventaire?: ConsoInventaire; stock_initial_sources?: ConsoStockInitialSources; ravitaillement?: ConsoRavitaillement;
+  inventaire?: ConsoInventaire; stock_initial_sources?: ConsoStockInitialSources;
+  /** Bloc « DONNÉES DE STOCK FINAL » : mêmes champs, à la Date de Relevé Finale du fichier. */
+  stock_final_sources?: ConsoStockInitialSources; ravitaillement?: ConsoRavitaillement;
   site_id: string;
   site_name: string | null;
   country: string | null;

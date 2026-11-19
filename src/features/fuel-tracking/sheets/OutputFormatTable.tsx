@@ -34,6 +34,19 @@ const STOCK_INITIAL: Col[] = [
   { h: "Relevé Compteur genset retenu", w: 105, render: (r) => <b>{num(r.stock_initial_sources?.compteur_retenu_h, 2)}</b> },
   { h: "Source de donnée index compteur", w: 150, left: true, render: (r) => txt(r.stock_initial_sources?.source_compteur) },
 ];
+// Bloc stock final : à la Date de Relevé Finale du fichier ; retenu = FMS, sinon Société de gardiennage, sinon relevé de terrain
+const STOCK_FINAL: Col[] = [
+  { h: "Qtité laissée à la date finale (relevé de terrain)", w: 115, render: (r) => num(r.stock_final_sources?.terrain_l) },
+  { h: "Qtité laissée à la date finale (Société de gardiennage)", w: 115, render: (r) => num(r.stock_final_sources?.gardiennage_l) },
+  { h: "Qtité laissée à la date finale (Fuel Sensor FMS)", w: 115, render: (r) => num(r.stock_final_sources?.fms_l) },
+  { h: "Qtité laissée retenue", w: 100, render: (r) => <b>{num(r.stock_final_sources?.retenue_l)}</b> },
+  { h: "Source de donnée de stock", w: 150, left: true, render: (r) => txt(r.stock_final_sources?.source) },
+  { h: "Relevé Visuel Compteur genset (relevé de terrain)", w: 115, render: (r) => num(r.stock_final_sources?.compteur_terrain_h, 2) },
+  { h: "Relevé Visuel Compteur genset (Société de gardiennage)", w: 115, render: (r) => num(r.stock_final_sources?.compteur_gardiennage_h, 2) },
+  { h: "Relevé Visuel Compteur genset (Index Compteur FMS)", w: 115, render: (r) => num(r.stock_final_sources?.compteur_fms_h, 2) },
+  { h: "Relevé Compteur genset retenu", w: 105, render: (r) => <b>{num(r.stock_final_sources?.compteur_retenu_h, 2)}</b> },
+  { h: "Source de donnée index compteur", w: 150, left: true, render: (r) => txt(r.stock_final_sources?.source_compteur) },
+];
 // 6 totaux lus dans ENOC sur la plage de dates de la ligne du fichier du site (Date de Relevé Initiale → Date de Relevé Finale)
 const periodeEnoc = (r: ConsoRow) => (r.ravitaillement?.debut && r.ravitaillement?.fin
   ? `ENOC, du ${fr(r.ravitaillement.debut)} au ${fr(r.ravitaillement.fin)} (${r.ravitaillement.nb_mouvements_enoc ?? 0} mouvement(s) sur le site)`
@@ -59,7 +72,7 @@ export function OutputFormatTable({ rows, onDetail }: { rows: ConsoRow[]; onDeta
   const td: CSSProperties = { fontSize: 12, padding: "5px 6px", border: "1px solid #D9E1F2", textAlign: "center", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
   const groups: Array<{ name: string; cols: Col[] }> = [
     { name: "INVENTAIRE", cols: INVENTAIRE }, { name: "DONNEES DE STOCK INITIAL", cols: STOCK_INITIAL },
-    { name: "DONNEES DE RAVITAILLEMENT", cols: RAVITAILLEMENT },
+    { name: "DONNEES DE RAVITAILLEMENT", cols: RAVITAILLEMENT }, { name: "DONNEES DE STOCK FINAL", cols: STOCK_FINAL },
   ];
   const all = groups.flatMap((g) => g.cols);
   // Colonne vide entre deux blocs : séparation visuelle nette (aucune donnée, ignorée par les lecteurs d'écran)
