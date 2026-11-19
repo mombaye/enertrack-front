@@ -11,6 +11,7 @@ import { getClosingUploads, uploadClosingFile, withdrawClosingFile, type Closing
 import { Card, EmptyState, Modal, SheetTitle, Skeleton } from "../ui";
 import { FT } from "../theme";
 import { actionBtn, Dash, fmtDateTime, StatusPill, tdStyle, thStyle } from "./stockRegistryUi";
+import { BaseGeCard } from "./BaseGeCard";
 
 const ACCEPT = ".xlsb,.xlsx,.xlsm";
 const STEPS = ["Envoi du fichier", "En attente", "Import des données", "Recalcul des bilans", "Terminé"] as const;
@@ -418,6 +419,7 @@ export function ConfigurationSheet() {
           </div>
         </Modal>
       )}
+      <BaseGeCard />
     </div>
   );
 }
