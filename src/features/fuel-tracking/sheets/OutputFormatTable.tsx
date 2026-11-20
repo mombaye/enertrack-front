@@ -76,7 +76,7 @@ const ESTIMATION_THEORIQUE: Col[] = [
   { h: "Temps de marche GE (Alarme day_dg_on FMS)", w: 115, tot: ["estimation_theorique", "tm_dg_on_h"], render: (r) => heures(r.estimation_theorique?.tm_dg_on_h,
     joursTip(r, r.estimation_theorique?.tm_dg_on_jours, "Snowflake GENSET_REPORT (Day DG On)")) },
   { h: "Temps de marche GE (Alarme day_rectifier_on FMS)", w: 115, tot: ["estimation_theorique", "tm_rectifier_h"], render: (r) => heures(r.estimation_theorique?.tm_rectifier_h,
-    r.estimation_theorique?.tm_rectifier_motif ?? joursTip(r, r.estimation_theorique?.tm_rectifier_jours, "Snowflake redresseur actif (créneaux 5 min)")) },
+    r.estimation_theorique?.tm_rectifier_motif ?? `${joursTip(r, r.estimation_theorique?.tm_rectifier_jours, "Snowflake RECTIFIER_EFFICIENCY_STATUS : créneaux 5 min Good / Aged / Warning")} — disponibilité ${r.estimation_theorique?.tm_rectifier_dispo_pct ?? "n.d."} %${r.estimation_theorique?.tm_rectifier_off_grid === true ? "" : r.estimation_theorique?.tm_rectifier_off_grid === false ? " — site raccordé au réseau : heures réseau + GE, non retenues comme temps de marche GE" : " — type de raccordement inconnu : non retenues comme temps de marche GE"}`) },
   { h: "Temps de marche GE (relevé de terrain)", w: 115, tot: ["estimation_theorique", "tm_terrain_h"], render: (r) => heures(r.estimation_theorique?.tm_terrain_h,
     r.estimation_theorique?.tm_terrain_motif ?? "Relevé Visuel Compteur genset (relevé de terrain) : relevé final − relevé initial") },
   { h: "Temps de marche GE (Index Compteur FMS)", w: 115, tot: ["estimation_theorique", "tm_index_fms_h"], render: (r) => heures(r.estimation_theorique?.tm_index_fms_h,
