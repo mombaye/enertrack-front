@@ -77,6 +77,9 @@ const ESTIMATION_THEORIQUE: Col[] = [
     r.estimation_theorique?.tm_terrain_motif ?? "Fichier de clôture (Output App Fuel : colonne du fichier ; Closing : compteur de terrain final − initial)") },
   { h: "Temps de marche GE (Index Compteur FMS)", w: 115, tot: ["estimation_theorique", "tm_index_fms_h"], render: (r) => heures(r.estimation_theorique?.tm_index_fms_h,
     "Index compteur FMS (Snowflake) à la date finale − à la date initiale") },
+  { h: "Source de donnée Temps de marche GE", w: 160, left: true, render: (r) => (r.estimation_theorique?.tm_source
+    ? <span title="Ordre : Index Compteur FMS → relevé de terrain → Alarme day_dg_on FMS → Alarme day_rectifier_on FMS">{r.estimation_theorique.tm_source}</span>
+    : txt(null)) },
 ];
 // 6 totaux lus dans ENOC sur la plage de dates de la ligne du fichier du site (Date de Relevé Initiale → Date de Relevé Finale)
 const periodeEnoc = (r: ConsoRow) => (r.ravitaillement?.debut && r.ravitaillement?.fin
