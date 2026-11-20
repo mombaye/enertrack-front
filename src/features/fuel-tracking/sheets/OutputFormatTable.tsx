@@ -89,7 +89,7 @@ const ESTIMATION_THEORIQUE: Col[] = [
   { h: "Puissance médiane mesurée redresseur (kW)", w: 115, render: (r) => kw(r.estimation_theorique?.p_rect_kw,
     `Médiane des puissances DC journalières du redresseur (Snowflake) — ${r.estimation_theorique?.p_rect_jours ?? 0} jour(s) mesuré(s)`) },
   { h: "Puissance médiane mesurée générateur (kW)", w: 115, render: (r) => kw(r.estimation_theorique?.p_ge_kw,
-    r.estimation_theorique?.p_ge_motif ?? "Algorithme CPH : outdoor P_DC ÷ rendement, indoor puissance Grid ; plafond 105 % × kVA × 0,8") },
+    r.estimation_theorique?.p_ge_motif ?? `Médiane de la production GE ÷ heures de marche (GENSET_REPORT, Snowflake) — ${r.estimation_theorique?.p_ge_jours ?? 0} jour(s) de marche ; jour au-delà de 105 % × kVA × 0,8 écarté`) },
   { h: "Puissance Grid médiane mesurée (kW)", w: 115, render: (r) => kw(r.estimation_theorique?.p_grid_kw,
     `Médiane des puissances AC journalières (compteur AC, Snowflake) — ${r.estimation_theorique?.p_grid_jours ?? 0} jour(s) mesuré(s)`) },
 ];

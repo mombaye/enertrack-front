@@ -2075,7 +2075,7 @@ export type ConsoRow = {
     /** Temps de marche retenu et sa source (ordre Ops : FMS → relevé de terrain → day_dg_on → day_rectifier_on). */
     tm_retenu_h?: number | null; tm_source?: string | null;
     /** Puissances médianes mesurées (kW) sur la plage du fichier : redresseur (P_DC), générateur (algorithme CPH), Grid (AC_METER). */
-    p_rect_kw?: number | null; p_rect_jours?: number | null; p_ge_kw?: number | null; p_ge_motif?: string | null;
+    p_rect_kw?: number | null; p_rect_jours?: number | null; p_ge_kw?: number | null; p_ge_jours?: number | null; p_ge_motif?: string | null;
     p_grid_kw?: number | null; p_grid_jours?: number | null }; ravitaillement?: ConsoRavitaillement;
   site_id: string;
   site_name: string | null;
