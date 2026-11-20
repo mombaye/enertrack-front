@@ -63,6 +63,10 @@ const heures = (v: number | null | undefined, tip: string) => (v === null || v =
   : <span title={tip}>{v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>);
 const joursTip = (r: ConsoRow, n: number | null | undefined, src: string) =>
   `${src} — ${n ?? 0} jour(s) renseigné(s) sur ${r.estimation_theorique?.tm_jours_periode ?? "?"} (lendemain de la date initiale → date finale)`;
+// Puissance (kW) : n.d. si non mesurée (jamais 0 par défaut), source / raison au survol
+const kw = (v: number | null | undefined, tip: string) => (v === null || v === undefined
+  ? <span style={{ color: "#94A0B4" }} title={tip}>n.d.</span>
+  : <span title={tip}>{v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>);
 const ESTIMATION_THEORIQUE: Col[] = [
   { h: "Fabriquant GE", w: 130, left: true, render: (r) => txt(r.estimation_theorique?.fabricant_ge) },
   { h: "Type de GE", w: 120, left: true, render: (r) => txt(r.estimation_theorique?.type_ge) },
@@ -82,6 +86,12 @@ const ESTIMATION_THEORIQUE: Col[] = [
   { h: "Source de donnée Temps de marche GE", w: 160, left: true, render: (r) => (r.estimation_theorique?.tm_source
     ? <span title="Ordre : Index Compteur FMS → relevé de terrain → Alarme day_dg_on FMS → Alarme day_rectifier_on FMS">{r.estimation_theorique.tm_source}</span>
     : txt(null)) },
+  { h: "Puissance médiane mesurée redresseur (kW)", w: 115, render: (r) => kw(r.estimation_theorique?.p_rect_kw,
+    `Médiane des puissances DC journalières du redresseur (Snowflake) — ${r.estimation_theorique?.p_rect_jours ?? 0} jour(s) mesuré(s)`) },
+  { h: "Puissance médiane mesurée générateur (kW)", w: 115, render: (r) => kw(r.estimation_theorique?.p_ge_kw,
+    r.estimation_theorique?.p_ge_motif ?? "Algorithme CPH : outdoor P_DC ÷ rendement, indoor puissance Grid ; plafond 105 % × kVA × 0,8") },
+  { h: "Puissance Grid médiane mesurée (kW)", w: 115, render: (r) => kw(r.estimation_theorique?.p_grid_kw,
+    `Médiane des puissances AC journalières (compteur AC, Snowflake) — ${r.estimation_theorique?.p_grid_jours ?? 0} jour(s) mesuré(s)`) },
 ];
 // 6 totaux lus dans ENOC sur la plage de dates de la ligne du fichier du site (Date de Relevé Initiale → Date de Relevé Finale)
 const periodeEnoc = (r: ConsoRow) => (r.ravitaillement?.debut && r.ravitaillement?.fin
