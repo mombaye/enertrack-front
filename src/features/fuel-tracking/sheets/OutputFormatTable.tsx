@@ -74,9 +74,9 @@ const ESTIMATION_THEORIQUE: Col[] = [
   { h: "Temps de marche GE (Alarme day_rectifier_on FMS)", w: 115, tot: ["estimation_theorique", "tm_rectifier_h"], render: (r) => heures(r.estimation_theorique?.tm_rectifier_h,
     r.estimation_theorique?.tm_rectifier_motif ?? joursTip(r, r.estimation_theorique?.tm_rectifier_jours, "Snowflake redresseur actif (créneaux 5 min)")) },
   { h: "Temps de marche GE (relevé de terrain)", w: 115, tot: ["estimation_theorique", "tm_terrain_h"], render: (r) => heures(r.estimation_theorique?.tm_terrain_h,
-    r.estimation_theorique?.tm_terrain_motif ?? "Fichier de clôture (Output App Fuel : colonne du fichier ; Closing : compteur de terrain final − initial)") },
+    r.estimation_theorique?.tm_terrain_motif ?? "Relevé Visuel Compteur genset (relevé de terrain) : relevé final − relevé initial") },
   { h: "Temps de marche GE (Index Compteur FMS)", w: 115, tot: ["estimation_theorique", "tm_index_fms_h"], render: (r) => heures(r.estimation_theorique?.tm_index_fms_h,
-    "Index compteur FMS (Snowflake) à la date finale − à la date initiale") },
+    r.estimation_theorique?.tm_index_fms_motif ?? "Relevé Visuel Compteur genset (Index Compteur FMS) : relevé final − relevé initial") },
   { h: "Source de donnée Temps de marche GE", w: 160, left: true, render: (r) => (r.estimation_theorique?.tm_source
     ? <span title="Ordre : Index Compteur FMS → relevé de terrain → Alarme day_dg_on FMS → Alarme day_rectifier_on FMS">{r.estimation_theorique.tm_source}</span>
     : txt(null)) },

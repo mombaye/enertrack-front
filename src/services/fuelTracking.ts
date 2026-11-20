@@ -2071,7 +2071,7 @@ export type ConsoRow = {
     /** Temps de marche GE (h) sur la plage du fichier (lendemain de la date initiale → date finale) ; null = non disponible. */
     tm_dg_on_h?: number | null; tm_dg_on_jours?: number | null; tm_rectifier_h?: number | null; tm_rectifier_jours?: number | null;
     tm_rectifier_motif?: string | null; tm_jours_periode?: number | null; tm_terrain_h?: number | null; tm_terrain_motif?: string | null;
-    tm_index_fms_h?: number | null;
+    tm_index_fms_h?: number | null; tm_index_fms_motif?: string | null;
     /** Temps de marche retenu et sa source (ordre Ops : FMS → relevé de terrain → day_dg_on → day_rectifier_on). */
     tm_retenu_h?: number | null; tm_source?: string | null }; ravitaillement?: ConsoRavitaillement;
   site_id: string;
