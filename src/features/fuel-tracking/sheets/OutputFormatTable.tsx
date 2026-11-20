@@ -77,6 +77,8 @@ const ESTIMATION_THEORIQUE: Col[] = [
     r.estimation_theorique?.tm_terrain_motif ?? "Relevé Visuel Compteur genset (relevé de terrain) : relevé final − relevé initial") },
   { h: "Temps de marche GE (Index Compteur FMS)", w: 115, tot: ["estimation_theorique", "tm_index_fms_h"], render: (r) => heures(r.estimation_theorique?.tm_index_fms_h,
     r.estimation_theorique?.tm_index_fms_motif ?? "Relevé Visuel Compteur genset (Index Compteur FMS) : relevé final − relevé initial") },
+  { h: "Temps de marche GE retenu", w: 105, tot: ["estimation_theorique", "tm_retenu_h"], render: (r) => <b>{heures(r.estimation_theorique?.tm_retenu_h,
+    r.estimation_theorique?.tm_source ? `Retenu : ${r.estimation_theorique.tm_source}` : "Aucune source de temps de marche pour ce site")}</b> },
   { h: "Source de donnée Temps de marche GE", w: 160, left: true, render: (r) => (r.estimation_theorique?.tm_source
     ? <span title="Ordre : Index Compteur FMS → relevé de terrain → Alarme day_dg_on FMS → Alarme day_rectifier_on FMS">{r.estimation_theorique.tm_source}</span>
     : txt(null)) },
