@@ -2067,7 +2067,11 @@ export type ConsoRow = {
   /** Bloc « ESTIMATION CONSOMMATION FUEL THÉORIQUE » : fabricant (Snowflake puis ENOC) / type de GE (ENOC puis Snowflake). */
   estimation_theorique?: { fabricant_ge: string | null; type_ge: string | null; source_ge: string | null;
     /** Puissance PRP par GE (GENSET DB du fichier de clôture) ; kW = kVA × 0,8 ; null + motif si introuvable / ambiguë. */
-    prp_kva?: number[] | null; prp_kw?: number[] | null; prp_motif?: string | null; prp_source?: string | null }; ravitaillement?: ConsoRavitaillement;
+    prp_kva?: number[] | null; prp_kw?: number[] | null; prp_motif?: string | null; prp_source?: string | null;
+    /** Temps de marche GE (h) sur la plage du fichier (lendemain de la date initiale → date finale) ; null = non disponible. */
+    tm_dg_on_h?: number | null; tm_dg_on_jours?: number | null; tm_rectifier_h?: number | null; tm_rectifier_jours?: number | null;
+    tm_rectifier_motif?: string | null; tm_jours_periode?: number | null; tm_terrain_h?: number | null; tm_terrain_motif?: string | null;
+    tm_index_fms_h?: number | null }; ravitaillement?: ConsoRavitaillement;
   site_id: string;
   site_name: string | null;
   country: string | null;
