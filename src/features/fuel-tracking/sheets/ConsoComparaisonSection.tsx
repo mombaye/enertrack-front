@@ -440,7 +440,7 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
           </div>
         )}
         <div style={{ opacity: pageLoading ? 0.45 : 1, transition: "opacity .15s", pointerEvents: pageLoading ? "none" : undefined }} aria-busy={pageLoading}>
-          <OutputFormatTable rows={(d?.rows ?? []).map(safeRow)} onDetail={(r) => setDetail({ row: r, tab: "hub" })} />
+          <OutputFormatTable rows={(d?.rows ?? []).map(safeRow)} onDetail={(r) => setDetail({ row: r, tab: "hub" })} totaux={d?.totaux} nbSites={d?.total} />
         </div>
         <nav aria-label="Pagination des sites" style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between", alignItems: "center", padding: "8px 12px", fontSize: 12, color: FT.textMid }}>
           <span>

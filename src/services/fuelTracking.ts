@@ -2155,6 +2155,8 @@ export type ConsoStockInitialSources = { date: string | null; terrain_l: number 
 
 export type ConsoResponse = {
   avertissement_sources?: string | null;
+  /** Ligne de totaux du tableau : {bloc: {champ: {total, sites}}} sur tous les sites du filtre (null si indisponible). */
+  totaux?: Record<string, Record<string, { total: number | null; sites: number }>> | null;
   /** Sites de la page dont les valeurs Snowflake FMS / ENOC gardien sont en cours de lecture (tâche de fond) : 0 = tout est là. */
   sources_en_attente?: number;
   kpis_closing?: ClosingKpis | null;
