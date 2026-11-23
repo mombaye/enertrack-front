@@ -109,7 +109,50 @@ const ESTIMATION_THEORIQUE: Col[] = [
       ? <span title={tip} style={{ color: "#B7791F" }}>{e.p_batt_kw.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 3 })} *</span>
       : kw(e?.p_batt_kw, tip);
   } },
+  { h: "Puissance retenue (kW)", w: 110, render: (r) => {
+    const e = r.estimation_theorique;
+    const tip = [e?.p_retenue_source ? `Source : ${SELECTION_LABEL[e.p_retenue_source] ?? e.p_retenue_source}` : null,
+      "Règle : maximum entre puissance médiane GE et puissance médiane redresseur ; sinon Load DC telco + Recharge batterie",
+      e?.p_retenue_motif ?? null].filter(Boolean).join(" ; ");
+    return e?.p_retenue_kw != null && e.p_retenue_reserve
+      ? <span title={tip} style={{ color: "#B7791F" }}>{e.p_retenue_kw.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} *</span>
+      : <b>{kw(e?.p_retenue_kw, tip)}</b>;
+  } },
+  { h: "Taux de charge GE (%)", w: 95, render: (r) => {
+    const e = r.estimation_theorique;
+    const tip = e?.taux_charge_motif ?? "Puissance retenue ÷ Puissance PRP (kW) du GE";
+    return e?.taux_charge == null ? <span style={{ color: "#94A0B4" }} title={tip}>n.d.</span>
+      : <span title={tip}>{(e.taux_charge * 100).toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %</span>;
+  } },
+  { h: "CPH théorique (L/h)", w: 95, render: (r) => {
+    const e = r.estimation_theorique;
+    const tip = e?.cph_a != null
+      ? `CPH = a·x² + b·x + c (x = taux de charge) avec a = ${e.cph_a}, b = ${e.cph_b}, c = ${e.cph_c} (GENSET DB, type ${e.type_ge ?? "?"})${e.cph_extrapolation ? " ; charge < 50 % : extrapolation de la courbe" : ""}`
+      : (e?.conso_theorique_motif ?? "Courbe GENSET DB non disponible");
+    return e?.cph_l_h != null && e.cph_extrapolation
+      ? <span title={tip} style={{ color: "#B7791F" }}>{e.cph_l_h.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} *</span>
+      : kw(e?.cph_l_h, tip);
+  } },
+  { h: "Consommation théorique (L)", w: 110, tot: ["estimation_theorique", "conso_theorique_l"], render: (r) => {
+    const e = r.estimation_theorique;
+    const tip = e?.conso_theorique_motif ?? "CPH théorique × Temps de marche GE retenu";
+    return e?.conso_theorique_l != null && e.cph_extrapolation
+      ? <span title={tip} style={{ color: "#B7791F" }}>{e.conso_theorique_l.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} *</span>
+      : <b>{kw(e?.conso_theorique_l, tip)}</b>;
+  } },
+  { h: "Consommation Snowflake fuel sensor (L)", w: 120, tot: ["estimation_theorique", "conso_fuel_sensor_l"], render: (r) => {
+    const e = r.estimation_theorique;
+    const tip = [`Somme des consommations mesurées du jour (VW_FUEL_REPORT, filtre strict) — ${e?.conso_fuel_sensor_jours ?? 0} jour(s) mesuré(s) sur ${e?.conso_fuel_sensor_jours_periode ?? "?"}`,
+      e?.conso_fuel_sensor_motif ?? null].filter(Boolean).join(" ; ");
+    return e?.conso_fuel_sensor_l != null && e.conso_fuel_sensor_reserve
+      ? <span title={tip} style={{ color: "#B7791F" }}>{e.conso_fuel_sensor_l.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} *</span>
+      : kw(e?.conso_fuel_sensor_l, tip);
+  } },
 ];
+const SELECTION_LABEL: Record<string, string> = {
+  PUISSANCE_MEDIANE_GE: "puissance médiane GE", PUISSANCE_MEDIANE_REDRESSEUR: "puissance médiane redresseur",
+  LOAD_DC_PLUS_RECHARGE_BATTERIE: "Load DC telco + Recharge batterie", LOAD_DC_SEUL: "Load DC telco seul (recharge batterie n.d.)",
+};
 // 6 totaux lus dans ENOC sur la plage de dates de la ligne du fichier du site (Date de Relevé Initiale → Date de Relevé Finale)
 const periodeEnoc = (r: ConsoRow) => (r.ravitaillement?.debut && r.ravitaillement?.fin
   ? `ENOC, du ${fr(r.ravitaillement.debut)} au ${fr(r.ravitaillement.fin)} (${r.ravitaillement.nb_mouvements_enoc ?? 0} mouvement(s) sur le site)`

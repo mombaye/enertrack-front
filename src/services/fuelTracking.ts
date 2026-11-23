@@ -2089,7 +2089,15 @@ export type ConsoRow = {
     p_batt_median_period_kw?: number | null; p_batt_current_a?: number | null; p_batt_voltage_v?: number | null;
     p_batt_dispo_pct?: number | null; p_batt_pos?: number | null; p_batt_reserve?: string | null; p_batt_motif?: string | null;
     p_batt_source?: "BATTERY_CHARGE_MEDIAN_DAY" | "BATTERY_CHARGE_MEDIAN_PERIOD" | "BATTERY_CHARGE_TELEMETRY_UNAVAILABLE"
-      | "NO_BATTERY_CHARGING_MEASURED" | "BATTERY_CHARGE_POWER_UNAVAILABLE" | null }; ravitaillement?: ConsoRavitaillement;
+      | "NO_BATTERY_CHARGING_MEASURED" | "BATTERY_CHARGE_POWER_UNAVAILABLE" | null;
+    /** Puissance retenue = max(GE, redresseur), sinon Load DC + Recharge batterie ; taux de charge = retenue ÷ PRP kW ;
+     *  CPH = a·x² + b·x + c (GENSET DB) ; conso théorique = CPH × temps de marche retenu ; conso fuel sensor = Σ VW_FUEL_REPORT. */
+    p_retenue_kw?: number | null; p_retenue_source?: string | null; p_retenue_motif?: string | null; p_retenue_reserve?: boolean;
+    taux_charge?: number | null; taux_charge_motif?: string | null; cph_l_h?: number | null; cph_a?: number | null;
+    cph_b?: number | null; cph_c?: number | null; cph_extrapolation?: boolean; conso_theorique_l?: number | null;
+    conso_theorique_motif?: string | null; conso_fuel_sensor_l?: number | null; conso_fuel_sensor_jours?: number | null;
+    conso_fuel_sensor_jours_periode?: number | null; conso_fuel_sensor_motif?: string | null; conso_fuel_sensor_reserve?: boolean };
+  ravitaillement?: ConsoRavitaillement;
   site_id: string;
   site_name: string | null;
   country: string | null;
