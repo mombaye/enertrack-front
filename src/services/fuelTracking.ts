@@ -2083,10 +2083,13 @@ export type ConsoRow = {
     p_grid_kw?: number | null; p_grid_jours?: number | null;
     /** Load DC telco : médiane des LOAD_W journaliers (AVERAGE_LOAD, Snowflake) sur la plage du fichier, kW. */
     p_load_dc_kw?: number | null; p_load_dc_jours?: number | null; p_load_dc_motif?: string | null;
-    /** Recharge batterie (kW) : médiane courant de charge × tension batterie 5 min (VW_GFMS_METRICS) ; repli Ah chargés
-     *  × 53,5 V ÷ 24 h (BATTERY_REPORT, jours aberrants écartés). p_batt_source = source retenue. */
-    p_batt_kw?: number | null; p_batt_jours?: number | null; p_batt_ecartes?: number | null; p_batt_motif?: string | null;
-    p_batt_source?: string | null; p_batt_nuls?: number | null }; ravitaillement?: ConsoRavitaillement;
+    /** Recharge batterie (règle équipe data) : courant de charge × tension ÷ 1000 par pas de 5 min (SILVER.GFMS_METRICS),
+     *  médiane des pas en charge ; null + source si pas de télémétrie ou pas de charge. Réserve si peu de pas en charge. */
+    p_batt_kw?: number | null; p_batt_jours?: number | null; p_batt_median_day_kw?: number | null;
+    p_batt_median_period_kw?: number | null; p_batt_current_a?: number | null; p_batt_voltage_v?: number | null;
+    p_batt_dispo_pct?: number | null; p_batt_pos?: number | null; p_batt_reserve?: string | null; p_batt_motif?: string | null;
+    p_batt_source?: "BATTERY_CHARGE_MEDIAN_DAY" | "BATTERY_CHARGE_MEDIAN_PERIOD" | "BATTERY_CHARGE_TELEMETRY_UNAVAILABLE"
+      | "NO_BATTERY_CHARGING_MEASURED" | "BATTERY_CHARGE_POWER_UNAVAILABLE" | null }; ravitaillement?: ConsoRavitaillement;
   site_id: string;
   site_name: string | null;
   country: string | null;

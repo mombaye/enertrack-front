@@ -97,10 +97,18 @@ const ESTIMATION_THEORIQUE: Col[] = [
     `Médiane des puissances AC journalières (compteur AC, Snowflake) — ${r.estimation_theorique?.p_grid_jours ?? 0} jour(s) mesuré(s)`) },
   { h: "Puissance Médiane Load DC telco (kW)", w: 115, render: (r) => kw(r.estimation_theorique?.p_load_dc_kw,
     r.estimation_theorique?.p_load_dc_motif ?? `Médiane du load DC telco journalier (AVERAGE_LOAD, Snowflake) — ${r.estimation_theorique?.p_load_dc_jours ?? 0} jour(s) mesuré(s)`) },
-  { h: "Puissance Médiane Recharge batterie (kW)", w: 115, render: (r) => kw(r.estimation_theorique?.p_batt_kw,
-    r.estimation_theorique?.p_batt_motif ?? `Source : ${r.estimation_theorique?.p_batt_source ?? "Snowflake"} — médiane des valeurs positives sur ${r.estimation_theorique?.p_batt_jours ?? 0} jour(s)` +
-      (r.estimation_theorique?.p_batt_nuls ? ` ; ${r.estimation_theorique.p_batt_nuls} jour(s) à 0 non compté(s)` : "") +
-      (r.estimation_theorique?.p_batt_ecartes ? ` ; ${r.estimation_theorique.p_batt_ecartes} jour(s) écarté(s) (Ah chargés > 3 × Ah déchargés + 500 Ah)` : "")) },
+  { h: "Puissance Médiane Recharge batterie (kW)", w: 115, render: (r) => {
+    const e = r.estimation_theorique;
+    const tip = [`Courant de charge × tension batterie, pas de 5 min (SILVER.GFMS_METRICS) — source : ${e?.p_batt_source ?? "BATTERY_CHARGE_TELEMETRY_UNAVAILABLE"}`,
+      e?.p_batt_pos != null ? `${e.p_batt_pos} pas en charge` : null,
+      e?.p_batt_current_a != null ? `courant médian ${e.p_batt_current_a.toLocaleString("fr-FR")} A` : null,
+      e?.p_batt_voltage_v != null ? `tension médiane ${e.p_batt_voltage_v.toLocaleString("fr-FR")} V` : null,
+      e?.p_batt_dispo_pct != null ? `disponibilité télémétrie ${e.p_batt_dispo_pct.toLocaleString("fr-FR")} %` : null,
+      e?.p_batt_reserve ?? null, e?.p_batt_motif ?? null].filter(Boolean).join(" ; ");
+    return e?.p_batt_kw != null && e.p_batt_reserve
+      ? <span title={tip} style={{ color: "#B7791F" }}>{e.p_batt_kw.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 3 })} *</span>
+      : kw(e?.p_batt_kw, tip);
+  } },
 ];
 // 6 totaux lus dans ENOC sur la plage de dates de la ligne du fichier du site (Date de Relevé Initiale → Date de Relevé Finale)
 const periodeEnoc = (r: ConsoRow) => (r.ravitaillement?.debut && r.ravitaillement?.fin
