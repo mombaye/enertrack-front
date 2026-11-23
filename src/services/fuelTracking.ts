@@ -2076,7 +2076,13 @@ export type ConsoRow = {
     tm_retenu_h?: number | null; tm_source?: string | null;
     /** Puissances médianes mesurées (kW) sur la plage du fichier : redresseur (P_DC), générateur (algorithme CPH), Grid (AC_METER). */
     p_rect_kw?: number | null; p_rect_jours?: number | null; p_ge_kw?: number | null; p_ge_jours?: number | null; p_ge_motif?: string | null;
-    p_grid_kw?: number | null; p_grid_jours?: number | null }; ravitaillement?: ConsoRavitaillement;
+    p_grid_kw?: number | null; p_grid_jours?: number | null;
+    /** Load DC telco : médiane des LOAD_W journaliers (AVERAGE_LOAD, Snowflake) sur la plage du fichier, kW. */
+    p_load_dc_kw?: number | null; p_load_dc_jours?: number | null; p_load_dc_motif?: string | null;
+    /** Recharge batterie (kW) : médiane courant de charge × tension batterie 5 min (VW_GFMS_METRICS) ; repli Ah chargés
+     *  × 53,5 V ÷ 24 h (BATTERY_REPORT, jours aberrants écartés). p_batt_source = source retenue. */
+    p_batt_kw?: number | null; p_batt_jours?: number | null; p_batt_ecartes?: number | null; p_batt_motif?: string | null;
+    p_batt_source?: string | null }; ravitaillement?: ConsoRavitaillement;
   site_id: string;
   site_name: string | null;
   country: string | null;
