@@ -87,7 +87,10 @@ const ESTIMATION_THEORIQUE: Col[] = [
     ? <span title="Ordre : Index Compteur FMS → relevé de terrain → Alarme day_dg_on FMS → Alarme day_rectifier_on FMS">{r.estimation_theorique.tm_source}</span>
     : txt(null)) },
   { h: "Puissance médiane mesurée redresseur (kW)", w: 115, render: (r) => kw(r.estimation_theorique?.p_rect_kw,
-    `Médiane des puissances DC journalières du redresseur (Snowflake) — ${r.estimation_theorique?.p_rect_jours ?? 0} jour(s) mesuré(s)`) },
+    [`P_DC ÷ rendement (RECTIFIER_EFFICIENCY_STATUS) — source : ${r.estimation_theorique?.p_rect_source ?? "PUISSANCE_REDRESSEUR_INDISPONIBLE"}`,
+     `${r.estimation_theorique?.p_rect_jours ?? 0} jour(s) qualifié(s) (≥ 50 % de disponibilité)`,
+     r.estimation_theorique?.p_rect_dispo_pct != null ? `disponibilité période ${r.estimation_theorique.p_rect_dispo_pct.toLocaleString("fr-FR")} %` : null,
+     r.estimation_theorique?.p_rect_motif ?? null].filter(Boolean).join(" ; ")) },
   { h: "Puissance médiane mesurée générateur (kW)", w: 115, render: (r) => kw(r.estimation_theorique?.p_ge_kw,
     r.estimation_theorique?.p_ge_motif ?? `Médiane de la production GE ÷ heures de marche (GENSET_REPORT, Snowflake) — ${r.estimation_theorique?.p_ge_jours ?? 0} jour(s) de marche ; jour au-delà de 105 % × kVA × 0,8 écarté`) },
   { h: "Puissance Grid médiane mesurée (kW)", w: 115, render: (r) => kw(r.estimation_theorique?.p_grid_kw,
