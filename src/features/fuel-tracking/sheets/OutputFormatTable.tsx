@@ -95,7 +95,8 @@ const ESTIMATION_THEORIQUE: Col[] = [
   { h: "Puissance Médiane Load DC telco (kW)", w: 115, render: (r) => kw(r.estimation_theorique?.p_load_dc_kw,
     r.estimation_theorique?.p_load_dc_motif ?? `Médiane du load DC telco journalier (AVERAGE_LOAD, Snowflake) — ${r.estimation_theorique?.p_load_dc_jours ?? 0} jour(s) mesuré(s)`) },
   { h: "Puissance Médiane Recharge batterie (kW)", w: 115, render: (r) => kw(r.estimation_theorique?.p_batt_kw,
-    r.estimation_theorique?.p_batt_motif ?? `Source : ${r.estimation_theorique?.p_batt_source ?? "Snowflake"} — médiane sur ${r.estimation_theorique?.p_batt_jours ?? 0} jour(s) mesuré(s)` +
+    r.estimation_theorique?.p_batt_motif ?? `Source : ${r.estimation_theorique?.p_batt_source ?? "Snowflake"} — médiane des valeurs positives sur ${r.estimation_theorique?.p_batt_jours ?? 0} jour(s)` +
+      (r.estimation_theorique?.p_batt_nuls ? ` ; ${r.estimation_theorique.p_batt_nuls} jour(s) à 0 non compté(s)` : "") +
       (r.estimation_theorique?.p_batt_ecartes ? ` ; ${r.estimation_theorique.p_batt_ecartes} jour(s) écarté(s) (Ah chargés > 3 × Ah déchargés + 500 Ah)` : "")) },
 ];
 // 6 totaux lus dans ENOC sur la plage de dates de la ligne du fichier du site (Date de Relevé Initiale → Date de Relevé Finale)

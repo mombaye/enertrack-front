@@ -2082,7 +2082,7 @@ export type ConsoRow = {
     /** Recharge batterie (kW) : médiane courant de charge × tension batterie 5 min (VW_GFMS_METRICS) ; repli Ah chargés
      *  × 53,5 V ÷ 24 h (BATTERY_REPORT, jours aberrants écartés). p_batt_source = source retenue. */
     p_batt_kw?: number | null; p_batt_jours?: number | null; p_batt_ecartes?: number | null; p_batt_motif?: string | null;
-    p_batt_source?: string | null }; ravitaillement?: ConsoRavitaillement;
+    p_batt_source?: string | null; p_batt_nuls?: number | null }; ravitaillement?: ConsoRavitaillement;
   site_id: string;
   site_name: string | null;
   country: string | null;
