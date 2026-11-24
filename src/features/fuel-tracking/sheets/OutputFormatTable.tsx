@@ -150,6 +150,12 @@ const ESTIMATION_THEORIQUE: Col[] = [
       ? <span title={tip} style={{ color: "#B7791F" }}>{e.conso_theorique_l.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} *</span>
       : <b>{kw(e?.conso_theorique_l, tip)}</b>;
   } },
+  { h: "Source de donnée Estimation Conso Fuel théorique", w: 170, left: true, render: (r) => {
+    const e = r.estimation_theorique;
+    return e?.conso_retenue_source
+      ? <span title="CPH théorique (L/h) × Temps de marche GE retenu">{e.conso_retenue_source}</span>
+      : <span style={{ color: "#94A0B4" }} title={e?.conso_retenue_motif ?? "Consommation théorique n.d."}>n.d.</span>;
+  } },
   { h: "Consommation Snowflake fuel sensor (L)", w: 120, tot: ["estimation_theorique", "conso_fuel_sensor_l"], render: (r) => {
     const e = r.estimation_theorique;
     const tip = [`Somme des consommations mesurées du jour (VW_FUEL_REPORT, filtre strict) — ${e?.conso_fuel_sensor_jours ?? 0} jour(s) mesuré(s) sur ${e?.conso_fuel_sensor_jours_periode ?? "?"}`,
@@ -157,21 +163,6 @@ const ESTIMATION_THEORIQUE: Col[] = [
     return e?.conso_fuel_sensor_l != null && e.conso_fuel_sensor_reserve
       ? <span title={tip} style={{ color: "#B7791F" }}>{e.conso_fuel_sensor_l.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} *</span>
       : kw(e?.conso_fuel_sensor_l, tip);
-  } },
-  { h: "Estimation Conso Fuel Théorique retenue (L)", w: 120, tot: ["estimation_theorique", "conso_retenue_l"], render: (r) => {
-    const e = r.estimation_theorique;
-    const tip = e?.conso_retenue_l != null
-      ? "Règle Ops : Consommation théorique (CPH × Temps de marche GE retenu) ; la conso fuel sensor n'est jamais retenue à sa place"
-      : (e?.conso_retenue_motif ?? "Consommation théorique n.d.");
-    return e?.conso_retenue_l != null && e.cph_extrapolation
-      ? <span title={tip} style={{ color: "#B7791F" }}>{e.conso_retenue_l.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} *</span>
-      : <b>{kw(e?.conso_retenue_l, tip)}</b>;
-  } },
-  { h: "Source de donnée Estimation Conso Fuel théorique", w: 170, left: true, render: (r) => {
-    const e = r.estimation_theorique;
-    return e?.conso_retenue_source
-      ? <span title="CPH théorique (L/h) × Temps de marche GE retenu">{e.conso_retenue_source}</span>
-      : <span style={{ color: "#94A0B4" }} title={e?.conso_retenue_motif ?? "Consommation théorique n.d."}>n.d.</span>;
   } },
 ];
 const SELECTION_LABEL: Record<string, string> = {
