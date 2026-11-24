@@ -2096,7 +2096,9 @@ export type ConsoRow = {
     taux_charge?: number | null; taux_charge_motif?: string | null; cph_l_h?: number | null; cph_a?: number | null;
     cph_b?: number | null; cph_c?: number | null; cph_extrapolation?: boolean; conso_theorique_l?: number | null;
     conso_theorique_motif?: string | null; conso_fuel_sensor_l?: number | null; conso_fuel_sensor_jours?: number | null;
-    conso_fuel_sensor_jours_periode?: number | null; conso_fuel_sensor_motif?: string | null; conso_fuel_sensor_reserve?: boolean };
+    conso_fuel_sensor_jours_periode?: number | null; conso_fuel_sensor_motif?: string | null; conso_fuel_sensor_reserve?: boolean;
+    /** Estimation Conso Fuel Théorique retenue (règle Ops) = conso théorique CPH seule ; source « calcul cph et temps de marche GE ». */
+    conso_retenue_l?: number | null; conso_retenue_source?: string | null; conso_retenue_motif?: string | null };
   ravitaillement?: ConsoRavitaillement;
   site_id: string;
   site_name: string | null;
