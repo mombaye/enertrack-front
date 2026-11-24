@@ -118,6 +118,16 @@ const ESTIMATION_THEORIQUE: Col[] = [
       ? <span title={tip} style={{ color: "#B7791F" }}>{e.p_retenue_kw.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} *</span>
       : <b>{kw(e?.p_retenue_kw, tip)}</b>;
   } },
+  { h: "Source de donnée Puissance retenue", w: 170, left: true, render: (r) => {
+    const e = r.estimation_theorique;
+    const src = e?.p_retenue_source;
+    if (!src) return <span style={{ color: "#94A0B4" }} title={e?.p_retenue_motif ?? "Puissance retenue n.d."}>n.d.</span>;
+    const tip = [SELECTION_ORIGINE[src] ?? null,
+      "Ordre : maximum entre Puissance médiane générateur et Puissance médiane redresseur ; sinon Load DC telco + Recharge batterie",
+      e?.p_retenue_motif ?? null].filter(Boolean).join(" ; ");
+    return <span title={tip} style={e?.p_retenue_reserve ? { color: "#B7791F" } : undefined}>
+      {SELECTION_SOURCE[src] ?? src}{e?.p_retenue_reserve ? " *" : ""}</span>;
+  } },
   { h: "Taux de charge GE (%)", w: 95, render: (r) => {
     const e = r.estimation_theorique;
     const tip = e?.taux_charge_motif ?? "Puissance retenue ÷ Puissance PRP (kW) du GE";
@@ -152,6 +162,17 @@ const ESTIMATION_THEORIQUE: Col[] = [
 const SELECTION_LABEL: Record<string, string> = {
   PUISSANCE_MEDIANE_GE: "puissance médiane GE", PUISSANCE_MEDIANE_REDRESSEUR: "puissance médiane redresseur",
   LOAD_DC_PLUS_RECHARGE_BATTERIE: "Load DC telco + Recharge batterie", LOAD_DC_SEUL: "Load DC telco seul (recharge batterie n.d.)",
+};
+// Colonne « Source de donnée Puissance retenue » : libellé de la colonne d'où vient la valeur retenue, origine au survol
+const SELECTION_SOURCE: Record<string, string> = {
+  PUISSANCE_MEDIANE_GE: "Puissance médiane mesurée générateur", PUISSANCE_MEDIANE_REDRESSEUR: "Puissance médiane mesurée redresseur",
+  LOAD_DC_PLUS_RECHARGE_BATTERIE: "Load DC telco + Recharge batterie", LOAD_DC_SEUL: "Load DC telco seul",
+};
+const SELECTION_ORIGINE: Record<string, string> = {
+  PUISSANCE_MEDIANE_GE: "Production GE ÷ heures de marche (GENSET_REPORT, Snowflake)",
+  PUISSANCE_MEDIANE_REDRESSEUR: "P_DC ÷ rendement (RECTIFIER_EFFICIENCY_STATUS, Snowflake)",
+  LOAD_DC_PLUS_RECHARGE_BATTERIE: "Load DC telco (AVERAGE_LOAD, Snowflake) + Recharge batterie (courant × tension, télémétrie gFMS)",
+  LOAD_DC_SEUL: "Load DC telco (AVERAGE_LOAD, Snowflake) ; recharge batterie n.d. : puissance probablement sous-estimée",
 };
 // 6 totaux lus dans ENOC sur la plage de dates de la ligne du fichier du site (Date de Relevé Initiale → Date de Relevé Finale)
 const periodeEnoc = (r: ConsoRow) => (r.ravitaillement?.debut && r.ravitaillement?.fin
