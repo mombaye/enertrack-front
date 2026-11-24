@@ -99,7 +99,7 @@ const ESTIMATION_THEORIQUE: Col[] = [
     r.estimation_theorique?.p_load_dc_motif ?? `Médiane du load DC telco journalier (AVERAGE_LOAD, Snowflake) — ${r.estimation_theorique?.p_load_dc_jours ?? 0} jour(s) mesuré(s)`) },
   { h: "Puissance Médiane Recharge batterie (kW)", w: 115, render: (r) => {
     const e = r.estimation_theorique;
-    const tip = [`Courant de charge × tension batterie, pas de 5 min (SILVER.GFMS_METRICS) — source : ${e?.p_batt_source ?? "BATTERY_CHARGE_TELEMETRY_UNAVAILABLE"}`,
+    const tip = [`Médiane des médianes journalières de l'équipe data (BATTERY_REPORT : courant × tension ÷ 1000, mesures en charge), jours ≥ 50 % de télémétrie — source : ${e?.p_batt_source ?? "BATTERY_CHARGE_TELEMETRY_UNAVAILABLE"}`,
       e?.p_batt_pos != null ? `${e.p_batt_pos} pas en charge` : null,
       e?.p_batt_current_a != null ? `courant médian ${e.p_batt_current_a.toLocaleString("fr-FR")} A` : null,
       e?.p_batt_voltage_v != null ? `tension médiane ${e.p_batt_voltage_v.toLocaleString("fr-FR")} V` : null,

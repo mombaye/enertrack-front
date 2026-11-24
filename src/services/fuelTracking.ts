@@ -2083,7 +2083,7 @@ export type ConsoRow = {
     p_grid_kw?: number | null; p_grid_jours?: number | null;
     /** Load DC telco : médiane des LOAD_W journaliers (AVERAGE_LOAD, Snowflake) sur la plage du fichier, kW. */
     p_load_dc_kw?: number | null; p_load_dc_jours?: number | null; p_load_dc_motif?: string | null;
-    /** Recharge batterie (règle équipe data) : courant de charge × tension ÷ 1000 par pas de 5 min (SILVER.GFMS_METRICS),
+    /** Recharge batterie (règle équipe data) : médiane du jour (GOLD.BATTERY_REPORT, courant × tension ÷ 1000 en charge),
      *  médiane des pas en charge ; null + source si pas de télémétrie ou pas de charge. Réserve si peu de pas en charge. */
     p_batt_kw?: number | null; p_batt_jours?: number | null; p_batt_median_day_kw?: number | null;
     p_batt_median_period_kw?: number | null; p_batt_current_a?: number | null; p_batt_voltage_v?: number | null;
