@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, Database, Download, Eye, Factory, Layers, List, MapPin, RefreshCw, Tag, XCircle, Zap } from "lucide-react";
 import {
-  downloadConsoExport, getConsommations, getConsommationsPeriodes,
+  downloadConsoExport, getConsoValeurs, getConsommations, getConsommationsPeriodes,
   type ConsoFilters, type ConsoFraicheur, type ConsoRow, type ConsoStatutBilan, type ConsoTargetStatut,
 } from "@/services/fuelTracking";
 import { Modal, Skeleton } from "../ui";
@@ -14,7 +14,7 @@ import { CoverageKpis } from "./cphDiagnostics";
 import { BalanceDetailModal } from "./StockPeriodBalance";
 import { SectionTitle } from "./ConsoOverview";
 import { KpiSynthese } from "./KpiSynthese";
-import { OutputFormatTable } from "./OutputFormatTable";
+import { OutputFormatTable, type ColFilters } from "./OutputFormatTable";
 import { DataHealthPanel } from "./DataHealthPanel";
 import { SiteDetailModal } from "./ControleCphSheet";
 
@@ -257,6 +257,14 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
   const A = d?.aide ?? {};
   const set = (k: keyof ConsoFilters, v: string) => { setF((o) => ({ ...o, [k]: v || undefined })); setPage(1); };
   const cols = buildColsDef(A);
+  // Filtres de colonnes « comme Excel » : {colonne: valeurs cochées}, envoyés au serveur (tous les sites, pas seulement la page)
+  const colFilters: ColFilters = (() => { try { return f.filtres_colonnes ? JSON.parse(f.filtres_colonnes) : {}; } catch { return {}; } })();
+  const nColFilters = Object.keys(colFilters).length;
+  const setColFilter = (key: string, values: string[] | null) => {
+    const next = { ...colFilters };
+    if (values === null) delete next[key]; else next[key] = values;
+    set("filtres_colonnes", Object.keys(next).length ? JSON.stringify(next) : "");
+  };
 
   const exportCsv = async (kind: "controle_complet" | "anomalies_fuel" | "priorites_donnees" | "rapport_imports") => {
     setBusy(kind); setMsg(null);
@@ -375,6 +383,20 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
                 </select>
               </label>
             ))}
+            <label style={box}>
+              <Factory size={14} color={FT.textSub} aria-hidden />
+              <select aria-label="Sites avec ou sans GE" value={f.avec_ge ?? ""} onChange={(e) => set("avec_ge", e.target.value)} style={selStyle}>
+                <option value="">Avec et sans GE</option>
+                <option value="oui">Avec GE (type de GE affiché)</option>
+                <option value="non">Sans GE (type de GE n.d.)</option>
+              </select>
+            </label>
+            {nColFilters > 0 && (
+              <button type="button" onClick={() => set("filtres_colonnes", "")} title="Retirer les filtres posés dans les en-têtes de colonnes"
+                style={{ fontSize: 12, fontWeight: 800, padding: "6px 10px", borderRadius: 9, border: "1px solid #FFC000", background: "#FFF2CC", color: FT.text, cursor: "pointer" }}>
+                Effacer les filtres de colonnes ({nColFilters}) ×
+              </button>
+            )}
             <button type="button" aria-expanded={adv} onClick={() => setAdv((v) => !v)} style={{ fontSize: 12.5, fontWeight: 700, background: "none", border: "none", color: FT.blue, cursor: "pointer" }}>
               {adv ? "Masquer filtres et exports ▲" : "Filtres et exports ▼"}
             </button>
@@ -451,7 +473,8 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
           </div>
         )}
         <div style={{ opacity: pageLoading ? 0.45 : 1, transition: "opacity .15s", pointerEvents: pageLoading ? "none" : undefined }} aria-busy={pageLoading}>
-          <OutputFormatTable rows={(d?.rows ?? []).map(safeRow)} onDetail={(r) => setDetail({ row: r, tab: "hub" })} totaux={d?.totaux} nbSites={d?.total} />
+          <OutputFormatTable rows={(d?.rows ?? []).map(safeRow)} onDetail={(r) => setDetail({ row: r, tab: "hub" })} totaux={d?.totaux} nbSites={d?.total}
+            colFilters={colFilters} onColFilter={setColFilter} loadValues={(key) => getConsoValeurs(params, key)} />
         </div>
         <nav aria-label="Pagination des sites" style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between", alignItems: "center", padding: "8px 12px", fontSize: 12, color: FT.textMid }}>
           <span>

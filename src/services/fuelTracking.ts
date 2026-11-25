@@ -2213,8 +2213,16 @@ export type ConsoFilters = {
   date_debut?: string; date_fin?: string; pays?: string; zone?: string; site?: string; typologie?: string; typologie_energie?: string;
   statut_bilan?: string; statut_certification?: string; source_stock?: string; source_runtime?: string; source_puissance?: string; source_target?: string;
   qualite?: string; correspondance?: string; tri?: string; page?: number; page_size?: number;
-  fabricant_ge?: string; type_ge?: string; source_ge?: string;
+  fabricant_ge?: string; type_ge?: string; source_ge?: string; avec_ge?: string;
+  filtres_colonnes?: string;   // JSON {colonne: [valeurs cochées]} (filtres « comme Excel » des en-têtes)
 };
+
+/** Valeurs d'une colonne du tableau Suivi Conso (bouton ▼ de l'en-tête), parmi les sites retenus par les autres filtres. */
+export async function getConsoValeurs(params: ConsoFilters, colonne: string) {
+  const { data } = await api.get<{ colonne: string; valeurs: Array<{ valeur: string; nb: number }> }>(`${BASE}/consommations/valeurs/`,
+    { params: cleanParams({ ...params, page: undefined, page_size: undefined, colonne } as ConsoFilters & { colonne: string }) });
+  return data.valeurs;
+}
 
 export async function getConsommations(params: ConsoFilters) {
   const { data } = await api.get<ConsoResponse>(`${BASE}/consommations/`, { params: cleanParams(params) });
