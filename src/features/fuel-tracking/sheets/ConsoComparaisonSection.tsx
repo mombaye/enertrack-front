@@ -386,7 +386,7 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
           })}
         </div>
         <button type="button" aria-expanded={more} onClick={() => setMore((m) => !m)} style={{ justifySelf: "start", fontSize: 12, fontWeight: 800, background: "none", border: "none", color: FT.blue, cursor: "pointer", padding: 0 }}>
-          {more ? "Moins de filtres ▲" : "Plus de filtres (pays, zone, typologie énergie, certification, sources, qualité, tri) ▼"}
+          {more ? "Moins de filtres ▲" : "Plus de filtres (pays, zone, typologie énergie, certification, sources, GE, qualité, tri) ▼"}
         </button>
         {more && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
@@ -399,6 +399,9 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
             {sel("source_runtime", "Source runtime", d?.facettes.sources_runtime)}
             {sel("source_puissance", "Source puissance", d?.facettes.sources_puissance)}
             {sel("source_target", "Source target", d?.facettes.sources_target)}
+            {sel("fabricant_ge", "Fabriquant GE", d?.facettes.fabricants_ge, (o) => (o === "AUCUN" ? "n.d. (non renseigné)" : o))}
+            {sel("type_ge", "Type de GE", d?.facettes.types_ge, (o) => (o === "AUCUN" ? "n.d. (non renseigné)" : o))}
+            {sel("source_ge", "Source de donnée GE", d?.facettes.sources_ge, (o) => (o === "AUCUN" ? "n.d. (non renseigné)" : o))}
             {sel("correspondance", "Base Closing", ["avec", "sans"], (o) => (o === "avec" ? "Présents dans le Closing" : "Absents du Closing (non utilisés)"))}
             {sel("qualite", "Qualité / réserve", ["reserve", "sans_reserve", "anomalie"], (o) => (o === "reserve" ? "Avec réserve" : o === "sans_reserve" ? "Sans réserve" : "Anomalie"))}
             {sel("tri", "Tri", ["gravite", "variation", "ecart_target"], (o) => (o === "gravite" ? "Gravité" : o === "variation" ? "Plus grosse variation" : "Plus gros écart vs target"))}

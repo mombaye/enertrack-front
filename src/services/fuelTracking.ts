@@ -2204,6 +2204,7 @@ export type ConsoResponse = {
   facettes: {
     pays: string[]; zones: string[]; typologies: string[]; typologies_energie: string[]; statuts_bilan: string[]; statuts_compte?: Record<string, number>; sites?: Array<{ id: string; nom: string }>; sources_stock: string[];
     sources_runtime: string[]; sources_puissance: string[]; sources_target: string[];
+    fabricants_ge?: string[]; types_ge?: string[]; sources_ge?: string[];
   };
   seuils: { couverture_instrumentee_min_pct: number; tolerance_target_pct: number; reference_minimale_l: number };
 };
@@ -2212,6 +2213,7 @@ export type ConsoFilters = {
   date_debut?: string; date_fin?: string; pays?: string; zone?: string; site?: string; typologie?: string; typologie_energie?: string;
   statut_bilan?: string; statut_certification?: string; source_stock?: string; source_runtime?: string; source_puissance?: string; source_target?: string;
   qualite?: string; correspondance?: string; tri?: string; page?: number; page_size?: number;
+  fabricant_ge?: string; type_ge?: string; source_ge?: string;
 };
 
 export async function getConsommations(params: ConsoFilters) {
