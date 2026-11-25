@@ -1,6 +1,6 @@
 // src/features/fuel-tracking/sheets/KpiSynthese.tsx
 // Synthèse du mois : mêmes KPI et même présentation (valeur + libellé, deux colonnes) que l'en-tête du fichier Closing,
-// avec le design de l'application. Toutes les valeurs sont CALCULÉES par EnerTrack (stocks des fichiers, mouvements ENOC).
+// avec le design de l'application. Toutes les valeurs sont les totaux du tableau Suivi Conso (calculs EnerTrack, aucun fichier).
 // Chaque valeur est cliquable : une fenêtre explique d'où elle vient et l'opération faite.
 import { useState } from "react";
 import type { ClosingKpis, ClosingKpiValue } from "@/services/fuelTracking";
