@@ -68,9 +68,9 @@ const kw = (v: number | null | undefined, tip: string) => (v === null || v === u
   ? <span style={{ color: "#94A0B4" }} title={tip}>n.d.</span>
   : <span title={tip}>{v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>);
 const ESTIMATION_THEORIQUE: Col[] = [
-  { h: "Fabriquant GE", w: 130, left: true, render: (r) => txt(r.estimation_theorique?.fabricant_ge) },
+  { h: "Fabriquant GE", w: 130, left: true, tot: ["estimation_theorique", "fabricant_ge"], render: (r) => txt(r.estimation_theorique?.fabricant_ge) },
   { h: "Type de GE", w: 130, left: true, tot: ["estimation_theorique", "type_ge"], render: (r) => txt(r.estimation_theorique?.type_ge) },
-  { h: "Source de donnée GE", w: 170, left: true, render: (r) => txt(r.estimation_theorique?.source_ge) },
+  { h: "Source de donnée GE", w: 170, left: true, tot: ["estimation_theorique", "source_ge"], render: (r) => txt(r.estimation_theorique?.source_ge) },
   { h: "Puissance PRP (KVA)", w: 95, tot: ["estimation_theorique", "prp_kva"], render: (r) => prp(r, r.estimation_theorique?.prp_kva) },
   { h: "Puissance PRP (KW)", w: 95, tot: ["estimation_theorique", "prp_kw"], render: (r) => prp(r, r.estimation_theorique?.prp_kw) },
   { h: "Temps de marche GE (Alarme day_dg_on FMS)", w: 115, tot: ["estimation_theorique", "tm_dg_on_h"], render: (r) => heures(r.estimation_theorique?.tm_dg_on_h,
@@ -83,21 +83,21 @@ const ESTIMATION_THEORIQUE: Col[] = [
     r.estimation_theorique?.tm_index_fms_motif ?? "Relevé Visuel Compteur genset (Index Compteur FMS) : relevé final − relevé initial") },
   { h: "Temps de marche GE retenu", w: 105, tot: ["estimation_theorique", "tm_retenu_h"], render: (r) => <b>{heures(r.estimation_theorique?.tm_retenu_h,
     r.estimation_theorique?.tm_source ? `Retenu : ${r.estimation_theorique.tm_source}` : "Aucune source de temps de marche pour ce site")}</b> },
-  { h: "Source de donnée Temps de marche GE", w: 160, left: true, render: (r) => (r.estimation_theorique?.tm_source
+  { h: "Source de donnée Temps de marche GE", w: 160, left: true, tot: ["estimation_theorique", "tm_source"], render: (r) => (r.estimation_theorique?.tm_source
     ? <span title="Ordre : Index Compteur FMS → relevé de terrain → Alarme day_dg_on FMS → Alarme day_rectifier_on FMS">{r.estimation_theorique.tm_source}</span>
     : txt(null)) },
-  { h: "Puissance médiane mesurée redresseur (kW)", w: 115, render: (r) => kw(r.estimation_theorique?.p_rect_kw,
+  { h: "Puissance médiane mesurée redresseur (kW)", w: 115, tot: ["estimation_theorique", "p_rect_kw"], render: (r) => kw(r.estimation_theorique?.p_rect_kw,
     [`P_DC ÷ rendement (RECTIFIER_EFFICIENCY_STATUS) — source : ${r.estimation_theorique?.p_rect_source ?? "PUISSANCE_REDRESSEUR_INDISPONIBLE"}`,
      `${r.estimation_theorique?.p_rect_jours ?? 0} jour(s) qualifié(s) (≥ 50 % de disponibilité)`,
      r.estimation_theorique?.p_rect_dispo_pct != null ? `disponibilité période ${r.estimation_theorique.p_rect_dispo_pct.toLocaleString("fr-FR")} %` : null,
      r.estimation_theorique?.p_rect_motif ?? null].filter(Boolean).join(" ; ")) },
-  { h: "Puissance médiane mesurée générateur (kW)", w: 115, render: (r) => kw(r.estimation_theorique?.p_ge_kw,
+  { h: "Puissance médiane mesurée générateur (kW)", w: 115, tot: ["estimation_theorique", "p_ge_kw"], render: (r) => kw(r.estimation_theorique?.p_ge_kw,
     r.estimation_theorique?.p_ge_motif ?? `Médiane de la production GE ÷ heures de marche (GENSET_REPORT, Snowflake) — ${r.estimation_theorique?.p_ge_jours ?? 0} jour(s) de marche ; jour au-delà de 105 % × kVA × 0,8 écarté`) },
-  { h: "Puissance Grid médiane mesurée (kW)", w: 115, render: (r) => kw(r.estimation_theorique?.p_grid_kw,
+  { h: "Puissance Grid médiane mesurée (kW)", w: 115, tot: ["estimation_theorique", "p_grid_kw"], render: (r) => kw(r.estimation_theorique?.p_grid_kw,
     `Médiane des puissances AC journalières (compteur AC, Snowflake) — ${r.estimation_theorique?.p_grid_jours ?? 0} jour(s) mesuré(s)`) },
-  { h: "Puissance Médiane Load DC telco (kW)", w: 115, render: (r) => kw(r.estimation_theorique?.p_load_dc_kw,
+  { h: "Puissance Médiane Load DC telco (kW)", w: 115, tot: ["estimation_theorique", "p_load_dc_kw"], render: (r) => kw(r.estimation_theorique?.p_load_dc_kw,
     r.estimation_theorique?.p_load_dc_motif ?? `Médiane du load DC telco journalier (AVERAGE_LOAD, Snowflake) — ${r.estimation_theorique?.p_load_dc_jours ?? 0} jour(s) mesuré(s)`) },
-  { h: "Puissance Médiane Recharge batterie (kW)", w: 115, render: (r) => {
+  { h: "Puissance Médiane Recharge batterie (kW)", w: 115, tot: ["estimation_theorique", "p_batt_kw"], render: (r) => {
     const e = r.estimation_theorique;
     const tip = [`Médiane des médianes journalières de l'équipe data (BATTERY_REPORT : courant × tension ÷ 1000, mesures en charge), jours ≥ 50 % de télémétrie — source : ${e?.p_batt_source ?? "BATTERY_CHARGE_TELEMETRY_UNAVAILABLE"}`,
       e?.p_batt_pos != null ? `${e.p_batt_pos} pas en charge` : null,
@@ -109,7 +109,7 @@ const ESTIMATION_THEORIQUE: Col[] = [
       ? <span title={tip} style={{ color: "#B7791F" }}>{e.p_batt_kw.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 3 })} *</span>
       : kw(e?.p_batt_kw, tip);
   } },
-  { h: "Puissance retenue (kW)", w: 110, render: (r) => {
+  { h: "Puissance retenue (kW)", w: 110, tot: ["estimation_theorique", "p_retenue_kw"], render: (r) => {
     const e = r.estimation_theorique;
     const tip = [e?.p_retenue_source ? `Source : ${SELECTION_LABEL[e.p_retenue_source] ?? e.p_retenue_source}` : null,
       "Règle : maximum entre puissance médiane GE et puissance médiane redresseur ; sinon Load DC telco + Recharge batterie",
@@ -118,7 +118,7 @@ const ESTIMATION_THEORIQUE: Col[] = [
       ? <span title={tip} style={{ color: "#B7791F" }}>{e.p_retenue_kw.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} *</span>
       : <b>{kw(e?.p_retenue_kw, tip)}</b>;
   } },
-  { h: "Source de donnée Puissance retenue", w: 170, left: true, render: (r) => {
+  { h: "Source de donnée Puissance retenue", w: 170, left: true, tot: ["estimation_theorique", "p_retenue_source"], render: (r) => {
     const e = r.estimation_theorique;
     const src = e?.p_retenue_source;
     if (!src) return <span style={{ color: "#94A0B4" }} title={e?.p_retenue_motif ?? "Puissance retenue n.d."}>n.d.</span>;
@@ -212,7 +212,7 @@ export function OutputFormatTable({ rows, onDetail, totaux, nbSites }: { rows: C
           : `Total sur ${t.sites} site(s) renseigné(s)${nbSites ? ` / ${nbSites} site(s) du filtre` : ""} — cases « n.d. » non comptées`) : "Total en cours de calcul"}>
         {v === null || v === undefined ? <span style={{ color: "#94A0B4" }}>{totaux ? "n.d." : "…"}</span>
           : t?.comptage ? `${v.toLocaleString("fr-FR")}${nbSites ? ` / ${nbSites.toLocaleString("fr-FR")}` : ""} sites`
-          : v.toLocaleString("fr-FR", { maximumFractionDigits: c.tot[1].endsWith("_h") ? 2 : 0 })}
+          : v.toLocaleString("fr-FR", { maximumFractionDigits: c.tot[1].endsWith("_h") || c.tot[1].endsWith("_kw") ? 2 : 0 })}
       </th>
     );
   };
