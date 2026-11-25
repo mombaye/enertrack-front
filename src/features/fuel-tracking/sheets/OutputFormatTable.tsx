@@ -13,7 +13,7 @@ const num = (v: number | null | undefined, d = 0) => (v === null || v === undefi
 const txt = (v: string | null | undefined) => (v ? v : <span style={{ color: "#94A0B4" }}>n.d.</span>);
 
 type Col = { h: string; w: number; left?: boolean; tot?: [string, string]; render: (r: ConsoRow) => ReactNode };
-export type ConsoTotaux = Record<string, Record<string, { total: number | null; sites: number }>> | null | undefined;
+export type ConsoTotaux = Record<string, Record<string, { total: number | null; sites: number; comptage?: boolean }>> | null | undefined;
 
 const INVENTAIRE: Col[] = [
   { h: "Nom du site", w: 150, left: true, render: (r) => r.site_name ?? "—" },
@@ -69,7 +69,7 @@ const kw = (v: number | null | undefined, tip: string) => (v === null || v === u
   : <span title={tip}>{v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>);
 const ESTIMATION_THEORIQUE: Col[] = [
   { h: "Fabriquant GE", w: 130, left: true, render: (r) => txt(r.estimation_theorique?.fabricant_ge) },
-  { h: "Type de GE", w: 120, left: true, render: (r) => txt(r.estimation_theorique?.type_ge) },
+  { h: "Type de GE", w: 130, left: true, tot: ["estimation_theorique", "type_ge"], render: (r) => txt(r.estimation_theorique?.type_ge) },
   { h: "Source de donnée GE", w: 170, left: true, render: (r) => txt(r.estimation_theorique?.source_ge) },
   { h: "Puissance PRP (KVA)", w: 95, tot: ["estimation_theorique", "prp_kva"], render: (r) => prp(r, r.estimation_theorique?.prp_kva) },
   { h: "Puissance PRP (KW)", w: 95, tot: ["estimation_theorique", "prp_kw"], render: (r) => prp(r, r.estimation_theorique?.prp_kw) },
@@ -208,8 +208,10 @@ export function OutputFormatTable({ rows, onDetail, totaux, nbSites }: { rows: C
     const v = t?.total;
     return (
       <th key={c.h} scope="col" style={totStyle}
-        title={t ? `Total sur ${t.sites} site(s) renseigné(s)${nbSites ? ` / ${nbSites} site(s) du filtre` : ""} — cases « n.d. » non comptées` : "Total en cours de calcul"}>
+        title={t ? (t.comptage ? `${t.sites} site(s) avec un ${c.h.toLowerCase()}${nbSites ? ` sur ${nbSites} site(s) du filtre` : ""} — cases « n.d. » non comptées`
+          : `Total sur ${t.sites} site(s) renseigné(s)${nbSites ? ` / ${nbSites} site(s) du filtre` : ""} — cases « n.d. » non comptées`) : "Total en cours de calcul"}>
         {v === null || v === undefined ? <span style={{ color: "#94A0B4" }}>{totaux ? "n.d." : "…"}</span>
+          : t?.comptage ? `${v.toLocaleString("fr-FR")}${nbSites ? ` / ${nbSites.toLocaleString("fr-FR")}` : ""} sites`
           : v.toLocaleString("fr-FR", { maximumFractionDigits: c.tot[1].endsWith("_h") ? 2 : 0 })}
       </th>
     );
