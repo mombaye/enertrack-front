@@ -2,7 +2,7 @@
 // Cinq mesures distinctes : variation de stock · Closing · instrumentée Snowflake · CPH (complète / partielle) · consommation réelle certifiée (vide avant validation).
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, Download, Eye, Layers, List, MapPin, RefreshCw, Tag, XCircle } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, Database, Download, Eye, Factory, Layers, List, MapPin, RefreshCw, Tag, XCircle, Zap } from "lucide-react";
 import {
   downloadConsoExport, getConsommations, getConsommationsPeriodes,
   type ConsoFilters, type ConsoFraicheur, type ConsoRow, type ConsoStatutBilan, type ConsoTargetStatut,
@@ -333,7 +333,7 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
       <section aria-label="Sites" style={{ border: FT.borderCrisp, background: FT.card, borderRadius: 14, boxShadow: FT.shadow, overflow: "hidden" }}>
         <div style={{ padding: "10px 12px", display: "grid", gap: 8, borderBottom: `1px solid ${FT.border}` }}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
-            <label style={{ ...box, flex: "1 1 240px" }}>
+            <label style={{ ...box, flex: "0 1 220px", minWidth: 160 }}>
               <MapPin size={14} color={FT.textSub} aria-hidden />
               <input aria-label="Rechercher un site" list="conso-sites" value={siteInput} placeholder="Rechercher un site (ID ou nom)"
                 onChange={(e) => {
@@ -364,6 +364,17 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
                 <option value="">Toutes typologies</option>{(d?.facettes.typologies ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
               </select>
             </label>
+            {([["fabricant_ge", "Fabriquant GE", "Tous fabricants", Factory, d?.facettes.fabricants_ge],
+               ["type_ge", "Type de GE", "Tous types de GE", Zap, d?.facettes.types_ge],
+               ["source_ge", "Source de donnée GE", "Toutes sources GE", Database, d?.facettes.sources_ge]] as const).map(([k, aria, all, Icon, opts]) => (
+              <label key={k} style={box}>
+                <Icon size={14} color={FT.textSub} aria-hidden />
+                <select aria-label={aria} value={f[k] ?? ""} onChange={(e) => set(k, e.target.value)} style={{ ...selStyle, maxWidth: 170 }}>
+                  <option value="">{all}</option>
+                  {(opts ?? []).map((o) => <option key={o} value={o}>{o === "AUCUN" ? "n.d. (non renseigné)" : o}</option>)}
+                </select>
+              </label>
+            ))}
             <button type="button" aria-expanded={adv} onClick={() => setAdv((v) => !v)} style={{ fontSize: 12.5, fontWeight: 700, background: "none", border: "none", color: FT.blue, cursor: "pointer" }}>
               {adv ? "Masquer filtres et exports ▲" : "Filtres et exports ▼"}
             </button>
@@ -386,7 +397,7 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
           })}
         </div>
         <button type="button" aria-expanded={more} onClick={() => setMore((m) => !m)} style={{ justifySelf: "start", fontSize: 12, fontWeight: 800, background: "none", border: "none", color: FT.blue, cursor: "pointer", padding: 0 }}>
-          {more ? "Moins de filtres ▲" : "Plus de filtres (pays, zone, typologie énergie, certification, sources, GE, qualité, tri) ▼"}
+          {more ? "Moins de filtres ▲" : "Plus de filtres (pays, zone, typologie énergie, certification, sources, qualité, tri) ▼"}
         </button>
         {more && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
@@ -399,9 +410,6 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
             {sel("source_runtime", "Source runtime", d?.facettes.sources_runtime)}
             {sel("source_puissance", "Source puissance", d?.facettes.sources_puissance)}
             {sel("source_target", "Source target", d?.facettes.sources_target)}
-            {sel("fabricant_ge", "Fabriquant GE", d?.facettes.fabricants_ge, (o) => (o === "AUCUN" ? "n.d. (non renseigné)" : o))}
-            {sel("type_ge", "Type de GE", d?.facettes.types_ge, (o) => (o === "AUCUN" ? "n.d. (non renseigné)" : o))}
-            {sel("source_ge", "Source de donnée GE", d?.facettes.sources_ge, (o) => (o === "AUCUN" ? "n.d. (non renseigné)" : o))}
             {sel("correspondance", "Base Closing", ["avec", "sans"], (o) => (o === "avec" ? "Présents dans le Closing" : "Absents du Closing (non utilisés)"))}
             {sel("qualite", "Qualité / réserve", ["reserve", "sans_reserve", "anomalie"], (o) => (o === "reserve" ? "Avec réserve" : o === "sans_reserve" ? "Sans réserve" : "Anomalie"))}
             {sel("tri", "Tri", ["gravite", "variation", "ecart_target"], (o) => (o === "gravite" ? "Gravité" : o === "variation" ? "Plus grosse variation" : "Plus gros écart vs target"))}
