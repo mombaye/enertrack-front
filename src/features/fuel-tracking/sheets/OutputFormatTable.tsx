@@ -86,25 +86,52 @@ const mm = (p: MinMax, which: "min" | "max", label: string): Col => ({
       : `${which === "min" ? "Plus petite" : "Plus grande"} des valeurs qui servent à la médiane : ${SOURCE_MM[p]}`);
   },
 });
+// Visibilité de chaque source de temps de marche GE (%) : seule une source vue sur plus de 50 % de la période est retenue
+const VIS_DEF: Record<string, string> = {
+  tm_dg_on: "jours renseignés (GENSET_REPORT) ÷ jours de la période",
+  tm_rectifier: "créneaux 5 min reçus (RECTIFIER_EFFICIENCY_STATUS) ÷ (288 × jours de la période)",
+  tm_terrain: "compteur cumulatif relevé aux deux dates du fichier : l'écart couvre toute la période (100 %)",
+  tm_index_fms: "compteur cumulatif FMS lu aux deux dates du fichier : l'écart couvre toute la période (100 %)",
+};
+const vis = (k: string, label: string): Col => ({
+  h: `Visibilité ${label} (%)`, w: 90, f: `estimation_theorique.${k}_visibilite_pct`, render: (r) => {
+    const e = r.estimation_theorique as Record<string, unknown> | undefined;
+    const v = e?.[`${k}_visibilite_pct`] as number | null | undefined;
+    const tip = `Visibilité = ${VIS_DEF[k]} ; retenue seulement au-dessus de 50 %`;
+    if (v == null) return <span style={{ color: "#94A0B4" }} title={`${tip} — aucune valeur pour cette source`}>n.d.</span>;
+    const low = v <= 50;
+    return <span title={low ? `${tip} — ${v.toLocaleString("fr-FR")} % : source non retenue` : tip} style={low ? { color: "#B7791F" } : undefined}>
+      {v.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} %{low ? " *" : ""}</span>;
+  },
+});
+// Valeur d'une source écartée (visibilité ≤ 50 %) : affichée en ocre avec « * », raison au survol
+const heuresV = (ecart: string | null | undefined, v: number | null | undefined, tip: string) => (ecart && v != null
+  ? <span style={{ color: "#B7791F" }} title={`${tip} — ${ecart}`}>{v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} *</span>
+  : heures(v, tip));
 const ESTIMATION_THEORIQUE: Col[] = [
   { h: "Fabriquant GE", w: 130, f: "estimation_theorique.fabricant_ge", left: true, tot: ["estimation_theorique", "fabricant_ge"], render: (r) => txt(r.estimation_theorique?.fabricant_ge) },
   { h: "Type de GE", w: 130, f: "estimation_theorique.type_ge", left: true, tot: ["estimation_theorique", "type_ge"], render: (r) => txt(r.estimation_theorique?.type_ge) },
   { h: "Source de donnée GE", w: 170, f: "estimation_theorique.source_ge", left: true, tot: ["estimation_theorique", "source_ge"], render: (r) => txt(r.estimation_theorique?.source_ge) },
   { h: "Puissance PRP (KVA)", w: 95, f: "estimation_theorique.prp_kva", tot: ["estimation_theorique", "prp_kva"], render: (r) => prp(r, r.estimation_theorique?.prp_kva) },
   { h: "Puissance PRP (KW)", w: 95, f: "estimation_theorique.prp_kw", tot: ["estimation_theorique", "prp_kw"], render: (r) => prp(r, r.estimation_theorique?.prp_kw) },
-  { h: "Temps de marche GE (Alarme day_dg_on FMS)", w: 115, f: "estimation_theorique.tm_dg_on_h", tot: ["estimation_theorique", "tm_dg_on_h"], render: (r) => heures(r.estimation_theorique?.tm_dg_on_h,
+  { h: "Temps de marche GE (Alarme day_dg_on FMS)", w: 115, f: "estimation_theorique.tm_dg_on_h", tot: ["estimation_theorique", "tm_dg_on_h"], render: (r) => heuresV(r.estimation_theorique?.tm_dg_on_ecart_motif, r.estimation_theorique?.tm_dg_on_h,
     joursTip(r, r.estimation_theorique?.tm_dg_on_jours, "Snowflake GENSET_REPORT (Day DG On)")) },
-  { h: "Temps de marche GE (Alarme day_rectifier_on FMS)", w: 115, f: "estimation_theorique.tm_rectifier_h", tot: ["estimation_theorique", "tm_rectifier_h"], render: (r) => heures(r.estimation_theorique?.tm_rectifier_h,
+  vis("tm_dg_on", "Alarme day_dg_on FMS"),
+  { h: "Temps de marche GE (Alarme day_rectifier_on FMS)", w: 115, f: "estimation_theorique.tm_rectifier_h", tot: ["estimation_theorique", "tm_rectifier_h"], render: (r) => heuresV(r.estimation_theorique?.tm_rectifier_ecart_motif, r.estimation_theorique?.tm_rectifier_h,
     r.estimation_theorique?.tm_rectifier_motif ?? `${joursTip(r, r.estimation_theorique?.tm_rectifier_jours, "Snowflake RECTIFIER_EFFICIENCY_STATUS : créneaux 5 min Good / Aged / Warning")} — disponibilité ${r.estimation_theorique?.tm_rectifier_dispo_pct ?? "n.d."} %${r.estimation_theorique?.tm_rectifier_off_grid === true ? "" : r.estimation_theorique?.tm_rectifier_off_grid === false ? " — site raccordé au réseau : heures réseau + GE, non retenues comme temps de marche GE" : " — type de raccordement inconnu : non retenues comme temps de marche GE"}`) },
-  { h: "Temps de marche GE (relevé de terrain)", w: 115, f: "estimation_theorique.tm_terrain_h", tot: ["estimation_theorique", "tm_terrain_h"], render: (r) => heures(r.estimation_theorique?.tm_terrain_h,
+  vis("tm_rectifier", "Alarme day_rectifier_on FMS"),
+  { h: "Temps de marche GE (relevé de terrain)", w: 115, f: "estimation_theorique.tm_terrain_h", tot: ["estimation_theorique", "tm_terrain_h"], render: (r) => heuresV(r.estimation_theorique?.tm_terrain_ecart_motif, r.estimation_theorique?.tm_terrain_h,
     r.estimation_theorique?.tm_terrain_motif ?? "Relevé Visuel Compteur genset (relevé de terrain) : relevé final − relevé initial") },
-  { h: "Temps de marche GE (Index Compteur FMS)", w: 115, f: "estimation_theorique.tm_index_fms_h", tot: ["estimation_theorique", "tm_index_fms_h"], render: (r) => heures(r.estimation_theorique?.tm_index_fms_h,
+  vis("tm_terrain", "relevé de terrain"),
+  { h: "Temps de marche GE (Index Compteur FMS)", w: 115, f: "estimation_theorique.tm_index_fms_h", tot: ["estimation_theorique", "tm_index_fms_h"], render: (r) => heuresV(r.estimation_theorique?.tm_index_fms_ecart_motif, r.estimation_theorique?.tm_index_fms_h,
     r.estimation_theorique?.tm_index_fms_motif ?? "Relevé Visuel Compteur genset (Index Compteur FMS) : relevé final − relevé initial") },
+  vis("tm_index_fms", "Index Compteur FMS"),
   { h: "Temps de marche GE retenu", w: 105, f: "estimation_theorique.tm_retenu_h", tot: ["estimation_theorique", "tm_retenu_h"], render: (r) => <b>{heures(r.estimation_theorique?.tm_retenu_h,
     r.estimation_theorique?.tm_source ? `Retenu : ${r.estimation_theorique.tm_source}` : "Aucune source de temps de marche pour ce site")}</b> },
   { h: "Source de donnée Temps de marche GE", w: 160, f: "estimation_theorique.tm_source", left: true, tot: ["estimation_theorique", "tm_source"], render: (r) => (r.estimation_theorique?.tm_source
-    ? <span title="Ordre : Index Compteur FMS → relevé de terrain → Alarme day_dg_on FMS → Alarme day_rectifier_on FMS">{r.estimation_theorique.tm_source}</span>
-    : txt(null)) },
+    ? <span title={`Ordre : Index Compteur FMS → relevé de terrain → Alarme day_dg_on FMS → Alarme day_rectifier_on FMS ; seules les sources vues sur plus de 50 % de la période${r.estimation_theorique.tm_sources_ecartees?.length ? ` — écartée(s) : ${r.estimation_theorique.tm_sources_ecartees.join(", ")}` : ""}`}>{r.estimation_theorique.tm_source}</span>
+    : <span style={{ color: "#94A0B4" }} title={r.estimation_theorique?.tm_sources_ecartees?.length
+      ? `Aucune source vue sur plus de 50 % de la période — écartée(s) : ${r.estimation_theorique.tm_sources_ecartees.join(", ")}` : "Aucune source de temps de marche"}>n.d.</span>) },
   mm("p_rect", "min", "redresseur"),
   { h: "Puissance médiane mesurée redresseur (kW)", w: 115, f: "estimation_theorique.p_rect_kw", tot: ["estimation_theorique", "p_rect_kw"], render: (r) => kw(r.estimation_theorique?.p_rect_kw,
     [`P_DC ÷ rendement (RECTIFIER_EFFICIENCY_STATUS) — source : ${r.estimation_theorique?.p_rect_source ?? "PUISSANCE_REDRESSEUR_INDISPONIBLE"}`,

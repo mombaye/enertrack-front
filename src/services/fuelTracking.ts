@@ -2088,6 +2088,10 @@ export type ConsoRow = {
     /** Min / max (kW) : plus petite et plus grande des valeurs journalières qui servent à la médiane (même filtre, même période). */
     p_rect_min_kw?: number | null; p_rect_max_kw?: number | null; p_ge_min_kw?: number | null; p_ge_max_kw?: number | null;
     p_grid_min_kw?: number | null; p_grid_max_kw?: number | null;
+    /** Visibilité (%) de chaque source de temps de marche GE ; source à 50 % ou moins écartée du temps de marche retenu. */
+    tm_dg_on_visibilite_pct?: number | null; tm_rectifier_visibilite_pct?: number | null; tm_terrain_visibilite_pct?: number | null;
+    tm_index_fms_visibilite_pct?: number | null; tm_dg_on_ecart_motif?: string | null; tm_rectifier_ecart_motif?: string | null;
+    tm_terrain_ecart_motif?: string | null; tm_index_fms_ecart_motif?: string | null; tm_sources_ecartees?: string[] | null;
     p_batt_kw?: number | null; p_batt_jours?: number | null; p_batt_median_day_kw?: number | null;
     p_batt_median_period_kw?: number | null; p_batt_current_a?: number | null; p_batt_voltage_v?: number | null;
     p_batt_dispo_pct?: number | null; p_batt_pos?: number | null; p_batt_reserve?: string | null; p_batt_motif?: string | null;
