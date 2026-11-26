@@ -2085,6 +2085,9 @@ export type ConsoRow = {
     p_load_dc_kw?: number | null; p_load_dc_jours?: number | null; p_load_dc_motif?: string | null;
     /** Recharge batterie (règle équipe data) : médiane du jour (GOLD.BATTERY_REPORT, courant × tension ÷ 1000 en charge),
      *  médiane des pas en charge ; null + source si pas de télémétrie ou pas de charge. Réserve si peu de pas en charge. */
+    /** Min / max (kW) : plus petite et plus grande des valeurs journalières qui servent à la médiane (même filtre, même période). */
+    p_rect_min_kw?: number | null; p_rect_max_kw?: number | null; p_ge_min_kw?: number | null; p_ge_max_kw?: number | null;
+    p_grid_min_kw?: number | null; p_grid_max_kw?: number | null;
     p_batt_kw?: number | null; p_batt_jours?: number | null; p_batt_median_day_kw?: number | null;
     p_batt_median_period_kw?: number | null; p_batt_current_a?: number | null; p_batt_voltage_v?: number | null;
     p_batt_dispo_pct?: number | null; p_batt_pos?: number | null; p_batt_reserve?: string | null; p_batt_motif?: string | null;

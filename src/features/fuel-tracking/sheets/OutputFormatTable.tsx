@@ -70,6 +70,22 @@ const joursTip = (r: ConsoRow, n: number | null | undefined, src: string) =>
 const kw = (v: number | null | undefined, tip: string) => (v === null || v === undefined
   ? <span style={{ color: "#94A0B4" }} title={tip}>n.d.</span>
   : <span title={tip}>{v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>);
+// Min / max d'une puissance : mêmes valeurs journalières que la médiane ; n.d. quand la médiane l'est (jamais 0)
+type MinMax = "p_rect" | "p_ge" | "p_grid";
+const SOURCE_MM: Record<MinMax, string> = {
+  p_rect: "jours qualifiés (≥ 50 % de disponibilité), sinon mesures valides de la période (RECTIFIER_EFFICIENCY_STATUS)",
+  p_ge: "jours de marche (production GE ÷ heures de marche, GENSET_REPORT) ; jour au-delà de 105 % × kVA × 0,8 écarté",
+  p_grid: "puissances AC journalières (compteur AC, Snowflake), mesures > 0",
+};
+const mm = (p: MinMax, which: "min" | "max", label: string): Col => ({
+  h: `Puissance ${which} mesurée ${label} (kW)`, w: 105, f: `estimation_theorique.${p}_${which}_kw`,
+  render: (r) => {
+    const e = r.estimation_theorique as Record<string, unknown> | undefined;
+    const v = e?.[`${p}_${which}_kw`] as number | null | undefined;
+    return kw(v, v == null ? ((e?.[`${p}_motif`] as string | null | undefined) ?? "Aucune mesure sur la période")
+      : `${which === "min" ? "Plus petite" : "Plus grande"} des valeurs qui servent à la médiane : ${SOURCE_MM[p]}`);
+  },
+});
 const ESTIMATION_THEORIQUE: Col[] = [
   { h: "Fabriquant GE", w: 130, f: "estimation_theorique.fabricant_ge", left: true, tot: ["estimation_theorique", "fabricant_ge"], render: (r) => txt(r.estimation_theorique?.fabricant_ge) },
   { h: "Type de GE", w: 130, f: "estimation_theorique.type_ge", left: true, tot: ["estimation_theorique", "type_ge"], render: (r) => txt(r.estimation_theorique?.type_ge) },
@@ -89,15 +105,21 @@ const ESTIMATION_THEORIQUE: Col[] = [
   { h: "Source de donnée Temps de marche GE", w: 160, f: "estimation_theorique.tm_source", left: true, tot: ["estimation_theorique", "tm_source"], render: (r) => (r.estimation_theorique?.tm_source
     ? <span title="Ordre : Index Compteur FMS → relevé de terrain → Alarme day_dg_on FMS → Alarme day_rectifier_on FMS">{r.estimation_theorique.tm_source}</span>
     : txt(null)) },
+  mm("p_rect", "min", "redresseur"),
   { h: "Puissance médiane mesurée redresseur (kW)", w: 115, f: "estimation_theorique.p_rect_kw", tot: ["estimation_theorique", "p_rect_kw"], render: (r) => kw(r.estimation_theorique?.p_rect_kw,
     [`P_DC ÷ rendement (RECTIFIER_EFFICIENCY_STATUS) — source : ${r.estimation_theorique?.p_rect_source ?? "PUISSANCE_REDRESSEUR_INDISPONIBLE"}`,
      `${r.estimation_theorique?.p_rect_jours ?? 0} jour(s) qualifié(s) (≥ 50 % de disponibilité)`,
      r.estimation_theorique?.p_rect_dispo_pct != null ? `disponibilité période ${r.estimation_theorique.p_rect_dispo_pct.toLocaleString("fr-FR")} %` : null,
      r.estimation_theorique?.p_rect_motif ?? null].filter(Boolean).join(" ; ")) },
+  mm("p_rect", "max", "redresseur"),
+  mm("p_ge", "min", "générateur"),
   { h: "Puissance médiane mesurée générateur (kW)", w: 115, f: "estimation_theorique.p_ge_kw", tot: ["estimation_theorique", "p_ge_kw"], render: (r) => kw(r.estimation_theorique?.p_ge_kw,
     r.estimation_theorique?.p_ge_motif ?? `Médiane de la production GE ÷ heures de marche (GENSET_REPORT, Snowflake) — ${r.estimation_theorique?.p_ge_jours ?? 0} jour(s) de marche ; jour au-delà de 105 % × kVA × 0,8 écarté`) },
+  mm("p_ge", "max", "générateur"),
+  mm("p_grid", "min", "Grid"),
   { h: "Puissance Grid médiane mesurée (kW)", w: 115, f: "estimation_theorique.p_grid_kw", tot: ["estimation_theorique", "p_grid_kw"], render: (r) => kw(r.estimation_theorique?.p_grid_kw,
     `Médiane des puissances AC journalières (compteur AC, Snowflake) — ${r.estimation_theorique?.p_grid_jours ?? 0} jour(s) mesuré(s)`) },
+  mm("p_grid", "max", "Grid"),
   { h: "Puissance Médiane Load DC telco (kW)", w: 115, f: "estimation_theorique.p_load_dc_kw", tot: ["estimation_theorique", "p_load_dc_kw"], render: (r) => kw(r.estimation_theorique?.p_load_dc_kw,
     r.estimation_theorique?.p_load_dc_motif ?? `Médiane du load DC telco journalier (AVERAGE_LOAD, Snowflake) — ${r.estimation_theorique?.p_load_dc_jours ?? 0} jour(s) mesuré(s)`) },
   { h: "Puissance Médiane Recharge batterie (kW)", w: 115, f: "estimation_theorique.p_batt_kw", tot: ["estimation_theorique", "p_batt_kw"], render: (r) => {
