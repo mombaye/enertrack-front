@@ -16,7 +16,8 @@ const txt = (v: string | null | undefined) => (v ? v : <span style={{ color: "#9
 type Col = { h: string; w: number; f?: string; left?: boolean; tot?: [string, string]; render: (r: ConsoRow) => ReactNode };
 export type ColFilters = Record<string, string[]>;
 type ColFilterProps = { colFilters?: ColFilters; onColFilter?: (key: string, values: string[] | null) => void; loadValues?: (key: string) => Promise<ColValue[]> };
-export type ConsoTotaux = Record<string, Record<string, { total: number | null; sites: number; comptage?: boolean; oui?: boolean; valeur?: string }>> | null | undefined;
+export type ConsoTotaux = Record<string, Record<string, { total: number | null; sites: number; comptage?: boolean; oui?: boolean; valeur?: string;
+  autres?: Record<string, number> }>> | null | undefined;
 
 const INVENTAIRE: Col[] = [
   { h: "Nom du site", w: 150, f: "site_name", left: true, render: (r) => r.site_name ?? "—" },
@@ -251,9 +252,12 @@ const ANALYSE_VARIATION: Col[] = [
       {a.tolerance_l.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>;
   } },
   // Process validation conso fuel : conforme si |Variation de stock − Consommation théorique| ≤ max(50 L ; 5 %)
-  { h: "Alerte App Fuel", w: 120, f: "analyse_variation.alerte", tot: ["analyse_variation", "alerte"], render: (r) => {
+  { h: "Alerte App Fuel", w: 160, f: "analyse_variation.alerte", tot: ["analyse_variation", "alerte"], render: (r) => {
     const a = r.analyse_variation;
     if (!a?.alerte) return <span style={{ color: "#94A0B4" }} title={a?.alerte_motif ?? "Variation de stock ou conso théorique n.d."}>n.d.</span>;
+    // Variation de stock négative : alerte à part (violet), stock ou mouvement à corriger avant toute comparaison
+    if (a.alerte === "Variation négative") return <span title={a.alerte_motif ?? undefined} style={{ fontWeight: 800, padding: "2px 8px", borderRadius: 999,
+      background: "#F3E8FF", color: "#6B21A8", border: "1px solid #C4B5FD" }}>⊖ Variation négative</span>;
     const ecart = a.alerte === "En écart";
     return <span title={a.alerte_motif ?? undefined} style={{ fontWeight: 800, padding: "2px 8px", borderRadius: 999,
       background: ecart ? "#FDE8E8" : "#E6F4EA", color: ecart ? "#B42318" : "#1E7B3C" }}>{ecart ? "⚠ En écart" : "✓ Conforme"}</span>;
@@ -331,7 +335,7 @@ export function OutputFormatTable({ rows, onDetail, totaux, nbSites, colFilters,
         title={t ? (t.oui ? `${t.total ?? 0} site(s) « ${t.valeur ?? "Oui"} » sur ${t.sites} site(s) calculé(s)${nbSites ? ` / ${nbSites} site(s) du filtre` : ""}` : t.comptage ? `${t.sites} site(s) avec un ${c.h.toLowerCase()}${nbSites ? ` sur ${nbSites} site(s) du filtre` : ""} — cases « n.d. » non comptées`
           : `Total sur ${t.sites} site(s) renseigné(s)${nbSites ? ` / ${nbSites} site(s) du filtre` : ""} — cases « n.d. » non comptées`) : "Total en cours de calcul"}>
         {v === null || v === undefined ? <span style={{ color: "#94A0B4" }}>{totaux ? "n.d." : "…"}</span>
-          : t?.oui ? `${v.toLocaleString("fr-FR")} ${t.valeur ?? "Oui"} / ${t.sites.toLocaleString("fr-FR")}`
+          : t?.oui ? `${v.toLocaleString("fr-FR")} ${t.valeur ?? "Oui"}${Object.entries(t.autres ?? {}).map(([k, n]) => ` · ${n.toLocaleString("fr-FR")} ${k}`).join("")} / ${t.sites.toLocaleString("fr-FR")}`
           : t?.comptage ? `${v.toLocaleString("fr-FR")}${nbSites ? ` / ${nbSites.toLocaleString("fr-FR")}` : ""} sites`
           : v.toLocaleString("fr-FR", { maximumFractionDigits: c.tot[1].endsWith("_h") || c.tot[1].endsWith("_kw") ? 2 : 0 })}
       </th>

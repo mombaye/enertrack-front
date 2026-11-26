@@ -2113,7 +2113,7 @@ export type ConsoRow = {
     conso_theorique_retenue_l: number | null; conso_theorique_motif: string | null; variation_l: number | null; variation_motif: string | null;
     delta_l: number | null; grande_difference: "Oui" | "Non" | null; motif: string | null; seuil_l: number;
     /** Alerte App Fuel : « Conforme » si |DELTA| ≤ tolérance = max(50 L ; 5 % × conso théorique), « En écart » sinon ; null = n.d. */
-    tolerance_l: number | null; alerte: "Conforme" | "En écart" | null; alerte_motif: string | null;
+    tolerance_l: number | null; alerte: "Conforme" | "En écart" | "Variation négative" | null; alerte_motif: string | null;
     /** Détail lisible de l'alerte : valeurs comparées, sens et taille de l'écart, seuil appliqué, action ; « Non calculable : … » sinon. */
     alerte_detail: string | null };
   ravitaillement?: ConsoRavitaillement;
