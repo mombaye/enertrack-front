@@ -2107,7 +2107,9 @@ export type ConsoRow = {
    *  DELTA = conso théorique retenue − variation ; grande différence « Oui » si |DELTA| > seuil (100 L). null = n.d., jamais 0. */
   analyse_variation?: {
     conso_theorique_retenue_l: number | null; conso_theorique_motif: string | null; variation_l: number | null; variation_motif: string | null;
-    delta_l: number | null; grande_difference: "Oui" | "Non" | null; motif: string | null; seuil_l: number };
+    delta_l: number | null; grande_difference: "Oui" | "Non" | null; motif: string | null; seuil_l: number;
+    /** Alerte App Fuel : « Conforme » si |DELTA| ≤ tolérance = max(50 L ; 5 % × conso théorique), « En écart » sinon ; null = n.d. */
+    tolerance_l: number | null; alerte: "Conforme" | "En écart" | null; alerte_motif: string | null };
   ravitaillement?: ConsoRavitaillement;
   site_id: string;
   site_name: string | null;
