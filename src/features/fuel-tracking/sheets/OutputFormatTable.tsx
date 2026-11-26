@@ -205,7 +205,10 @@ const ESTIMATION_THEORIQUE: Col[] = [
   } },
   { h: "Consommation Snowflake fuel sensor (L)", w: 120, f: "estimation_theorique.conso_fuel_sensor_l", tot: ["estimation_theorique", "conso_fuel_sensor_l"], render: (r) => {
     const e = r.estimation_theorique;
-    const tip = [`Somme des consommations mesurées du jour (VW_FUEL_REPORT, filtre strict) — ${e?.conso_fuel_sensor_jours ?? 0} jour(s) mesuré(s) sur ${e?.conso_fuel_sensor_jours_periode ?? "?"}`,
+    const l2 = (v?: number | null) => v == null ? "n.d." : `${v.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} L`;
+    const tip = ["Niveau de cuve FMS au relevé initial − niveau au relevé final + remplissages vus par le capteur (hausse ≥ 50 L d'un jour à l'autre ; en dessous = bruit)",
+      `Niveau initial ${l2(e?.conso_fuel_sensor_niveau_debut_l)} · niveau final ${l2(e?.conso_fuel_sensor_niveau_fin_l)} · ${e?.conso_fuel_sensor_remplissages ?? 0} remplissage(s) vu(s) (${l2(e?.conso_fuel_sensor_remplissages_l ?? 0)})`,
+      `${e?.conso_fuel_sensor_jours ?? 0} jour(s) avec niveau sur ${e?.conso_fuel_sensor_jours_periode ?? "?"}`,
       e?.conso_fuel_sensor_motif ?? null].filter(Boolean).join(" ; ");
     return e?.conso_fuel_sensor_l != null && e.conso_fuel_sensor_reserve
       ? <span title={tip} style={{ color: "#B7791F" }}>{e.conso_fuel_sensor_l.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} *</span>

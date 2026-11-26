@@ -2098,12 +2098,14 @@ export type ConsoRow = {
     p_batt_source?: "BATTERY_CHARGE_MEDIAN_DAY" | "BATTERY_CHARGE_MEDIAN_PERIOD" | "BATTERY_CHARGE_TELEMETRY_UNAVAILABLE"
       | "NO_BATTERY_CHARGING_MEASURED" | "BATTERY_CHARGE_POWER_UNAVAILABLE" | null;
     /** Puissance retenue = max(GE, redresseur), sinon Load DC + Recharge batterie ; taux de charge = retenue ÷ PRP kW ;
-     *  CPH = a·x² + b·x + c (GENSET DB) ; conso théorique = CPH × temps de marche retenu ; conso fuel sensor = Σ VW_FUEL_REPORT. */
+     *  CPH = a·x² + b·x + c (GENSET DB) ; conso théorique = CPH × temps de marche retenu ; conso fuel sensor = niveau FMS initial − niveau final + remplissages ≥ 50 L (VW_FUEL_REPORT). */
     p_retenue_kw?: number | null; p_retenue_source?: string | null; p_retenue_motif?: string | null; p_retenue_reserve?: boolean;
     taux_charge?: number | null; taux_charge_motif?: string | null; cph_l_h?: number | null; cph_a?: number | null;
     cph_b?: number | null; cph_c?: number | null; cph_extrapolation?: boolean; conso_theorique_l?: number | null;
     conso_theorique_motif?: string | null; conso_fuel_sensor_l?: number | null; conso_fuel_sensor_jours?: number | null;
     conso_fuel_sensor_jours_periode?: number | null; conso_fuel_sensor_motif?: string | null; conso_fuel_sensor_reserve?: boolean;
+    conso_fuel_sensor_niveau_debut_l?: number | null; conso_fuel_sensor_niveau_fin_l?: number | null;
+    conso_fuel_sensor_remplissages?: number | null; conso_fuel_sensor_remplissages_l?: number | null;
     /** Estimation Conso Fuel Théorique retenue (règle Ops) = conso théorique CPH seule ; source « calcul cph et temps de marche GE ». */
     conso_retenue_l?: number | null; conso_retenue_source?: string | null; conso_retenue_motif?: string | null };
   /** Bloc « ANALYSE VARIATION DE STOCK Vs ESTIMATION THÉORIQUE » (règles du fichier Output App Fuel d'Ops) :
