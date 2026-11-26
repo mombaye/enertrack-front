@@ -16,7 +16,7 @@ const txt = (v: string | null | undefined) => (v ? v : <span style={{ color: "#9
 type Col = { h: string; w: number; f?: string; left?: boolean; tot?: [string, string]; render: (r: ConsoRow) => ReactNode };
 export type ColFilters = Record<string, string[]>;
 type ColFilterProps = { colFilters?: ColFilters; onColFilter?: (key: string, values: string[] | null) => void; loadValues?: (key: string) => Promise<ColValue[]> };
-export type ConsoTotaux = Record<string, Record<string, { total: number | null; sites: number; comptage?: boolean }>> | null | undefined;
+export type ConsoTotaux = Record<string, Record<string, { total: number | null; sites: number; comptage?: boolean; oui?: boolean }>> | null | undefined;
 
 const INVENTAIRE: Col[] = [
   { h: "Nom du site", w: 150, f: "site_name", left: true, render: (r) => r.site_name ?? "—" },
@@ -168,6 +168,27 @@ const ESTIMATION_THEORIQUE: Col[] = [
       : <span style={{ color: "#94A0B4" }} title={e?.conso_retenue_motif ?? "Consommation théorique n.d."}>n.d.</span>;
   } },
 ];
+// Bloc « ANALYSE VARIATION DE STOCK Vs ESTIMATION THÉORIQUE » : règles du fichier Output App Fuel d'Ops ; n.d. avec sa raison au survol
+const litres = (v: number | null | undefined, tip: string, bold = false) => (v === null || v === undefined
+  ? <span style={{ color: "#94A0B4" }} title={tip}>n.d.</span>
+  : <span title={tip} style={bold ? { fontWeight: 700 } : undefined}>{v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>);
+const VAR_FORMULE = "Qtité laissée retenue (initiale) + EYDON + CARTE TOTAL + Ajout − Retrait − QTE volée − QTE vidangée / Fuite − Qtité laissée retenue (finale)";
+const ANALYSE_VARIATION: Col[] = [
+  { h: "Estimation Conso Fuel Théorique retenue  (L)", w: 120, f: "analyse_variation.conso_theorique_retenue_l", tot: ["analyse_variation", "conso_theorique_retenue_l"],
+    render: (r) => litres(r.analyse_variation?.conso_theorique_retenue_l, r.analyse_variation?.conso_theorique_motif ?? "CPH théorique × Temps de marche GE retenu") },
+  { h: "Variation de stock Fuel considéréé  (L)", w: 120, f: "analyse_variation.variation_l", tot: ["analyse_variation", "variation_l"],
+    render: (r) => litres(r.analyse_variation?.variation_l, r.analyse_variation?.variation_motif ?? VAR_FORMULE) },
+  { h: "Analysis #3: Grande différence entre la Conso observée et à la  Conso Théorique  ?", w: 150, f: "analyse_variation.grande_difference",
+    tot: ["analyse_variation", "grande_difference"], render: (r) => {
+      const a = r.analyse_variation;
+      if (!a?.grande_difference) return <span style={{ color: "#94A0B4" }} title={a?.motif ?? "DELTA non calculable"}>n.d.</span>;
+      const oui = a.grande_difference === "Oui";
+      return <span title={`« Oui » si l'écart entre conso théorique et variation de stock dépasse ${a.seuil_l} L (dans un sens ou dans l'autre)`}
+        style={{ fontWeight: 800, color: oui ? "#B42318" : "#1E7B3C" }}>{a.grande_difference}</span>;
+    } },
+  { h: "DELTA (Conso Théorique Vs Conso Observée)", w: 120, f: "analyse_variation.delta_l", tot: ["analyse_variation", "delta_l"],
+    render: (r) => litres(r.analyse_variation?.delta_l, r.analyse_variation?.motif ?? "Estimation Conso Fuel Théorique retenue − Variation de stock Fuel considérée", true) },
+];
 const SELECTION_LABEL: Record<string, string> = {
   PUISSANCE_MEDIANE_GE: "puissance médiane GE", PUISSANCE_MEDIANE_REDRESSEUR: "puissance médiane redresseur",
   LOAD_DC_PLUS_RECHARGE_BATTERIE: "Load DC telco + Recharge batterie", LOAD_DC_SEUL: "Load DC telco seul (recharge batterie n.d.)",
@@ -227,9 +248,10 @@ export function OutputFormatTable({ rows, onDetail, totaux, nbSites, colFilters,
     const v = t?.total;
     return (
       <th key={c.h} scope="col" style={totStyle}
-        title={t ? (t.comptage ? `${t.sites} site(s) avec un ${c.h.toLowerCase()}${nbSites ? ` sur ${nbSites} site(s) du filtre` : ""} — cases « n.d. » non comptées`
+        title={t ? (t.oui ? `${t.total ?? 0} site(s) avec une grande différence (Oui) sur ${t.sites} site(s) calculé(s)${nbSites ? ` / ${nbSites} site(s) du filtre` : ""}` : t.comptage ? `${t.sites} site(s) avec un ${c.h.toLowerCase()}${nbSites ? ` sur ${nbSites} site(s) du filtre` : ""} — cases « n.d. » non comptées`
           : `Total sur ${t.sites} site(s) renseigné(s)${nbSites ? ` / ${nbSites} site(s) du filtre` : ""} — cases « n.d. » non comptées`) : "Total en cours de calcul"}>
         {v === null || v === undefined ? <span style={{ color: "#94A0B4" }}>{totaux ? "n.d." : "…"}</span>
+          : t?.oui ? `${v.toLocaleString("fr-FR")} Oui / ${t.sites.toLocaleString("fr-FR")}`
           : t?.comptage ? `${v.toLocaleString("fr-FR")}${nbSites ? ` / ${nbSites.toLocaleString("fr-FR")}` : ""} sites`
           : v.toLocaleString("fr-FR", { maximumFractionDigits: c.tot[1].endsWith("_h") || c.tot[1].endsWith("_kw") ? 2 : 0 })}
       </th>
@@ -240,6 +262,7 @@ export function OutputFormatTable({ rows, onDetail, totaux, nbSites, colFilters,
     { name: "INVENTAIRE", cols: INVENTAIRE }, { name: "DONNEES DE STOCK INITIAL", cols: STOCK_INITIAL },
     { name: "DONNEES DE RAVITAILLEMENT", cols: RAVITAILLEMENT }, { name: "DONNEES DE STOCK FINAL", cols: STOCK_FINAL },
     { name: "ESTIMATION CONSOMMATION FUEL THEORIQUE", cols: ESTIMATION_THEORIQUE },
+    { name: "ANALYSE VARIATION DE STOCK Vs ESTIMATION THEORIQUE", cols: ANALYSE_VARIATION },
   ];
   const all = groups.flatMap((g) => g.cols);
   // Colonne vide entre deux blocs : séparation visuelle nette (aucune donnée, ignorée par les lecteurs d'écran)

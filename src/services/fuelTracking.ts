@@ -2099,6 +2099,12 @@ export type ConsoRow = {
     conso_fuel_sensor_jours_periode?: number | null; conso_fuel_sensor_motif?: string | null; conso_fuel_sensor_reserve?: boolean;
     /** Estimation Conso Fuel Théorique retenue (règle Ops) = conso théorique CPH seule ; source « calcul cph et temps de marche GE ». */
     conso_retenue_l?: number | null; conso_retenue_source?: string | null; conso_retenue_motif?: string | null };
+  /** Bloc « ANALYSE VARIATION DE STOCK Vs ESTIMATION THÉORIQUE » (règles du fichier Output App Fuel d'Ops) :
+   *  variation = stock initial retenu + EYDON + CARTE TOTAL + Ajout − Retrait − Volé − Vidangé − stock final retenu ;
+   *  DELTA = conso théorique retenue − variation ; grande différence « Oui » si |DELTA| > seuil (100 L). null = n.d., jamais 0. */
+  analyse_variation?: {
+    conso_theorique_retenue_l: number | null; conso_theorique_motif: string | null; variation_l: number | null; variation_motif: string | null;
+    delta_l: number | null; grande_difference: "Oui" | "Non" | null; motif: string | null; seuil_l: number };
   ravitaillement?: ConsoRavitaillement;
   site_id: string;
   site_name: string | null;
