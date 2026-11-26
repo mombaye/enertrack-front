@@ -262,12 +262,14 @@ const ANALYSE_VARIATION: Col[] = [
     return <span title={a.alerte_motif ?? undefined} style={{ fontWeight: 800, padding: "2px 8px", borderRadius: 999,
       background: ecart ? "#FDE8E8" : "#E6F4EA", color: ecart ? "#B42318" : "#1E7B3C" }}>{ecart ? "⚠ En écart" : "✓ Conforme"}</span>;
   } },
-  // Détail de l'alerte : texte complet au survol quand il dépasse la largeur de la colonne
-  { h: "Détail Alerte App Fuel", w: 420, left: true, render: (r) => {
-    const d = r.analyse_variation?.alerte_detail;
+  // Détail de l'alerte en langage clair, affiché en entier (retour à la ligne), liseré de la couleur de l'alerte
+  { h: "Détail Alerte App Fuel", w: 440, left: true, render: (r) => {
+    const a = r.analyse_variation;
+    const d = a?.alerte_detail;
     if (!d) return <span style={{ color: "#94A0B4" }}>n.d.</span>;
-    return <span title={d} style={{ display: "block", maxWidth: 408, overflow: "hidden", textOverflow: "ellipsis",
-      color: d.startsWith("Non calculable") ? "#94A0B4" : undefined }}>{d}</span>;
+    const color = a?.alerte === "Variation négative" ? "#6B21A8" : a?.alerte === "En écart" ? "#B42318" : a?.alerte === "Conforme" ? "#1E7B3C" : "#94A0B4";
+    return <span style={{ display: "block", width: 424, whiteSpace: "normal", lineHeight: 1.35, textAlign: "left", paddingLeft: 7,
+      borderLeft: `3px solid ${color}`, color: a?.alerte ? "#1B2433" : "#6B7A90" }}>{d}</span>;
   } },
 ];
 const SELECTION_LABEL: Record<string, string> = {
