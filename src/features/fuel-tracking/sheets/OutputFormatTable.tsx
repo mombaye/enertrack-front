@@ -191,15 +191,20 @@ const ESTIMATION_THEORIQUE: Col[] = [
   } },
 ];
 // Bloc « ANALYSE VARIATION DE STOCK Vs ESTIMATION THÉORIQUE » : règles du fichier Output App Fuel d'Ops ; n.d. avec sa raison au survol
-const litres = (v: number | null | undefined, tip: string, bold = false) => (v === null || v === undefined
+// Valeur négative (variation de stock, DELTA) : même signalement que le bloc Conso théorique (ocre + « * »), explication au survol
+const NEG_VAR = "le stock final et les sorties dépassent le stock initial et les entrées : mouvement manquant ou relevé de stock erroné à vérifier";
+const NEG_DELTA = "la variation de stock observée dépasse la consommation théorique : stock initial / final ou mouvement à vérifier";
+const litres = (v: number | null | undefined, tip: string, bold = false, neg?: string) => (v === null || v === undefined
   ? <span style={{ color: "#94A0B4" }} title={tip}>n.d.</span>
+  : v < 0 ? <span title={`Valeur négative${neg ? ` : ${neg}` : ""} — ${tip}`} style={{ color: "#B7791F", fontWeight: bold ? 700 : undefined }}>
+      {v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} *</span>
   : <span title={tip} style={bold ? { fontWeight: 700 } : undefined}>{v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>);
 const VAR_FORMULE = "Qtité laissée retenue (initiale) + EYDON + CARTE TOTAL + Ajout − Retrait − QTE volée − QTE vidangée / Fuite − Qtité laissée retenue (finale)";
 const ANALYSE_VARIATION: Col[] = [
   { h: "Estimation Conso Fuel Théorique retenue  (L)", w: 120, f: "analyse_variation.conso_theorique_retenue_l", tot: ["analyse_variation", "conso_theorique_retenue_l"],
     render: (r) => litres(r.analyse_variation?.conso_theorique_retenue_l, r.analyse_variation?.conso_theorique_motif ?? "CPH théorique × Temps de marche GE retenu") },
   { h: "Variation de stock Fuel considéréé  (L)", w: 120, f: "analyse_variation.variation_l", tot: ["analyse_variation", "variation_l"],
-    render: (r) => litres(r.analyse_variation?.variation_l, r.analyse_variation?.variation_motif ?? VAR_FORMULE) },
+    render: (r) => litres(r.analyse_variation?.variation_l, r.analyse_variation?.variation_motif ?? VAR_FORMULE, false, NEG_VAR) },
   { h: "Analysis #3: Grande différence entre la Conso observée et à la  Conso Théorique  ?", w: 150, f: "analyse_variation.grande_difference",
     tot: ["analyse_variation", "grande_difference"], render: (r) => {
       const a = r.analyse_variation;
@@ -209,7 +214,7 @@ const ANALYSE_VARIATION: Col[] = [
         style={{ fontWeight: 800, color: oui ? "#B42318" : "#1E7B3C" }}>{a.grande_difference}</span>;
     } },
   { h: "DELTA (Conso Théorique Vs Conso Observée)", w: 120, f: "analyse_variation.delta_l", tot: ["analyse_variation", "delta_l"],
-    render: (r) => litres(r.analyse_variation?.delta_l, r.analyse_variation?.motif ?? "Estimation Conso Fuel Théorique retenue − Variation de stock Fuel considérée", true) },
+    render: (r) => litres(r.analyse_variation?.delta_l, r.analyse_variation?.motif ?? "Estimation Conso Fuel Théorique retenue − Variation de stock Fuel considérée", true, NEG_DELTA) },
   // Process validation conso fuel : conforme si |Variation de stock − Consommation théorique| ≤ max(50 L ; 5 %)
   { h: "Alerte App Fuel", w: 120, f: "analyse_variation.alerte", tot: ["analyse_variation", "alerte"], render: (r) => {
     const a = r.analyse_variation;
