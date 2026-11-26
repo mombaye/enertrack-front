@@ -2183,6 +2183,13 @@ export type ClosingKpiValue = { libelle: string; valeur: number | null; detail?:
 export type ClosingKpis = {
   mois: string; debut?: string; fin?: string; source: "FICHIER_CLOSING" | "CALCUL_ENERTRACK" | "TABLEAU_SUIVI_CONSO"; fichier: string | null; note?: string;
   kpis: Record<string, ClosingKpiValue>;
+  /** Synthèse « Analyse variation de stock Vs estimation théorique » : groupes exclusifs (certifiés, en alerte, sans conso
+   *  théorique, non calculables) ; sommes sur les sites qui ont la valeur (null = aucune, jamais 0). */
+  analyse?: { groupes: AnalyseGroupe[]; total: AnalyseGroupe } | null;
+};
+export type AnalyseGroupe = {
+  cle?: string; libelle: string; sites: number; conso_theorique_l: number | null; sites_theorique: number; variation_l: number | null;
+  sites_variation: number; delta_l: number | null; sites_delta: number; dont?: Record<string, number>;
 };
 
 export type ConsoInventaire = { region: string | null; latitude: number | null; longitude: number | null; sla: string | null;

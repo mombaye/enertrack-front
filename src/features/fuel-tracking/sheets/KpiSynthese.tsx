@@ -3,7 +3,7 @@
 // avec le design de l'application. Toutes les valeurs sont les totaux du tableau Suivi Conso (calculs EnerTrack, aucun fichier).
 // Chaque valeur est cliquable : une fenêtre explique d'où elle vient et l'opération faite.
 import { useState } from "react";
-import type { ClosingKpis, ClosingKpiValue } from "@/services/fuelTracking";
+import type { AnalyseGroupe, ClosingKpis, ClosingKpiValue } from "@/services/fuelTracking";
 import { Modal } from "../ui";
 import { FT } from "../theme";
 
@@ -53,6 +53,7 @@ export function KpiSynthese({ data }: { data: ClosingKpis | null | undefined }) 
         <div>{LEFT.map((id) => <Row key={id} id={id} />)}</div>
         <div>{MIDDLE.map((id) => <Row key={id} id={id} />)}</div>
       </div>
+      {data.analyse && <AnalyseTable groupes={data.analyse.groupes} total={data.analyse.total} />}
       <div style={{ fontSize: 11, color: FT.textSub, marginTop: 6 }}>Cliquez sur une valeur pour voir d'où elle vient. « n.d. » = donnée non disponible (jamais remplacée par 0).</div>
 
       {open && cur && (
@@ -84,5 +85,68 @@ export function KpiSynthese({ data }: { data: ClosingKpis | null | undefined }) 
         </Modal>
       )}
     </section>
+  );
+}
+
+// Synthèse « Analyse variation de stock Vs estimation théorique » : nombre de sites et totaux par groupe (mêmes valeurs que le tableau)
+const GROUPE_COULEUR: Record<string, string> = { certifies: "#1E7B3C", alerte: "#B42318", sans_theorique: "#6B7A90", non_calculables: "#B7791F" };
+const GROUPE_AIDE: Record<string, string> = {
+  certifies: "Écart entre variation de stock et conso théorique dans la tolérance max(50 L ; 5 %)",
+  alerte: "Écart au-delà de la tolérance, ou variation de stock négative : à instruire auprès des équipes opérationnelles",
+  sans_theorique: "Conso théorique non calculable (type de GE, PRP, puissance, courbe ou temps de marche manquant)",
+  non_calculables: "Conso théorique calculée mais variation de stock non calculable (stock initial / final ou mouvements ENOC manquants)",
+};
+const litres = (v: number | null, n: number, total: number) => (v === null
+  ? <span style={{ color: FT.textSub }} title="Aucun site du groupe n'a cette valeur">n.d.</span>
+  : <span title={n < total ? `Somme sur ${n} site(s) renseigné(s) sur ${total}` : undefined} style={{ color: v < 0 ? FT.red : undefined }}>
+      {Math.round(v).toLocaleString("fr-FR")}{n < total ? " *" : ""}</span>);
+
+function AnalyseTable({ groupes, total }: { groupes: AnalyseGroupe[]; total: AnalyseGroupe }) {
+  const shown = groupes.filter((g) => g.sites > 0 || g.cle !== "non_calculables");
+  const th = { padding: "6px 8px", fontSize: 11.5, fontWeight: 800, color: FT.textMid, textAlign: "right" as const, borderBottom: `2px solid ${FT.border}` };
+  const td = { padding: "6px 8px", fontSize: 13, textAlign: "right" as const, fontVariantNumeric: "tabular-nums" as const, borderBottom: `1px solid ${FT.border}` };
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 800, color: FT.text, marginBottom: 4 }}>Analyse variation de stock Vs estimation théorique</div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 640 }}>
+          <thead>
+            <tr>
+              <th style={{ ...th, textAlign: "left" }}>Sites</th><th style={th}>Nbre de sites</th><th style={th}>Conso théorique (L)</th>
+              <th style={th}>Variation de stock (L)</th><th style={th}>DELTA théorique − variation (L)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((g) => (
+              <tr key={g.cle}>
+                <td style={{ ...td, textAlign: "left" }} title={GROUPE_AIDE[g.cle ?? ""]}>
+                  <span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 999, background: GROUPE_COULEUR[g.cle ?? ""] ?? FT.textSub, marginRight: 8 }} />
+                  {g.libelle}
+                  {g.dont && g.sites > 0 && (
+                    <span style={{ color: FT.textSub, fontSize: 11.5 }}>
+                      {" — dont "}{Object.entries(g.dont).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${k}`).join(", ")}
+                    </span>
+                  )}
+                </td>
+                <td style={{ ...td, fontWeight: 800, color: GROUPE_COULEUR[g.cle ?? ""] }}>{g.sites.toLocaleString("fr-FR")}</td>
+                <td style={td}>{litres(g.conso_theorique_l, g.sites_theorique, g.sites)}</td>
+                <td style={td}>{litres(g.variation_l, g.sites_variation, g.sites)}</td>
+                <td style={{ ...td, fontWeight: 700 }}>{litres(g.delta_l, g.sites_delta, g.sites)}</td>
+              </tr>
+            ))}
+            <tr style={{ background: "#FFF2CC" }}>
+              <td style={{ ...td, textAlign: "left", fontWeight: 800 }}>Total</td>
+              <td style={{ ...td, fontWeight: 800 }}>{total.sites.toLocaleString("fr-FR")}</td>
+              <td style={{ ...td, fontWeight: 800 }}>{litres(total.conso_theorique_l, total.sites_theorique, total.sites)}</td>
+              <td style={{ ...td, fontWeight: 800 }}>{litres(total.variation_l, total.sites_variation, total.sites)}</td>
+              <td style={{ ...td, fontWeight: 800 }}>{litres(total.delta_l, total.sites_delta, total.sites)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style={{ fontSize: 11, color: FT.textSub, marginTop: 4 }}>
+        Chaque site est compté une seule fois. « * » = somme partielle (survolez pour voir sur combien de sites).
+      </div>
+    </div>
   );
 }
