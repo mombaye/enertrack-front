@@ -242,6 +242,14 @@ const ANALYSE_VARIATION: Col[] = [
     } },
   { h: "DELTA (Conso Théorique Vs Conso Observée)", w: 120, f: "analyse_variation.delta_l", tot: ["analyse_variation", "delta_l"],
     render: (r) => litres(r.analyse_variation?.delta_l, r.analyse_variation?.motif ?? "Estimation Conso Fuel Théorique retenue − Variation de stock Fuel considérée", true, NEG_DELTA) },
+  // Seuil de tolérance de l'alerte : max(50 L ; 5 % × conso théorique)
+  { h: "Seuil de tolérance Alerte (L)", w: 110, f: "analyse_variation.tolerance_l", render: (r) => {
+    const a = r.analyse_variation;
+    if (a?.tolerance_l == null) return <span style={{ color: "#94A0B4" }} title={a?.conso_theorique_motif ?? "Conso théorique n.d. : seuil non calculable"}>n.d.</span>;
+    const min = a.tolerance_l === 50;
+    return <span title={`max(50 L ; 5 % × ${(a.conso_theorique_retenue_l ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} L) : ${min ? "50 L minimum" : "5 % de la conso théorique"}`}>
+      {a.tolerance_l.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>;
+  } },
   // Process validation conso fuel : conforme si |Variation de stock − Consommation théorique| ≤ max(50 L ; 5 %)
   { h: "Alerte App Fuel", w: 120, f: "analyse_variation.alerte", tot: ["analyse_variation", "alerte"], render: (r) => {
     const a = r.analyse_variation;
@@ -249,6 +257,13 @@ const ANALYSE_VARIATION: Col[] = [
     const ecart = a.alerte === "En écart";
     return <span title={a.alerte_motif ?? undefined} style={{ fontWeight: 800, padding: "2px 8px", borderRadius: 999,
       background: ecart ? "#FDE8E8" : "#E6F4EA", color: ecart ? "#B42318" : "#1E7B3C" }}>{ecart ? "⚠ En écart" : "✓ Conforme"}</span>;
+  } },
+  // Détail de l'alerte : texte complet au survol quand il dépasse la largeur de la colonne
+  { h: "Détail Alerte App Fuel", w: 420, left: true, render: (r) => {
+    const d = r.analyse_variation?.alerte_detail;
+    if (!d) return <span style={{ color: "#94A0B4" }}>n.d.</span>;
+    return <span title={d} style={{ display: "block", maxWidth: 408, overflow: "hidden", textOverflow: "ellipsis",
+      color: d.startsWith("Non calculable") ? "#94A0B4" : undefined }}>{d}</span>;
   } },
 ];
 const SELECTION_LABEL: Record<string, string> = {
