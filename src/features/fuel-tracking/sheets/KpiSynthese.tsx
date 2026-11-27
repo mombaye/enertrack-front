@@ -91,7 +91,7 @@ export function KpiSynthese({ data }: { data: ClosingKpis | null | undefined }) 
 // Synthèse « Analyse variation de stock Vs estimation théorique » : nombre de sites et totaux par groupe (mêmes valeurs que le tableau)
 const GROUPE_COULEUR: Record<string, string> = { certifies: "#1E7B3C", alerte: "#B42318", sans_theorique: "#6B7A90", non_calculables: "#B7791F" };
 const GROUPE_AIDE: Record<string, string> = {
-  certifies: "Écart entre variation de stock et conso théorique dans la tolérance max(50 L ; 5 %)",
+  certifies: "Écart entre variation de stock et conso théorique dans le seuil de tolérance choisi (colonne « Seuil de tolérance Alerte », par défaut max(50 L ; 5 %))",
   alerte: "Écart au-delà de la tolérance, ou variation de stock négative : à instruire auprès des équipes opérationnelles",
   sans_theorique: "Conso théorique non calculable (type de GE, PRP, puissance, courbe ou temps de marche manquant)",
   non_calculables: "Conso théorique calculée mais variation de stock non calculable (stock initial / final, mouvements ENOC ou volé / vidangé du fichier de closing manquants)",

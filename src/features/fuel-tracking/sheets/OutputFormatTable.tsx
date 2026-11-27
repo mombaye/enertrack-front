@@ -2,7 +2,7 @@
 // Tableau de Suivi Conso au format du fichier « Output App Fuel » : blocs INVENTAIRE, DONNÉES DE STOCK INITIAL et DONNÉES DE RAVITAILLEMENT.
 // Toutes les valeurs du stock initial sont prises à la DATE EXACTE du relevé initial du fichier (aucune autre période).
 import { Fragment, useState, type CSSProperties, type ReactNode } from "react";
-import type { ConsoRow } from "@/services/fuelTracking";
+import type { ConsoRow, SeuilAlerte } from "@/services/fuelTracking";
 import { ColumnFilterMenu, type ColValue } from "./ColumnFilterMenu";
 
 const NAVY = "#1F3864";
@@ -260,12 +260,11 @@ const ANALYSE_VARIATION: Col[] = [
     } },
   { h: "DELTA (Conso Théorique Vs Conso Observée)", w: 120, f: "analyse_variation.delta_l", tot: ["analyse_variation", "delta_l"],
     render: (r) => litres(r.analyse_variation?.delta_l, r.analyse_variation?.motif ?? "Estimation Conso Fuel Théorique retenue − Variation de stock Fuel considérée", true, NEG_DELTA) },
-  // Seuil de tolérance de l'alerte : max(50 L ; 5 % × conso théorique)
-  { h: "Seuil de tolérance Alerte (L)", w: 110, f: "analyse_variation.tolerance_l", render: (r) => {
+  // Seuil de tolérance de l'alerte : formule choisie dans la liste déroulante de l'en-tête (par défaut max(50 L ; 5 % × conso théorique))
+  { h: "Seuil de tolérance Alerte (L)", w: 150, f: "analyse_variation.tolerance_l", render: (r) => {
     const a = r.analyse_variation;
     if (a?.tolerance_l == null) return <span style={{ color: "#94A0B4" }} title={a?.conso_theorique_motif ?? "Conso théorique n.d. : seuil non calculable"}>n.d.</span>;
-    const min = a.tolerance_l === 50;
-    return <span title={`max(50 L ; 5 % × ${(a.conso_theorique_retenue_l ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} L) : ${min ? "50 L minimum" : "5 % de la conso théorique"}`}>
+    return <span title={a.tolerance_formule ?? `max(50 L ; 5 % × ${(a.conso_theorique_retenue_l ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} L)`}>
       {a.tolerance_l.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>;
   } },
   // Process validation conso fuel : conforme si |Variation de stock − Consommation théorique| ≤ max(50 L ; 5 %)
@@ -332,7 +331,10 @@ const RAVITAILLEMENT: Col[] = [
     render: closing((r) => r.ravitaillement?.vidange_closing_l, "Qté vidangée / Fuite / Écart de stock") },
 ];
 
-export function OutputFormatTable({ rows, onDetail, totaux, nbSites, colFilters, onColFilter, loadValues }: { rows: ConsoRow[]; onDetail: (r: ConsoRow) => void; totaux?: ConsoTotaux; nbSites?: number } & ColFilterProps) {
+export function OutputFormatTable({ rows, onDetail, totaux, nbSites, colFilters, onColFilter, loadValues, seuil, onSeuil }: {
+  rows: ConsoRow[]; onDetail: (r: ConsoRow) => void; totaux?: ConsoTotaux; nbSites?: number;
+  seuil?: SeuilAlerte; onSeuil?: (code: string) => void;   // liste déroulante « Seuil de tolérance Alerte » : appliqué à tous les sites
+} & ColFilterProps) {
   const [menu, setMenu] = useState<{ key: string; title: string; anchor: DOMRect } | null>(null);
   // En-tête de colonne + bouton ▼ (filtre « comme Excel ») ; bouton plein quand un filtre est actif sur la colonne :
   // un clic sur ce même bouton enlève alors le filtre de la colonne
@@ -415,7 +417,15 @@ export function OutputFormatTable({ rows, onDetail, totaux, nbSites, colFilters,
             {groups.map((g) => (
               <Fragment key={g.name}>
                 <th aria-hidden style={{ ...gap, position: "sticky", top: TOT_H + 30, zIndex: 2 }} />
-                {g.cols.map((c) => <th key={c.h} scope="col" style={{ ...th, minWidth: c.w, maxWidth: c.w }}>{head(c.h, c.f)}</th>)}
+                {g.cols.map((c) => <th key={c.h} scope="col" style={{ ...th, minWidth: c.w, maxWidth: c.w }}>{head(c.h, c.f)}
+                  {c.f === "analyse_variation.tolerance_l" && seuil && onSeuil && (
+                    <select aria-label="Formule du seuil de tolérance (tous les sites)" value={seuil.code} onChange={(e) => onSeuil(e.target.value)}
+                      title={`Formule appliquée à tous les sites : ${seuil.options.find((o) => o.code === seuil.code)?.libelle ?? ""}`}
+                      style={{ display: "block", width: "100%", marginTop: 5, fontSize: 10.5, fontWeight: 600, padding: "2px 3px", borderRadius: 5,
+                        border: "1px solid #8EA9DB", background: seuil.code === seuil.defaut ? "#fff" : "#FFC000", color: "#000", cursor: "pointer" }}>
+                      {seuil.options.map((o) => <option key={o.code} value={o.code}>{o.libelle}</option>)}
+                    </select>
+                  )}</th>)}
               </Fragment>
             ))}
           </tr>

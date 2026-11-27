@@ -2118,7 +2118,7 @@ export type ConsoRow = {
     conso_theorique_retenue_l: number | null; conso_theorique_motif: string | null; variation_l: number | null; variation_motif: string | null;
     delta_l: number | null; grande_difference: "Oui" | "Non" | null; motif: string | null; seuil_l: number;
     /** Alerte App Fuel : « Conforme » si |DELTA| ≤ tolérance = max(50 L ; 5 % × conso théorique), « En écart » sinon ; null = n.d. */
-    tolerance_l: number | null; alerte: "Conforme" | "En écart" | "Variation négative" | null; alerte_motif: string | null;
+    tolerance_l: number | null; tolerance_formule?: string | null; seuil_code?: string; alerte: "Conforme" | "En écart" | "Variation négative" | null; alerte_motif: string | null;
     /** Détail lisible de l'alerte : valeurs comparées, sens et taille de l'écart, seuil appliqué, action ; « Non calculable : … » sinon. */
     alerte_detail: string | null };
   ravitaillement?: ConsoRavitaillement;
@@ -2210,12 +2210,15 @@ export type ConsoStockInitialSources = { date: string | null; terrain_l: number 
   retenue_l: number | null; source: string | null; compteur_terrain_h?: number | null; compteur_gardiennage_h: number | null; compteur_fms_h: number | null;
   compteur_retenu_h: number | null; source_compteur: string | null };
 
+export type SeuilAlerte = { code: string; defaut: string; options: Array<{ code: string; libelle: string }> };
+
 export type ConsoResponse = {
   avertissement_sources?: string | null;
   /** Ligne de totaux du tableau : {bloc: {champ: {total, sites}}} sur tous les sites du filtre (null si indisponible). */
   totaux?: Record<string, Record<string, { total: number | null; sites: number }>> | null;
   /** Sites de la page dont les valeurs Snowflake FMS / ENOC gardien sont en cours de lecture (tâche de fond) : 0 = tout est là. */
   sources_en_attente?: number;
+  seuil_alerte?: SeuilAlerte;   // seuil de tolérance de l'Alerte App Fuel appliqué à tous les sites + choix possibles
   kpis_closing?: ClosingKpis | null;
   detail?: string;
   fraicheur?: ConsoFraicheur;
@@ -2244,6 +2247,7 @@ export type ConsoFilters = {
   qualite?: string; correspondance?: string; tri?: string; page?: number; page_size?: number;
   fabricant_ge?: string; type_ge?: string; source_ge?: string; avec_ge?: string;
   filtres_colonnes?: string;   // JSON {colonne: [valeurs cochées]} (filtres « comme Excel » des en-têtes)
+  seuil?: string;              // seuil de tolérance de l'Alerte App Fuel (code « minimum L_pourcentage »), tous les sites
 };
 
 /** Valeurs d'une colonne du tableau Suivi Conso (bouton ▼ de l'en-tête), parmi les sites retenus par les autres filtres. */
