@@ -94,7 +94,7 @@ const GROUPE_AIDE: Record<string, string> = {
   certifies: "Écart entre variation de stock et conso théorique dans la tolérance max(50 L ; 5 %)",
   alerte: "Écart au-delà de la tolérance, ou variation de stock négative : à instruire auprès des équipes opérationnelles",
   sans_theorique: "Conso théorique non calculable (type de GE, PRP, puissance, courbe ou temps de marche manquant)",
-  non_calculables: "Conso théorique calculée mais variation de stock non calculable (stock initial / final ou mouvements ENOC manquants)",
+  non_calculables: "Conso théorique calculée mais variation de stock non calculable (stock initial / final, mouvements ENOC ou volé / vidangé du fichier de closing manquants)",
 };
 const litres = (v: number | null, n: number, total: number) => (v === null
   ? <span style={{ color: FT.textSub }} title="Aucun site du groupe n'a cette valeur">n.d.</span>

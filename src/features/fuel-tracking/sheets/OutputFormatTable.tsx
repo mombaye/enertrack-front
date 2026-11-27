@@ -244,7 +244,7 @@ const litres = (v: number | null | undefined, tip: string, bold = false, neg?: s
   : v < 0 ? <span title={`Valeur négative${neg ? ` : ${neg}` : ""} — ${tip}`} style={{ color: "#B7791F", fontWeight: bold ? 700 : undefined }}>
       {v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} *</span>
   : <span title={tip} style={bold ? { fontWeight: 700 } : undefined}>{v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>);
-const VAR_FORMULE = "Qtité laissée retenue (initiale) + EYDON + CARTE TOTAL + Ajout − Retrait − QTE volée − QTE vidangée / Fuite − Qtité laissée retenue (finale)";
+const VAR_FORMULE = "Qtité laissée retenue (initiale) + EYDON + CARTE TOTAL + Ajout − Retrait − QTE volée − QTE vidangée / Fuite (fichier de closing) − Qtité laissée retenue (finale)";
 const ANALYSE_VARIATION: Col[] = [
   { h: "Estimation Conso Fuel Théorique retenue  (L)", w: 120, f: "analyse_variation.conso_theorique_retenue_l", tot: ["analyse_variation", "conso_theorique_retenue_l"],
     render: (r) => litres(r.analyse_variation?.conso_theorique_retenue_l, r.analyse_variation?.conso_theorique_motif ?? "CPH théorique × Temps de marche GE retenu") },
@@ -307,18 +307,29 @@ const SELECTION_ORIGINE: Record<string, string> = {
   LOAD_DC_SEUL: "Load DC telco (AVERAGE_LOAD, Snowflake) ; recharge batterie n.d. : puissance probablement sous-estimée",
   PUISSANCE_GRID_MEDIANE: "Médiane des puissances AC journalières (compteur AC, Snowflake) : retenue car GE, redresseur et load DC sont n.d.",
 };
-// 6 totaux lus dans ENOC sur la plage de dates de la ligne du fichier du site (Date de Relevé Initiale → Date de Relevé Finale)
+// 4 totaux lus dans ENOC sur la plage de dates de la ligne du fichier du site (Date de Relevé Initiale → Date de Relevé Finale)
 const periodeEnoc = (r: ConsoRow) => (r.ravitaillement?.debut && r.ravitaillement?.fin
   ? `ENOC, du ${fr(r.ravitaillement.debut)} au ${fr(r.ravitaillement.fin)} (${r.ravitaillement.nb_mouvements_enoc ?? 0} mouvement(s) sur le site)`
   : "Pas de dates de relevé dans le fichier pour ce site : non calculé");
 const enoc = (v: (r: ConsoRow) => number | null | undefined) => (r: ConsoRow) => <span title={periodeEnoc(r)}>{num(v(r))}</span>;
+// Total QTE volée / vidangée : lues telles quelles sur la ligne du fichier de closing de la période ; ce sont elles qui entrent
+// dans la variation de stock (les vols / vidanges ENOC sont mis de côté pour le moment)
+const closing = (v: (r: ConsoRow) => number | null | undefined, champ: string) => (r: ConsoRow) => {
+  const x = v(r);
+  const per = r.ravitaillement?.debut && r.ravitaillement?.fin ? ` (période du ${fr(r.ravitaillement.debut)} au ${fr(r.ravitaillement.fin)})` : "";
+  return <span title={x === null || x === undefined
+    ? `Source : fichier de closing — « ${champ} » vide, ou site absent du fichier pour cette période : non renseigné (pas 0), variation de stock non calculée`
+    : `Source : fichier de closing — colonne « ${champ} » de la ligne du site${per}. Valeur utilisée dans la variation de stock (vols / vidanges ENOC mis de côté).`}>{num(x)}</span>;
+};
 const RAVITAILLEMENT: Col[] = [
   { h: "Total Livraison Fuel EYDON", w: 105, f: "ravitaillement.eydon_l", tot: ["ravitaillement", "eydon_l"], render: enoc((r) => r.ravitaillement?.eydon_l) },
   { h: "Total Livraison Fuel CARTE TOTAL", w: 105, f: "ravitaillement.carte_total_l", tot: ["ravitaillement", "carte_total_l"], render: enoc((r) => r.ravitaillement?.carte_total_l) },
   { h: "Total Ajout", w: 90, f: "ravitaillement.ajout_l", tot: ["ravitaillement", "ajout_l"], render: enoc((r) => r.ravitaillement?.ajout_l) },
   { h: "Total Retrait", w: 90, f: "ravitaillement.retrait_l", tot: ["ravitaillement", "retrait_l"], render: enoc((r) => r.ravitaillement?.retrait_l) },
-  { h: "Total QTE volée déclarée", w: 100, f: "ravitaillement.vole_l", tot: ["ravitaillement", "vole_l"], render: enoc((r) => r.ravitaillement?.vole_l) },
-  { h: "Total QTE vidangée / Fuite / Ecart de Stock", w: 120, f: "ravitaillement.fuite_l", tot: ["ravitaillement", "fuite_l"], render: enoc((r) => r.ravitaillement?.fuite_l) },
+  { h: "Total QTE volée déclarée", w: 100, f: "ravitaillement.vole_closing_l", tot: ["ravitaillement", "vole_closing_l"],
+    render: closing((r) => r.ravitaillement?.vole_closing_l, "Qté volée") },
+  { h: "Total QTE vidangée / Fuite / Ecart de Stock", w: 120, f: "ravitaillement.vidange_closing_l", tot: ["ravitaillement", "vidange_closing_l"],
+    render: closing((r) => r.ravitaillement?.vidange_closing_l, "Qté vidangée / Fuite / Écart de stock") },
 ];
 
 export function OutputFormatTable({ rows, onDetail, totaux, nbSites, colFilters, onColFilter, loadValues }: { rows: ConsoRow[]; onDetail: (r: ConsoRow) => void; totaux?: ConsoTotaux; nbSites?: number } & ColFilterProps) {
