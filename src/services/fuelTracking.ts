@@ -2106,6 +2106,9 @@ export type ConsoRow = {
     conso_fuel_sensor_jours_periode?: number | null; conso_fuel_sensor_motif?: string | null; conso_fuel_sensor_reserve?: boolean;
     conso_fuel_sensor_niveau_debut_l?: number | null; conso_fuel_sensor_niveau_fin_l?: number | null;
     conso_fuel_sensor_remplissages?: number | null; conso_fuel_sensor_remplissages_l?: number | null;
+    /** ANCIEN calcul (comparaison seulement) : somme des baisses signalées par Snowflake (DROP_DETECTED). */
+    conso_fuel_sensor_avant_l?: number | null; conso_fuel_sensor_avant_jours?: number | null; conso_fuel_sensor_avant_baisses?: number | null;
+    conso_fuel_sensor_avant_motif?: string | null; conso_fuel_sensor_avant_reserve?: boolean;
     /** Estimation Conso Fuel Théorique retenue (règle Ops) = conso théorique CPH seule ; source « calcul cph et temps de marche GE ». */
     conso_retenue_l?: number | null; conso_retenue_source?: string | null; conso_retenue_motif?: string | null };
   /** Bloc « ANALYSE VARIATION DE STOCK Vs ESTIMATION THÉORIQUE » (règles du fichier Output App Fuel d'Ops) :

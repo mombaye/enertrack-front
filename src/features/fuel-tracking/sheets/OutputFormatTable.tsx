@@ -203,10 +203,24 @@ const ESTIMATION_THEORIQUE: Col[] = [
       ? <span title={tip} style={{ color: "#B7791F" }}>{e.conso_theorique_l.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} *</span>
       : <b>{kw(e?.conso_theorique_l, tip)}</b>;
   } },
-  { h: "Consommation Snowflake fuel sensor (L)", w: 120, f: "estimation_theorique.conso_fuel_sensor_l", tot: ["estimation_theorique", "conso_fuel_sensor_l"], render: (r) => {
+  // AVANT / APRÈS : ancien calcul (baisses signalées par Snowflake) gardé à côté du nouveau (niveau de cuve) pour comparer
+  { h: "Consommation Snowflake fuel sensor — Avant (L)", w: 120, f: "estimation_theorique.conso_fuel_sensor_avant_l",
+    tot: ["estimation_theorique", "conso_fuel_sensor_avant_l"], render: (r) => {
+    const e = r.estimation_theorique;
+    const tip = ["AVANT (ancien calcul, plus utilisé) : somme, jour par jour, des seules baisses de niveau que Snowflake a lui-même signalées (VW_FUEL_REPORT, DROP_DETECTED). Un jour sans baisse signalée compte 0 L",
+      "Ce signal ne se déclenche presque jamais pour la consommation normale du GE : d'où 0 L alors que le niveau de la cuve baisse",
+      `${e?.conso_fuel_sensor_avant_baisses ?? 0} baisse(s) signalée(s) sur ${e?.conso_fuel_sensor_avant_jours ?? 0} jour(s) mesuré(s)`,
+      e?.conso_fuel_sensor_avant_motif ?? null].filter(Boolean).join(" ; ");
+    const v = e?.conso_fuel_sensor_avant_l;
+    return v == null ? <span style={{ color: "#94A0B4" }} title={tip}>n.d.</span>
+      : <span title={tip} style={{ color: "#6B7A90" }}>{v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{e?.conso_fuel_sensor_avant_reserve ? " *" : ""}</span>;
+  } },
+  { h: "Consommation Snowflake fuel sensor — Après (L)", w: 120, f: "estimation_theorique.conso_fuel_sensor_l", tot: ["estimation_theorique", "conso_fuel_sensor_l"], render: (r) => {
     const e = r.estimation_theorique;
     const l2 = (v?: number | null) => v == null ? "n.d." : `${v.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} L`;
-    const tip = ["Niveau de cuve FMS au relevé initial − niveau au relevé final + remplissages vus par le capteur (hausse ≥ 50 L d'un jour à l'autre ; en dessous = bruit)",
+    const tip = ["APRÈS (nouveau calcul, validé par le Fuel Manager) : niveau de cuve FMS au relevé initial − niveau au relevé final + remplissages vus par le capteur (hausse ≥ 50 L d'un jour à l'autre ; en dessous = bruit du capteur)",
+      e?.conso_fuel_sensor_niveau_debut_l != null && e?.conso_fuel_sensor_niveau_fin_l != null && e?.conso_fuel_sensor_l != null
+        ? `Calcul : ${l2(e.conso_fuel_sensor_niveau_debut_l)} − ${l2(e.conso_fuel_sensor_niveau_fin_l)} + ${l2(e.conso_fuel_sensor_remplissages_l ?? 0)} = ${l2(e.conso_fuel_sensor_l)}` : null,
       `Niveau initial ${l2(e?.conso_fuel_sensor_niveau_debut_l)} · niveau final ${l2(e?.conso_fuel_sensor_niveau_fin_l)} · ${e?.conso_fuel_sensor_remplissages ?? 0} remplissage(s) vu(s) (${l2(e?.conso_fuel_sensor_remplissages_l ?? 0)})`,
       `${e?.conso_fuel_sensor_jours ?? 0} jour(s) avec niveau sur ${e?.conso_fuel_sensor_jours_periode ?? "?"}`,
       e?.conso_fuel_sensor_motif ?? null].filter(Boolean).join(" ; ");
