@@ -312,10 +312,14 @@ const periodeEnoc = (r: ConsoRow) => (r.ravitaillement?.debut && r.ravitaillemen
   : "Pas de dates de relevé dans le fichier pour ce site : non calculé");
 const enoc = (v: (r: ConsoRow) => number | null | undefined) => (r: ConsoRow) => <span title={periodeEnoc(r)}>{num(v(r))}</span>;
 // Total QTE volée / vidangée : lues telles quelles sur la ligne du fichier de closing de la période ; ce sont elles qui entrent
-// dans la variation de stock (les vols / vidanges ENOC sont mis de côté pour le moment)
-const closing = (v: (r: ConsoRow) => number | null | undefined, champ: string) => (r: ConsoRow) => {
+// dans la variation de stock. Période personnalisée (aucun bilan) : déclarations ENOC de la période (le fichier n'a que des totaux mensuels).
+const closing = (v: (r: ConsoRow) => number | null | undefined, champ: string, quoi: string) => (r: ConsoRow) => {
   const x = v(r);
   const per = r.ravitaillement?.debut && r.ravitaillement?.fin ? ` (période du ${fr(r.ravitaillement.debut)} au ${fr(r.ravitaillement.fin)})` : "";
+  if (r.periode_personnalisee) {
+    return <span title={x === null || x === undefined ? "Source : ENOC — pas de dates de relevé pour ce site : non calculé"
+      : `Source : ENOC — ${quoi} déclarés dans ENOC${per}. Période personnalisée : le fichier de closing n'a que des totaux mensuels.`}>{num(x)}</span>;
+  }
   return <span title={x === null || x === undefined
     ? `Source : fichier de closing — « ${champ} » vide, ou site absent du fichier pour cette période : non renseigné (pas 0), variation de stock non calculée`
     : `Source : fichier de closing — colonne « ${champ} » de la ligne du site${per}. Valeur utilisée dans la variation de stock (vols / vidanges ENOC mis de côté).`}>{num(x)}</span>;
@@ -325,10 +329,10 @@ const RAVITAILLEMENT: Col[] = [
   { h: "Total Livraison Fuel CARTE TOTAL", w: 105, f: "ravitaillement.carte_total_l", tot: ["ravitaillement", "carte_total_l"], render: enoc((r) => r.ravitaillement?.carte_total_l) },
   { h: "Total Ajout", w: 90, f: "ravitaillement.ajout_l", tot: ["ravitaillement", "ajout_l"], render: enoc((r) => r.ravitaillement?.ajout_l) },
   { h: "Total Retrait", w: 90, f: "ravitaillement.retrait_l", tot: ["ravitaillement", "retrait_l"], render: enoc((r) => r.ravitaillement?.retrait_l) },
-  { h: "Total QTE volée déclarée", w: 100, f: "ravitaillement.vole_closing_l", tot: ["ravitaillement", "vole_closing_l"],
-    render: closing((r) => r.ravitaillement?.vole_closing_l, "Qté volée") },
-  { h: "Total QTE vidangée / Fuite / Ecart de Stock", w: 120, f: "ravitaillement.vidange_closing_l", tot: ["ravitaillement", "vidange_closing_l"],
-    render: closing((r) => r.ravitaillement?.vidange_closing_l, "Qté vidangée / Fuite / Écart de stock") },
+  { h: "Total QTE volée déclarée", w: 100, f: "ravitaillement.vole_retenu_l", tot: ["ravitaillement", "vole_retenu_l"],
+    render: closing((r) => r.ravitaillement?.vole_retenu_l, "Qté volée", "vols") },
+  { h: "Total QTE vidangée / Fuite / Ecart de Stock", w: 120, f: "ravitaillement.vidange_retenu_l", tot: ["ravitaillement", "vidange_retenu_l"],
+    render: closing((r) => r.ravitaillement?.vidange_retenu_l, "Qté vidangée / Fuite / Écart de stock", "vidanges / fuites") },
 ];
 
 export function OutputFormatTable({ rows, onDetail, totaux, nbSites, colFilters, onColFilter, loadValues, seuil, onSeuil }: {

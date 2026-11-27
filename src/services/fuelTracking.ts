@@ -2061,6 +2061,8 @@ export type ConsoGapExplication = {
 export type ConsoGap = { ecart_l: number | null; ecart_pct: number | null; pct_na: string | null };
 
 export type ConsoRow = {
+  /** Période personnalisée (aucun bilan) : dates de relevé utilisées par tout le tableau (veille du début → fin). */
+  periode_personnalisee?: { releve_initial: string; releve_final: string };
   inventaire?: ConsoInventaire; stock_initial_sources?: ConsoStockInitialSources;
   /** Bloc « DONNÉES DE STOCK FINAL » : mêmes champs, à la Date de Relevé Finale du fichier. */
   stock_final_sources?: ConsoStockInitialSources;
@@ -2202,7 +2204,8 @@ export type ConsoInventaire = { region: string | null; latitude: number | null; 
 /** Bloc « DONNÉES DE RAVITAILLEMENT » : les 6 totaux viennent d'ENOC, sur la plage « Date de Relevé Initiale » → « Date de Relevé
  *  Finale » de la ligne du fichier du site (debut / fin). null = pas de dates de fichier pour ce site (jamais 0 par défaut). */
 export type ConsoRavitaillement = { eydon_l: number | null; carte_total_l: number | null; ajout_l: number | null; retrait_l: number | null;
-  vole_l: number | null; fuite_l: number | null; vole_closing_l?: number | null; vidange_closing_l?: number | null; nb_mouvements_enoc: number | null; source: string | null; debut: string | null; fin: string | null;
+  vole_l: number | null; fuite_l: number | null; vole_closing_l?: number | null; vidange_closing_l?: number | null; vole_retenu_l?: number | null; vidange_retenu_l?: number | null;
+  pertes_source?: string | null; nb_mouvements_enoc: number | null; source: string | null; debut: string | null; fin: string | null;
   /** « Date de Relevé Finale » lue telle quelle dans la ligne du fichier de clôture (contrôle) ; null si absente du fichier. */
   date_finale_fichier?: string | null };
 
@@ -2224,6 +2227,7 @@ export type ConsoResponse = {
   fraicheur?: ConsoFraicheur;
   periode: {
     debut: string; fin: string; libelle: string; jours: number; bilan_disponible: boolean; sites_avec_bilan: number; sites_calculables: number; par_defaut?: boolean;
+    personnalisee?: { releve_initial: string; releve_final: string };   // période sans bilan : calcul sur ces deux dates de relevé
   } | null;
   kpis: ConsoKpis;
   rows: ConsoRow[];

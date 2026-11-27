@@ -21,6 +21,7 @@ import { SiteDetailModal } from "./ControleCphSheet";
 const nf = (v: number | null | undefined, d = 0) => (v === null || v === undefined ? "—" : v.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d }));
 const signed = (v: number | null | undefined, d = 0) => (v === null || v === undefined ? "—" : `${v > 0 ? "+" : ""}${nf(v, d)}`);
 const mono: CSSProperties = { fontVariantNumeric: "tabular-nums" };
+const fmtDay = (d: string) => d.slice(0, 10).split("-").reverse().join("/");   // AAAA-MM-JJ → JJ/MM/AAAA
 const dash = <span style={{ color: FT.textSub }}>—</span>;
 
 const STATUT_META: Record<ConsoStatutBilan, { label: string; tone: Tone }> = {
@@ -321,9 +322,17 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
   return (
     <section aria-label="Suivis Consommations" style={{ display: "grid", gap: 14 }}>
       {d?.detail && !per && <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.orangeL, color: FT.orange, fontWeight: 700, fontSize: 13 }}>{d.detail}</div>}
-      {per && noBilan && (
+      {per && noBilan && !per.personnalisee && (
         <div role="alert" style={{ padding: 12, borderRadius: FT.radius, background: FT.orangeL, color: FT.text, fontSize: 13 }}>
           Aucun bilan de stock enregistré pour cette période ({per.libelle}). Choisissez un mois dans le sélecteur de période de l'en-tête.
+        </div>
+      )}
+      {per?.personnalisee && (
+        <div role="status" style={{ padding: 12, borderRadius: FT.radius, background: FT.blueL, color: FT.text, fontSize: 13, lineHeight: 1.5 }}>
+          <b>Période personnalisée</b> (aucun bilan de clôture sur ces dates) : stocks relevés le {fmtDay(per.personnalisee.releve_initial)} (veille du début)
+          et le {fmtDay(per.personnalisee.releve_final)} — Fuel Sensor FMS, sinon relevé de gardien ENOC du jour, sinon n.d. (pas de relevé de terrain
+          hors dates de clôture). Livraisons, ajouts, retraits, vols et vidanges : ENOC sur la période. Temps de marche, puissances, CPH et conso
+          théorique : mêmes règles que pour un mois.
         </div>
       )}
       {q.isError && (
