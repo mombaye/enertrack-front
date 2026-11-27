@@ -484,7 +484,7 @@ export function ConsoComparaisonSection({ extra, period }: { extra?: ReactNode; 
         <div style={{ opacity: pageLoading ? 0.45 : 1, transition: "opacity .15s", pointerEvents: pageLoading ? "none" : undefined }} aria-busy={pageLoading}>
           <OutputFormatTable rows={(d?.rows ?? []).map(safeRow)} onDetail={(r) => setDetail({ row: r, tab: "hub" })} totaux={d?.totaux} nbSites={d?.total}
             colFilters={colFilters} onColFilter={setColFilter} loadValues={(key) => getConsoValeurs(params, key)}
-            seuil={d?.seuil_alerte} onSeuil={(code) => set("seuil", code === d?.seuil_alerte?.defaut ? "" : code)} />
+            mois={d?.analyse_mensuelle} seuil={d?.seuil_alerte} onSeuil={(code) => set("seuil", code === d?.seuil_alerte?.defaut ? "" : code)} />
         </div>
         <nav aria-label="Pagination des sites" style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between", alignItems: "center", padding: "8px 12px", fontSize: 12, color: FT.textMid }}>
           <span>

@@ -2123,6 +2123,15 @@ export type ConsoRow = {
     tolerance_l: number | null; tolerance_formule?: string | null; seuil_code?: string; alerte: "Conforme" | "En écart" | "Variation négative" | null; alerte_motif: string | null;
     /** Détail lisible de l'alerte : valeurs comparées, sens et taille de l'écart, seuil appliqué, action ; « Non calculable : … » sinon. */
     alerte_detail: string | null };
+  /** Bloc « ANALYSE ESTIMATION CONSOMMATION FUEL MENSUELLE Vs CONSOMMATION FUEL MOIS PRÉCÉDENT » (Output App Fuel d'Ops, BX → CB) :
+   *  conso moyenne = variation ÷ nb jours ; estimation = moyenne × jours du mois N ;
+   *  équivalent N-1 = Qtité cons considérée du closing N-1 ÷ ses jours × jours du mois N ; delta = estimation − équivalent. null = n.d. */
+  analyse_mensuelle?: {
+    nb_jours: number | null; conso_moyenne_l_j: number | null; conso_moyenne_motif: string | null;
+    mois_n: string | null; mois_n_libelle: string | null; jours_mois_n: number | null; estimation_mois_l: number | null;
+    mois_n1: string | null; mois_n1_libelle: string | null; conso_n1_l: number | null; jours_n1: number | null;
+    periode_n1: [string | null, string | null] | null; fichier_n1?: string | null; formule_n1_coherente?: boolean | null;
+    equivalent_n1_l: number | null; equivalent_n1_motif: string | null; delta_l: number | null; delta_motif: string | null };
   ravitaillement?: ConsoRavitaillement;
   site_id: string;
   site_name: string | null;
@@ -2214,6 +2223,9 @@ export type ConsoStockInitialSources = { date: string | null; terrain_l: number 
   compteur_retenu_h: number | null; source_compteur: string | null };
 
 export type SeuilAlerte = { code: string; defaut: string; options: Array<{ code: string; libelle: string }> };
+/** Mois N (période affichée) et N-1 des en-têtes du bloc d'analyse mensuelle : jamais figés. */
+export type MoisAnalyse = { mois_n: string | null; mois_n_libelle: string | null; jours_mois_n: number | null;
+  mois_n1: string | null; mois_n1_libelle: string | null; jours_mois_n1: number | null };
 
 export type ConsoResponse = {
   avertissement_sources?: string | null;
@@ -2221,6 +2233,7 @@ export type ConsoResponse = {
   totaux?: Record<string, Record<string, { total: number | null; sites: number }>> | null;
   /** Sites de la page dont les valeurs Snowflake FMS / ENOC gardien sont en cours de lecture (tâche de fond) : 0 = tout est là. */
   sources_en_attente?: number;
+  analyse_mensuelle?: MoisAnalyse;   // libellés des mois N / N-1 du bloc d'analyse mensuelle
   seuil_alerte?: SeuilAlerte;   // seuil de tolérance de l'Alerte App Fuel appliqué à tous les sites + choix possibles
   kpis_closing?: ClosingKpis | null;
   detail?: string;

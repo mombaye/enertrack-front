@@ -2,7 +2,7 @@
 // Tableau de Suivi Conso au format du fichier « Output App Fuel » : blocs INVENTAIRE, DONNÉES DE STOCK INITIAL et DONNÉES DE RAVITAILLEMENT.
 // Toutes les valeurs du stock initial sont prises à la DATE EXACTE du relevé initial du fichier (aucune autre période).
 import { Fragment, useState, type CSSProperties, type ReactNode } from "react";
-import type { ConsoRow, SeuilAlerte } from "@/services/fuelTracking";
+import type { ConsoRow, MoisAnalyse, SeuilAlerte } from "@/services/fuelTracking";
 import { ColumnFilterMenu, type ColValue } from "./ColumnFilterMenu";
 
 const NAVY = "#1F3864";
@@ -288,6 +288,38 @@ const ANALYSE_VARIATION: Col[] = [
       borderLeft: `3px solid ${color}`, color: a?.alerte ? "#1B2433" : "#6B7A90" }}>{d}</span>;
   } },
 ];
+// Bloc « ANALYSE ESTIMATION CONSOMMATION FUEL MENSUELLE Vs CONSOMMATION FUEL MOIS PRÉCÉDENT » (colonnes BX → CB du fichier
+// Output App Fuel d'Ops) : en-têtes construits avec les mois de la période affichée (jamais figés) ; n.d. avec sa raison au survol
+const analyseMensuelle = (m?: MoisAnalyse): Col[] => {
+  const n = m?.mois_n_libelle ?? "MOIS EN COURS", n1 = m?.mois_n1_libelle ?? "MOIS PRÉCÉDENT", j = m?.jours_mois_n;
+  const jtxt = j ? `${j} jours` : "nombre de jours du mois";
+  return [
+    { h: "Nbre Jour cons", w: 80, f: "analyse_mensuelle.nb_jours", render: (r) => {
+      const a = r.analyse_mensuelle;
+      return a?.nb_jours == null ? <span style={{ color: "#94A0B4" }} title="Dates de relevé absentes">n.d.</span>
+        : <span title={`Date de Relevé Finale − Date de Relevé Initiale (${fr(r.stock_initial_sources?.date)} → ${fr(r.ravitaillement?.date_finale_fichier ?? r.stock_final_sources?.date)})`}>{a.nb_jours}</span>;
+    } },
+    { h: "Conso Moyenne sur la période [L/jr]", w: 110, f: "analyse_mensuelle.conso_moyenne_l_j", tot: ["analyse_mensuelle", "conso_moyenne_l_j"],
+      render: (r) => litres(r.analyse_mensuelle?.conso_moyenne_l_j, r.analyse_mensuelle?.conso_moyenne_motif
+        ?? "Variation de stock Fuel considérée ÷ Nbre Jour cons", false, NEG_VAR) },
+    { h: `Estimation Consommation Mois de ${n}`, w: 130, f: "analyse_mensuelle.estimation_mois_l", tot: ["analyse_mensuelle", "estimation_mois_l"],
+      render: (r) => litres(r.analyse_mensuelle?.estimation_mois_l, r.analyse_mensuelle?.conso_moyenne_motif
+        ? `n.d. : ${r.analyse_mensuelle.conso_moyenne_motif}` : `Conso Moyenne sur la période × ${jtxt} (${n})`, true, NEG_VAR) },
+    { h: `Equivalent consommation Mois de ${n1} sur ${jtxt}`, w: 140, f: "analyse_mensuelle.equivalent_n1_l", tot: ["analyse_mensuelle", "equivalent_n1_l"],
+      render: (r) => {
+        const a = r.analyse_mensuelle;
+        if (a?.equivalent_n1_l == null) return litres(null, a?.equivalent_n1_motif ?? "Fichier de closing N-1 absent");
+        const per = a.periode_n1 ? ` du ${fr(a.periode_n1[0])} au ${fr(a.periode_n1[1])}` : "";
+        const tip = `Source : fichier de closing de ${n1}${a.fichier_n1 ? ` (${a.fichier_n1})` : ""} — Qtité cons considérée ${(a.conso_n1_l ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} L`
+          + `${per} (${a.jours_n1} jours) ÷ ${a.jours_n1} × ${a.jours_mois_n}` + (a.formule_n1_coherente === false ? " — formule du closing N-1 signalée incohérente : à vérifier" : "");
+        return litres(a.equivalent_n1_l, tip);
+      } },
+    { h: `Delta conso ${n} Vs ${n1}`, w: 130, f: "analyse_mensuelle.delta_l", tot: ["analyse_mensuelle", "delta_l"],
+      render: (r) => litres(r.analyse_mensuelle?.delta_l, r.analyse_mensuelle?.delta_motif
+        ?? `Estimation Consommation Mois de ${n} − Equivalent consommation Mois de ${n1}`, true,
+        `consommation estimée en ${n.toLowerCase()} inférieure au mois précédent (${n1.toLowerCase()})`) },
+  ];
+};
 const SELECTION_LABEL: Record<string, string> = {
   PUISSANCE_MEDIANE_GE: "puissance médiane GE", PUISSANCE_MEDIANE_REDRESSEUR: "puissance médiane redresseur",
   LOAD_DC_PLUS_RECHARGE_BATTERIE: "Load DC telco + Recharge batterie", LOAD_DC_SEUL: "Load DC telco seul (recharge batterie n.d.)",
@@ -335,8 +367,9 @@ const RAVITAILLEMENT: Col[] = [
     render: closing((r) => r.ravitaillement?.vidange_retenu_l, "Qté vidangée / Fuite / Écart de stock", "vidanges / fuites") },
 ];
 
-export function OutputFormatTable({ rows, onDetail, totaux, nbSites, colFilters, onColFilter, loadValues, seuil, onSeuil }: {
+export function OutputFormatTable({ rows, onDetail, totaux, nbSites, colFilters, onColFilter, loadValues, seuil, onSeuil, mois }: {
   rows: ConsoRow[]; onDetail: (r: ConsoRow) => void; totaux?: ConsoTotaux; nbSites?: number;
+  mois?: MoisAnalyse;   // mois N / N-1 de la période affichée (en-têtes du bloc d'analyse mensuelle)
   seuil?: SeuilAlerte; onSeuil?: (code: string) => void;   // liste déroulante « Seuil de tolérance Alerte » : appliqué à tous les sites
 } & ColFilterProps) {
   const [menu, setMenu] = useState<{ key: string; title: string; anchor: DOMRect } | null>(null);
@@ -389,6 +422,7 @@ export function OutputFormatTable({ rows, onDetail, totaux, nbSites, colFilters,
     { name: "DONNEES DE RAVITAILLEMENT", cols: RAVITAILLEMENT }, { name: "DONNEES DE STOCK FINAL", cols: STOCK_FINAL },
     { name: "ESTIMATION CONSOMMATION FUEL THEORIQUE", cols: ESTIMATION_THEORIQUE },
     { name: "ANALYSE VARIATION DE STOCK Vs ESTIMATION THEORIQUE", cols: ANALYSE_VARIATION },
+    { name: "ANALYSE ESTIMATION CONSOMMATION FUEL MENSUELLE Vs CONSOMMATION FUEL MOIS PRECEDENT", cols: analyseMensuelle(mois) },
   ];
   const all = groups.flatMap((g) => g.cols);
   // Colonne vide entre deux blocs : séparation visuelle nette (aucune donnée, ignorée par les lecteurs d'écran)
