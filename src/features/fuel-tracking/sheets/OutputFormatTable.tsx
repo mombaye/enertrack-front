@@ -334,16 +334,22 @@ const RAVITAILLEMENT: Col[] = [
 
 export function OutputFormatTable({ rows, onDetail, totaux, nbSites, colFilters, onColFilter, loadValues }: { rows: ConsoRow[]; onDetail: (r: ConsoRow) => void; totaux?: ConsoTotaux; nbSites?: number } & ColFilterProps) {
   const [menu, setMenu] = useState<{ key: string; title: string; anchor: DOMRect } | null>(null);
-  // En-tête de colonne + bouton ▼ (filtre « comme Excel ») ; bouton plein quand un filtre est actif sur la colonne
+  // En-tête de colonne + bouton ▼ (filtre « comme Excel ») ; bouton plein quand un filtre est actif sur la colonne :
+  // un clic sur ce même bouton enlève alors le filtre de la colonne
   const head = (title: string, key?: string) => {
     if (!key || !onColFilter || !loadValues) return title;
     const on = !!colFilters?.[key];
     return (
       <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
         <span>{title}</span>
-        <button type="button" aria-label={`Filtrer la colonne ${title}${on ? " (filtre actif)" : ""}`} aria-haspopup="dialog" aria-expanded={menu?.key === key}
-          title={on ? `Filtre actif : ${colFilters![key].length} valeur(s)` : "Filtrer"}
-          onClick={(e) => { const a = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMenu(menu?.key === key ? null : { key, title, anchor: a }); }}
+        <button type="button" aria-label={on ? `Enlever le filtre de la colonne ${title}` : `Filtrer la colonne ${title}`}
+          aria-haspopup={on ? undefined : "dialog"} aria-expanded={on ? undefined : menu?.key === key}
+          title={on ? `Filtre actif : ${colFilters![key].length} valeur(s) — cliquer pour enlever le filtre` : "Filtrer"}
+          onClick={(e) => {
+            if (on) { setMenu(null); onColFilter(key, null); return; }
+            const a = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setMenu(menu?.key === key ? null : { key, title, anchor: a });
+          }}
           style={{ flex: "none", width: 18, height: 18, padding: 0, borderRadius: 4, border: "1px solid #fff", cursor: "pointer", fontSize: 9, lineHeight: 1,
             background: on ? "#FFC000" : "transparent", color: on ? "#000" : "#fff" }}>{on ? "▼●" : "▼"}</button>
       </span>
